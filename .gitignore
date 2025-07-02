@@ -1,0 +1,5 @@
+logs/*
+config.txt
+res/*
+MainWindow.RestorePoint*
+Remote DCU.psproj*
