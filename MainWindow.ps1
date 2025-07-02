@@ -279,69 +279,73 @@ Function Update-WSIDFile {
             $queue = $global:SyncUI[$computer]
             $tb = $tabsMap[$computer]
             # Set default text again in case of retry/restart
-            $tb.Dispatcher.Invoke([action]{
-                $args[0].AppendText("[$($args[1])] Runspace started at $(Get-Date).`n")
-                $args[0].ScrollToEnd()
-            }, $tb, $computer)
+            $tb.AppendText("[$computer] Runspace started at $(Get-Date).`n")
+            $tb.ScrollToEnd()
             $remoteDCUPathAbs = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'src\remoteDCU.ps1'))
             $ps = [PowerShell]::Create()
-            # Pass $tb as an argument to the script block
             $ps.AddScript({
-                param($hostName, $scriptPath, $tb)
-                if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
-                    $tb.Dispatcher.Invoke({
-                        param($tbRef)
-                        $tbRef.AppendText("ERROR: remoteDCU.ps1 path is invalid or missing.`n")
-                        $tbRef.ScrollToEnd()
-                    }, $tb)
-                    return
-                }
-                $psi = New-Object System.Diagnostics.ProcessStartInfo(
-                    'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
-                )
-                $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-                $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+                    param($hostName, $scriptPath, $queue, $tb)
+                    if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+                        $tb.Dispatcher.Invoke([action[string]] {
+                                param($l)
+                                $tb.AppendText("ERROR: remoteDCU.ps1 path is invalid or missing.`n")
+                                $tb.ScrollToEnd()
+                            }, "")
+                        return
+                    }
+                    $psi = New-Object System.Diagnostics.ProcessStartInfo(
+                        'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
+                    )
+                    $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+                    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
 
-                $proc = [System.Diagnostics.Process]::new(); $proc.StartInfo = $psi
-                $proc.Start() | Out-Null
+                    $proc = [System.Diagnostics.Process]::new(); $proc.StartInfo = $psi
+                    $proc.Start() | Out-Null
 
-                $stdout = $proc.StandardOutput
-                $stderr = $proc.StandardError
-                $lastErrorLine = $null
-                while (-not $stdout.EndOfStream) {
-                    $line = $stdout.ReadLine()
-                    $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                    if ($cleanLine -match "pwsh exited on .+ with error code (\d+)\.") {
-                        $lastErrorLine = $matches[0]
+                    $stdout = $proc.StandardOutput
+                    $stderr = $proc.StandardError
+                    $lastErrorLine = $null
+                    while (-not $stdout.EndOfStream) {
+                        $line = $stdout.ReadLine()
+                        # Remove ANSI escape sequences
+                        $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
+                        # Only capture the last error code line, ignore PsExec connection/service lines
+                        if ($cleanLine -match "pwsh exited on .+ with error code (\d+)\.") {
+                            $lastErrorLine = $matches[0]
+                        }
+                        # Suppress PsExec connection/service lines
+                        elseif ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
+                            $queue.Enqueue($cleanLine) | Out-Null
+                            $tb.Dispatcher.Invoke([action[string]] {
+                                    param($l)
+                                    $tb.AppendText("$l`n")
+                                    $tb.ScrollToEnd()
+                                }, $cleanLine)
+                        }
                     }
-                    elseif ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
-                        $tb.Dispatcher.Invoke({
-                            param($tbRef, $lineText)
-                            $tbRef.AppendText("$lineText`n")
-                            $tbRef.ScrollToEnd()
-                        }, $tb, $cleanLine)
+                    while (-not $stderr.EndOfStream) {
+                        $line = $stderr.ReadLine()
+                        $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
+                        # Suppress PsExec connection/service lines in stderr as well
+                        if ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
+                            $queue.Enqueue($cleanLine) | Out-Null
+                            $tb.Dispatcher.Invoke([action[string]] {
+                                    param($l)
+                                    $tb.AppendText("$l`n")
+                                    $tb.ScrollToEnd()
+                                }, $cleanLine)
+                        }
                     }
-                }
-                while (-not $stderr.EndOfStream) {
-                    $line = $stderr.ReadLine()
-                    $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                    if ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
-                        $tb.Dispatcher.Invoke({
-                            param($tbRef, $lineText)
-                            $tbRef.AppendText("$lineText`n")
-                            $tbRef.ScrollToEnd()
-                        }, $tb, $cleanLine)
+                    $proc.WaitForExit()
+                    # After process ends, print only the last error code line if it was found
+                    if ($lastErrorLine) {
+                        $tb.Dispatcher.Invoke([action[string]] {
+                                param($l)
+                                $tb.AppendText("Final status: $l`n")
+                                $tb.ScrollToEnd()
+                            }, $lastErrorLine)
                     }
-                }
-                $proc.WaitForExit()
-                if ($lastErrorLine) {
-                    $tb.Dispatcher.Invoke({
-                        param($tbRef, $lineText)
-                        $tbRef.AppendText("Final status: $lineText`n")
-                        $tbRef.ScrollToEnd()
-                    }, $tb, $lastErrorLine)
-                }
-            }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($tb)
+                }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
             $async = $ps.BeginInvoke()
             $activeRunspaces += $ps
@@ -357,33 +361,36 @@ Function Update-WSIDFile {
             Start-NextRunspace
         }
 
-        # Timer to manage runspaces (no longer needed for output batching)
+        # Timer to flush queues and manage runspaces
         $timer = New-Object System.Windows.Threading.DispatcherTimer
         $timer.Interval = [TimeSpan]::FromMilliseconds(100)
         $timer.Add_Tick({
-            # Only manage runspace completion and starting new ones
-            $finished = @()
-            foreach ($ps in @($activeRunspaces)) {
-                if ($ps -and $runspaceJobs -and $runspaceJobs.ContainsKey($ps)) {
+                # Flush output to textboxes
+                foreach ($comp in $tabsMap.Keys) {
+                    $tb = $tabsMap[$comp]
+                    $queue = $global:SyncUI[$comp]
+                    $line = $null
+                    while ($queue.TryDequeue([ref]$line)) {
+                        $tb.AppendText("$line`n"); $tb.ScrollToEnd()
+                    }
+                }
+                # Check for completed runspaces and start new ones if needed
+                $finished = @()
+                foreach ($ps in $activeRunspaces) {
                     $job = $runspaceJobs[$ps]
                     if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
-                        try { $ps.EndInvoke($job.AsyncResult) } catch {}
+                        $ps.EndInvoke($job.AsyncResult)
                         $ps.Dispose()
                         $finished += $ps
                     }
                 }
-            }
-            foreach ($ps in $finished) {
-                $activeRunspaces = $activeRunspaces | Where-Object { $_ -ne $ps }
-                if ($runspaceJobs.ContainsKey($ps)) {
+                foreach ($ps in $finished) {
+                    $activeRunspaces = $activeRunspaces | Where-Object { $_ -ne $ps }
                     $runspaceJobs.Remove($ps)
+                    # Start a new runspace if there are more computers pending
+                    Start-NextRunspace
                 }
-            }
-            # Start as many new runspaces as needed to maintain throttleLimit
-            while ($activeRunspaces.Count -lt $throttleLimit -and $pending.Count -gt 0) {
-                Start-NextRunspace
-            }
-        })
+            })
         $timer.Start()
 
         if ($tabs.Items.Count -gt 0) {
@@ -393,23 +400,6 @@ Function Update-WSIDFile {
     else {
         Write-Host "TextBox is empty. File not updated."
     }
-}
-
-# --- UI update helper (must be defined before use) ---
-Function Update-Window {
-    param(
-        [string]$Content,
-        [switch]$Append
-    )
-    $tb = $global:HomeView.FindName('TerminalBlock')
-    $tb.Dispatcher.Invoke([action] {
-            if ($Append) {
-                $tb.AppendText("$Content`n")
-            }
-            else {
-                $tb.Text = "$Content`n"
-            }
-        })
 }
 
 # --- Main Content Control and Navigation ---
@@ -441,16 +431,3 @@ if ($btnLogs) {
 
 # --- Show Window ---
 $null = $window.ShowDialog()
-
-# Explanation:
-# When using PowerShell's ForEach-Object -Parallel in a terminal:
-# - Each parallel script block runs in its own process, and output is written to the terminal's standard output stream.
-# - The terminal (console host) is optimized for rapid, concurrent output and can buffer and display many lines efficiently.
-# - There is no GUI thread or Dispatcher, so output does not block UI rendering.
-
-# In a WPF GUI:
-# - Each runspace/process must marshal output back to the UI thread using Dispatcher.Invoke/BeginInvoke.
-# - The UI thread can be easily overwhelmed if too many updates are queued, causing lag or freezing.
-# - GUI controls (like TextBox) are much slower to update than a terminal, especially with frequent or large updates.
-
-# In summary: The terminal is designed for high-throughput output and is not blocked by UI thread constraints, while a GUI must synchronize all updates to the UI thread, which can become a bottleneck with many parallel tasks.
