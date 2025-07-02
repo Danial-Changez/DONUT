@@ -236,13 +236,13 @@ Function Update-WSIDFile {
         # Read throttleLimit from config.txt
         $configPath = Join-Path $PSScriptRoot 'config.txt'
         # Default
-        $throttleLimit = 5
+        $global:throttleLimit = 5
         if (Test-Path $configPath) {
             $configLines = Get-Content $configPath | Where-Object { $_ -match 'throttleLimit' }
             if ($configLines) {
                 $line = $configLines -replace '[\r\n ]', ''
                 if ($line -match 'throttleLimit=(\d+)') {
-                    $throttleLimit = [int]$matches[1]
+                    $global:throttleLimit = [int]$matches[1]
                 }
             }
         }
@@ -270,127 +270,140 @@ Function Update-WSIDFile {
             $tb.ScrollToEnd()
         }
 
-        $activeRunspaces = @()
-        $runspaceJobs = @{}
+        # Use a script-scoped hashtable for shared state instead of global variables
+        $script:ActiveRunspaces = @()
+        $script:RunspaceJobs = @{}
+        $script:PendingQueue = $pending
+        $script:TabsMap = $tabsMap
+        $script:SyncUI = $global:SyncUI
 
-        function Start-NextRunspace {
-            if ($pending.Count -eq 0) { return }
-            $computer = $pending.Dequeue()
-            $queue = $global:SyncUI[$computer]
-            $tb = $tabsMap[$computer]
-            # Set default text again in case of retry/restart
+        # Define Start-NextRunspace as a script-scoped scriptblock
+        $script:StartNextRunspace = {
+            if ($script:PendingQueue.Count -eq 0) { return }
+            $computer = $script:PendingQueue.Dequeue()
+            if (-not $script:TabsMap.ContainsKey($computer)) {
+                Write-Host "No tab for $computer, skipping runspace creation."
+                return
+            }
+            $queue = $script:SyncUI[$computer]
+            $tb = $script:TabsMap[$computer]
             $tb.AppendText("[$computer] Runspace started at $(Get-Date).`n")
             $tb.ScrollToEnd()
             $remoteDCUPathAbs = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'src\remoteDCU.ps1'))
             $ps = [PowerShell]::Create()
             $ps.AddScript({
-                    param($hostName, $scriptPath, $queue, $tb)
-                    if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+                param($hostName, $scriptPath, $queue, $tb)
+                if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+                    $tb.Dispatcher.Invoke([action[string]] {
+                            param($l)
+                            $tb.AppendText("ERROR: remoteDCU.ps1 path is invalid or missing.`n")
+                            $tb.ScrollToEnd()
+                        }, "")
+                    return
+                }
+                $psi = New-Object System.Diagnostics.ProcessStartInfo(
+                    'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
+                )
+                $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+                $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+
+                $proc = [System.Diagnostics.Process]::new(); $proc.StartInfo = $psi
+                $proc.Start() | Out-Null
+
+                $stdout = $proc.StandardOutput
+                $stderr = $proc.StandardError
+                $lastErrorLine = $null
+                while (-not $stdout.EndOfStream) {
+                    $line = $stdout.ReadLine()
+                    # Remove ANSI escape sequences
+                    $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
+                    # Only capture the last error code line, ignore PsExec connection/service lines
+                    if ($cleanLine -match "pwsh exited on .+ with error code (\d+)\.") {
+                        $lastErrorLine = $matches[0]
+                    }
+                    # Suppress PsExec connection/service lines
+                    elseif ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
+                        $queue.Enqueue($cleanLine) | Out-Null
                         $tb.Dispatcher.Invoke([action[string]] {
                                 param($l)
-                                $tb.AppendText("ERROR: remoteDCU.ps1 path is invalid or missing.`n")
+                                $tb.AppendText("$l`n")
                                 $tb.ScrollToEnd()
-                            }, "")
-                        return
+                            }, $cleanLine)
                     }
-                    $psi = New-Object System.Diagnostics.ProcessStartInfo(
-                        'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
-                    )
-                    $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-                    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
-
-                    $proc = [System.Diagnostics.Process]::new(); $proc.StartInfo = $psi
-                    $proc.Start() | Out-Null
-
-                    $stdout = $proc.StandardOutput
-                    $stderr = $proc.StandardError
-                    $lastErrorLine = $null
-                    while (-not $stdout.EndOfStream) {
-                        $line = $stdout.ReadLine()
-                        # Remove ANSI escape sequences
-                        $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                        # Only capture the last error code line, ignore PsExec connection/service lines
-                        if ($cleanLine -match "pwsh exited on .+ with error code (\d+)\.") {
-                            $lastErrorLine = $matches[0]
-                        }
-                        # Suppress PsExec connection/service lines
-                        elseif ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
-                            $queue.Enqueue($cleanLine) | Out-Null
-                            $tb.Dispatcher.Invoke([action[string]] {
-                                    param($l)
-                                    $tb.AppendText("$l`n")
-                                    $tb.ScrollToEnd()
-                                }, $cleanLine)
-                        }
-                    }
-                    while (-not $stderr.EndOfStream) {
-                        $line = $stderr.ReadLine()
-                        $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                        # Suppress PsExec connection/service lines in stderr as well
-                        if ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
-                            $queue.Enqueue($cleanLine) | Out-Null
-                            $tb.Dispatcher.Invoke([action[string]] {
-                                    param($l)
-                                    $tb.AppendText("$l`n")
-                                    $tb.ScrollToEnd()
-                                }, $cleanLine)
-                        }
-                    }
-                    $proc.WaitForExit()
-                    # After process ends, print only the last error code line if it was found
-                    if ($lastErrorLine) {
+                }
+                while (-not $stderr.EndOfStream) {
+                    $line = $stderr.ReadLine()
+                    $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
+                    # Suppress PsExec connection/service lines in stderr as well
+                    if ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
+                        $queue.Enqueue($cleanLine) | Out-Null
                         $tb.Dispatcher.Invoke([action[string]] {
                                 param($l)
-                                $tb.AppendText("Final status: $l`n")
+                                $tb.AppendText("$l`n")
                                 $tb.ScrollToEnd()
-                            }, $lastErrorLine)
+                            }, $cleanLine)
                     }
-                }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
+                }
+                $proc.WaitForExit()
+                # After process ends, print only the last error code line if it was found
+                if ($lastErrorLine) {
+                    $tb.Dispatcher.Invoke([action[string]] {
+                            param($l)
+                            $tb.AppendText("Final status: $l`n")
+                            $tb.ScrollToEnd()
+                        }, $lastErrorLine)
+                }
+            }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
             $async = $ps.BeginInvoke()
-            $activeRunspaces += $ps
-            $runspaceJobs[$ps] = @{
+            $script:ActiveRunspaces += $ps
+            $script:RunspaceJobs[$ps] = @{
                 Computer    = $computer
                 PowerShell  = $ps
                 AsyncResult = $async
             }
+            Write-Host "Started runspace for $computer. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
         }
 
         # Start up to $throttleLimit runspaces
-        for ($i = 0; $i -lt $throttleLimit -and $pending.Count -gt 0; $i++) {
-            Start-NextRunspace
+        for ($i = 0; $i -lt $global:throttleLimit -and $script:PendingQueue.Count -gt 0; $i++) {
+            & $script:StartNextRunspace
         }
 
         # Timer to flush queues and manage runspaces
         $timer = New-Object System.Windows.Threading.DispatcherTimer
         $timer.Interval = [TimeSpan]::FromMilliseconds(100)
         $timer.Add_Tick({
-                # Flush output to textboxes
-                foreach ($comp in $tabsMap.Keys) {
-                    $tb = $tabsMap[$comp]
-                    $queue = $global:SyncUI[$comp]
-                    $line = $null
-                    while ($queue.TryDequeue([ref]$line)) {
-                        $tb.AppendText("$line`n"); $tb.ScrollToEnd()
-                    }
+            foreach ($comp in $script:TabsMap.Keys) {
+                $tb = $script:TabsMap[$comp]
+                $queue = $script:SyncUI[$comp]
+                $line = $null
+                while ($queue.TryDequeue([ref]$line)) {
+                    $tb.AppendText("$line`n"); $tb.ScrollToEnd()
                 }
-                # Check for completed runspaces and start new ones if needed
-                $finished = @()
-                foreach ($ps in $activeRunspaces) {
-                    $job = $runspaceJobs[$ps]
+            }
+            $finished = @()
+            foreach ($ps in @($script:ActiveRunspaces)) {
+                if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
+                    $job = $script:RunspaceJobs[$ps]
                     if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
-                        $ps.EndInvoke($job.AsyncResult)
+                        try { $ps.EndInvoke($job.AsyncResult) } catch {}
                         $ps.Dispose()
                         $finished += $ps
                     }
                 }
-                foreach ($ps in $finished) {
-                    $activeRunspaces = $activeRunspaces | Where-Object { $_ -ne $ps }
-                    $runspaceJobs.Remove($ps)
-                    # Start a new runspace if there are more computers pending
-                    Start-NextRunspace
-                }
-            })
+            }
+            foreach ($ps in $finished) {
+                Write-Host "Cleaning up finished runspace for $($script:RunspaceJobs[$ps].Computer)"
+                $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+                $script:RunspaceJobs.Remove($ps)
+            }
+            Write-Host "Active runspaces: $($script:ActiveRunspaces.Count), Throttle Limit: $($global:throttleLimit), Pending: $($script:PendingQueue.Count)"
+            while ($script:ActiveRunspaces.Count -lt $global:throttleLimit -and $script:PendingQueue.Count -gt 0) {
+                Write-Host "Starting next runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
+                & $script:StartNextRunspace
+            }
+        })
         $timer.Start()
 
         if ($tabs.Items.Count -gt 0) {
@@ -430,4 +443,8 @@ if ($btnLogs) {
 }
 
 # --- Show Window ---
+$null = $window.ShowDialog()
+# --- Show Window ---
+$null = $window.ShowDialog()
+$null = $window.ShowDialog()
 $null = $window.ShowDialog()
