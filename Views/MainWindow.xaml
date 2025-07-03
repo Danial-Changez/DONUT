@@ -25,11 +25,11 @@
         <Border.BorderBrush>
             <LinearGradientBrush StartPoint="0,0"
                                  EndPoint="1,1">
-                <GradientStop Color="{DynamicResource winBorderColor1}"
+                <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}"
                               Offset="0" />
-                <GradientStop Color="{DynamicResource winBorderColor2}"
+                <GradientStop Color="{DynamicResource WindowBorderAccentColor}"
                               Offset="0" />
-                <GradientStop Color="{DynamicResource winBorderColor3}"
+                <GradientStop Color="{DynamicResource WindowBorderSecondaryColor}"
                               Offset="0" />
             </LinearGradientBrush>
         </Border.BorderBrush>
@@ -46,9 +46,9 @@
                 <Border.Background>
                     <LinearGradientBrush StartPoint="1,0.75"
                                          EndPoint="0,0">
-                        <GradientStop Color="{DynamicResource secondaryBackColor1}"
+                        <GradientStop Color="{DynamicResource SecondaryBackgroundDarkColor}"
                                       Offset="0" />
-                        <GradientStop Color="{DynamicResource secondaryBackColor2}"
+                        <GradientStop Color="{DynamicResource SecondaryBackgroundColor}"
                                       Offset="1" />
                     </LinearGradientBrush>
                 </Border.Background>
@@ -72,7 +72,7 @@
                         </StackPanel>
                         <!-- Menu Buttons -->
                         <RadioButton x:Name="btnHome" Style="{DynamicResource menuButton}"
-                                     Tag="{DynamicResource color1}">
+                                     Tag="{DynamicResource AccentPurpleLight}">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Left">
                                 <Path Style="{DynamicResource menuButtonIcon}"
@@ -82,7 +82,7 @@
                             </StackPanel>
                         </RadioButton>
                         <RadioButton x:Name="btnConfig" Style="{DynamicResource menuButton}"
-                                     Tag="{DynamicResource color2}">
+                                     Tag="{DynamicResource AccentBlue}">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Left">
                                 <Path Style="{DynamicResource menuButtonIcon}"
@@ -92,7 +92,7 @@
                             </StackPanel>
                         </RadioButton>
                         <RadioButton x:Name="btnLogs" Style="{DynamicResource menuButton}"
-                                     Tag="{DynamicResource color3}">
+                                     Tag="{DynamicResource AccentCyan}">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Left">
                                 <Path Style="{DynamicResource menuButtonIcon}"
@@ -110,9 +110,9 @@
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0,0"
                                          EndPoint="1,0.75">
-                        <GradientStop Color="{DynamicResource primaryBackColor1}"
+                        <GradientStop Color="{DynamicResource PrimaryBackgroundDarkColor}"
                                       Offset="0" />
-                        <GradientStop Color="{DynamicResource primaryBackColor2}"
+                        <GradientStop Color="{DynamicResource PrimaryBackgroundColor}"
                                       Offset="1" />
                     </LinearGradientBrush>
                 </Border.Background>
@@ -134,19 +134,19 @@
                                 Margin="0,0,5,0">
                         <Button x:Name="btnClose"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource color4}">
+                                Tag="{DynamicResource AccentPink}">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
                         <Button x:Name="btnMaximize"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource color6}">
+                                Tag="{DynamicResource AccentYellow}">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource Square}" />
                         </Button>
                         <Button x:Name="btnMinimize"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource color8}">
+                                Tag="{DynamicResource AccentBlueLight}">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Width="13"
                                   Data="{DynamicResource Minimize}" />
@@ -156,18 +156,51 @@
                     <StackPanel Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Grid.Row="1">
-                        <Path Data="{DynamicResource Home}"
-                              Height="20"
-                              Width="20"
-                              Stretch="Uniform"
-                              Fill="{DynamicResource titleColor2}"
-                              Margin="35,0,10,0" />
-                        <TextBlock Text="Dashboard"
-                                   Foreground="{DynamicResource titleColor2}"
-                                   FontSize="16"
-                                   FontFamily="Montserrat"
-                                   FontWeight="Medium"
-                                   VerticalAlignment="Center" />
+                        <!-- Home Header -->
+                        <StackPanel Orientation="Horizontal" x:Name="headerHome" Visibility="Collapsed">
+                            <Path Data="{DynamicResource Home}"
+                                  Height="24"
+                                  Width="24"
+                                  Stretch="Uniform"
+                                  Fill="{DynamicResource TitleTextSecondary}"
+                                  Margin="35,0,10,0" />
+                            <TextBlock Text="Dashboard"
+                                       Foreground="{DynamicResource TitleTextSecondary}"
+                                       FontSize="20"
+                                       FontFamily="Montserrat"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <!-- Config Header -->
+                        <StackPanel Orientation="Horizontal" x:Name="headerConfig" Visibility="Collapsed">
+                            <Path Data="{DynamicResource Config}"
+                                  Height="24"
+                                  Width="24"
+                                  Stretch="Uniform"
+                                  Fill="{DynamicResource TitleTextSecondary}"
+                                  Margin="35,0,10,0" />
+                            <TextBlock Text="Configuration"
+                                       Foreground="{DynamicResource TitleTextSecondary}"
+                                       FontSize="20"
+                                       FontFamily="Montserrat"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <!-- Logs Header -->
+                        <StackPanel Orientation="Horizontal" x:Name="headerLogs" Visibility="Collapsed">
+                            <Path Data="{DynamicResource Logs}"
+                                  Height="24"
+                                  Width="24"
+                                  Stretch="Uniform"
+                                  Fill="{DynamicResource TitleTextSecondary}"
+                                  Margin="35,0,10,0" />
+                            <TextBlock Text="Logs"
+                                       Foreground="{DynamicResource TitleTextSecondary}"
+                                       FontSize="20"
+                                       FontFamily="Montserrat"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
                     </StackPanel>
                     <ContentControl x:Name="contentMain"
                                     Grid.Row="2"

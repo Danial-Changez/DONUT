@@ -1,0 +1,76 @@
+<!-- Configure.xaml -->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource PanelBackground}">
+    <Grid.Resources>
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontFamily" Value="Montserrat" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource BodyTextPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BodyTextPrimary}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="Padding" Value="2,2,2,2" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
+            <Setter Property="FontFamily" Value="Montserrat" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
+            <Setter Property="Margin" Value="0,4,0,4" />
+        </Style>
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentPurple}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontFamily" Value="Montserrat" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Width" Value="180" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Height="38" CornerRadius="19" Background="{TemplateBinding Background}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentBlue}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Grid.Resources>
+    <StackPanel Margin="30,20,30,20">
+        <TextBlock Text="Configure Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
+        <GroupBox Header="Flags" Foreground="{DynamicResource AccentPurple}" Margin="0,0,0,16">
+            <StackPanel Margin="10,5,0,5">
+                <CheckBox Content="Silent" Style="{DynamicResource ModernCheckBox}" />
+                <CheckBox Content="Allow XML" Style="{DynamicResource ModernCheckBox}" />
+                <CheckBox Content="Lock Settings" Style="{DynamicResource ModernCheckBox}" />
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Header="Options" Foreground="{DynamicResource AccentCyan}" Margin="0,0,0,16">
+            <StackPanel Margin="10,5,0,5">
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                    <TextBlock Text="Output Log: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
+                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                    <TextBlock Text="Catalog Location: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
+                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                    <TextBlock Text="Delay Days: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="80" VerticalAlignment="Center" />
+                    <TextBox Width="80" Style="{DynamicResource ModernTextBox}" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+        <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+    </StackPanel>
+</Grid>

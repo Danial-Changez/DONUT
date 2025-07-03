@@ -21,16 +21,16 @@
                   Height="25"
                   Width="25"
                   Stretch="Uniform"
-                  Fill="{DynamicResource plainTextColor3}" />
+                  Fill="{DynamicResource BodyTextTertiary}" />
             <TextBox x:Name="txtHomeMessage"
                      Height="35"
                      Width="300"
                      Background="Transparent"
                      FontWeight="Medium"
                      FontFamily="Montserrat"
-                     Foreground="{DynamicResource plainTextColor3}"
-                     CaretBrush="{DynamicResource plainTextColor3}"
-                     BorderBrush="{DynamicResource plainTextColor3}"
+                     Foreground="{DynamicResource BodyTextTertiary}"
+                     CaretBrush="{DynamicResource BodyTextTertiary}"
+                     BorderBrush="{DynamicResource BodyTextTertiary}"
                      BorderThickness="0,0,0,1"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
@@ -50,7 +50,7 @@
             <Button.Style>
                 <Style TargetType="Button">
                     <Setter Property="Background"
-                            Value="#773DFF" />
+                            Value="{DynamicResource AccentPurple}" />
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
@@ -67,7 +67,7 @@
                         <Trigger Property="IsMouseOver"
                                  Value="True">
                             <Setter Property="Background"
-                                    Value="#836EFB" />
+                                    Value="{DynamicResource AccentPurpleHover}" />
                         </Trigger>
                     </Style.Triggers>
                 </Style>
@@ -81,7 +81,7 @@
                 <Setter Property="Background"
                         Value="Transparent" />
                 <Setter Property="Foreground"
-                        Value="{DynamicResource terminalColor}" />
+                        Value="{DynamicResource TerminalText}" />
                 <Setter Property="FontFamily"
                         Value="Cascadia Code" />
                 <Setter Property="FontSize"
@@ -117,19 +117,22 @@
                 <Setter Property="Background"
                         Value="Transparent" />
                 <Setter Property="Foreground"
-                        Value="{DynamicResource terminalColor}" />
+                        Value="{DynamicResource TerminalText}" />
                 <Setter Property="FontWeight"
                         Value="Normal" />
                 <Setter Property="BorderThickness"
-                        Value="0,0,0,0" />
+                        Value="2" />
+                <Setter Property="BorderBrush"
+                        Value="{DynamicResource AccentBlue}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="TabItem">
                             <Border x:Name="Bd"
                                     Background="{TemplateBinding Background}"
-                                    CornerRadius="4,4,0,0"
+                                    CornerRadius="8,8,0,0"
                                     Padding="{TemplateBinding Padding}"
-                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    BorderBrush="{TemplateBinding BorderBrush}">
                                 <ContentPresenter ContentSource="Header" />
                             </Border>
                             <ControlTemplate.Triggers>
@@ -137,19 +140,15 @@
                                          Value="True">
                                     <Setter TargetName="Bd"
                                             Property="Background"
-                                            Value="#3D4A6E" />
+                                            Value="{DynamicResource PanelBackgroundActive}" />
                                     <Setter Property="FontWeight"
                                             Value="Bold" />
-                                    <Setter Property="BorderThickness"
-                                            Value="0,0,0,3" />
-                                    <Setter Property="BorderBrush"
-                                            Value="#2380e6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver"
                                          Value="True">
                                     <Setter TargetName="Bd"
                                             Property="Background"
-                                            Value="{DynamicResource plainTextColor3}" />
+                                            Value="{DynamicResource PanelBackgroundHover}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -160,7 +159,7 @@
             <Style x:Key="TerminalTabControlStyle"
                    TargetType="TabControl">
                 <Setter Property="Background"
-                        Value="{DynamicResource panelColor}" />
+                        Value="{DynamicResource PanelBackground}" />
                 <Setter Property="BorderThickness"
                         Value="0" />
                 <Setter Property="ItemContainerStyle"
@@ -185,7 +184,7 @@
                 </Setter>
             </Style>
         </Grid.Resources>
-        <Border Background="{DynamicResource panelColor}"
+        <Border Background="{DynamicResource PanelBackground}"
                 CornerRadius="6"
                 Margin="10"
                 HorizontalAlignment="Stretch"

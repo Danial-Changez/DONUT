@@ -5,5 +5,5 @@
       xmlns:local="clr-namespace:WPF_LoginForm.Views">
     <TextBlock Text="Logs Content" 
                 FontFamily="Montserrat"
-                Foreground="{DynamicResource color6}"/>
+                Foreground="{DynamicResource AccentYellow}"/>
 </Grid>

@@ -11,7 +11,7 @@
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Foreground"
-                Value="{DynamicResource plainTextColor3}" />
+                Value="{DynamicResource BodyTextTertiary}" />
         <Setter Property="BorderBrush"
                 Value="Transparent" />
         <Setter Property="Template">
@@ -33,9 +33,9 @@
                 <Setter Property="Margin"
                         Value="0,0,0,5" />
                 <Setter Property="Background"
-                        Value="{DynamicResource panelOverColor}" />
+                        Value="{DynamicResource PanelBackgroundHover}" />
                 <Setter Property="Foreground"
-                        Value="{DynamicResource titleColor3}" />
+                        Value="{DynamicResource TitleTextTertiary}" />
                 <Setter Property="BorderBrush"
                         Value="{Binding Path=Tag, RelativeSource={RelativeSource Self}}" />
             </Trigger>
@@ -45,7 +45,7 @@
                 <Setter Property="Margin"
                         Value="0,0,0,5" />
                 <Setter Property="Background"
-                        Value="{DynamicResource panelActiveColor}" />
+                        Value="{DynamicResource PanelBackgroundActive}" />
                 <Setter Property="Foreground"
                         Value="{Binding Path=Tag, RelativeSource={RelativeSource Self}}" />
                 <Setter Property="BorderBrush"
@@ -90,7 +90,7 @@
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Foreground"
-                Value="{DynamicResource plainTextColor3}" />
+                Value="{DynamicResource BodyTextTertiary}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -107,7 +107,7 @@
             <Trigger Property="IsMouseOver"
                      Value="True">
                 <Setter Property="Background"
-                        Value="{DynamicResource panelActiveColor}" />
+                        Value="{DynamicResource PanelBackgroundActive}" />
                 <Setter Property="Foreground"
                         Value="{Binding Path=Tag, RelativeSource={RelativeSource Self}}" />
             </Trigger>
@@ -136,7 +136,7 @@
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Foreground"
-                Value="{DynamicResource plainTextColor1}" />
+                Value="{DynamicResource BodyTextPrimary}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -167,79 +167,5 @@
                 Value="Uniform" />
         <Setter Property="Fill"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-    </Style>
-    <!-- Scrollbar (I am not making a new file for just scrollbars) -->
-    <Style x:Key="ScrollBarThumb"
-           TargetType="Thumb">
-        <!-- Thumb bar style -->
-        <Setter Property="Height"
-                Value="20" />
-        <Setter Property="Width"
-                Value="6" />
-        <Setter Property="Background"
-                Value="{DynamicResource panelColor}" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Thumb">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="6" /> <!-- Remove Margin here -->
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-            <!-- Scrollbar style when hovering -->
-            <Trigger Property="IsMouseOver"
-                     Value="True">
-                <Setter Property="Background"
-                        Value="{DynamicResource panelOverColor}" />
-            </Trigger>
-            <Trigger Property="IsDragging"
-                     Value="True">
-                <Setter Property="Background"
-                        Value="{DynamicResource panelActiveColor}" />
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-    <!-- Hiding up and down arrows on scroll bar -->
-    <Style x:Key="invisibleRepeatButton"
-           TargetType="RepeatButton">
-        <Setter Property="Width"
-                Value="0" />
-        <Setter Property="Height"
-                Value="0" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="RepeatButton" />
-            </Setter.Value>
-        </Setter>
-    </Style>
-    <Style TargetType="ScrollBar">
-        <Setter Property="Width"
-                Value="6" />
-        <Setter Property="Background"
-                Value="Transparent" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ScrollBar">
-                    <Grid x:Name="Bg">
-                        <Track x:Name="Part_Track"
-                               IsDirectionReversed="True"
-                               Margin="0,2,0,2"> <!-- Use margin for top/bottom space -->
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton Style="{StaticResource invisibleRepeatButton}"
-                                              Command="ScrollBar.LineUpCommand" />
-                            </Track.DecreaseRepeatButton>
-                            <Track.Thumb>
-                                <Thumb Style="{StaticResource ScrollBarThumb}" />
-                            </Track.Thumb>
-                            <Track.IncreaseRepeatButton>
-                                <RepeatButton Style="{StaticResource invisibleRepeatButton}"
-                                              Command="ScrollBar.LineDownCommand" />
-                            </Track.IncreaseRepeatButton>
-                        </Track>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 </ResourceDictionary>
