@@ -98,6 +98,19 @@ Function Initialize-HomeView {
     else {
         Write-Host "Search button not found in HomeView."
     }
+
+    # Attach the SelectionChanged event to the ComboBox
+    $mainCommandComboBox = $script:HomeView.FindName('MainCommandComboBox')
+    if ($mainCommandComboBox) {
+        $mainCommandComboBox.Style = $script:HomeView.Resources["ModernComboBox"]
+        $mainCommandComboBox.Add_SelectionChanged({
+                OnMainCommandChanged $mainCommandComboBox
+            })
+        Write-Host "MainCommandComboBox SelectionChanged event attached."
+    }
+    else {
+        Write-Host "MainCommandComboBox not found in HomeView."
+    }
 }
 
 # Define Show-Placeholder globally
@@ -237,7 +250,7 @@ Function Update-WSIDFile {
     $tabs = $script:HomeView.FindName('TerminalTabs')
     $tabs.Items.Clear()
 
-    # prepare synchronized queues and UI map
+    # Prepare synchronized queues and UI map
     $script:SyncUI = [hashtable]::Synchronized(@{})
     $tabsMap = @{}
 
@@ -319,7 +332,36 @@ Function Update-WSIDFile {
     }
 }
 
-# --- Window and Resources ---
+Function Set-ConfigOptionView {
+    param($optionContent, $selected)
+    if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
+        Write-Host "optionContent is null or does not have a Content property."
+        return
+    }
+    if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
+        $optionContent.Content = $null
+        return
+    }
+    $viewMap = @{
+        "Scan" = "Scan.xaml"
+        "Apply Updates" = "ApplyUpdates.xaml"
+        "Configure" = "Configure.xaml"
+        "Driver Install" = "Driver Install.xaml"
+        "Version" = "Version.xaml"
+    }
+    $file = $null
+    if ($viewMap.ContainsKey($selected)) {
+        $file = $viewMap[$selected]
+    }
+    if ($file) {
+        $childView = Import-XamlView "Views\Config Options\$file"
+        $optionContent.Content = $childView
+    } else {
+        $optionContent.Content = $null
+    }
+}
+
+# Window and Resources 
 $window = Import-Xaml "Views\MainWindow.xaml"
 
 # Merge all resource dictionaries from the Styles folder
@@ -340,7 +382,7 @@ $logoImage = $window.FindName('Logo')
 $logoPath = Join-Path $PSScriptRoot 'Images\logo yellow arrow.png'
 $logoImage.Source = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]$logoPath)
 
-# --- Window Controls and Events ---
+# Window Controls and Events 
 Add-Type -AssemblyName System.Windows.Forms
 
 # Maximize/Restore/Minimize/Close buttons
@@ -381,35 +423,75 @@ $minimizeButton.Add_Click({
         $window.WindowState = 'Minimized'
     })
 
-# --- WSID Path ---
+# WSID Path 
 $wsidFilePath = Join-Path $PSScriptRoot "res\WSID.txt"
 
-# --- Main Content Control and Navigation ---
+# Header panels for dynamic icon/text
+$headerHome = $window.FindName('headerHome')
+$headerConfig = $window.FindName('headerConfig')
+$headerLogs = $window.FindName('headerLogs')
+
+Function Show-HeaderPanel {
+    param($homeVisibility, $configVisibility, $logsVisibility)
+    if ($headerHome)   { $headerHome.Visibility   = $homeVisibility }
+    if ($headerConfig) { $headerConfig.Visibility = $configVisibility }
+    if ($headerLogs)   { $headerLogs.Visibility   = $logsVisibility }
+}
+
+# Main Content Control and Navigation 
 $contentControl = $window.FindName('contentMain')
 $btnHome = $window.FindName('btnHome')
 $btnConfig = $window.FindName('btnConfig')
 $btnLogs = $window.FindName('btnLogs')
 
-# Set HomeView as default view
+# Set HomeView as default view and header
 if ($contentControl) {
     Initialize-HomeView $contentControl
+    Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
 }
 
 if ($btnHome) {
     $btnHome.Add_Checked({
-            Initialize-HomeView $contentControl
-        })
+        Initialize-HomeView $contentControl
+        Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
+    })
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-            $contentControl.Content = Import-XamlView "Views\ConfigView.xaml"
-        })
+        $configView = Import-XamlView "Views\Config Options\ConfigView.xaml"
+        $contentControl.Content = $configView
+        Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
+
+        $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+        $optionContent = $configView.FindName('ConfigOptionContent')
+        Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+        if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
+            # Try to find it in the Content property if not found
+            if ($configView.Content -and $configView.Content.FindName) {
+                $optionContent = $configView.Content.FindName('ConfigOptionContent')
+                Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+            }
+        }
+        if ($mainCommandCombo -and $optionContent) {
+            # Set initial view
+            $selected = $mainCommandCombo.Text
+            Set-ConfigOptionView $optionContent $selected
+
+            $mainCommandCombo.Add_SelectionChanged({
+                $sel = $mainCommandCombo.Text
+                Set-ConfigOptionView $optionContent $sel
+            })
+        } else {
+            Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid."
+        }
+    })
 }
 if ($btnLogs) {
     $btnLogs.Add_Checked({
-            $contentControl.Content = Import-XamlView "Views\LogsView.xaml"
-        })
+        $contentControl.Content = Import-XamlView "Views\LogsView.xaml"
+        Show-HeaderPanel "Collapsed" "Collapsed" "Visible"
+    })
 }
 
-# --- Show Window ---
+# Show Window 
 $null = $window.ShowDialog()
