@@ -156,37 +156,22 @@ $script:StartNextRunspace = {
             $lastErrorLine = $null
             while (-not $stdout.EndOfStream) {
                 $line = $stdout.ReadLine()
-                # Remove ANSI escape sequences
                 $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                # Only capture the last error code line, ignore PsExec connection/service lines
                 if ($cleanLine -match "pwsh exited on .+ with error code (\d+)\.") {
                     $lastErrorLine = $matches[0]
                 }
-                # Suppress PsExec connection/service lines
                 elseif ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
                     $queue.Enqueue($cleanLine) | Out-Null
-                    $tb.Dispatcher.Invoke([action[string]] {
-                            param($l)
-                            $tb.AppendText("$l`n")
-                            $tb.ScrollToEnd()
-                        }, $cleanLine)
                 }
             }
             while (-not $stderr.EndOfStream) {
                 $line = $stderr.ReadLine()
                 $cleanLine = $line -replace "`e\[[\d;]*[A-Za-z]", ""
-                # Suppress PsExec connection/service lines in stderr as well
                 if ($cleanLine -notmatch "Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on" -and $cleanLine -match '\S') {
                     $queue.Enqueue($cleanLine) | Out-Null
-                    $tb.Dispatcher.Invoke([action[string]] {
-                            param($l)
-                            $tb.AppendText("$l`n")
-                            $tb.ScrollToEnd()
-                        }, $cleanLine)
                 }
             }
             $proc.WaitForExit()
-            # After process ends, print only the last error code line if it was found
             if ($lastErrorLine) {
                 $tb.Dispatcher.Invoke([action[string]] {
                         param($l)
