@@ -2,4 +2,6 @@ logs/*
 config.txt
 res/*
 MainWindow.RestorePoint*
+MainWindow-*
 Remote DCU.psproj*
+.vs/
