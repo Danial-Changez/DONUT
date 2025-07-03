@@ -370,10 +370,22 @@ Function Update-WSIDFile {
             & $script:StartNextRunspace
         }
 
-        # Timer to flush queues and manage runspaces
-        $timer = New-Object System.Windows.Threading.DispatcherTimer
-        $timer.Interval = [TimeSpan]::FromMilliseconds(100)
-        $timer.Add_Tick({
+        # Only start the DispatcherTimer ONCE per search/click
+        if ($script:Timer) {
+            $script:Timer.Stop()
+            $script:Timer = $null
+        }
+        # Clear all output queues before starting new timer/runspaces to prevent leftover lines
+        foreach ($comp in $script:TabsMap.Keys) {
+            $queue = $script:SyncUI[$comp]
+            while ($queue.Count -gt 0) { $null = $queue.TryDequeue([ref]([string]::Empty)) }
+            $tb = $script:TabsMap[$comp]
+            $tb.Clear()  # If .Clear() is not available, use $tb.Text = ""
+        }
+
+        $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
+        $script:Timer.Add_Tick({
             foreach ($comp in $script:TabsMap.Keys) {
                 $tb = $script:TabsMap[$comp]
                 $queue = $script:SyncUI[$comp]
@@ -404,7 +416,7 @@ Function Update-WSIDFile {
                 & $script:StartNextRunspace
             }
         })
-        $timer.Start()
+        $script:Timer.Start()
 
         if ($tabs.Items.Count -gt 0) {
             $tabs.SelectedIndex = 0
