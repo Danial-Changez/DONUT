@@ -195,7 +195,14 @@ $script:StartNextRunspace = {
         }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
     $async = $ps.BeginInvoke()
-    $script:ActiveRunspaces += $ps
+    if (-not $script:ActiveRunspaces) { 
+        $script:ActiveRunspaces = @()
+    }
+    if (-not $script:RunspaceJobs) {
+        $script:RunspaceJobs = @{}
+    }
+    
+    $script:ActiveRunspaces += ,$ps
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
         PowerShell  = $ps
@@ -227,12 +234,6 @@ Function Update-WSIDFile {
     Set-Content -Path $wsidFilePath -Value $valid
     Write-Host "WSID.txt updated with: '$($valid -join ',')'"
 
-    # Prevent multiple invocations by disabling the search button temporarily
-    $searchButton = $script:HomeView.FindName('btnSearch')
-    if ($searchButton) {
-        $searchButton.IsEnabled = $false
-    }
-
     # Read throttleLimit from config.txt
     $configPath = Join-Path $PSScriptRoot 'config.txt'
     # Default
@@ -246,36 +247,45 @@ Function Update-WSIDFile {
             }
         }
     }
-
     $tabs = $script:HomeView.FindName('TerminalTabs')
-    $tabs.Items.Clear()
-
-    # Prepare synchronized queues and UI map
-    $script:SyncUI = [hashtable]::Synchronized(@{})
-    $tabsMap = @{}
+    
+    # # Full reset (original behavior)
+    # $tabs.Items.Clear()
 
     # Prepare queue of computers to process
-    $pending = [System.Collections.Queue]::new()
+    # Only append new computers, do not reset existing tabs/queues
     foreach ($computer in $valid) {
-        $pending.Enqueue($computer)
-        # create a Tab + readonly TextBox
-        $tab = [System.Windows.Controls.TabItem]::new(); $tab.Header = $computer
-        $tb = [System.Windows.Controls.TextBox]::new(); $tb.IsReadOnly = $true
-        $tab.Content = $tb; $tabs.Items.Add($tab)
-        $tabsMap[$computer] = $tb
-        $script:SyncUI[$computer] = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
+        if (-not $script:QueuedOrRunning) { 
+            $script:QueuedOrRunning = @{}
+        }
+        if (-not $script:QueuedOrRunning.ContainsKey($computer)) {
+            if (-not $script:PendingQueue) { 
+                $script:PendingQueue = [System.Collections.Queue]::new()
+            }
+            $script:PendingQueue.Enqueue($computer)
+            
+            # Create a Tab + readonly TextBox
+            $tab = [System.Windows.Controls.TabItem]::new() 
+            $tab.Header = $computer
+            $tb = [System.Windows.Controls.TextBox]::new()
+            $tab.Content = $tb; $tabs.Items.Add($tab)
 
-        # Set default text for this computer's textbox
-        $tb.AppendText("[$computer] Starting runspace and remoteDCU.ps1...`n")
-        $tb.ScrollToEnd()
+            if (-not $script:TabsMap) {
+                $script:TabsMap = @{}
+            }
+            $script:TabsMap[$computer] = $tb
+
+            if (-not $script:SyncUI) {
+                $script:SyncUI = [hashtable]::Synchronized(@{})
+            }
+            $script:SyncUI[$computer] = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
+
+            # Set default text for this computer's textbox
+            $tb.AppendText("[$computer] Starting runspace and remoteDCU.ps1...`n")
+            $tb.ScrollToEnd()
+            $script:QueuedOrRunning[$computer] = $true
+        }
     }
-
-    # Use a script-scoped hashtable for shared state instead of global variables
-    $script:ActiveRunspaces = @()
-    $script:RunspaceJobs = @{}
-    $script:PendingQueue = $pending
-    $script:TabsMap = $tabsMap
-    $script:SyncUI = $script:SyncUI
 
     # Start up to $throttleLimit runspaces
     for ($i = 0; $i -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0; $i++) {
@@ -287,44 +297,54 @@ Function Update-WSIDFile {
         $script:Timer.Stop()
         $script:Timer = $null
     }
-    # Clear all output queues before starting new timer/runspaces to prevent leftover lines
-    foreach ($comp in $script:TabsMap.Keys) {
-        $queue = $script:SyncUI[$comp]
+    # Only clear the output queue and textbox for new computers, not for all tabs
+    foreach ($computer in $valid) {
+        if ($script:TabsMap.ContainsKey($computer)) { continue }
+        $queue = $script:SyncUI[$computer]
         while ($queue.Count -gt 0) { $null = $queue.TryDequeue([ref]([string]::Empty)) }
-        $tb = $script:TabsMap[$comp]
+        $tb = $script:TabsMap[$computer]
         $tb.Clear()
     }
 
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Timer.Add_Tick({
-            foreach ($comp in $script:TabsMap.Keys) {
-                $tb = $script:TabsMap[$comp]
-                $queue = $script:SyncUI[$comp]
-                $line = $null
-                while ($queue.TryDequeue([ref]$line)) {
-                    $tb.AppendText("$line`n"); $tb.ScrollToEnd()
+        if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
+        foreach ($comp in $script:TabsMap.Keys) {
+            $tb = $script:TabsMap[$comp]
+            $queue = $script:SyncUI[$comp]
+            $line = $null
+            while ($queue.TryDequeue([ref]$line)) {
+                $tb.AppendText("$line`n"); $tb.ScrollToEnd()
+            }
+        }
+        $finished = @()
+        foreach ($ps in @($script:ActiveRunspaces)) {
+            if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
+                $job = $script:RunspaceJobs[$ps]
+                if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
+                    try { $ps.EndInvoke($job.AsyncResult) } catch {}
+                    $ps.Dispose()
+                    Write-Host "[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)"
+                    $finished += $ps
                 }
             }
-            $finished = @()
-            foreach ($ps in @($script:ActiveRunspaces)) {
-                if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
-                    $job = $script:RunspaceJobs[$ps]
-                    if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
-                        try { $ps.EndInvoke($job.AsyncResult) } catch {}
-                        $ps.Dispose()
-                        $finished += $ps
-                    }
-                }
-            }
-            foreach ($ps in $finished) {
-                $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+        }
+        foreach ($ps in $finished) {
+            if ($script:RunspaceJobs.ContainsKey($ps)) {
+                $comp = $script:RunspaceJobs[$ps].Computer
+                Write-Host "[DEBUG] Cleaning up Runspace for $comp"
                 $script:RunspaceJobs.Remove($ps)
+            } else {
+                Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs."
             }
-            while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
-                & $script:StartNextRunspace
-            }
-        })
+            $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+        }
+        while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
+            & $script:StartNextRunspace
+            Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
+        }
+    })
     $script:Timer.Start()
 
     if ($tabs.Items.Count -gt 0) {
@@ -343,11 +363,11 @@ Function Set-ConfigOptionView {
         return
     }
     $viewMap = @{
-        "Scan" = "Scan.xaml"
-        "Apply Updates" = "ApplyUpdates.xaml"
-        "Configure" = "Configure.xaml"
+        "Scan"           = "Scan.xaml"
+        "Apply Updates"  = "ApplyUpdates.xaml"
+        "Configure"      = "Configure.xaml"
         "Driver Install" = "Driver Install.xaml"
-        "Version" = "Version.xaml"
+        "Version"        = "Version.xaml"
     }
     $file = $null
     if ($viewMap.ContainsKey($selected)) {
@@ -356,7 +376,8 @@ Function Set-ConfigOptionView {
     if ($file) {
         $childView = Import-XamlView "Views\Config Options\$file"
         $optionContent.Content = $childView
-    } else {
+    }
+    else {
         $optionContent.Content = $null
     }
 }
@@ -433,9 +454,9 @@ $headerLogs = $window.FindName('headerLogs')
 
 Function Show-HeaderPanel {
     param($homeVisibility, $configVisibility, $logsVisibility)
-    if ($headerHome)   { $headerHome.Visibility   = $homeVisibility }
+    if ($headerHome) { $headerHome.Visibility = $homeVisibility }
     if ($headerConfig) { $headerConfig.Visibility = $configVisibility }
-    if ($headerLogs)   { $headerLogs.Visibility   = $logsVisibility }
+    if ($headerLogs) { $headerLogs.Visibility = $logsVisibility }
 }
 
 # Main Content Control and Navigation 
@@ -452,45 +473,46 @@ if ($contentControl) {
 
 if ($btnHome) {
     $btnHome.Add_Checked({
-        Initialize-HomeView $contentControl
-        Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
-    })
+            Initialize-HomeView $contentControl
+            Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
+        })
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-        $configView = Import-XamlView "Views\Config Options\ConfigView.xaml"
-        $contentControl.Content = $configView
-        Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
+            $configView = Import-XamlView "Views\Config Options\ConfigView.xaml"
+            $contentControl.Content = $configView
+            Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
 
-        $mainCommandCombo = $configView.FindName('MainCommandComboBox')
-        $optionContent = $configView.FindName('ConfigOptionContent')
-        Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
-        if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
-            # Try to find it in the Content property if not found
-            if ($configView.Content -and $configView.Content.FindName) {
-                $optionContent = $configView.Content.FindName('ConfigOptionContent')
-                Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+            $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+            $optionContent = $configView.FindName('ConfigOptionContent')
+            Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+            if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
+                # Try to find it in the Content property if not found
+                if ($configView.Content -and $configView.Content.FindName) {
+                    $optionContent = $configView.Content.FindName('ConfigOptionContent')
+                    Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+                }
             }
-        }
-        if ($mainCommandCombo -and $optionContent) {
-            # Set initial view
-            $selected = $mainCommandCombo.Text
-            Set-ConfigOptionView $optionContent $selected
+            if ($mainCommandCombo -and $optionContent) {
+                # Set initial view
+                $selected = $mainCommandCombo.Text
+                Set-ConfigOptionView $optionContent $selected
 
-            $mainCommandCombo.Add_SelectionChanged({
-                $sel = $mainCommandCombo.Text
-                Set-ConfigOptionView $optionContent $sel
-            })
-        } else {
-            Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid."
-        }
-    })
+                $mainCommandCombo.Add_SelectionChanged({
+                        $sel = $mainCommandCombo.Text
+                        Set-ConfigOptionView $optionContent $sel
+                    })
+            }
+            else {
+                Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid."
+            }
+        })
 }
 if ($btnLogs) {
     $btnLogs.Add_Checked({
-        $contentControl.Content = Import-XamlView "Views\LogsView.xaml"
-        Show-HeaderPanel "Collapsed" "Collapsed" "Visible"
-    })
+            $contentControl.Content = Import-XamlView "Views\LogsView.xaml"
+            Show-HeaderPanel "Collapsed" "Collapsed" "Visible"
+        })
 }
 
 # Show Window 
