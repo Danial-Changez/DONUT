@@ -28,30 +28,30 @@
             <!-- Dropdown / Multi-Select Options -->
             <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Update Severity" Style="{DynamicResource ModernSectionSubtitle}" />
                 <WrapPanel>
-                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" />
                 </WrapPanel>
-                <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <TextBlock Text="Update Type" Style="{DynamicResource ModernSectionSubtitle}" />
                 <WrapPanel>
-                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
                 </WrapPanel>
-                <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <TextBlock Text="Update Device Category" Style="{DynamicResource ModernSectionSubtitle}" />
                 <WrapPanel>
-                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
                 </WrapPanel>
                 <TextBlock Text="Schedule Action" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
                 <ComboBox Width="200" Style="{DynamicResource ModernComboBox}">

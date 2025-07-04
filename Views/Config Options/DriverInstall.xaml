@@ -19,11 +19,11 @@
             <!-- Text Options -->
             <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Output Log" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Driver Library Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Driver Library Location" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Catalog Location" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>

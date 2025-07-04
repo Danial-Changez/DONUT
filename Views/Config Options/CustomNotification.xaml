@@ -7,11 +7,11 @@
             <!-- Text Options -->
             <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Heading" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Heading" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Body" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Body" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Timestamp" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Timestamp" Style="{DynamicResource ModernSectionSubtitle}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>

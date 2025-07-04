@@ -137,13 +137,13 @@
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextSecondary}" />
+                Value="{DynamicResource BodyTextPrimary}" />
         <Setter Property="Margin"
-                Value="0,4,0,4" />
+                Value="0,0,16,8" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <StackPanel Orientation="Horizontal">
+                    <DockPanel LastChildFill="True">
                         <Border x:Name="box"
                                 Width="30"
                                 Height="30"
@@ -152,7 +152,8 @@
                                 BorderBrush="{DynamicResource AccentBlue}"
                                 Background="Transparent"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                DockPanel.Dock="Left">
                             <Grid>
                                 <Path x:Name="check"
                                       Data="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"
@@ -169,8 +170,10 @@
                             </Grid>
                         </Border>
                         <ContentPresenter Margin="10,0,0,0"
-                                          VerticalAlignment="Center" />
-                    </StackPanel>
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          HorizontalAlignment="Left" />
+                    </DockPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked"
                                  Value="True">
@@ -194,6 +197,15 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Modern Section Subtitle Style for Config Option Panels -->
+    <Style x:Key="ModernSectionSubtitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
+        <Setter Property="Margin" Value="0,12,0,4" />
     </Style>
     <!-- Modern Button Style (like searchBtn) -->
     <Style x:Key="ModernButton"

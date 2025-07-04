@@ -4,8 +4,8 @@
       Background="{DynamicResource PanelBackground}">
     <StackPanel Margin="30,20,30,20">
         <TextBlock Text="This command will display the help information for DCU CLI on the target machine(s)."
-                   FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}"
-                   Margin="0,0,0,18" TextWrapping="Wrap" HorizontalAlignment="Center" />
+                   Style="{DynamicResource ModernSectionSubtitle}"
+                   TextWrapping="Wrap" HorizontalAlignment="Center" />
         <!-- No options for help command -->
         <!-- No Save button here -->
     </StackPanel>
