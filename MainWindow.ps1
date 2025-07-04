@@ -342,6 +342,111 @@ Function Update-WSIDFile {
     }
 }
 
+# --- Config Save Logic ---
+Function Save-ConfigFromUI {
+    param(
+        [string]$selectedKey
+    )
+    # Canonical command and option tables (must match config file spec)
+    $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
+    $COMMAND_OPTIONS = @{
+        scan = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "report")
+        applyUpdates = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "reboot", "encryptedPassword", "encryptedPasswordFile", "encryptionKey", "secureEncryptedPassword", "secureEncryptionKey", "autoSuspendBitLocker", "forceupdate")
+        configure = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "driverLibraryLocation", "downloadLocation", "delayDays", "allowXML", "importSettings", "exportSettings", "lockSettings", "advancedDriverRestore", "userConsent", "secureBiosPassword", "biosPassword", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "proxyHost", "proxyPort", "proxyUserName", "secureProxyPassword", "proxyPassword", "scheduleWeekly", "scheduleMonthly", "scheduleDaily", "scheduleManual", "scheduleAuto", "scheduleAction", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "deferralInstallInterval", "deferralInstallCount", "systemRestartDeferral", "deferralRestartInterval", "deferralRestartCount", "updatesNotification", "maxretry")
+        customnotification = @("heading", "body", "timestamp")
+        driverInstall = @("silent", "outputLog", "driverLibraryLocation", "reboot")
+        generateEncryptedPassword = @("encryptionKey", "password", "outputPath", "secureEncryptionKey", "securePassword")
+        help = @()
+        version = @()
+    }
+    $FLAG_OPTIONS = @{
+        scan = @("silent")
+        applyUpdates = @("silent", "reboot", "autoSuspendBitLocker", "forceupdate")
+        configure = @("silent", "allowXML", "lockSettings", "advancedDriverRestore", "userConsent", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "scheduleAuto", "scheduleManual", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "systemRestartDeferral", "updatesNotification")
+        customnotification = @()
+        driverInstall = @("silent", "reboot")
+        generateEncryptedPassword = @()
+        help = @()
+        version = @()
+    }
+    $GLOBAL_OPTIONS = @("throttleLimit")
+
+    $configView = $contentControl.Content
+    if (-not $configView) { Write-Host "[Config] No config view loaded."; return }
+    $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+    $optionContent = $configView.FindName('ConfigOptionsContent')
+    if (-not $mainCommandCombo -or -not $optionContent) { Write-Host "[Config] MainCommandComboBox or ConfigOptionsContent not found."; return }
+    if (-not $selectedKey) {
+        Write-Host "[Config] No key for selected command (argument missing)." -ForegroundColor Red
+        return
+    }
+    $childView = $optionContent.Content
+    if (-not $childView) { Write-Host "[Config] No child view loaded."; return }
+
+    $lines = @()
+    foreach ($cmd in $MAIN_COMMANDS) {
+        $enabled = if ($cmd -eq $selectedKey) { 'enable' } else { 'disable' }
+        $lines += "$cmd = $enabled"
+        if ($cmd -eq $selectedKey) {
+            # Flags (toggles)
+            foreach ($flag in $FLAG_OPTIONS[$cmd]) {
+                # Find toggle by name (case-insensitive, ignoring spaces)
+                $toggle = $null
+                $toggles = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.StackPanel] } | ForEach-Object { $_.Children } | Where-Object { $_ -is [System.Windows.Controls.ToggleButton] }
+                foreach ($t in $toggles) {
+                    $label = $t.Parent.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] } | Select-Object -First 1
+                    $flagName = ($label.Text -split ':')[0] -replace ' ', ''
+                    if ($flagName.ToLower() -eq $flag.ToLower()) { $toggle = $t; break }
+                }
+                $val = if ($toggle -and $toggle.IsChecked) { 'enable' } else { '' }
+                $lines += "- $flag = $val"
+            }
+            # Multi-checkboxes (multi-select)
+            foreach ($multi in @("updateSeverity", "updateType", "updateDeviceCategory")) {
+                if ($COMMAND_OPTIONS[$cmd] -contains $multi) {
+                    $wrap = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.WrapPanel] } | Where-Object { $_.Tag -eq $multi }
+                    if ($wrap) {
+                        $checked = $wrap.Children | Where-Object { $_.IsChecked } | ForEach-Object { $_.Content }
+                        if ($checked) {
+                            $lines += "- $multi = $($checked -join ',')"
+                        }
+                    }
+                }
+            }
+            # Textboxes
+            foreach ($opt in $COMMAND_OPTIONS[$cmd]) {
+                if ($FLAG_OPTIONS[$cmd] -contains $opt) { continue }
+                if ($opt -in @("updateSeverity", "updateType", "updateDeviceCategory", "scheduleAction")) { continue }
+                $tb = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.TextBox] -and $_.Tag -eq $opt }
+                if ($tb -and $tb.Text) {
+                    $lines += "- $opt = $($tb.Text)"
+                }
+            }
+            # Dropdowns (ComboBox)
+            if ($COMMAND_OPTIONS[$cmd] -contains "scheduleAction") {
+                $combo = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.ComboBox] -and $_.Tag -eq "scheduleAction" }
+                if ($combo) {
+                    $val = $combo.SelectedItem
+                    if ($val -is [System.Windows.Controls.ComboBoxItem]) { $val = $val.Content }
+                    if ($val) {
+                        $lines += "- scheduleAction = $val"
+                    }
+                }
+            }
+        }
+    }
+    # Write to config.txt
+    # Global options (e.g., throttleLimit) - preserve any existing global options at the end
+    $configPath = Join-Path $PSScriptRoot 'config.txt'
+    if (Test-Path $configPath) {
+        $globalLines = Get-Content $configPath | Where-Object { $_ -match '^[a-zA-Z]+\s*=\s*\d+$' -and ($_ -notmatch '^(scan|applyupdates|configure|customnotification|driverinstall|generateencryptedpassword|help|version)\s*=') }
+        foreach ($g in $globalLines) { $lines += $g }
+    }
+    Set-Content -Path $configPath -Value $lines
+    Write-Host "[Config] Saved config to $configPath"
+    # --- Ensure config.txt is reloaded if needed elsewhere ---
+}
+
 # Window and Resources 
 $window = Import-Xaml "Views\MainWindow.xaml"
 $wsidFilePath = Join-Path $PSScriptRoot "res\WSID.txt"
@@ -518,9 +623,9 @@ if ($btnConfig) {
             }
             & $SetConfigOptionView $optionContent 'Scan'
             $mainCommandCombo.Add_SelectionChanged(({
-                $eventArgs = $args[1]
-                if ($eventArgs.AddedItems.Count -gt 0) {
-                    $selItem = $eventArgs.AddedItems[0]
+                $selEventArgs = $args[1]
+                if ($selEventArgs.AddedItems.Count -gt 0) {
+                    $selItem = $selEventArgs.AddedItems[0]
                     if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
                         $sel = $selItem.Content
                     } else {
@@ -539,6 +644,34 @@ if ($btnConfig) {
             }).GetNewClosure())
         } else {
             Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
+        }
+
+        # Wire up Save button in ConfigView
+        $saveBtn = $configView.FindName('btnSaveConfig')
+        if ($saveBtn) {
+            $null = $saveBtn.Remove_Click
+            $saveBtn.Add_Click({
+                # Get selected command key robustly
+                $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+                $viewMap = @{
+                    "Scan"           = "scan"
+                    "Apply Updates"  = "applyUpdates"
+                    "Configure"      = "configure"
+                    "Driver Install" = "driverInstall"
+                    "Version"        = "version"
+                    "Help"           = "help"
+                    "Generate Encrypted Password" = "generateEncryptedPassword"
+                    "Custom Notification" = "customnotification"
+                }
+                $selectedCmd = $mainCommandCombo.SelectedItem
+                if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) { $selectedCmd = $selectedCmd.Content }
+                $selectedCmdNorm = $selectedCmd -replace '\s+', ' ' -replace '^\s+|\s+$',''
+                $selectedKey = $null
+                foreach ($k in $viewMap.Keys) {
+                    if ($k.ToLower() -eq $selectedCmdNorm.ToLower()) { $selectedKey = $viewMap[$k]; break }
+                }
+                Save-ConfigFromUI -selectedKey $selectedKey
+            })
         }
     })
 }
