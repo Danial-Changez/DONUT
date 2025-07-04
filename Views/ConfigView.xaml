@@ -39,7 +39,8 @@
     <!-- Dynamic Options Section (child view) -->
     <ContentControl x:Name="ConfigOptionsContent" Grid.Row="2" Margin="0,0,0,0" />
     <!-- Save Button -->
-    <Button Grid.Row="3"
+    <Button x:Name="btnSaveConfig"
+            Grid.Row="3"
             Content="Save Config"
             Style="{DynamicResource ModernButton}"
             HorizontalAlignment="Center"

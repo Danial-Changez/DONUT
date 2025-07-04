@@ -7,6 +7,6 @@
                    FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}"
                    Margin="0,0,0,18" TextWrapping="Wrap" HorizontalAlignment="Center" />
         <!-- No options for help command -->
-        <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+        <!-- No Save button here -->
     </StackPanel>
 </Grid>

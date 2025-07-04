@@ -4,7 +4,6 @@
       Background="{DynamicResource PanelBackground}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="30,20,30,20">
-            <TextBlock Text="Driver Install Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
             <!-- Flags -->
             <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical" Margin="0,0,0,18">
@@ -27,7 +26,6 @@
                 <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
-            <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,30,0,0" />
         </StackPanel>
     </ScrollViewer>
 </Grid>
