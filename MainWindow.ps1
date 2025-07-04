@@ -347,7 +347,7 @@ Function Save-ConfigFromUI {
     param(
         [string]$selectedKey
     )
-    # Canonical command and option tables (must match config file spec)
+    # Command and option tables
     $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
     $COMMAND_OPTIONS = @{
         scan = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "report")
@@ -372,16 +372,23 @@ Function Save-ConfigFromUI {
     $GLOBAL_OPTIONS = @("throttleLimit")
 
     $configView = $contentControl.Content
-    if (-not $configView) { Write-Host "[Config] No config view loaded."; return }
+    if (-not $configView) { 
+        Write-Host "[Config] No config view loaded."; return 
+    }
     $mainCommandCombo = $configView.FindName('MainCommandComboBox')
     $optionContent = $configView.FindName('ConfigOptionsContent')
-    if (-not $mainCommandCombo -or -not $optionContent) { Write-Host "[Config] MainCommandComboBox or ConfigOptionsContent not found."; return }
+    if (-not $mainCommandCombo -or -not $optionContent) { 
+        Write-Host "[Config] MainCommandComboBox or ConfigOptionsContent not found."; return 
+    }
     if (-not $selectedKey) {
         Write-Host "[Config] No key for selected command (argument missing)." -ForegroundColor Red
         return
     }
+    
     $childView = $optionContent.Content
-    if (-not $childView) { Write-Host "[Config] No child view loaded."; return }
+    if (-not $childView) { 
+        Write-Host "[Config] No child view loaded."; return 
+    }
 
     $lines = @()
     foreach ($cmd in $MAIN_COMMANDS) {
@@ -664,11 +671,12 @@ if ($btnConfig) {
                     "Custom Notification" = "customnotification"
                 }
                 $selectedCmd = $mainCommandCombo.SelectedItem
-                if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) { $selectedCmd = $selectedCmd.Content }
-                $selectedCmdNorm = $selectedCmd -replace '\s+', ' ' -replace '^\s+|\s+$',''
+                if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) { 
+                    $selectedCmd = $selectedCmd.Content 
+                }
                 $selectedKey = $null
                 foreach ($k in $viewMap.Keys) {
-                    if ($k.ToLower() -eq $selectedCmdNorm.ToLower()) { $selectedKey = $viewMap[$k]; break }
+                    if ($k -eq $selectedCmd) { $selectedKey = $viewMap[$k]; break }
                 }
                 Save-ConfigFromUI -selectedKey $selectedKey
             })
