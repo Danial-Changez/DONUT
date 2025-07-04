@@ -80,7 +80,8 @@ Function Initialize-HomeView {
         Initialize-SearchBar $script:SearchBar
         Set-PlaceholderLogic $script:SearchBar "WSID..."
         Write-Host "Search bar initialized with: '$($script:SearchBar.Text)'"
-    } else {
+    }
+    else {
         Write-Host "Search bar not found in HomeView."
     }
     # Attach the click event to the Search button
@@ -88,11 +89,12 @@ Function Initialize-HomeView {
     if ($searchButton) {
         $null = $searchButton.Remove_Click
         $searchButton.Add_Click({
-            $bar = $script:HomeView.FindName('txtHomeMessage')
-            Update-WSIDFile $bar
-        })
+                $bar = $script:HomeView.FindName('txtHomeMessage')
+                Update-WSIDFile $bar
+            })
         Write-Host "Search button click event attached."
-    } else {
+    }
+    else {
         Write-Host "Search button not found in HomeView."
     }
     # Attach the SelectionChanged event to the ComboBox
@@ -101,10 +103,11 @@ Function Initialize-HomeView {
         $null = $mainCommandComboBox.Remove_SelectionChanged
         $mainCommandComboBox.Style = $script:HomeView.Resources["ModernComboBox"]
         $mainCommandComboBox.Add_SelectionChanged({
-            OnMainCommandChanged $mainCommandComboBox
-        })
+                OnMainCommandChanged $mainCommandComboBox
+            })
         Write-Host "MainCommandComboBox SelectionChanged event attached."
-    } else {
+    }
+    else {
         Write-Host "MainCommandComboBox not found in HomeView."
     }
 }
@@ -126,6 +129,13 @@ Function Initialize-SearchBar {
         $textBox.Text = $lines -join "`r`n"
     }
 }
+
+if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = @() }
+if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
+if (-not $script:QueuedOrRunning) { $script:QueuedOrRunning = @{} }
+if (-not $script:PendingQueue) { $script:PendingQueue = [System.Collections.Queue]::new() }
+if (-not $script:TabsMap) { $script:TabsMap = @{} }
+if (-not $script:SyncUI) { $script:SyncUI = [hashtable]::Synchronized(@{}) }
 
 # Define Start-NextRunspace as a script-scoped scriptblock
 $script:StartNextRunspace = {
@@ -154,10 +164,13 @@ $script:StartNextRunspace = {
             $psi = New-Object System.Diagnostics.ProcessStartInfo(
                 'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
             )
-            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-            $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.UseShellExecute = $false
+            $psi.CreateNoWindow = $true
 
-            $proc = [System.Diagnostics.Process]::new(); $proc.StartInfo = $psi
+            $proc = [System.Diagnostics.Process]::new()
+            $proc.StartInfo = $psi
             $proc.Start() | Out-Null
 
             $stdout = $proc.StandardOutput
@@ -191,14 +204,7 @@ $script:StartNextRunspace = {
         }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
     $async = $ps.BeginInvoke()
-    if (-not $script:ActiveRunspaces) { 
-        $script:ActiveRunspaces = @()
-    }
-    if (-not $script:RunspaceJobs) {
-        $script:RunspaceJobs = @{}
-    }
-    
-    $script:ActiveRunspaces += , $ps
+    $script:ActiveRunspaces += $ps
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
         PowerShell  = $ps
@@ -245,35 +251,20 @@ Function Update-WSIDFile {
     }
     $tabs = $script:HomeView.FindName('TerminalTabs')
     
-    # # Full reset (original behavior)
-    # $tabs.Items.Clear()
-
     # Prepare queue of computers to process
     # Only append new computers, do not reset existing tabs/queues
     foreach ($computer in $valid) {
-        if (-not $script:QueuedOrRunning) { 
-            $script:QueuedOrRunning = @{}
-        }
         if (-not $script:QueuedOrRunning.ContainsKey($computer)) {
-            if (-not $script:PendingQueue) { 
-                $script:PendingQueue = [System.Collections.Queue]::new()
-            }
             $script:PendingQueue.Enqueue($computer)
             
             # Create a Tab + readonly TextBox
             $tab = [System.Windows.Controls.TabItem]::new() 
-            $tab.Header = $computer
             $tb = [System.Windows.Controls.TextBox]::new()
-            $tab.Content = $tb; $tabs.Items.Add($tab)
+            $tab.Header = $computer
+            $tab.Content = $tb
+            $tabs.Items.Add($tab)
 
-            if (-not $script:TabsMap) {
-                $script:TabsMap = @{}
-            }
             $script:TabsMap[$computer] = $tb
-
-            if (-not $script:SyncUI) {
-                $script:SyncUI = [hashtable]::Synchronized(@{})
-            }
             $script:SyncUI[$computer] = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
 
             # Set default text for this computer's textbox
@@ -296,6 +287,7 @@ Function Update-WSIDFile {
     # Only clear the output queue and textbox for new computers, not for all tabs
     foreach ($computer in $valid) {
         if ($script:TabsMap.ContainsKey($computer)) { continue }
+        
         $queue = $script:SyncUI[$computer]
         while ($queue.Count -gt 0) { $null = $queue.TryDequeue([ref]([string]::Empty)) }
         $tb = $script:TabsMap[$computer]
@@ -305,13 +297,14 @@ Function Update-WSIDFile {
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Timer.Add_Tick({
-            if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
+
             foreach ($comp in $script:TabsMap.Keys) {
                 $tb = $script:TabsMap[$comp]
                 $queue = $script:SyncUI[$comp]
                 $line = $null
                 while ($queue.TryDequeue([ref]$line)) {
-                    $tb.AppendText("$line`n"); $tb.ScrollToEnd()
+                    $tb.AppendText("$line`n")
+                    $tb.ScrollToEnd()
                 }
             }
             $finished = @()
@@ -321,7 +314,7 @@ Function Update-WSIDFile {
                     if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
                         try { $ps.EndInvoke($job.AsyncResult) } catch {}
                         $ps.Dispose()
-                        Write-Host "[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)"
+                        Write-Host "`n[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)" -ForegroundColor Green
                         $finished += $ps
                     }
                 }
@@ -329,17 +322,17 @@ Function Update-WSIDFile {
             foreach ($ps in $finished) {
                 if ($script:RunspaceJobs.ContainsKey($ps)) {
                     $comp = $script:RunspaceJobs[$ps].Computer
-                    Write-Host "[DEBUG] Cleaning up Runspace for $comp"
+                    Write-Host "[DEBUG] Cleaning up Runspace for $comp`n" -ForegroundColor Green
                     $script:RunspaceJobs.Remove($ps)
                 }
                 else {
-                    Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs."
+                    Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs." -ForegroundColor Yellow
                 }
                 $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
             }
             while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
                 & $script:StartNextRunspace
-                Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
+                Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)" -ForegroundColor Cyan
             }
         })
     $script:Timer.Start()
@@ -366,10 +359,8 @@ Function Set-ConfigOptionView {
         "Driver Install" = "Driver Install.xaml"
         "Version"        = "Version.xaml"
     }
-    $file = $null
-    if ($viewMap.ContainsKey($selected)) {
-        $file = $viewMap[$selected]
-    }
+
+    $file = $viewMap[$selected]
     if ($file) {
         $childView = Import-XamlView "Views\Config Options\$file"
         $optionContent.Content = $childView
@@ -476,13 +467,13 @@ Function Update-HomeView {
         foreach ($tab in $script:TabsCollection) {
             $tabs.Items.Add($tab)
         }
-        Write-Host "[Update-HomeView] Restored $($script:TabsCollection.Count) tabs to TerminalTabs."
+        Write-Host "[Update-HomeView] Restored $($script:TabsCollection.Count) tabs to TerminalTabs." -ForegroundColor Cyan
     }
     $searchBar = $script:HomeViewInstance.FindName('txtHomeMessage')
     if ($searchBar) {
         Initialize-SearchBar $searchBar
         Set-PlaceholderLogic $searchBar "WSID..."
-        Write-Host "[Update-HomeView] Search bar refreshed with: '$($searchBar.Text)'"
+        Write-Host "[Update-HomeView] Search bar refreshed with: '$($searchBar.Text)'" -ForegroundColor Cyan
     }
 }
 
@@ -499,14 +490,14 @@ if ($contentControl) {
 
 if ($btnHome) {
     $btnHome.Add_Checked({
-        if (-not $script:HomeViewInstance) {
-            Initialize-HomeView $contentControl
-            $script:HomeViewInstance = $script:HomeView
-        }
-        $contentControl.Content = $script:HomeViewInstance
-        Update-HomeView
-        Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
-    })
+            if (-not $script:HomeViewInstance) {
+                Initialize-HomeView $contentControl
+                $script:HomeViewInstance = $script:HomeView
+            }
+            $contentControl.Content = $script:HomeViewInstance
+            Update-HomeView
+            Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
+        })
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
@@ -519,12 +510,13 @@ if ($btnConfig) {
 
             $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
             $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionContent')
-            Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+            Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Cyan
+            
             if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
                 # Try to find it in the Content property if not found
                 if ($script:ConfigViewInstance.Content -and $script:ConfigViewInstance.Content.FindName) {
                     $optionContent = $script:ConfigViewInstance.Content.FindName('ConfigOptionContent')
-                    Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
+                    Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Yellow
                 }
             }
             if ($mainCommandCombo -and $optionContent) {
@@ -538,7 +530,7 @@ if ($btnConfig) {
                     })
             }
             else {
-                Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid."
+                Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
             }
         })
 }
