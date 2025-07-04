@@ -12,22 +12,16 @@
         <RowDefinition Height="Auto" /> <!-- Save Button -->
     </Grid.RowDefinitions>
     <!-- Title -->
-    <TextBlock Text="Configuration"
+    <TextBlock Text="Main Command"
                Grid.Row="0"
                FontFamily="Montserrat"
-               FontSize="24"
+               FontSize="20"
                FontWeight="Bold"
                Foreground="{DynamicResource AccentBlue}"
-               Margin="0,18,0,24"
+               Margin="0,18,0,18"
                HorizontalAlignment="Center" />
     <!-- Main Command Dropdown -->
     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
-        <TextBlock Text="Main Command: "
-                   FontFamily="Montserrat"
-                   FontSize="16"
-                   FontWeight="Medium"
-                   Foreground="{DynamicResource BodyTextPrimary}"
-                   VerticalAlignment="Center" />
         <ComboBox x:Name="MainCommandComboBox"
                   Width="220"
                   Margin="10,0,0,0"
@@ -43,7 +37,7 @@
         </ComboBox>
     </StackPanel>
     <!-- Dynamic Options Section (child view) -->
-    <ContentControl x:Name="ConfigOptionContent" Grid.Row="2" Margin="0,0,0,0" />
+    <ContentControl x:Name="ConfigOptionsContent" Grid.Row="2" Margin="0,0,0,0" />
     <!-- Save Button -->
     <Button Grid.Row="3"
             Content="Save Config"

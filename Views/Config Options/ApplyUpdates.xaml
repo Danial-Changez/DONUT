@@ -1,29 +1,79 @@
-<!-- ApplyUpdates.xaml -->
+<!-- ApplyUpdates.xaml - Organized layout to match Python UI screenshots -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource PanelBackground}">
-    <StackPanel Margin="30,20,30,20">
-        <TextBlock Text="Apply Updates Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
-        <GroupBox Header="Flags" Foreground="{DynamicResource AccentPurple}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <CheckBox Content="Silent" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Reboot" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Auto Suspend BitLocker" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Force Update" Style="{DynamicResource ModernCheckBox}" />
-            </StackPanel>
-        </GroupBox>
-        <GroupBox Header="Options" Foreground="{DynamicResource AccentCyan}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Output Log: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="30,20,30,20">
+            <TextBlock Text="Apply Updates Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
+            <!-- Flags -->
+            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Orientation="Vertical" Margin="0,0,0,18">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Catalog Location: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Reboot: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Auto Suspend Bit Locker: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Force Update: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
-        </GroupBox>
-        <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,10,0,0" />
-    </StackPanel>
+            <!-- Dropdown / Multi-Select Options -->
+            <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" />
+                <WrapPanel>
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" />
+                </WrapPanel>
+                <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <WrapPanel>
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
+                </WrapPanel>
+                <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <WrapPanel>
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
+                </WrapPanel>
+            </StackPanel>
+            <!-- Text Options -->
+            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encrypted Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encrypted Password File" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encryption Key" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Encrypted Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Encryption Key" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+            <!-- Global Options (if any) can be added here -->
+            <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,30,0,0" />
+        </StackPanel>
+    </ScrollViewer>
 </Grid>

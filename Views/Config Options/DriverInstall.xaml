@@ -1,27 +1,33 @@
-<!-- Driver Install.xaml -->
+<!-- DriverInstall.xaml - Organized layout to match Python UI screenshots -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource PanelBackground}">
-    <StackPanel Margin="30,20,30,20">
-        <TextBlock Text="Driver Install Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
-        <GroupBox Header="Flags" Foreground="{DynamicResource AccentPurple}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <CheckBox Content="Silent" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Reboot" Style="{DynamicResource ModernCheckBox}" />
-            </StackPanel>
-        </GroupBox>
-        <GroupBox Header="Options" Foreground="{DynamicResource AccentCyan}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Output Log: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="30,20,30,20">
+            <TextBlock Text="Driver Install Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
+            <!-- Flags -->
+            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Orientation="Vertical" Margin="0,0,0,18">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Catalog Location: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Reboot: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
-        </GroupBox>
-        <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,10,0,0" />
-    </StackPanel>
+            <!-- Text Options -->
+            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Driver Library Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+            <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,30,0,0" />
+        </StackPanel>
+    </ScrollViewer>
 </Grid>

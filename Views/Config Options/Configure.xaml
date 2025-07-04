@@ -2,75 +2,114 @@
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource PanelBackground}">
-    <Grid.Resources>
-        <Style x:Key="ModernTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="FontFamily" Value="Montserrat" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
-            <Setter Property="CaretBrush" Value="{DynamicResource BodyTextPrimary}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BodyTextPrimary}" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="Padding" Value="2,2,2,2" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
-        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
-            <Setter Property="FontFamily" Value="Montserrat" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
-            <Setter Property="Margin" Value="0,4,0,4" />
-        </Style>
-        <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource AccentPurple}" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="FontFamily" Value="Montserrat" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Height" Value="38" />
-            <Setter Property="Width" Value="180" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Height="38" CornerRadius="19" Background="{TemplateBinding Background}">
-                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource AccentBlue}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </Grid.Resources>
-    <StackPanel Margin="30,20,30,20">
-        <TextBlock Text="Configure Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
-        <GroupBox Header="Flags" Foreground="{DynamicResource AccentPurple}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <CheckBox Content="Silent" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Allow XML" Style="{DynamicResource ModernCheckBox}" />
-                <CheckBox Content="Lock Settings" Style="{DynamicResource ModernCheckBox}" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="30,20,30,20">
+            <TextBlock Text="Configure Command Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
+            <!-- Flags -->
+            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Orientation="Vertical" Margin="0,0,0,18">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Allow Xml: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Lock Settings: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Advanced Driver Restore: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="User Consent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Custom Proxy: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Authentication: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Fallback To Direct Connection: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Auto: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Manual: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Restore Defaults: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Force Restart: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Auto Suspend Bit Locker: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Default Source Location: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Installation Deferral: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="System Restart Deferral: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Updates Notification: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
             </StackPanel>
-        </GroupBox>
-        <GroupBox Header="Options" Foreground="{DynamicResource AccentCyan}" Margin="0,0,0,16">
-            <StackPanel Margin="10,5,0,5">
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Output Log: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Catalog Location: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="120" VerticalAlignment="Center" />
-                    <TextBox Width="200" Style="{DynamicResource ModernTextBox}" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Delay Days: " FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Width="80" VerticalAlignment="Center" />
-                    <TextBox Width="80" Style="{DynamicResource ModernTextBox}" />
-                </StackPanel>
+            <!-- Dropdown / Multi-Select Options -->
+            <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" />
+                <WrapPanel>
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                </WrapPanel>
+                <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <WrapPanel>
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                </WrapPanel>
+                <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <WrapPanel>
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Margin="0,0,12,0" />
+                </WrapPanel>
+                <TextBlock Text="Schedule Action" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
+                <ComboBox Width="200" Style="{DynamicResource ModernComboBox}">
+                    <ComboBoxItem Content="NotifyAvailableUpdates" />
+                    <ComboBoxItem Content="DownloadAndNotify" />
+                    <ComboBoxItem Content="DownloadInstallAndNotify" />
+                </ComboBox>
             </StackPanel>
-        </GroupBox>
-        <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,10,0,0" />
-    </StackPanel>
+            <!-- Text Options -->
+            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Driver Library Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Download Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Import Settings" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Export Settings" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Bios Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Bios Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Custom Proxy" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Host" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Port" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy User Name" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Proxy Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Weekly" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Monthly" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Daily" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Install Interval" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Install Count" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Restart Interval" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Restart Count" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Max Retry" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+            <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,30,0,0" />
+        </StackPanel>
+    </ScrollViewer>
 </Grid>

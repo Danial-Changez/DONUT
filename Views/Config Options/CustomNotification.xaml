@@ -1,0 +1,21 @@
+<!-- CustomNotification.xaml - Organized layout to match Python UI screenshots -->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource PanelBackground}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="30,20,30,20">
+            <TextBlock Text="Custom Notification Options" FontFamily="Montserrat" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,18" HorizontalAlignment="Center" />
+            <!-- Text Options -->
+            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="Heading" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Body" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Timestamp" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+            <Button Content="Save Config" Style="{DynamicResource ModernButton}" HorizontalAlignment="Center" Margin="0,30,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</Grid>

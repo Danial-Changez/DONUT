@@ -342,36 +342,9 @@ Function Update-WSIDFile {
     }
 }
 
-Function Set-ConfigOptionView {
-    param($optionContent, $selected)
-    if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
-        Write-Host "optionContent is null or does not have a Content property."
-        return
-    }
-    if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
-        $optionContent.Content = $null
-        return
-    }
-    $viewMap = @{
-        "Scan"           = "Scan.xaml"
-        "Apply Updates"  = "ApplyUpdates.xaml"
-        "Configure"      = "Configure.xaml"
-        "Driver Install" = "Driver Install.xaml"
-        "Version"        = "Version.xaml"
-    }
-
-    $file = $viewMap[$selected]
-    if ($file) {
-        $childView = Import-XamlView "Views\Config Options\$file"
-        $optionContent.Content = $childView
-    }
-    else {
-        $optionContent.Content = $null
-    }
-}
-
 # Window and Resources 
 $window = Import-Xaml "Views\MainWindow.xaml"
+$wsidFilePath = Join-Path $PSScriptRoot "res\WSID.txt"
 
 # Merge all resource dictionaries from the Styles folder
 $stylesPath = Join-Path $PSScriptRoot 'Styles'
@@ -431,9 +404,6 @@ $minimizeButton = $window.FindName('btnMinimize')
 $minimizeButton.Add_Click({
         $window.WindowState = 'Minimized'
     })
-
-# WSID Path 
-$wsidFilePath = Join-Path $PSScriptRoot "res\WSID.txt"
 
 # Header panels for dynamic icon/text
 $headerHome = $window.FindName('headerHome')
@@ -501,38 +471,76 @@ if ($btnHome) {
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-            if (-not $script:ConfigViewInstance) {
-                $script:ConfigViewInstance = Import-XamlView "Views\Config Options\ConfigView.xaml"
-                # Optionally, run one-time setup here if needed
-            }
-            $contentControl.Content = $script:ConfigViewInstance
-            Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
+        $configView = Import-XamlView "Views\\ConfigView.xaml"
+        $contentControl.Content = $configView
+        Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
 
-            $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
-            $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionContent')
-            Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Cyan
-            
-            if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
-                # Try to find it in the Content property if not found
-                if ($script:ConfigViewInstance.Content -and $script:ConfigViewInstance.Content.FindName) {
-                    $optionContent = $script:ConfigViewInstance.Content.FindName('ConfigOptionContent')
-                    Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Yellow
+        $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+        $optionContent = $configView.FindName('ConfigOptionsContent')
+        Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Cyan
+
+        if ($mainCommandCombo -and $optionContent) {
+            # Inline script block for testing
+            $SetConfigOptionView = {
+                param($optionContent, $selected)
+                if (-not $optionContent) {
+                    Write-Host "optionContent is null." -ForegroundColor Red
+                    return
+                }
+                if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
+                    $optionContent.Content = $null
+                    return
+                }
+                $viewMap = @{
+                    "Scan"           = "Scan.xaml"
+                    "Apply Updates"  = "ApplyUpdates.xaml"
+                    "Configure"      = "Configure.xaml"
+                    "Driver Install" = "DriverInstall.xaml"
+                    "Version"        = "Version.xaml"
+                    "Help"           = "Help.xaml"
+                    "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
+                    "Custom Notification" = "CustomNotification.xaml"
+                }
+                $file = $viewMap[$selected]
+                if ($file) {
+                    $childView = Import-XamlView "Views\\Config Options\\$file"
+                    if ($childView) {
+                        $optionContent.Content = $childView
+                        Write-Host "Loaded child view: $file" -ForegroundColor Green
+                    } else {
+                        $optionContent.Content = $null
+                        Write-Host "Failed to load child view: $file" -ForegroundColor Red
+                    }
+                }
+                else {
+                    $optionContent.Content = $null
                 }
             }
-            if ($mainCommandCombo -and $optionContent) {
-                # Set initial view
-                $selected = $mainCommandCombo.Text
-                Set-ConfigOptionView $optionContent $selected
-
-                $mainCommandCombo.Add_SelectionChanged({
-                        $sel = $mainCommandCombo.Text
-                        Set-ConfigOptionView $optionContent $sel
-                    })
-            }
-            else {
-                Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
-            }
-        })
+            & $SetConfigOptionView $optionContent 'Scan'
+            $mainCommandCombo.Add_SelectionChanged(({
+                $eventArgs = $args[1]
+                if ($eventArgs.AddedItems.Count -gt 0) {
+                    $selItem = $eventArgs.AddedItems[0]
+                    if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
+                        $sel = $selItem.Content
+                    } else {
+                        $sel = $selItem.ToString()
+                    }
+                } else {
+                    $sel = $mainCommandCombo.Text
+                }
+                Write-Host "$sel selected from MainCommandComboBox." -ForegroundColor Cyan
+                $currentOptionContent = $configView.FindName('ConfigOptionsContent')
+                if ($currentOptionContent) {
+                    & $SetConfigOptionView $currentOptionContent $sel
+                } else {
+                    Write-Host "optionContent is null." -ForegroundColor Red
+                }
+            }).GetNewClosure())
+        } else {
+            Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
+        }
+    })
 }
 if ($btnLogs) {
     $btnLogs.Add_Checked({
