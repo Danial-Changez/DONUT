@@ -68,47 +68,43 @@ Function Set-PlaceholderLogic {
 }
 
 Function Initialize-HomeView {
-    param($contentControl)
+    # Only do one-time setup: event wiring, variable assignment
     $script:HomeView = Import-XamlView "Views\HomeView.xaml"
     if ($null -eq $script:HomeView) {
         Write-Host "Failed to load HomeView.xaml."
         return
     }
-    $contentControl.Content = $script:HomeView
-
     # Initialize the search bar
     $script:SearchBar = $script:HomeView.FindName('txtHomeMessage')
     if ($script:SearchBar) {
         Initialize-SearchBar $script:SearchBar
         Set-PlaceholderLogic $script:SearchBar "WSID..."
         Write-Host "Search bar initialized with: '$($script:SearchBar.Text)'"
-    }
-    else {
+    } else {
         Write-Host "Search bar not found in HomeView."
     }
-
     # Attach the click event to the Search button
     $searchButton = $script:HomeView.FindName('btnSearch')
     if ($searchButton) {
+        $null = $searchButton.Remove_Click
         $searchButton.Add_Click({
-                Update-WSIDFile $script:SearchBar
-            })
+            $bar = $script:HomeView.FindName('txtHomeMessage')
+            Update-WSIDFile $bar
+        })
         Write-Host "Search button click event attached."
-    }
-    else {
+    } else {
         Write-Host "Search button not found in HomeView."
     }
-
     # Attach the SelectionChanged event to the ComboBox
     $mainCommandComboBox = $script:HomeView.FindName('MainCommandComboBox')
     if ($mainCommandComboBox) {
+        $null = $mainCommandComboBox.Remove_SelectionChanged
         $mainCommandComboBox.Style = $script:HomeView.Resources["ModernComboBox"]
         $mainCommandComboBox.Add_SelectionChanged({
-                OnMainCommandChanged $mainCommandComboBox
-            })
+            OnMainCommandChanged $mainCommandComboBox
+        })
         Write-Host "MainCommandComboBox SelectionChanged event attached."
-    }
-    else {
+    } else {
         Write-Host "MainCommandComboBox not found in HomeView."
     }
 }
@@ -202,7 +198,7 @@ $script:StartNextRunspace = {
         $script:RunspaceJobs = @{}
     }
     
-    $script:ActiveRunspaces += ,$ps
+    $script:ActiveRunspaces += , $ps
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
         PowerShell  = $ps
@@ -309,42 +305,43 @@ Function Update-WSIDFile {
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Timer.Add_Tick({
-        if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
-        foreach ($comp in $script:TabsMap.Keys) {
-            $tb = $script:TabsMap[$comp]
-            $queue = $script:SyncUI[$comp]
-            $line = $null
-            while ($queue.TryDequeue([ref]$line)) {
-                $tb.AppendText("$line`n"); $tb.ScrollToEnd()
-            }
-        }
-        $finished = @()
-        foreach ($ps in @($script:ActiveRunspaces)) {
-            if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
-                $job = $script:RunspaceJobs[$ps]
-                if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
-                    try { $ps.EndInvoke($job.AsyncResult) } catch {}
-                    $ps.Dispose()
-                    Write-Host "[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)"
-                    $finished += $ps
+            if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
+            foreach ($comp in $script:TabsMap.Keys) {
+                $tb = $script:TabsMap[$comp]
+                $queue = $script:SyncUI[$comp]
+                $line = $null
+                while ($queue.TryDequeue([ref]$line)) {
+                    $tb.AppendText("$line`n"); $tb.ScrollToEnd()
                 }
             }
-        }
-        foreach ($ps in $finished) {
-            if ($script:RunspaceJobs.ContainsKey($ps)) {
-                $comp = $script:RunspaceJobs[$ps].Computer
-                Write-Host "[DEBUG] Cleaning up Runspace for $comp"
-                $script:RunspaceJobs.Remove($ps)
-            } else {
-                Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs."
+            $finished = @()
+            foreach ($ps in @($script:ActiveRunspaces)) {
+                if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
+                    $job = $script:RunspaceJobs[$ps]
+                    if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
+                        try { $ps.EndInvoke($job.AsyncResult) } catch {}
+                        $ps.Dispose()
+                        Write-Host "[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)"
+                        $finished += $ps
+                    }
+                }
             }
-            $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
-        }
-        while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
-            & $script:StartNextRunspace
-            Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
-        }
-    })
+            foreach ($ps in $finished) {
+                if ($script:RunspaceJobs.ContainsKey($ps)) {
+                    $comp = $script:RunspaceJobs[$ps].Computer
+                    Write-Host "[DEBUG] Cleaning up Runspace for $comp"
+                    $script:RunspaceJobs.Remove($ps)
+                }
+                else {
+                    Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs."
+                }
+                $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+            }
+            while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
+                & $script:StartNextRunspace
+                Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
+            }
+        })
     $script:Timer.Start()
 
     if ($tabs.Items.Count -gt 0) {
@@ -465,31 +462,68 @@ $btnHome = $window.FindName('btnHome')
 $btnConfig = $window.FindName('btnConfig')
 $btnLogs = $window.FindName('btnLogs')
 
+# --- Persistent View Instances ---
+$script:HomeViewInstance = $null
+$script:ConfigViewInstance = $null
+$script:LogsViewInstance = $null
+
+# --- Update-HomeView: restore dynamic content (tabs, search bar, etc.) ---
+Function Update-HomeView {
+    if (-not $script:HomeViewInstance) { return }
+    $tabs = $script:HomeViewInstance.FindName('TerminalTabs')
+    if ($tabs -and $script:TabsCollection) {
+        $tabs.Items.Clear()
+        foreach ($tab in $script:TabsCollection) {
+            $tabs.Items.Add($tab)
+        }
+        Write-Host "[Update-HomeView] Restored $($script:TabsCollection.Count) tabs to TerminalTabs."
+    }
+    $searchBar = $script:HomeViewInstance.FindName('txtHomeMessage')
+    if ($searchBar) {
+        Initialize-SearchBar $searchBar
+        Set-PlaceholderLogic $searchBar "WSID..."
+        Write-Host "[Update-HomeView] Search bar refreshed with: '$($searchBar.Text)'"
+    }
+}
+
 # Set HomeView as default view and header
 if ($contentControl) {
-    Initialize-HomeView $contentControl
+    if (-not $script:HomeViewInstance) {
+        Initialize-HomeView $contentControl
+        $script:HomeViewInstance = $script:HomeView
+    }
+    $contentControl.Content = $script:HomeViewInstance
+    Update-HomeView
     Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
 }
 
 if ($btnHome) {
     $btnHome.Add_Checked({
+        if (-not $script:HomeViewInstance) {
             Initialize-HomeView $contentControl
-            Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
-        })
+            $script:HomeViewInstance = $script:HomeView
+        }
+        $contentControl.Content = $script:HomeViewInstance
+        Update-HomeView
+        Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
+    })
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-            $configView = Import-XamlView "Views\Config Options\ConfigView.xaml"
-            $contentControl.Content = $configView
+            if (-not $script:ConfigViewInstance) {
+                $script:ConfigViewInstance = Import-XamlView "Views\Config Options\ConfigView.xaml"
+                # Optionally, run one-time setup here if needed
+            }
+            $contentControl.Content = $script:ConfigViewInstance
             Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
 
-            $mainCommandCombo = $configView.FindName('MainCommandComboBox')
-            $optionContent = $configView.FindName('ConfigOptionContent')
+            $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
+            $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionContent')
             Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
             if (-not $optionContent -or -not ($optionContent.PSObject.Properties['Content'])) {
                 # Try to find it in the Content property if not found
-                if ($configView.Content -and $configView.Content.FindName) {
-                    $optionContent = $configView.Content.FindName('ConfigOptionContent')
+                if ($script:ConfigViewInstance.Content -and $script:ConfigViewInstance.Content.FindName) {
+                    $optionContent = $script:ConfigViewInstance.Content.FindName('ConfigOptionContent')
                     Write-Host "[DEBUG] Fallback optionContent: $optionContent, type: $($optionContent.GetType().FullName)"
                 }
             }
@@ -510,7 +544,10 @@ if ($btnConfig) {
 }
 if ($btnLogs) {
     $btnLogs.Add_Checked({
-            $contentControl.Content = Import-XamlView "Views\LogsView.xaml"
+            if (-not $script:LogsViewInstance) {
+                $script:LogsViewInstance = Import-XamlView "Views\LogsView.xaml"
+            }
+            $contentControl.Content = $script:LogsViewInstance
             Show-HeaderPanel "Collapsed" "Collapsed" "Visible"
         })
 }
