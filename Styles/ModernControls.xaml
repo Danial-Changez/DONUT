@@ -21,6 +21,8 @@
                 Value="2,2,2,2" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
+        <Setter Property="HorizontalAlignment"
+                Value="Left" />
     </Style>
     <!-- Modern ComboBox Style -->
     <Style x:Key="ModernComboBox"
