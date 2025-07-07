@@ -15,7 +15,6 @@
             <!-- Dropdown / Multi-Select Options -->
             <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,0,0,4" />
                 <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120" />
@@ -27,40 +26,46 @@
                         <ColumnDefinition Width="120" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" /> <!-- Severity Text -->
                         <RowDefinition Height="Auto" /> <!-- Severity -->
+                        <RowDefinition Height="Auto" /> <!-- Type Text -->
                         <RowDefinition Height="Auto" /> <!-- Type -->
+                        <RowDefinition Height="Auto" /> <!-- Device Category Text -->
                         <RowDefinition Height="Auto" /> <!-- Device Category -->
                     </Grid.RowDefinitions>
+                    <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,0,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"/>
+                    <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"/>
+                    <TextBlock Text="Device Category Text" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4"/>
                     <!-- Update Severity Row -->
-                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="0" Grid.Column="0" />
-                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="0" Grid.Column="1" />
-                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="0" Grid.Column="2" />
-                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="0" Grid.Column="3" />
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
                     <!-- Update Type Row -->
-                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
-                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
-                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
-                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="4" />
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="3" Grid.Column="0" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="3" Grid.Column="1" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="3" Grid.Column="2" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="3" Grid.Column="3" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="3" Grid.Column="4" />
                     <!-- Update Device Category Row -->
-                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="0" />
-                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="1" />
-                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="2" />
-                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="3" />
-                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="4" />
-                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="5" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="2" Grid.Column="6" />
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="0" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="1" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="2" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="3" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="4" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="5" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="5" Grid.Column="6" />
                 </Grid>
             </StackPanel>
             <!-- Text Options -->
             <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" />
+                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}"/>
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" HorizontalAlignment="Left"/>
                 <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" HorizontalAlignment="Left"/>
                 <TextBlock Text="Report" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" HorizontalAlignment="Left"/>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
