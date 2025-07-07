@@ -97,19 +97,6 @@ Function Initialize-HomeView {
     else {
         Write-Host "Search button not found in HomeView."
     }
-    # Attach the SelectionChanged event to the ComboBox
-    $mainCommandComboBox = $script:HomeView.FindName('MainCommandComboBox')
-    if ($mainCommandComboBox) {
-        $null = $mainCommandComboBox.Remove_SelectionChanged
-        $mainCommandComboBox.Style = $script:HomeView.Resources["ModernComboBox"]
-        $mainCommandComboBox.Add_SelectionChanged({
-                OnMainCommandChanged $mainCommandComboBox
-            })
-        Write-Host "MainCommandComboBox SelectionChanged event attached."
-    }
-    else {
-        Write-Host "MainCommandComboBox not found in HomeView."
-    }
 }
 
 # Define Show-Placeholder globally
@@ -350,33 +337,33 @@ Function Save-ConfigFromUI {
     # Command and option tables
     $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
     $COMMAND_OPTIONS = @{
-        scan = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "report")
-        applyUpdates = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "reboot", "encryptedPassword", "encryptedPasswordFile", "encryptionKey", "secureEncryptedPassword", "secureEncryptionKey", "autoSuspendBitLocker", "forceupdate")
-        configure = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "driverLibraryLocation", "downloadLocation", "delayDays", "allowXML", "importSettings", "exportSettings", "lockSettings", "advancedDriverRestore", "userConsent", "secureBiosPassword", "biosPassword", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "proxyHost", "proxyPort", "proxyUserName", "secureProxyPassword", "proxyPassword", "scheduleWeekly", "scheduleMonthly", "scheduleDaily", "scheduleManual", "scheduleAuto", "scheduleAction", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "deferralInstallInterval", "deferralInstallCount", "systemRestartDeferral", "deferralRestartInterval", "deferralRestartCount", "updatesNotification", "maxretry")
-        customnotification = @("heading", "body", "timestamp")
-        driverInstall = @("silent", "outputLog", "driverLibraryLocation", "reboot")
+        scan                      = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "report")
+        applyUpdates              = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "reboot", "encryptedPassword", "encryptedPasswordFile", "encryptionKey", "secureEncryptedPassword", "secureEncryptionKey", "autoSuspendBitLocker", "forceupdate")
+        configure                 = @("silent", "outputLog", "updateSeverity", "updateType", "updateDeviceCategory", "catalogLocation", "driverLibraryLocation", "downloadLocation", "delayDays", "allowXML", "importSettings", "exportSettings", "lockSettings", "advancedDriverRestore", "userConsent", "secureBiosPassword", "biosPassword", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "proxyHost", "proxyPort", "proxyUserName", "secureProxyPassword", "proxyPassword", "scheduleWeekly", "scheduleMonthly", "scheduleDaily", "scheduleManual", "scheduleAuto", "scheduleAction", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "deferralInstallInterval", "deferralInstallCount", "systemRestartDeferral", "deferralRestartInterval", "deferralRestartCount", "updatesNotification", "maxretry")
+        customnotification        = @("heading", "body", "timestamp")
+        driverInstall             = @("silent", "outputLog", "driverLibraryLocation", "reboot")
         generateEncryptedPassword = @("encryptionKey", "password", "outputPath", "secureEncryptionKey", "securePassword")
-        help = @()
-        version = @()
+        help                      = @()
+        version                   = @()
     }
     $FLAG_OPTIONS = @{
-        scan = @("silent")
-        applyUpdates = @("silent", "reboot", "autoSuspendBitLocker", "forceupdate")
-        configure = @("silent", "allowXML", "lockSettings", "advancedDriverRestore", "userConsent", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "scheduleAuto", "scheduleManual", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "systemRestartDeferral", "updatesNotification")
-        customnotification = @()
-        driverInstall = @("silent", "reboot")
+        scan                      = @("silent")
+        applyUpdates              = @("silent", "reboot", "autoSuspendBitLocker", "forceupdate")
+        configure                 = @("silent", "allowXML", "lockSettings", "advancedDriverRestore", "userConsent", "customProxy", "proxyAuthentication", "proxyFallbackToDirectConnection", "scheduleAuto", "scheduleManual", "restoreDefaults", "forceRestart", "autoSuspendBitLocker", "defaultSourceLocation", "installationDeferral", "systemRestartDeferral", "updatesNotification")
+        customnotification        = @()
+        driverInstall             = @("silent", "reboot")
         generateEncryptedPassword = @()
-        help = @()
-        version = @()
+        help                      = @()
+        version                   = @()
     }
     $GLOBAL_OPTIONS = @("throttleLimit")
 
-    $configView = $contentControl.Content
-    if (-not $configView) { 
+    $script:ConfigViewInstance = $contentControl.Content
+    if (-not $script:ConfigViewInstance) { 
         Write-Host "[Config] No config view loaded."; return 
     }
-    $mainCommandCombo = $configView.FindName('MainCommandComboBox')
-    $optionContent = $configView.FindName('ConfigOptionsContent')
+    $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
+    $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionsContent')
     if (-not $mainCommandCombo -or -not $optionContent) { 
         Write-Host "[Config] MainCommandComboBox or ConfigOptionsContent not found."; return 
     }
@@ -536,14 +523,14 @@ $btnConfig = $window.FindName('btnConfig')
 $btnLogs = $window.FindName('btnLogs')
 
 # --- Persistent View Instances ---
-$script:HomeViewInstance = $null
+$script:HomeView = $null
 $script:ConfigViewInstance = $null
 $script:LogsViewInstance = $null
 
 # --- Update-HomeView: restore dynamic content (tabs, search bar, etc.) ---
 Function Update-HomeView {
-    if (-not $script:HomeViewInstance) { return }
-    $tabs = $script:HomeViewInstance.FindName('TerminalTabs')
+    if (-not $script:HomeView) { return }
+    $tabs = $script:HomeView.FindName('TerminalTabs')
     if ($tabs -and $script:TabsCollection) {
         $tabs.Items.Clear()
         foreach ($tab in $script:TabsCollection) {
@@ -551,7 +538,7 @@ Function Update-HomeView {
         }
         Write-Host "[Update-HomeView] Restored $($script:TabsCollection.Count) tabs to TerminalTabs." -ForegroundColor Cyan
     }
-    $searchBar = $script:HomeViewInstance.FindName('txtHomeMessage')
+    $searchBar = $script:HomeView.FindName('txtHomeMessage')
     if ($searchBar) {
         Initialize-SearchBar $searchBar
         Set-PlaceholderLogic $searchBar "WSID..."
@@ -559,40 +546,47 @@ Function Update-HomeView {
     }
 }
 
-# Set HomeView as default view and header
-if ($contentControl) {
-    if (-not $script:HomeViewInstance) {
+Function Show-HomeView {
+    if (-not $script:HomeView) {
         Initialize-HomeView $contentControl
-        $script:HomeViewInstance = $script:HomeView
     }
-    $contentControl.Content = $script:HomeViewInstance
+    $contentControl.Content = $script:HomeView
     Update-HomeView
     Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
 }
 
+# Set HomeView as default view and header
+if ($contentControl) {
+    Show-HomeView
+}
+
 if ($btnHome) {
     $btnHome.Add_Checked({
-            if (-not $script:HomeViewInstance) {
-                Initialize-HomeView $contentControl
-                $script:HomeViewInstance = $script:HomeView
-            }
-            $contentControl.Content = $script:HomeViewInstance
-            Update-HomeView
-            Show-HeaderPanel "Visible" "Collapsed" "Collapsed"
+            Show-HomeView
         })
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-        $configView = Import-XamlView "Views\\ConfigView.xaml"
-        $contentControl.Content = $configView
+        if (-not $script:ConfigViewInstance) {
+            Write-Host "[DEBUG] ConfigViewInstance is null, loading ConfigView.xaml"
+            $script:ConfigViewInstance = Import-XamlView "Views\ConfigView.xaml"
+        }
+
+        $contentControl.Content = $script:ConfigViewInstance
         Show-HeaderPanel "Collapsed" "Visible" "Collapsed"
 
-        $mainCommandCombo = $configView.FindName('MainCommandComboBox')
-        $optionContent = $configView.FindName('ConfigOptionsContent')
+        $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
+        $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionsContent')
         Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Cyan
 
+        if ($mainCommandCombo) {
+            # Ensure a default selection if none is selected
+            if (-not $mainCommandCombo.SelectedItem -and $mainCommandCombo.Items.Count -gt 0) {
+                $mainCommandCombo.SelectedIndex = 0
+            }
+        }
+
         if ($mainCommandCombo -and $optionContent) {
-            # Inline script block for testing
             $SetConfigOptionView = {
                 param($optionContent, $selected)
                 if (-not $optionContent) {
@@ -604,22 +598,23 @@ if ($btnConfig) {
                     return
                 }
                 $viewMap = @{
-                    "Scan"           = "Scan.xaml"
-                    "Apply Updates"  = "ApplyUpdates.xaml"
-                    "Configure"      = "Configure.xaml"
-                    "Driver Install" = "DriverInstall.xaml"
-                    "Version"        = "Version.xaml"
-                    "Help"           = "Help.xaml"
+                    "Scan"                        = "Scan.xaml"
+                    "Apply Updates"               = "ApplyUpdates.xaml"
+                    "Configure"                   = "Configure.xaml"
+                    "Driver Install"              = "DriverInstall.xaml"
+                    "Version"                     = "Version.xaml"
+                    "Help"                        = "Help.xaml"
                     "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
-                    "Custom Notification" = "CustomNotification.xaml"
+                    "Custom Notification"         = "CustomNotification.xaml"
                 }
                 $file = $viewMap[$selected]
                 if ($file) {
-                    $childView = Import-XamlView "Views\\Config Options\\$file"
+                    $childView = Import-XamlView "Views\Config Options\$file"
                     if ($childView) {
                         $optionContent.Content = $childView
                         Write-Host "Loaded child view: $file" -ForegroundColor Green
-                    } else {
+                    }
+                    else {
                         $optionContent.Content = $null
                         Write-Host "Failed to load child view: $file" -ForegroundColor Red
                     }
@@ -628,9 +623,21 @@ if ($btnConfig) {
                     $optionContent.Content = $null
                 }
             }
-            & $SetConfigOptionView $optionContent 'Scan'
+            # Use the selected item or fallback to default
+            $selectedCmd = $mainCommandCombo.SelectedItem
+            if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) {
+                $selectedCmd = $selectedCmd.Content
+            } elseif (-not $selectedCmd -or [string]::IsNullOrWhiteSpace($selectedCmd)) {
+                $selectedCmd = $mainCommandCombo.Text
+                if (-not $selectedCmd -or [string]::IsNullOrWhiteSpace($selectedCmd)) {
+                    $selectedCmd = 'Scan'
+                }
+            }
+            & $SetConfigOptionView $optionContent $selectedCmd
+            # Use the captured $optionContent directly in the event handler
             $mainCommandCombo.Add_SelectionChanged(({
-                $selEventArgs = $args[1]
+                param($src, $selEventArgs)
+                $sel = $null
                 if ($selEventArgs.AddedItems.Count -gt 0) {
                     $selItem = $selEventArgs.AddedItems[0]
                     if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
@@ -642,44 +649,48 @@ if ($btnConfig) {
                     $sel = $mainCommandCombo.Text
                 }
                 Write-Host "$sel selected from MainCommandComboBox." -ForegroundColor Cyan
-                $currentOptionContent = $configView.FindName('ConfigOptionsContent')
-                if ($currentOptionContent) {
-                    & $SetConfigOptionView $currentOptionContent $sel
+                if ($optionContent) {
+                    & $SetConfigOptionView $optionContent $sel
                 } else {
-                    Write-Host "optionContent is null." -ForegroundColor Red
+                    Write-Host "optionContent is null (event handler)." -ForegroundColor Red
                 }
             }).GetNewClosure())
         } else {
             Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
         }
 
-        # Wire up Save button in ConfigView
-        $saveBtn = $configView.FindName('btnSaveConfig')
-        if ($saveBtn) {
-            $null = $saveBtn.Remove_Click
+        # Wire up Save button in ConfigView only once
+        $saveBtn = $script:ConfigViewInstance.FindName('btnSaveConfig')
+        if ($saveBtn -and -not $script:SaveBtnHandlerAdded) {
             $saveBtn.Add_Click({
-                # Get selected command key robustly
-                $mainCommandCombo = $configView.FindName('MainCommandComboBox')
+                $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
                 $viewMap = @{
-                    "Scan"           = "scan"
-                    "Apply Updates"  = "applyUpdates"
-                    "Configure"      = "configure"
-                    "Driver Install" = "driverInstall"
-                    "Version"        = "version"
-                    "Help"           = "help"
+                    "Scan"                        = "scan"
+                    "Apply Updates"               = "applyUpdates"
+                    "Configure"                   = "configure"
+                    "Driver Install"              = "driverInstall"
+                    "Version"                     = "version"
+                    "Help"                        = "help"
                     "Generate Encrypted Password" = "generateEncryptedPassword"
-                    "Custom Notification" = "customnotification"
+                    "Custom Notification"         = "customnotification"
                 }
                 $selectedCmd = $mainCommandCombo.SelectedItem
-                if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) { 
-                    $selectedCmd = $selectedCmd.Content 
+                if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) {
+                    $selectedCmd = $selectedCmd.Content
+                } elseif (-not $selectedCmd -or [string]::IsNullOrWhiteSpace($selectedCmd)) {
+                    $selectedCmd = $mainCommandCombo.Text
+                    if (-not $selectedCmd -or [string]::IsNullOrWhiteSpace($selectedCmd)) {
+                        $selectedCmd = 'Scan'
+                    }
                 }
+                Write-Host "[DEBUG] Selected command: $selectedCmd" -ForegroundColor Cyan
                 $selectedKey = $null
                 foreach ($k in $viewMap.Keys) {
                     if ($k -eq $selectedCmd) { $selectedKey = $viewMap[$k]; break }
                 }
                 Save-ConfigFromUI -selectedKey $selectedKey
             })
+            $script:SaveBtnHandlerAdded = $true
         }
     })
 }
