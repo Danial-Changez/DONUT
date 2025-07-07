@@ -8,12 +8,12 @@
             <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical" Margin="0,0,0,18">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <ToggleButton x:Name="silent" Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Silent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Reboot: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <ToggleButton x:Name="reboot" Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Reboot" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
             <!-- Text Options -->

@@ -7,52 +7,72 @@
             <!-- Flags -->
             <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical" Margin="0,0,0,18">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Allow Xml: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Lock Settings: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Advanced Driver Restore: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="User Consent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Custom Proxy: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Authentication: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Fallback To Direct Connection: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Auto: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Manual: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Restore Defaults: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Force Restart: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Auto Suspend Bit Locker: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Default Source Location: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Installation Deferral: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="System Restart Deferral: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
-                <StackPanel Orientation="Horizontal"><ToggleButton Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Updates Notification: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="silent" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Silent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="allowXML" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Allow Xml" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="lockSettings" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Lock Settings" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="advancedDriverRestore" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Advanced Driver Restore" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="userConsent" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="User Consent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="customProxy" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Custom Proxy" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="proxyAuthentication" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Authentication" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="proxyFallbackToDirectConnection" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Proxy Fallback To Direct Connection" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="scheduleAuto" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Auto" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="scheduleManual" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Schedule Manual" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="restoreDefaults" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Restore Defaults" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="forceRestart" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Force Restart" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="autoSuspendBitLocker" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Auto Suspend Bit Locker" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="defaultSourceLocation" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Default Source Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="installationDeferral" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Installation Deferral" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8"><ToggleButton x:Name="systemRestartDeferral" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="System Restart Deferral" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                <StackPanel Orientation="Horizontal"><ToggleButton x:Name="updatesNotification" Style="{DynamicResource ModernToggleSwitch}" /><TextBlock Text="Updates Notification" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
             </StackPanel>
             <!-- Dropdown / Multi-Select Options -->
             <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Update Severity" Style="{DynamicResource ModernSectionSubtitle}" />
-                <WrapPanel>
-                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" />
-                </WrapPanel>
-                <TextBlock Text="Update Type" Style="{DynamicResource ModernSectionSubtitle}" />
-                <WrapPanel>
-                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
-                </WrapPanel>
-                <TextBlock Text="Update Device Category" Style="{DynamicResource ModernSectionSubtitle}" />
-                <WrapPanel>
-                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" />
-                </WrapPanel>
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" /> <!-- Severity Text -->
+                        <RowDefinition Height="Auto" /> <!-- Severity -->
+                        <RowDefinition Height="Auto" /> <!-- Type Text -->
+                        <RowDefinition Height="Auto" /> <!-- Type -->
+                        <RowDefinition Height="Auto" /> <!-- Device Category Text -->
+                        <RowDefinition Height="Auto" /> <!-- Device Category -->
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,0,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"/>
+                    <!-- Update Severity Row -->
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="0" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="1" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="2" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="3" />
+                    <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,10,0,6" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"/>
+                    <!-- Update Type Row -->
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="0" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="1" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="2" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="3" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="4" />
+                    <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,10,0,6" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4"/>
+                    <!-- Update Device Category Row -->
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="0" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="1" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="2" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="3" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="4" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="5" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="6" />
+                </Grid>
+                <!-- Add x:Name to parent containers for backend lookup -->
+                <Grid x:Name="updateSeverity" Visibility="Collapsed" />
+                <Grid x:Name="updateType" Visibility="Collapsed" />
+                <Grid x:Name="updateDeviceCategory" Visibility="Collapsed" />
                 <TextBlock Text="Schedule Action" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,8,0,0" />
                 <ComboBox Width="200" Style="{DynamicResource ModernComboBox}">
                     <ComboBoxItem Content="NotifyAvailableUpdates" />
@@ -78,6 +98,11 @@
                 <TextBlock Text="Bios Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Secure Bios Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+
+            <StackPanel>
+            <TextBlock Text="Number Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Custom Proxy" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
@@ -107,6 +132,12 @@
                 <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Max Retry" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
                 <TextBox Width="120" Style="{DynamicResource ModernTextBox}" />
+        </StackPanel>
+                    <!-- Global Options -->
+            <TextBlock Text="Global Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="Throttle Limit (required)" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBox x:Name="throttleLimit" Width="120" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

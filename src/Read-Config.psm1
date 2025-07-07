@@ -48,6 +48,7 @@ function Read-Config {
                     $commands[$currentCommand].Args[$argKey] = $argValue;
                 }
             }
+            
         }
     }
     
@@ -59,16 +60,15 @@ function Read-Config {
     $enabledOption = $enabledOptions | Select-Object -First 1;
 
     # Build a concatenated arguments string from the enabled section's Args
+    # True flags: only include if enabled (enable), omit if disable
+    $trueFlags = @("silent", "scheduleManual", "scheduleAuto", "restoreDefaults")
     $argString = ($enabledOption.Value.Args.GetEnumerator() | ForEach-Object {
-            if ($_.Value) {
-                if ($_.Key -eq "silent") {
-                    "-$($_.Key)"
-                }
-                else {
-                    "-$($_.Key)=`"$($_.Value)`"" 
-                }
-            }
-        } | Where-Object { $_ }) -join " "
+        if ($_.Key -in $trueFlags) {
+            if ($_.Value -eq 'enable') { "-$($_.Key)" } else { $null }
+        } elseif ($_.Value) {
+            "-$($_.Key)=`"$($_.Value)`""
+        }
+    } | Where-Object { $_ }) -join " "
     
     return [PSCustomObject]@{
         EnabledCmdOption = [string]$enabledOption.Key;

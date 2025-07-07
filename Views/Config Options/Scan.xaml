@@ -8,8 +8,8 @@
             <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical" Margin="0,0,0,18">
                 <StackPanel Orientation="Horizontal">
-                    <ToggleButton Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Silent: OFF" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <ToggleButton x:Name="silent" Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Silent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
             <!-- Dropdown / Multi-Select Options -->
@@ -66,6 +66,11 @@
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" HorizontalAlignment="Left"/>
                 <TextBlock Text="Report" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" />
                 <TextBox Width="320" Style="{DynamicResource ModernTextBox}" Foreground="{DynamicResource BodyTextPrimary}" HorizontalAlignment="Left"/>
+            </StackPanel>
+            <!-- Throttle Limit always at the very bottom -->
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="Throttle Limit (required)" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextPrimary}" />
+                <TextBox x:Name="throttleLimit" Width="120" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
