@@ -369,10 +369,9 @@ Function Save-ConfigFromUI {
         help                      = @()
         version                   = @()
     }
-    # $globalOpts is no longer needed; throttleLimit is always required and handled explicitly
 
-    $script:ConfigViewInstance = $contentControl.Content
     if (-not $script:ConfigViewInstance) { 
+        $script:ConfigViewInstance = $contentControl.Content
         Write-Host "[Config] No config view loaded."; return 
     }
     $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
@@ -421,9 +420,10 @@ Function Save-ConfigFromUI {
             # 2. Multi-checkboxes (multi-select) by x:Name (not Tag)
             foreach ($multi in @("updateSeverity", "updateType", "updateDeviceCategory")) {
                 if ($supportingOpts[$cmd] -contains $multi) {
-                    $wrap = $childView.FindName($multi)
-                    if ($wrap) {
-                        $checked = $wrap.Children | Where-Object { $_.IsChecked } | ForEach-Object { $_.Content }
+                    $grid = $childView.FindName($multi)
+                    if ($grid) {
+                        $checked = $grid.Children | Where-Object { $_.IsChecked } | ForEach-Object { $_.Content }
+                        Write-Host "[DEBUG] Found multi-checkbox '$multi' with checked items: $($checked -join ', ')"
                         if ($checked) {
                             $lines += "- $multi = $($checked -join ',')"
                         }
@@ -436,29 +436,30 @@ Function Save-ConfigFromUI {
                 if ($flagOpts[$cmd] -contains $opt) { continue }
                 if ($opt -in @("updateSeverity", "updateType", "updateDeviceCategory")) { continue }
 
-                # TextBox (by Tag)
-                $tb = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.TextBox] -and $_.Tag -eq $opt }
-                if ($tb -and $tb.Text -and $tb.Text.Trim()) {
-                    $lines += "- $opt = $($tb.Text.Trim())"
-                    continue
-                }
-
-                # ComboBox (by Tag)
-                $cb = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.ComboBox] -and $_.Tag -eq $opt }
-                if ($cb -and $cb.SelectedItem) {
-                    $val = $cb.SelectedItem
-                    if ($val -is [System.Windows.Controls.ComboBoxItem]) { $val = $val.Content }
-                    if ($val -and $val.ToString().Trim()) {
-                        $lines += "- $opt = $($val.ToString().Trim())"
+                # Find by x:Name (Name property)
+                $ctrl = $childView.FindName($opt)
+                if ($ctrl) {
+                    # TextBox
+                    if ($ctrl -is [System.Windows.Controls.TextBox]) {
+                        if ($ctrl.Text -and $ctrl.Text.Trim()) {
+                            $lines += "- $opt = $($ctrl.Text.Trim())"
+                        }
+                        continue
                     }
-                    continue
-                }
-
-                # CheckBox (for single-value options, by Tag)
-                $chk = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.CheckBox] -and $_.Tag -eq $opt }
-                if ($chk) {
-                    $lines += "- $opt = $($chk.IsChecked -eq $true ? 'enable' : 'disable')"
-                    continue
+                    # ComboBox
+                    elseif ($ctrl -is [System.Windows.Controls.ComboBox]) {
+                        $val = $ctrl.SelectedItem
+                        if ($val -is [System.Windows.Controls.ComboBoxItem]) { $val = $val.Content }
+                        if ($val -and $val.ToString().Trim()) {
+                            $lines += "- $opt = $($val.ToString().Trim())"
+                        }
+                        continue
+                    }
+                    # CheckBox (single-value)
+                    elseif ($ctrl -is [System.Windows.Controls.CheckBox]) {
+                        $lines += "- $opt = $($ctrl.IsChecked -eq $true ? 'enable' : 'disable')"
+                        continue
+                    }
                 }
             }
         }
