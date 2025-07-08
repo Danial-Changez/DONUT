@@ -1,7 +1,6 @@
 <!-- DriverInstall.xaml - Organized layout to match Python UI screenshots -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="{DynamicResource PanelBackground}">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource PanelBackground}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
@@ -20,11 +19,11 @@
             <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
                 <TextBlock Text="Output Log" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBox x:Name="outputLog" Width="320" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Driver Library Location" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBox x:Name="driverLibraryLocation" Width="320" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Catalog Location" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBox x:Name="catalogLocation" Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

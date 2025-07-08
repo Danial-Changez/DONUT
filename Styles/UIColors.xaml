@@ -52,7 +52,7 @@
     <SolidColorBrush x:Key="BodyTextSecondary" Color="{StaticResource BodyTextSecondaryColor}"/>
     <Color x:Key="BodyTextTertiaryColor"> #7376BD</Color>
     <SolidColorBrush x:Key="BodyTextTertiary" Color="{StaticResource BodyTextTertiaryColor}"/>
-    <Color x:Key="TerminalTextColor"> #39FFFC</Color>
+    <Color x:Key="TerminalTextColor"> #e98024</Color>
     <SolidColorBrush x:Key="TerminalText" Color="{StaticResource TerminalTextColor}"/>
     <!-- Panel Colors -->
     <Color x:Key="PanelBackgroundColor"> #200F53</Color>
