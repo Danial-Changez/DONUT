@@ -1,11 +1,10 @@
 <!-- ApplyUpdates.xaml - Organized layout to match Python UI screenshots -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="{DynamicResource PanelBackground}">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource PanelBackground}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
-            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical" Margin="0,0,0,18">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <ToggleButton x:Name="silent" Style="{DynamicResource ModernToggleSwitch}" />
@@ -25,9 +24,29 @@
                 </StackPanel>
             </StackPanel>
             <!-- Dropdown / Multi-Select Options -->
-            <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <Grid Margin="0,0,0,8">
+                <Grid Margin="0,0,0,8" x:Name="updateSeverity">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="140" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <!-- Severity Text -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Severity -->
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,0,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
+                    <!-- Update Severity Row -->
+                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
+                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
+                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
+                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
+                </Grid>
+                <Grid Margin="0,0,0,8" x:Name="updateType">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120" />
                         <ColumnDefinition Width="120" />
@@ -38,58 +57,67 @@
                         <ColumnDefinition Width="120" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" /> <!-- Severity Text -->
-                        <RowDefinition Height="Auto" /> <!-- Severity -->
-                        <RowDefinition Height="Auto" /> <!-- Type Text -->
-                        <RowDefinition Height="Auto" /> <!-- Type -->
-                        <RowDefinition Height="Auto" /> <!-- Device Category Text -->
-                        <RowDefinition Height="Auto" /> <!-- Device Category -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Type Text -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Type -->
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,0,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"/>
-                    <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,10,0,6" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"/>
-                    <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextSecondary}" Margin="0,10,0,6" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4"/>
-                    <!-- Update Severity Row -->
-                    <CheckBox x:Name="updateSeveritySecurity" Content="Security" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="0" />
-                    <CheckBox x:Name="updateSeverityCritical" Content="Critical" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="1" />
-                    <CheckBox x:Name="updateSeverityRecommended" Content="Recommended" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="2" />
-                    <CheckBox x:Name="updateSeverityOptional" Content="Optional" Style="{DynamicResource ModernCheckBox}" Grid.Row="1" Grid.Column="3" />
+                    <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
                     <!-- Update Type Row -->
-                    <CheckBox x:Name="updateTypeBios" Content="Bios" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="0" />
-                    <CheckBox x:Name="updateTypeFirmware" Content="Firmware" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="1" />
-                    <CheckBox x:Name="updateTypeDriver" Content="Driver" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="2" />
-                    <CheckBox x:Name="updateTypeApplication" Content="Application" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="3" />
-                    <CheckBox x:Name="updateTypeOthers" Content="Others" Style="{DynamicResource ModernCheckBox}" Grid.Row="3" Grid.Column="4" />
+                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
+                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
+                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
+                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="4" />
+                </Grid>
+                <Grid Margin="0,0,0,8" x:Name="updateDeviceCategory">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="120" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <!-- Device Category Text -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Device Category -->
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
                     <!-- Update Device Category Row -->
-                    <CheckBox x:Name="updateDeviceCategoryAudio" Content="Audio" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="0" />
-                    <CheckBox x:Name="updateDeviceCategoryVideo" Content="Video" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="1" />
-                    <CheckBox x:Name="updateDeviceCategoryNetwork" Content="Network" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="2" />
-                    <CheckBox x:Name="updateDeviceCategoryStorage" Content="Storage" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="3" />
-                    <CheckBox x:Name="updateDeviceCategoryInput" Content="Input" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="4" />
-                    <CheckBox x:Name="updateDeviceCategoryChipset" Content="Chipset" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="5" />
-                    <CheckBox x:Name="updateDeviceCategoryOthers" Content="Others" Style="{DynamicResource ModernCheckBox}" Grid.Row="5" Grid.Column="6" />
+                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
+                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
+                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
+                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
+                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="4" />
+                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="5" />
+                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="6" />
                 </Grid>
             </StackPanel>
             <!-- Text Options -->
-            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
+            <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Encrypted Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Encrypted Password File" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Encryption Key" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Secure Encrypted Password" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Secure Encryption Key" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
-                <TextBox Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="outputLog" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="catalogLocation" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encrypted Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="encryptedPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encrypted Password File" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="encryptedPasswordFile" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Encryption Key" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="encryptionKey" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Encrypted Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="secureEncryptedPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Encryption Key" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
+                <TextBox x:Name="secureEncryptionKey" Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <!-- Throttle Limit always at the very bottom -->
             <StackPanel Margin="0,20,0,0">
-                <TextBlock Text="Throttle Limit (required)" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" />
+                <TextBlock Text="Throttle Limit " FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
                 <TextBox x:Name="throttleLimit" Width="120" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
