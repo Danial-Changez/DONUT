@@ -149,10 +149,10 @@
                     <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="6" />
                 </Grid>
                 <TextBlock Text="Schedule Action" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,6" />
-                <ComboBox Width="200" Style="{DynamicResource ModernComboBox}" HorizontalAlignment="Left" Margin="0,0,0,18">
-                    <ComboBoxItem Content="NotifyAvailableUpdates" />
-                    <ComboBoxItem Content="DownloadAndNotify" />
-                    <ComboBoxItem Content="DownloadInstallAndNotify" />
+                <ComboBox x:Name="scheduleAction" Width="200" Style="{DynamicResource ModernComboBox}" HorizontalAlignment="Left" Margin="0,0,0,18">
+                    <ComboBoxItem x:Name="NotifyAvailableUpdates" Content="Notify Available Updates" />
+                    <ComboBoxItem x:Name="DownloadAndNotify" Content="Download and Notify" />
+                    <ComboBoxItem x:Name="DownloadInstallAndNotify" Content="Download Install and Notify" />
                 </ComboBox>
             </StackPanel>
             <!-- Text/Number Options -->
