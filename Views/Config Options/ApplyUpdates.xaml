@@ -110,10 +110,6 @@
                 <TextBox x:Name="encryptedPasswordFile" Width="320" Style="{DynamicResource ModernTextBox}" />
                 <TextBlock Text="Encryption Key" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
                 <TextBox x:Name="encryptionKey" Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Secure Encrypted Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <TextBox x:Name="secureEncryptedPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
-                <TextBlock Text="Secure Encryption Key" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <TextBox x:Name="secureEncryptionKey" Width="320" Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <!-- Throttle Limit always at the very bottom -->
             <StackPanel Margin="0,20,0,0">
