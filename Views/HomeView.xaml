@@ -19,7 +19,7 @@
                                         <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Path Data="{DynamicResource Search}" Height="20" Width="20" Stretch="Uniform" Fill="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" Margin="4,0,8,0" Grid.Column="0" />
-                                <TextBox x:Name="txtHomeMessage" Style="{DynamicResource GoogleSearchBar}" Grid.Column="1" Margin="0" AcceptsReturn="True" TextWrapping="Wrap" HorizontalAlignment="Left" MinWidth="150" MaxWidth="350" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Center" />
+                                <TextBox x:Name="txtHomeMessage" Style="{DynamicResource GoogleSearchBar}" Grid.Column="1" Margin="0" AcceptsReturn="True" TextWrapping="Wrap" HorizontalAlignment="Left" MinWidth="150" MaxWidth="500" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Center" />
                                 <Button x:Name="btnSearch" Grid.Column="2" Content="Search" FontSize="12" FontFamily="Montserrat" Cursor="Hand" BorderThickness="0" Foreground="White" Height="30" MinWidth="120" Margin="8,0,4,0" VerticalAlignment="Center" HorizontalAlignment="Right">
                                         <Button.Style>
                                                 <Style TargetType="Button">
@@ -45,75 +45,8 @@
                 </Border>
         </Grid>
         <Grid Grid.Row="1">
-                <Grid.Resources>
-                        <!-- implicit style for all TextBox controls -->
-                        <Style TargetType="TextBox">
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="Foreground" Value="{DynamicResource TerminalText}" />
-                                <Setter Property="FontFamily" Value="Cascadia Code" />
-                                <Setter Property="FontSize" Value="14" />
-                                <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="AcceptsReturn" Value="True" />
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                                <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
-                                <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
-                                <Setter Property="Margin" Value="10" />
-                                <Setter Property="IsReadOnly" Value="True" />
-                                <Setter Property="Focusable" Value="True" />
-                        </Style>
-                        <!-- style for each tab header -->
-                        <Style x:Key="TerminalTabItemStyle" TargetType="TabItem">
-                                <Setter Property="FontFamily" Value="Cascadia Code" />
-                                <Setter Property="FontSize" Value="14" />
-                                <Setter Property="Margin" Value="2,0,2,0" />
-                                <Setter Property="Padding" Value="10,5" />
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="Foreground" Value="{DynamicResource TerminalText}" />
-                                <Setter Property="FontWeight" Value="Normal" />
-                                <Setter Property="BorderThickness" Value="2" />
-                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBlue}" />
-                                <Setter Property="Template">
-                                        <Setter.Value>
-                                                <ControlTemplate TargetType="TabItem">
-                                                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8,8,0,0" Padding="{TemplateBinding Padding}" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}">
-                                                                <ContentPresenter ContentSource="Header" />
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsSelected" Value="True">
-                                                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelBackgroundActive}" />
-                                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                                </Trigger>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
-                                                                </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                        </Setter.Value>
-                                </Setter>
-                        </Style>
-                        <!-- style for the TabControl -->
-                        <Style x:Key="TerminalTabControlStyle" TargetType="TabControl">
-                                <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
-                                <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="ItemContainerStyle" Value="{StaticResource TerminalTabItemStyle}" />
-                                <Setter Property="Template">
-                                        <Setter.Value>
-                                                <ControlTemplate TargetType="TabControl">
-                                                        <Grid>
-                                                                <Grid.RowDefinitions>
-                                                                        <RowDefinition Height="Auto" />
-                                                                        <RowDefinition Height="*" />
-                                                                </Grid.RowDefinitions>
-                                                                <TabPanel x:Name="HeaderPanel" Background="{TemplateBinding Background}" IsItemsHost="True" />
-                                                                <ContentPresenter Grid.Row="1" Margin="{TemplateBinding Padding}" ContentSource="SelectedContent" />
-                                                        </Grid>
-                                                </ControlTemplate>
-                                        </Setter.Value>
-                                </Setter>
-                        </Style>
-                </Grid.Resources>
                 <Border Background="{DynamicResource PanelBackground}" CornerRadius="6" Margin="10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                        <TabControl x:Name="TerminalTabs" Style="{StaticResource TerminalTabControlStyle}" Margin="10" />
+                        <TabControl x:Name="TerminalTabs" Style="{DynamicResource TerminalTabControlStyle}" Margin="10" />
                 </Border>
         </Grid>
 </Grid>

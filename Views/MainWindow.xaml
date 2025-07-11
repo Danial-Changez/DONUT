@@ -3,10 +3,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:WPF_LoginForm.Views"
     xmlns:windowChrome="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Title="MainWindowView" Height="700" Width="1300" WindowStartupLocation="CenterScreen" WindowStyle="None" Background="Transparent" AllowsTransparency="True" ResizeMode="CanResize">
-    <!-- Correctly nested WindowChrome -->
-    <windowChrome:WindowChrome.WindowChrome>
-        <windowChrome:WindowChrome CaptionHeight="1" CornerRadius="10" ResizeBorderThickness="8" GlassFrameThickness="0" />
-    </windowChrome:WindowChrome.WindowChrome>
     <Border CornerRadius="10" BorderThickness="1" Background="Transparent">
         <Border.BorderBrush>
             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -35,7 +31,7 @@
                         <!-- Title -->
                         <StackPanel Orientation="Horizontal" Height="100" Margin="15,15,15,15" Background="Transparent">
                             <Viewbox Stretch="Uniform" MaxWidth="180" MaxHeight="120" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <Image x:Name="Logo" Source="Images/logo yellow arrow.png" />
+                                <Image x:Name="Logo" Source="../Images/logo yellow arrow.png" />
                             </Viewbox>
                         </StackPanel>
                         <!-- Menu Buttons -->
