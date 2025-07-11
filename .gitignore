@@ -3,6 +3,7 @@ config.txt
 res/*
 MainWindow.RestorePoint*
 MainWindow-*
-Remote DCU.psproj*
+DONUT.*
 .vs/
 notes.txt
+bin/
