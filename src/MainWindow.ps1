@@ -169,7 +169,7 @@ Function Update-WSIDFile {
 
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
-    $script:AllDoneNotified = $false
+    $script:Notified = $false
     $script:Timer.Add_Tick({
         foreach ($comp in $script:TabsMap.Keys) {
             $tb = $script:TabsMap[$comp]
@@ -208,10 +208,10 @@ Function Update-WSIDFile {
             Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)" -ForegroundColor Cyan
         }
 
-        # Show AllDonePopup when all runspaces and queue are empty
-        if ($script:ActiveRunspaces.Count -eq 0 -and $script:PendingQueue.Count -eq 0 -and -not $script:AllDoneNotified) {
-            if (-not $script:AllDonePopupOpen) {
-                $popup = Import-XamlView "..\Views\AllDonePopup.xaml"
+        # Show Popup when all runspaces and queue are empty
+        if ($script:ActiveRunspaces.Count -eq 0 -and $script:PendingQueue.Count -eq 0 -and -not $script:Notified) {
+            if (-not $script:PopupOpen) {
+                $popup = Import-XamlView "..\Views\PopUp.xaml"
                 if ($popup) {
                     $popupWin = $popup
                     # Merge all style dictionaries from Styles folder
@@ -240,7 +240,7 @@ Function Update-WSIDFile {
                             if ($null -ne $popupWin) {
                                 try { $popupWin.Close() } catch {}
                             }
-                            $script:AllDonePopupOpen = $false
+                            $script:PopupOpen = $false
                         })
                     }
                     if ($okBtn) {
@@ -248,7 +248,7 @@ Function Update-WSIDFile {
                             if ($null -ne $popupWin) {
                                 try { $popupWin.Close() } catch {}
                             }
-                            $script:AllDonePopupOpen = $false
+                            $script:PopupOpen = $false
                         })
                     }
                     if ($minBtn) {
@@ -267,7 +267,7 @@ Function Update-WSIDFile {
                     }
                     # Pause the main DispatcherTimer while popup is open
                     if ($script:Timer) { $script:Timer.Stop() }
-                    $script:AllDonePopupOpen = $true
+                    $script:PopupOpen = $true
                     # Auto-close after 2 seconds (in popup scope)
                     $timer = New-Object System.Windows.Threading.DispatcherTimer
                     $timer.Interval = [TimeSpan]::FromSeconds(10)
@@ -275,7 +275,7 @@ Function Update-WSIDFile {
                         if ($null -ne $popupWin) {
                             try { $popupWin.Close() } catch {}
                         }
-                        $script:AllDonePopupOpen = $false
+                        $script:PopupOpen = $false
                         $timer.Stop()
                     })
                     $timer.Start()
@@ -283,12 +283,12 @@ Function Update-WSIDFile {
                     # Resume the main DispatcherTimer after popup closes
                     if ($script:Timer) { $script:Timer.Start() }
                 }
-                $script:AllDoneNotified = $true
+                $script:Notified = $true
             }
         }
         if ($script:ActiveRunspaces.Count -gt 0 -or $script:PendingQueue.Count -gt 0) {
-            $script:AllDoneNotified = $false
-            $script:AllDonePopupOpen = $false
+            $script:Notified = $false
+            $script:PopupOpen = $false
         }
     })
     $script:Timer.Start()
