@@ -381,26 +381,23 @@ $script:IsCustomMaximized = $false
 $panelControlBar = $window.FindName('panelControlBar')
 function Switch-CustomMaximize {
     Add-Type -AssemblyName System.Windows.Forms
-    if (-not $script:IsCustomMaximized) {
-        # Save current bounds
-        $script:LastWindowBounds = [PSCustomObject]@{
-            Left   = $window.Left
-            Top    = $window.Top
-            Width  = $window.Width
-            Height = $window.Height
-        }
-        # Get the screen the window is currently on
-        $rect = New-Object System.Drawing.Rectangle([int]$window.Left, [int]$window.Top, [int]$window.Width, [int]$window.Height)
-        $screen = [System.Windows.Forms.Screen]::AllScreens | Where-Object { $_.WorkingArea.IntersectsWith($rect) } | Select-Object -First 1
-        if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
-        $workArea = $screen.WorkingArea
-        $window.Left = $workArea.Left
-        $window.Top = $workArea.Top
-        $window.Width = $workArea.Width
-        $window.Height = $workArea.Height
-        $script:IsCustomMaximized = $true
-    } else {
+    # Get the screen the window is currently on
+    $rect = New-Object System.Drawing.Rectangle([int]$window.Left, [int]$window.Top, [int]$window.Width, [int]$window.Height)
+    $screen = [System.Windows.Forms.Screen]::AllScreens | Where-Object { $_.Bounds.IntersectsWith($rect) } | Select-Object -First 1
+    if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
+    $workArea = $screen.WorkingArea
+
+    $isNativeMaximized = ($window.WindowState -eq 'Maximized')
+    $isCustomMaximized = (
+        [math]::Abs($window.Left - $workArea.Left) -le 2 -and
+        [math]::Abs($window.Top - $workArea.Top) -le 2 -and
+        [math]::Abs($window.Width - $workArea.Width) -le 2 -and
+        [math]::Abs($window.Height - $workArea.Height) -le 2
+    )
+
+    if ($isNativeMaximized -or $isCustomMaximized -or $script:IsCustomMaximized) {
         # Restore previous bounds
+        $window.WindowState = 'Normal'
         if ($script:LastWindowBounds) {
             $window.Left = $script:LastWindowBounds.Left
             $window.Top = $script:LastWindowBounds.Top
@@ -408,6 +405,21 @@ function Switch-CustomMaximize {
             $window.Height = $script:LastWindowBounds.Height
         }
         $script:IsCustomMaximized = $false
+    } else {
+        # Save current bounds
+        $script:LastWindowBounds = [PSCustomObject]@{
+            Left   = $window.Left
+            Top    = $window.Top
+            Width  = $window.Width
+            Height = $window.Height
+        }
+        # Maximize to working area (excluding taskbar)
+        $window.WindowState = 'Normal'
+        $window.Left = $workArea.Left
+        $window.Top = $workArea.Top
+        $window.Width = $workArea.Width
+        $window.Height = $workArea.Height
+        $script:IsCustomMaximized = $true
     }
 }
 
