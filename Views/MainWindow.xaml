@@ -90,7 +90,7 @@
                         <!-- Home Header -->
                         <StackPanel Orientation="Horizontal" x:Name="headerHome" Visibility="Collapsed">
                             <Path Data="{DynamicResource Home}" Height="24" Width="24" Stretch="Uniform" Fill="{DynamicResource TitleTextSecondary}" Margin="35,0,10,0" />
-                            <TextBlock Text="Dashboard" Foreground="{DynamicResource TitleTextSecondary}" FontSize="20" FontFamily="Montserrat" FontWeight="Medium" VerticalAlignment="Center" />
+                            <TextBlock Text="Home" Foreground="{DynamicResource TitleTextSecondary}" FontSize="20" FontFamily="Montserrat" FontWeight="Medium" VerticalAlignment="Center" />
                         </StackPanel>
                         <!-- Config Header -->
                         <StackPanel Orientation="Horizontal" x:Name="headerConfig" Visibility="Collapsed">
