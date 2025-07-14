@@ -2,7 +2,8 @@ Function Save-ConfigFromUI {
     param(
         [Parameter(Mandatory)]
         [string]$selectedKey,
-        [System.Windows.Controls.ContentControl]$contentControl
+        [System.Windows.Controls.ContentControl]$contentControl,
+        $childView
     )
     # Command and option tables
     $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
@@ -26,26 +27,18 @@ Function Save-ConfigFromUI {
         help                      = @()
         version                   = @()
     }
-    $script_OPTIONS = @("throttleLimit")
 
-    $script:ConfigViewInstance = $contentControl.Content
-    if (-not $script:ConfigViewInstance) { 
-        Write-Host "[Config] No config view loaded."; return 
-    }
-    $mainCommandCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
-    $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionsContent')
-    if (-not $mainCommandCombo -or -not $optionContent) { 
-        Write-Host "[Config] MainCommandComboBox or ConfigOptionsContent not found."; return 
-    }
+
     if (-not $selectedKey) {
         Write-Host "[Config] No key for selected command (argument missing)." -ForegroundColor Red
         return
     }
-    
-    $childView = $optionContent.Content
     if (-not $childView) { 
         Write-Host "[Config] No child view loaded."; return 
     }
+
+    # Recursive function to find all controls of a type (optionally by Tag)
+
 
     $lines = @()
     foreach ($cmd in $MAIN_COMMANDS) {
@@ -54,26 +47,29 @@ Function Save-ConfigFromUI {
         if ($cmd -eq $selectedKey) {
             # Flags (toggles)
             foreach ($flag in $FLAG_OPTIONS[$cmd]) {
-                # Find toggle by name (case-insensitive, ignoring spaces)
-                $toggle = $null
-                $toggles = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.StackPanel] } | ForEach-Object { $_.Children } | Where-Object { $_ -is [System.Windows.Controls.ToggleButton] }
-                foreach ($t in $toggles) {
-                    $label = $t.Parent.Children | Where-Object { $_ -is [System.Windows.Controls.TextBlock] } | Select-Object -First 1
-                    $flagName = ($label.Text -split ':')[0] -replace ' ', ''
-                    if ($flagName.ToLower() -eq $flag.ToLower()) { $toggle = $t; break }
+                $ctrl = $null
+                try { $ctrl = $childView.FindName($flag) } catch {}
+                if ($ctrl -and $ctrl.PSObject.TypeNames[0] -match 'ToggleButton|CheckBox') {
+                    $val = if ($ctrl.IsChecked) { 'enable' } else { '' }
+                    $lines += "- $flag = $val"
                 }
-                $val = if ($toggle -and $toggle.IsChecked) { 'enable' } else { '' }
-                $lines += "- $flag = $val"
             }
             # Multi-checkboxes (multi-select)
             foreach ($multi in @("updateSeverity", "updateType", "updateDeviceCategory")) {
                 if ($COMMAND_OPTIONS[$cmd] -contains $multi) {
-                    $wrap = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.WrapPanel] } | Where-Object { $_.Tag -eq $multi }
-                    if ($wrap) {
-                        $checked = $wrap.Children | Where-Object { $_.IsChecked } | ForEach-Object { $_.Content }
-                        if ($checked) {
-                            $lines += "- $multi = $($checked -join ',')"
+                    $checked = @()
+                    # Try to find a parent panel by name
+                    $panel = $null
+                    try { $panel = $childView.FindName($multi) } catch {}
+                    if ($panel -and $panel.Children) {
+                        foreach ($c in $panel.Children) {
+                            if ($c -is [System.Windows.Controls.CheckBox] -and $c.IsChecked) {
+                                $checked += $c.Content
+                            }
                         }
+                    }
+                    if ($checked) {
+                        $lines += "- $multi = $($checked -join ',')"
                     }
                 }
             }
@@ -81,15 +77,17 @@ Function Save-ConfigFromUI {
             foreach ($opt in $COMMAND_OPTIONS[$cmd]) {
                 if ($FLAG_OPTIONS[$cmd] -contains $opt) { continue }
                 if ($opt -in @("updateSeverity", "updateType", "updateDeviceCategory", "scheduleAction")) { continue }
-                $tb = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.TextBox] -and $_.Tag -eq $opt }
-                if ($tb -and $tb.Text) {
+                $tb = $null
+                try { $tb = $childView.FindName($opt) } catch {}
+                if ($tb -and $tb.PSObject.TypeNames[0] -match 'TextBox' -and $tb.Text -and -not [string]::IsNullOrWhiteSpace($tb.Text)) {
                     $lines += "- $opt = $($tb.Text)"
                 }
             }
             # Dropdowns (ComboBox)
             if ($COMMAND_OPTIONS[$cmd] -contains "scheduleAction") {
-                $combo = $childView.Children | Where-Object { $_ -is [System.Windows.Controls.ComboBox] -and $_.Tag -eq "scheduleAction" }
-                if ($combo) {
+                $combo = $null
+                try { $combo = $childView.FindName("scheduleAction") } catch {}
+                if ($combo -and $combo.PSObject.TypeNames[0] -match 'ComboBox') {
                     $val = $combo.SelectedItem
                     if ($val -is [System.Windows.Controls.ComboBoxItem]) { $val = $val.Content }
                     if ($val) {
@@ -100,10 +98,18 @@ Function Save-ConfigFromUI {
         }
     }
     # Write to config.txt and preserve any existing script options at the end
-    $configPath = Join-Path $PSScriptRoot 'config.txt'
+    $configPath = Join-Path $PSScriptRoot '../config.txt'
     if (Test-Path $configPath) {
-        $scriptLines = Get-Content $configPath | Where-Object { $_ -match '^[a-zA-Z]+\s*=\s*\d+$' -and ($_ -notmatch '^(scan|applyupdates|configure|customnotification|driverinstall|generateencryptedpassword|help|version)\s*=') }
+        $scriptLines = Get-Content $configPath | Where-Object { $_ -match '^[a-zA-Z]+\s*=\s*\d+$' -and ($_ -notmatch '^(scan|applyupdates|configure|customnotification|driverinstall|generateencryptedpassword|help|version|throttleLimit)\s*=') }
         foreach ($g in $scriptLines) { $lines += $g }
+    }
+    # Add throttleLimit if present in the UI (after removing all previous ones)
+    $throttleBox = $null
+    try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
+    if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox' -and $throttleBox.Text -and -not [string]::IsNullOrWhiteSpace($throttleBox.Text)) {
+        $lines += "throttleLimit = $($throttleBox.Text)"
+    } else {
+        $lines += "throttleLimit = 5"
     }
     Set-Content -Path $configPath -Value $lines
     Write-Host "[Config] Saved config to $configPath"

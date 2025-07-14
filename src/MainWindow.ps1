@@ -268,7 +268,7 @@ Function Update-WSIDFile {
                     # Pause the main DispatcherTimer while popup is open
                     if ($script:Timer) { $script:Timer.Stop() }
                     $script:PopupOpen = $true
-                    # Auto-close after 2 seconds (in popup scope)
+                    # Auto-close after 10 seconds (in popup scope)
                     $timer = New-Object System.Windows.Threading.DispatcherTimer
                     $timer.Interval = [TimeSpan]::FromSeconds(10)
                     $timer.Add_Tick({
@@ -349,9 +349,6 @@ Function Update-HomeView {
     }
 }
 
-# --- Config Save Logic ---
-
-
 # Window and Resources 
 $window = Import-Xaml "..\Views\MainWindow.xaml"
 $script:wsidFilePath = Join-Path $PSScriptRoot "..\res\WSID.txt"
@@ -376,9 +373,6 @@ $logoImage.Source = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]$logoPa
 
 # Window Controls and Events 
 Add-Type -AssemblyName System.Windows.Forms
-
-
-
 
 # Maximize/Restore/Minimize/Close buttons
 $script:LastWindowBounds = $null
@@ -424,6 +418,7 @@ if ($null -ne $panelControlBar) {
             return
         }
         $window.DragMove()
+        [System.Windows.Input.Mouse]::Capture($null) # Release mouse capture to prevent stuck drag/resize
     })
 }
 
@@ -445,6 +440,72 @@ $minimizeButton = $window.FindName('btnMinimize')
 if ($null -ne $minimizeButton) {
     $minimizeButton.Add_Click({
         $window.WindowState = 'Minimized'
+    })
+}
+
+# Resize Border and MouseMove/LeftButtonDown events
+$WindowResizeBorder = $window.FindName('WindowResizeBorder')
+if ($WindowResizeBorder) {
+    $window.Add_MouseMove({
+        $pos = [System.Windows.Input.Mouse]::GetPosition($window)
+        $margin = 6
+        $resizeDir = $null
+        if ($pos.X -le $margin -and $pos.Y -le $margin) { $resizeDir = 'TopLeft' }
+        elseif ($pos.X -ge ($window.Width - $margin) -and $pos.Y -le $margin) { $resizeDir = 'TopRight' }
+        elseif ($pos.X -le $margin -and $pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'BottomLeft' }
+        elseif ($pos.X -ge ($window.Width - $margin) -and $pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'BottomRight' }
+        elseif ($pos.X -le $margin) { $resizeDir = 'Left' }
+        elseif ($pos.X -ge ($window.Width - $margin)) { $resizeDir = 'Right' }
+        elseif ($pos.Y -le $margin) { $resizeDir = 'Top' }
+        elseif ($pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'Bottom' }
+        else { $resizeDir = $null }
+        if ($resizeDir) {
+            $WindowResizeBorder.IsHitTestVisible = $true
+            switch ($resizeDir) {
+                'Left' { $window.Cursor = [System.Windows.Input.Cursors]::SizeWE }
+                'Right' { $window.Cursor = [System.Windows.Input.Cursors]::SizeWE }
+                'Top' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNS }
+                'Bottom' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNS }
+                'TopLeft' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNWSE }
+                'BottomRight' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNWSE }
+                'TopRight' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNESW }
+                'BottomLeft' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNESW }
+            }
+        } else {
+            $WindowResizeBorder.IsHitTestVisible = $false
+            $window.Cursor = [System.Windows.Input.Cursors]::Arrow
+        }
+    })
+    $WindowResizeBorder.Add_MouseLeftButtonDown({
+        $pos = [System.Windows.Input.Mouse]::GetPosition($window)
+        $margin = 6
+        $resizeDir = $null
+        if ($pos.X -le $margin -and $pos.Y -le $margin) { $resizeDir = 'TopLeft' }
+        elseif ($pos.X -ge ($window.Width - $margin) -and $pos.Y -le $margin) { $resizeDir = 'TopRight' }
+        elseif ($pos.X -le $margin -and $pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'BottomLeft' }
+        elseif ($pos.X -ge ($window.Width - $margin) -and $pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'BottomRight' }
+        elseif ($pos.X -le $margin) { $resizeDir = 'Left' }
+        elseif ($pos.X -ge ($window.Width - $margin)) { $resizeDir = 'Right' }
+        elseif ($pos.Y -le $margin) { $resizeDir = 'Top' }
+        elseif ($pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'Bottom' }
+        else { $resizeDir = $null }
+        if ($resizeDir) {
+            $sig = '[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);'
+            $type = Add-Type -MemberDefinition $sig -Name 'Win32SendMessage' -Namespace Win32 -PassThru
+            $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
+            $msg = 0x112 # WM_SYSCOMMAND
+            $sc = switch ($resizeDir) {
+                'Left' { 0xF001 }
+                'Right' { 0xF002 }
+                'Top' { 0xF003 }
+                'Bottom' { 0xF006 }
+                'TopLeft' { 0xF004 }
+                'TopRight' { 0xF005 }
+                'BottomLeft' { 0xF007 }
+                'BottomRight' { 0xF008 }
+            }
+            $type::SendMessage($hwnd, $msg, $sc, 0) | Out-Null
+        }
     })
 }
 
@@ -540,33 +601,36 @@ if ($btnConfig) {
                     $optionContent.Content = $null
                 }
             }
-            # Always attach the handler first
-            $mainCommandCombo.Add_SelectionChanged(({
-                $selEventArgs = $args[1]
-                if ($selEventArgs.AddedItems.Count -gt 0) {
-                    $selItem = $selEventArgs.AddedItems[0]
-                    if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
-                        $sel = $selItem.Content
+            if ($firstLoad) {
+                # Remove any previous SelectionChanged handlers before adding a new one
+                $null = $mainCommandCombo.Remove_SelectionChanged
+                $mainCommandCombo.Add_SelectionChanged(({
+                    $selEventArgs = $args[1]
+                    if ($selEventArgs.AddedItems.Count -gt 0) {
+                        $selItem = $selEventArgs.AddedItems[0]
+                        if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
+                            $sel = $selItem.Content
+                        }
+                        else {
+                            $sel = $selItem.ToString()
+                        }
                     }
                     else {
-                        $sel = $selItem.ToString()
+                        $sel = $mainCommandCombo.Text
                     }
+                    Write-Host "$sel selected from MainCommandComboBox." -ForegroundColor Cyan
+                    $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
+                    if ($currentOptionContent) {
+                        & $SetConfigOptionView $currentOptionContent $sel
+                    }
+                    else {
+                        Write-Host "optionContent is null." -ForegroundColor Red
+                    }
+                }).GetNewClosure())
+                # On first load, set ComboBox to index 0 so event fires and UI syncs
+                if ($mainCommandCombo.Items.Count -gt 0) {
+                    $mainCommandCombo.SelectedIndex = 0
                 }
-                else {
-                    $sel = $mainCommandCombo.Text
-                }
-                Write-Host "$sel selected from MainCommandComboBox." -ForegroundColor Cyan
-                $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
-                if ($currentOptionContent) {
-                    & $SetConfigOptionView $currentOptionContent $sel
-                }
-                else {
-                    Write-Host "optionContent is null." -ForegroundColor Red
-                }
-            }).GetNewClosure())
-            # On first load, set ComboBox to index 0 so event fires and UI syncs
-            if ($firstLoad -and $mainCommandCombo.Items.Count -gt 0) {
-                $mainCommandCombo.SelectedIndex = 0
             } else {
                 # On subsequent loads, just load the current selection or default to Scan
                 $selected = $mainCommandCombo.Text
@@ -604,7 +668,10 @@ if ($btnConfig) {
                 foreach ($k in $viewMap.Keys) {
                     if ($k -eq $selectedCmd) { $selectedKey = $viewMap[$k]; break }
                 }
-                Save-ConfigFromUI -selectedKey $selectedKey -ContentControl $contentControl
+                $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
+                $childView = $null
+                if ($optionContent) { $childView = $optionContent.Content }
+                Save-ConfigFromUI -selectedKey $selectedKey -ContentControl $contentControl -childView $childView
             })
         }
     })
