@@ -169,45 +169,128 @@ Function Update-WSIDFile {
 
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
+    $script:AllDoneNotified = $false
     $script:Timer.Add_Tick({
+        foreach ($comp in $script:TabsMap.Keys) {
+            $tb = $script:TabsMap[$comp]
+            $queue = $script:SyncUI[$comp]
+            $line = $null
+            while ($queue.TryDequeue([ref]$line)) {
+                $tb.AppendText("$line`n")
+                $tb.ScrollToEnd()
+            }
+        }
+        $finished = @()
+        foreach ($ps in @($script:ActiveRunspaces)) {
+            if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
+                $job = $script:RunspaceJobs[$ps]
+                if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
+                    try { $ps.EndInvoke($job.AsyncResult) } catch {}
+                    $ps.Dispose()
+                    Write-Host "`n[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)" -ForegroundColor Green
+                    $finished += $ps
+                }
+            }
+        }
+        foreach ($ps in $finished) {
+            if ($script:RunspaceJobs.ContainsKey($ps)) {
+                $comp = $script:RunspaceJobs[$ps].Computer
+                Write-Host "[DEBUG] Cleaning up Runspace for $comp`n" -ForegroundColor Green
+                $script:RunspaceJobs.Remove($ps)
+            }
+            else {
+                Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs." -ForegroundColor Yellow
+            }
+            $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+        }
+        while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
+            & $script:StartNextRunspace
+            Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)" -ForegroundColor Cyan
+        }
 
-            foreach ($comp in $script:TabsMap.Keys) {
-                $tb = $script:TabsMap[$comp]
-                $queue = $script:SyncUI[$comp]
-                $line = $null
-                while ($queue.TryDequeue([ref]$line)) {
-                    $tb.AppendText("$line`n")
-                    $tb.ScrollToEnd()
-                }
-            }
-            $finished = @()
-            foreach ($ps in @($script:ActiveRunspaces)) {
-                if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
-                    $job = $script:RunspaceJobs[$ps]
-                    if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
-                        try { $ps.EndInvoke($job.AsyncResult) } catch {}
-                        $ps.Dispose()
-                        Write-Host "`n[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)" -ForegroundColor Green
-                        $finished += $ps
+        # Show AllDonePopup when all runspaces and queue are empty
+        if ($script:ActiveRunspaces.Count -eq 0 -and $script:PendingQueue.Count -eq 0 -and -not $script:AllDoneNotified) {
+            if (-not $script:AllDonePopupOpen) {
+                $popup = Import-XamlView "..\Views\AllDonePopup.xaml"
+                if ($popup) {
+                    $popupWin = $popup
+                    # Merge all style dictionaries from Styles folder
+                    $stylesPath = Join-Path $PSScriptRoot '..\Styles'
+                    Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
+                        $styleStream = [System.IO.File]::OpenRead($_.FullName)
+                        try {
+                            $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
+                            try {
+                                $popupWin.Resources.MergedDictionaries.Add($styleDict)
+                            } catch {
+                                Write-Host "[WARN] Failed to add style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
+                            }
+                        } catch {
+                            Write-Host "[WARN] Failed to load style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
+                        } finally {
+                            $styleStream.Close()
+                        }
                     }
+                    $closeBtn = $popupWin.FindName('btnClose')
+                    $okBtn = $popupWin.FindName('btnOk')
+                    $panelBar = $popupWin.FindName('panelControlBar')
+                    $minBtn = $popupWin.FindName('btnMinimize')
+                    if ($closeBtn) {
+                        $closeBtn.Add_Click({
+                            if ($null -ne $popupWin) {
+                                try { $popupWin.Close() } catch {}
+                            }
+                            $script:AllDonePopupOpen = $false
+                        })
+                    }
+                    if ($okBtn) {
+                        $okBtn.Add_Click({
+                            if ($null -ne $popupWin) {
+                                try { $popupWin.Close() } catch {}
+                            }
+                            $script:AllDonePopupOpen = $false
+                        })
+                    }
+                    if ($minBtn) {
+                        $minBtn.Add_Click({
+                            if ($null -ne $popupWin) {
+                                try { $popupWin.WindowState = 'Minimized' } catch {}
+                            }
+                        })
+                    }
+                    if ($panelBar) {
+                        $panelBar.Add_MouseLeftButtonDown({
+                            if ($null -ne $popupWin) {
+                                try { $popupWin.DragMove() } catch {}
+                            }
+                        })
+                    }
+                    # Pause the main DispatcherTimer while popup is open
+                    if ($script:Timer) { $script:Timer.Stop() }
+                    $script:AllDonePopupOpen = $true
+                    # Auto-close after 2 seconds (in popup scope)
+                    $timer = New-Object System.Windows.Threading.DispatcherTimer
+                    $timer.Interval = [TimeSpan]::FromSeconds(10)
+                    $timer.Add_Tick({
+                        if ($null -ne $popupWin) {
+                            try { $popupWin.Close() } catch {}
+                        }
+                        $script:AllDonePopupOpen = $false
+                        $timer.Stop()
+                    })
+                    $timer.Start()
+                    $null = $popupWin.ShowDialog()
+                    # Resume the main DispatcherTimer after popup closes
+                    if ($script:Timer) { $script:Timer.Start() }
                 }
+                $script:AllDoneNotified = $true
             }
-            foreach ($ps in $finished) {
-                if ($script:RunspaceJobs.ContainsKey($ps)) {
-                    $comp = $script:RunspaceJobs[$ps].Computer
-                    Write-Host "[DEBUG] Cleaning up Runspace for $comp`n" -ForegroundColor Green
-                    $script:RunspaceJobs.Remove($ps)
-                }
-                else {
-                    Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs." -ForegroundColor Yellow
-                }
-                $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
-            }
-            while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
-                & $script:StartNextRunspace
-                Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)" -ForegroundColor Cyan
-            }
-        })
+        }
+        if ($script:ActiveRunspaces.Count -gt 0 -or $script:PendingQueue.Count -gt 0) {
+            $script:AllDoneNotified = $false
+            $script:AllDonePopupOpen = $false
+        }
+    })
     $script:Timer.Start()
 
     if ($tabs.Items.Count -gt 0) {
