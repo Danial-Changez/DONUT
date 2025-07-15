@@ -7,7 +7,7 @@ Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "LogsView.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "WindowEvents.psm1")
 
 if (-not $script:ManualRebootQueue) { $script:ManualRebootQueue = [hashtable]::Synchronized(@{}) }
-if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = @() }
+if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = [System.Collections.Generic.List[object]]::new() }
 if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
 if (-not $script:QueuedOrRunning) { $script:QueuedOrRunning = @{} }
 if (-not $script:PendingQueue) { $script:PendingQueue = [System.Collections.Queue]::new() }
@@ -79,7 +79,7 @@ $script:StartNextRunspace = {
         }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
     $async = $ps.BeginInvoke()
-    $script:ActiveRunspaces = $script:ActiveRunspaces + $ps
+    $script:ActiveRunspaces.Add($ps)
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
         PowerShell  = $ps
@@ -185,7 +185,6 @@ Function Update-WSIDFile {
         $tb.Clear()
     }
     # Debug: Show contents of ManualRebootQueue after population
-    $debugQueue = $script:ManualRebootQueue.Keys
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Notified = $false
@@ -199,15 +198,15 @@ Function Update-WSIDFile {
                 $tb.ScrollToEnd()
             }
         }
-        $finished = @()
-        foreach ($ps in @($script:ActiveRunspaces)) {
+        $finished = [System.Collections.Generic.List[object]]::new()
+        foreach ($ps in $script:ActiveRunspaces) {
             if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
                 $job = $script:RunspaceJobs[$ps]
                 if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
                     try { $ps.EndInvoke($job.AsyncResult) } catch {}
                     $ps.Dispose()
                     Write-Host "`n[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)" -ForegroundColor Green
-                    $finished += $ps
+                    $finished.Add($ps)
                 }
             }
         }
@@ -220,7 +219,7 @@ Function Update-WSIDFile {
             else {
                 Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs." -ForegroundColor Yellow
             }
-            $script:ActiveRunspaces = $script:ActiveRunspaces | Where-Object { $_ -ne $ps }
+            $script:ActiveRunspaces.Remove($ps) | Out-Null
         }
         while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
             & $script:StartNextRunspace
@@ -275,6 +274,8 @@ Function Update-WSIDFile {
                             }
                             $script:PopupOpen = $false
                             $script:ManualRebootQueue.Clear()
+                            $script:Notified = $false
+                            if ($script:Timer) { $script:Timer.Start() }
                         })
                     }
                     if ($okBtn) {
@@ -284,6 +285,8 @@ Function Update-WSIDFile {
                             }
                             $script:PopupOpen = $false
                             $script:ManualRebootQueue.Clear()
+                            $script:Notified = $false
+                            if ($script:Timer) { $script:Timer.Start() }
                         })
                     }
                     if ($minBtn) {
@@ -303,24 +306,10 @@ Function Update-WSIDFile {
                     # Pause the main DispatcherTimer while popup is open
                     if ($script:Timer) { $script:Timer.Stop() }
                     $script:PopupOpen = $true
-                    $timer = New-Object System.Windows.Threading.DispatcherTimer
-                    $timer.Interval = [TimeSpan]::FromSeconds(10)
-                    $timer.Add_Tick({
-                        if ($null -ne $popupWin) {
-                            try { $popupWin.Close() } catch {}
-                        }
-                        $script:PopupOpen = $false
-                        $script:ManualRebootQueue.Clear()
-                        Write-Host "[DEBUG] ManualRebootQueue cleared after popup closed (auto)" -ForegroundColor Yellow
-                        $timer.Stop()
-                        $timer = $null
-                    })
-                    $timer.Start()
                     $null = $popupWin.ShowDialog()
-                    # Resume the main DispatcherTimer after popup closes
-                    if ($script:Timer) { $script:Timer.Start() }
+                    # After popup closes, allow future popups
+                    $script:Notified = $true
                 }
-                $script:Notified = $true
             }
         }
         if ($script:ActiveRunspaces.Count -gt 0 -or $script:PendingQueue.Count -gt 0) {
