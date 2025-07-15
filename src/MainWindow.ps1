@@ -6,7 +6,7 @@ Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ImportXaml.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "LogsView.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "WindowEvents.psm1")
 
-
+if (-not $script:ManualRebootQueue) { $script:ManualRebootQueue = [hashtable]::Synchronized(@{}) }
 if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = @() }
 if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
 if (-not $script:QueuedOrRunning) { $script:QueuedOrRunning = @{} }
@@ -79,7 +79,7 @@ $script:StartNextRunspace = {
         }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
     $async = $ps.BeginInvoke()
-    $script:ActiveRunspaces += $ps
+    $script:ActiveRunspaces = $script:ActiveRunspaces + $ps
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
         PowerShell  = $ps
@@ -126,10 +126,29 @@ Function Update-WSIDFile {
     $tabs = $script:HomeView.FindName('TerminalTabs')
 
     # Prepare queue of computers to process, and only append new computers, do not reset existing tabs/queues
+    $configPath = Join-Path $PSScriptRoot '..\config.txt'
+    $needsManualReboot = $false
+    $flagPresent = $false
+    if (Test-Path $configPath) {
+        $configLines = Get-Content $configPath
+        foreach ($line in $configLines) {
+            if ($line -match 'reboot') { $flagPresent = $true }
+            if ($line -match 'forceRestart') { $flagPresent = $true }
+            if (($line -match 'reboot\s*=\s*false' -or $line -match 'forceRestart\s*=\s*false' -or $line -match '-\s*reboot\s*=\s*$' -or $line -match '-\s*forceRestart\s*=\s*$')) {
+                $needsManualReboot = $true
+            }
+        }
+    } else {
+        Write-Host "[DEBUG] Config file not found" -ForegroundColor Red
+    }
     foreach ($computer in $valid) {
+        if ($flagPresent -and $needsManualReboot) {
+            $script:ManualRebootQueue[$computer] = $true
+        } else {
+            if ($script:ManualRebootQueue.ContainsKey($computer)) { $script:ManualRebootQueue.Remove($computer) }
+        }
         if (-not $script:QueuedOrRunning.ContainsKey($computer)) {
             $script:PendingQueue.Enqueue($computer)
-            
             # Create a Tab + readonly TextBox
             $tab = [System.Windows.Controls.TabItem]::new() 
             $tb = [System.Windows.Controls.TextBox]::new()
@@ -141,7 +160,7 @@ Function Update-WSIDFile {
             $script:SyncUI[$computer] = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
 
             # Set default text for this computer's textbox
-            $tb.AppendText("[$computer] Starting runspace and remoteDCU.ps1...`n")
+            $tb.AppendText("[$($computer)] Starting runspace and remoteDCU.ps1...`n")
             $tb.ScrollToEnd()
             $script:QueuedOrRunning[$computer] = $true
         }
@@ -160,13 +179,13 @@ Function Update-WSIDFile {
     # Only clear the output queue and textbox for new computers, not for all tabs
     foreach ($computer in $valid) {
         if ($script:TabsMap.ContainsKey($computer)) { continue }
-        
         $queue = $script:SyncUI[$computer]
         while ($queue.Count -gt 0) { $null = $queue.TryDequeue([ref]([string]::Empty)) }
         $tb = $script:TabsMap[$computer]
         $tb.Clear()
     }
-
+    # Debug: Show contents of ManualRebootQueue after population
+    $debugQueue = $script:ManualRebootQueue.Keys
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Notified = $false
@@ -235,12 +254,27 @@ Function Update-WSIDFile {
                     $okBtn = $popupWin.FindName('btnOk')
                     $panelBar = $popupWin.FindName('panelControlBar')
                     $minBtn = $popupWin.FindName('btnMinimize')
+                    $popupSubHeader = $popupWin.FindName('popupSubHeader')
+                    $popupComputerList = $popupWin.FindName('popupComputerList')
+                    $names = $script:ManualRebootQueue.Keys
+                    if ($names.Count -gt 0) {
+                        if ($popupSubHeader) { $popupSubHeader.Visibility = 'Visible' }
+                        if ($popupComputerList) {
+                            $popupComputerList.Visibility = 'Visible'
+                            $popupComputerList.Items.Clear()
+                            foreach ($name in $names) { $null = $popupComputerList.Items.Add($name) }
+                        }
+                    } else {
+                        if ($popupSubHeader) { $popupSubHeader.Visibility = 'Collapsed' }
+                        if ($popupComputerList) { $popupComputerList.Visibility = 'Collapsed' }
+                    }
                     if ($closeBtn) {
                         $closeBtn.Add_Click({
                             if ($null -ne $popupWin) {
                                 try { $popupWin.Close() } catch {}
                             }
                             $script:PopupOpen = $false
+                            $script:ManualRebootQueue.Clear()
                         })
                     }
                     if ($okBtn) {
@@ -249,6 +283,7 @@ Function Update-WSIDFile {
                                 try { $popupWin.Close() } catch {}
                             }
                             $script:PopupOpen = $false
+                            $script:ManualRebootQueue.Clear()
                         })
                     }
                     if ($minBtn) {
@@ -268,7 +303,6 @@ Function Update-WSIDFile {
                     # Pause the main DispatcherTimer while popup is open
                     if ($script:Timer) { $script:Timer.Stop() }
                     $script:PopupOpen = $true
-                    # Auto-close after 10 seconds (in popup scope)
                     $timer = New-Object System.Windows.Threading.DispatcherTimer
                     $timer.Interval = [TimeSpan]::FromSeconds(10)
                     $timer.Add_Tick({
@@ -276,7 +310,10 @@ Function Update-WSIDFile {
                             try { $popupWin.Close() } catch {}
                         }
                         $script:PopupOpen = $false
+                        $script:ManualRebootQueue.Clear()
+                        Write-Host "[DEBUG] ManualRebootQueue cleared after popup closed (auto)" -ForegroundColor Yellow
                         $timer.Stop()
+                        $timer = $null
                     })
                     $timer.Start()
                     $null = $popupWin.ShowDialog()
@@ -299,7 +336,7 @@ Function Update-WSIDFile {
 }
 
 Function Initialize-HomeView {
-    # Only do one-time setup: event wiring, variable assignment
+    # One-time setup with event wiring and variable assignment
     $script:HomeView = Import-XamlView "..\Views\HomeView.xaml"
     if ($null -eq $script:HomeView) {
         Write-Host "Failed to load HomeView.xaml."
@@ -310,7 +347,6 @@ Function Initialize-HomeView {
     if ($script:SearchBar) {
         Initialize-SearchBar $script:SearchBar
         Set-PlaceholderLogic $script:SearchBar "WSID..."
-        Write-Host "Search bar initialized with: '$($script:SearchBar.Text)'"
     }
     else {
         Write-Host "Search bar not found in HomeView."
@@ -323,7 +359,6 @@ Function Initialize-HomeView {
                 $bar = $script:HomeView.FindName('txtHomeMessage')
                 Update-WSIDFile $bar
             })
-        Write-Host "Search button click event attached."
     }
     else {
         Write-Host "Search button not found in HomeView."
@@ -339,13 +374,11 @@ Function Update-HomeView {
         foreach ($tab in $script:TabsCollection) {
             $tabs.Items.Add($tab)
         }
-        Write-Host "[Update-HomeView] Restored $($script:TabsCollection.Count) tabs to TerminalTabs." -ForegroundColor Cyan
     }
     $searchBar = $script:HomeView.FindName('txtHomeMessage')
     if ($searchBar) {
         Initialize-SearchBar $searchBar
         Set-PlaceholderLogic $searchBar "WSID..."
-        Write-Host "[Update-HomeView] Search bar refreshed with: '$($searchBar.Text)'" -ForegroundColor Cyan
     }
 }
 
@@ -430,7 +463,6 @@ if ($null -ne $panelControlBar) {
             return
         }
         $window.DragMove()
-        [System.Windows.Input.Mouse]::Capture($null) # Release mouse capture to prevent stuck drag/resize
     })
 }
 
@@ -574,7 +606,6 @@ if ($btnConfig) {
 
         $mainCommandCombo = $configViewInstance.FindName('MainCommandComboBox')
         $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
-        Write-Host "[DEBUG] optionContent: $optionContent, type: $($optionContent.GetType().FullName)" -ForegroundColor Cyan
 
         if ($mainCommandCombo -and $optionContent) {
             $SetConfigOptionView = {
@@ -602,7 +633,6 @@ if ($btnConfig) {
                     $childView = Import-XamlView "..\Views\Config Options\$file"
                     if ($childView) {
                         $optionContent.Content = $childView
-                        Write-Host "Loaded child view: $file" -ForegroundColor Green
                     }
                     else {
                         $optionContent.Content = $null
@@ -630,7 +660,6 @@ if ($btnConfig) {
                     else {
                         $sel = $mainCommandCombo.Text
                     }
-                    Write-Host "$sel selected from MainCommandComboBox." -ForegroundColor Cyan
                     $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
                     if ($currentOptionContent) {
                         & $SetConfigOptionView $currentOptionContent $sel
@@ -671,10 +700,8 @@ if ($btnConfig) {
                     "Custom Notification"         = "customnotification"
                 }
                 $selectedCmd = $mainCommandCombo.SelectedItem
-                Write-Host "[DEBUG] Selected command: $selectedCmd" -ForegroundColor Cyan
                 if ($selectedCmd -is [System.Windows.Controls.ComboBoxItem]) { 
                     $selectedCmd = $selectedCmd.Content 
-                    Write-Host "[DEBUG] Selected command content: $selectedCmd" -ForegroundColor Cyan
                 }
                 $selectedKey = $null
                 foreach ($k in $viewMap.Keys) {
