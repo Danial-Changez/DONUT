@@ -38,9 +38,31 @@
                     </LinearGradientBrush>
                 </Border.Background>
                 <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,0">
-                        <TextBlock Text="All Done!" Foreground="{DynamicResource TitleTextPrimary}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8" />
-                        <Button x:Name="btnOk" Content="OK" Width="80" Height="40" Margin="0,10,0,0" Style="{DynamicResource ModernButton}" />
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" /> <!-- Header -->
+                        <RowDefinition Height="*" />    <!-- Computer List -->
+                        <RowDefinition Height="Auto" /> <!-- Button -->
+                    </Grid.RowDefinitions>
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" VerticalAlignment="Top" HorizontalAlignment="Center">
+                        <TextBlock x:Name="popupHeader" Text="All Done!" Foreground="{DynamicResource TitleTextPrimary}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,0" />
+                        <TextBlock x:Name="popupSubHeader" Text="The following computer(s) require manual reboot:" Foreground="{DynamicResource TitleTextPrimary}" FontSize="16" FontWeight="Normal" HorizontalAlignment="Center" Margin="0,0,0,8" Visibility="Collapsed" />
+                    </StackPanel>
+                    <!-- Computer List -->
+                    <ListBox Grid.Row="1"
+                             x:Name="popupComputerList"
+                             FontSize="16"
+                             Foreground="{DynamicResource TitleTextPrimary}"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             HorizontalContentAlignment="Center"
+                             Padding="24,0"
+                             MaxHeight="100"
+                             Margin="0,0,0,2"
+                             Visibility="Collapsed" />
+                    <!-- Button -->
+                    <StackPanel Grid.Row="2" VerticalAlignment="Bottom" HorizontalAlignment="Center">
+                        <Button x:Name="btnOk" Content="OK" Width="120" Height="48" Margin="0,10,0,0" Style="{DynamicResource ModernButton}" />
                     </StackPanel>
                 </Grid>
             </Border>
