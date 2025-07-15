@@ -20,17 +20,9 @@ function Main {
     Param ([String]$Commandline)
         
     #--------------------------------------------------------------------------
-    # Robust script root resolution for packaged and dev environments
+    # Robust script root resolution
     $root = $PSScriptRoot
-    if (-not $root) {
-        if ($HostInvocation -and $HostInvocation.MyCommand) {
-            $root = Split-Path -Parent $HostInvocation.MyCommand.Path
-        } elseif ($PSCommandPath) {
-            $root = Split-Path -Parent $PSCommandPath
-        } else {
-            $root = '.'
-        }
-    }
+    if (-not $root) { $root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
     $updater = Join-Path $root 'src\Updater.ps1'
     $mainwindow = Join-Path $root 'src\MainWindow.ps1'

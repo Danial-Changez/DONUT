@@ -24,7 +24,6 @@ Function Import-Xaml {
 Function Import-XamlView {
     param([string]$RelativePath)
     $fullPath = Join-Path $PSScriptRoot $RelativePath
-    Write-Host "Loading XAML file from path: $fullPath"
     if (-Not (Test-Path $fullPath)) {
         Write-Host "File not found: $fullPath"
         return $null
@@ -32,7 +31,6 @@ Function Import-XamlView {
     $stream = [System.IO.File]::OpenRead($fullPath)
     try {
         $xaml = [Windows.Markup.XamlReader]::Load($stream)
-        Write-Host "XAML file loaded successfully."
         return $xaml
     }
     catch {

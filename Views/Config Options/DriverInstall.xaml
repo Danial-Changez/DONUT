@@ -19,11 +19,20 @@
             <TextBlock Text="Text Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
                 <TextBlock Text="Output Log" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox x:Name="outputLog" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                    <Path Data="{DynamicResource File}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
+                    <TextBox x:Name="outputLog" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                </StackPanel>
                 <TextBlock Text="Driver Library Location" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox x:Name="driverLibraryLocation" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                    <Path Data="{DynamicResource DriverLibrary}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
+                    <TextBox x:Name="driverLibraryLocation" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                </StackPanel>
                 <TextBlock Text="Catalog Location" Style="{DynamicResource ModernSectionSubtitle}" />
-                <TextBox x:Name="catalogLocation" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Catalog}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
+                    <TextBox x:Name="catalogLocation" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                </StackPanel>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
