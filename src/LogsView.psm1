@@ -21,12 +21,7 @@ Function Show-LogsView {
         Write-Host "[Logs] Logs directory not found: $logsDir" -ForegroundColor Yellow
         $tab = [System.Windows.Controls.TabItem]::new()
         $tab.Header = "No logs found"
-        $tb = [System.Windows.Controls.TextBox]::new()
-        $tb.Text = "No log files found in the logs directory."
-        $tb.IsReadOnly = $true
-        $tb.VerticalScrollBarVisibility = 'Auto'
-        $tb.HorizontalScrollBarVisibility = 'Auto'
-        $tab.Content = $tb
+        $tab.DataContext = "No log files found in the logs directory."
         $logsTabControl.Items.Add($tab)
         return $logsViewInstance
     }
@@ -34,39 +29,24 @@ Function Show-LogsView {
     if ($logFiles.Count -eq 0) {
         $tab = [System.Windows.Controls.TabItem]::new()
         $tab.Header = "No logs found"
-        $tb = [System.Windows.Controls.TextBox]::new()
-        $tb.Text = "No log files found in the logs directory."
-        $tb.IsReadOnly = $true
-        $tb.VerticalScrollBarVisibility = 'Auto'
-        $tb.HorizontalScrollBarVisibility = 'Auto'
-        $tab.Content = $tb
+        $tab.DataContext = "No log files found in the logs directory."
         $logsTabControl.Items.Add($tab)
         return $logsViewInstance
     }
     foreach ($file in $logFiles) {
         $tab = [System.Windows.Controls.TabItem]::new()
         $tab.Header = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-        # Use a ScrollViewer to wrap the TextBox for reliable scrolling
-        $scrollViewer = [System.Windows.Controls.ScrollViewer]::new()
-        $scrollViewer.VerticalScrollBarVisibility = 'Auto'
-        $scrollViewer.HorizontalScrollBarVisibility = 'Auto'
         $tb = [System.Windows.Controls.TextBox]::new()
-        $tb.IsReadOnly = $true
-        $tb.FontFamily = [System.Windows.Media.FontFamily]::new("Consolas")
-        $tb.FontSize = 13
-        $tb.AcceptsReturn = $true
-        $tb.AcceptsTab = $true
-        $tb.TextWrapping = 'NoWrap'
-        $tb.VerticalScrollBarVisibility = 'Hidden'  # Let ScrollViewer handle it
-        $tb.HorizontalScrollBarVisibility = 'Hidden'
+        $tb.VerticalScrollBarVisibility = 'Auto'
+        $tb.HorizontalScrollBarVisibility = 'Auto'
+        $tb.HorizontalAlignment = 'Stretch'
+        $tb.VerticalAlignment = 'Stretch'
         try {
-            $content = Get-Content -Path $file.FullName -Raw -ErrorAction Stop
-            $tb.Text = $content
+            $tb.Text = Get-Content -Path $file.FullName -Raw -ErrorAction Stop
         } catch {
-            $tb.Text = "Failed to load log file: $($_.Exception.Message)"
+            $tb.Text = "Failed to load log file: $($file.Name): $($_.Exception.Message)"
         }
-        $scrollViewer.Content = $tb
-        $tab.Content = $scrollViewer
+        $tab.Content = $tb
         $logsTabControl.Items.Add($tab)
     }
     $logsTabControl.SelectedIndex = 0
