@@ -175,6 +175,10 @@
                 Value="0,0,0,8" />
         <Setter Property="HorizontalAlignment"
                 Value="Left" />
+        <Setter Property="VerticalScrollBarVisibility"
+                Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility"
+                Value="Auto" />
     </Style>
     <!-- Modern ComboBox Style -->
     <Style x:Key="ModernComboBox"
@@ -204,20 +208,16 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="10">
-                            <DockPanel>
+                            <DockPanel LastChildFill="False">
                                 <ContentPresenter x:Name="ContentSite"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                                   Content="{TemplateBinding SelectionBoxItem}"
                                                   VerticalAlignment="Center"
                                                   HorizontalAlignment="Left"
-                                                  Margin="6,0,0,0" />
-                                <ToggleButton x:Name="ToggleButton"
-                                              DockPanel.Dock="Right"
-                                              Focusable="False"
-                                              IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                              ClickMode="Press"
-                                              Background="Transparent"
-                                              BorderThickness="0">
+                                                  Margin="12,0,0,0"
+                                                  Width="Auto" />
+                                <!-- Visual-only arrow -->
+                                <Grid Width="32" DockPanel.Dock="Right" HorizontalAlignment="Right">
                                     <Path x:Name="Arrow"
                                           Data="M 0 0 L 8 0 L 4 4 Z"
                                           Fill="{DynamicResource AccentBlue}"
@@ -225,10 +225,26 @@
                                           Height="8"
                                           Margin="0,0,8,0"
                                           VerticalAlignment="Center"
-                                          HorizontalAlignment="Right" />
-                                </ToggleButton>
+                                          HorizontalAlignment="Center" />
+                                </Grid>
                             </DockPanel>
                         </Border>
+                        <!-- Overlay an invisible ToggleButton to open dropdown on any click except the arrow -->
+                        <ToggleButton x:Name="OverlayToggle"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      Focusable="False"
+                                      IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      ClickMode="Press"
+                                      Margin="0"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                IsOpen="{TemplateBinding IsDropDownOpen}"
@@ -407,41 +423,43 @@
         </Style.Triggers>
     </Style>
     <!-- Scrollbar Styles moved from ButtonStyles.xaml -->
-    <Style x:Key="ScrollBarThumb"
-           TargetType="Thumb">
-        <Setter Property="Height"
-                Value="20" />
-        <Setter Property="Width"
-                Value="6" />
-        <Setter Property="Background"
-                Value="{DynamicResource PanelBackground}" />
+    <Style x:Key="ScrollBarTrackThumb" TargetType="Thumb">
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Width" Value="7" />
+        <Setter Property="Background" Value="{DynamicResource AccentBlue}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="6" />
+                    <Grid x:Name="Grid">
+                        <Rectangle HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   Width="Auto"
+                                   Height="Auto"
+                                   Fill="Transparent" />
+                        <Border x:Name="CornerScrollBarRectangle"
+                                CornerRadius="5"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Width="Auto"
+                                Height="Auto"
+                                Margin="0,1,0,1"
+                                Background="{TemplateBinding Background}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Tag" Value="Horizontal">
+                            <Setter TargetName="CornerScrollBarRectangle" Property="Width" Value="Auto" />
+                            <Setter TargetName="CornerScrollBarRectangle" Property="Height" Value="6" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver"
-                     Value="True">
-                <Setter Property="Background"
-                        Value="{DynamicResource PanelBackgroundHover}" />
-            </Trigger>
-            <Trigger Property="IsDragging"
-                     Value="True">
-                <Setter Property="Background"
-                        Value="{DynamicResource PanelBackgroundActive}" />
-            </Trigger>
-        </Style.Triggers>
     </Style>
-    <Style x:Key="invisibleRepeatButton"
-           TargetType="RepeatButton">
-        <Setter Property="Width"
-                Value="0" />
-        <Setter Property="Height"
-                Value="0" />
+    <!-- Invisible RepeatButton for ScrollBar -->
+    <Style x:Key="InvisibleRepeatButton" TargetType="RepeatButton">
+        <Setter Property="Width" Value="0" />
+        <Setter Property="Height" Value="0" />
+        <Setter Property="Opacity" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RepeatButton" />
@@ -449,30 +467,68 @@
         </Setter>
     </Style>
     <Style TargetType="ScrollBar">
-        <Setter Property="Width"
-                Value="6" />
-        <Setter Property="Background"
-                Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBlue}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="7" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
-                    <Grid x:Name="Bg">
-                        <Track x:Name="Part_Track"
-                               IsDirectionReversed="True"
-                               Margin="0,2,0,2">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton Style="{StaticResource invisibleRepeatButton}"
-                                              Command="ScrollBar.LineUpCommand" />
-                            </Track.DecreaseRepeatButton>
+                    <Grid x:Name="GridRoot" Width="7" Background="{TemplateBinding Background}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Track x:Name="PART_Track"
+                               Grid.Row="0"
+                               IsDirectionReversed="true"
+                               ViewportSize="NaN"
+                               Focusable="false">
                             <Track.Thumb>
-                                <Thumb Style="{StaticResource ScrollBarThumb}" />
+                                <Thumb x:Name="Thumb"
+                                       Background="{TemplateBinding Foreground}"
+                                       Style="{DynamicResource ScrollBarTrackThumb}" />
                             </Track.Thumb>
                             <Track.IncreaseRepeatButton>
-                                <RepeatButton Style="{StaticResource invisibleRepeatButton}"
-                                              Command="ScrollBar.LineDownCommand" />
+                                <RepeatButton x:Name="PageUp"
+                                              Command="ScrollBar.PageDownCommand"
+                                              Style="{DynamicResource InvisibleRepeatButton}"
+                                              Focusable="false" />
                             </Track.IncreaseRepeatButton>
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="PageDown"
+                                              Command="ScrollBar.PageUpCommand"
+                                              Style="{DynamicResource InvisibleRepeatButton}"
+                                              Focusable="false" />
+                            </Track.DecreaseRepeatButton>
                         </Track>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger SourceName="Thumb" Property="IsMouseOver" Value="true">
+                            <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource AccentPurple}" />
+                        </Trigger>
+                        <Trigger SourceName="Thumb" Property="IsDragging" Value="true">
+                            <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource AccentBlue}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter TargetName="Thumb" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter TargetName="GridRoot" Property="LayoutTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="PART_Track" Property="LayoutTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Width" Value="Auto" />
+                            <Setter Property="Height" Value="8" />
+                            <Setter TargetName="Thumb" Property="Tag" Value="Horizontal" />
+                            <Setter TargetName="PageDown" Property="Command" Value="ScrollBar.PageLeftCommand" />
+                            <Setter TargetName="PageUp" Property="Command" Value="ScrollBar.PageRightCommand" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

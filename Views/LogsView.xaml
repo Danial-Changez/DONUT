@@ -8,12 +8,8 @@
             Margin="10"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
-          <ScrollViewer
-            VerticalScrollBarVisibility="Auto"
-            HorizontalScrollBarVisibility="Auto">
             <TabControl x:Name="LogsTabControl"
-                    Style="{DynamicResource TerminalTabControlStyle}"
-                    Margin="10" />
-          </ScrollViewer>
+                       Style="{DynamicResource TerminalTabControlStyle}"
+                       Margin="10" />
     </Border>
 </Grid>
