@@ -21,19 +21,17 @@ function Main {
         
     #--------------------------------------------------------------------------
     # Robust script root resolution for packaged and dev environments
-    $root = $PSScriptRoot
-    if (-not $root) {
-        if ($HostInvocation -and $HostInvocation.MyCommand) {
-            $root = Split-Path -Parent $HostInvocation.MyCommand.Path
-        } elseif ($PSCommandPath) {
-            $root = Split-Path -Parent $PSCommandPath
-        } else {
-            $root = '.'
-        }
-    }
-
-    $updater = Join-Path $root 'src\Updater.ps1'
-    $mainwindow = Join-Path $root 'src\MainWindow.ps1'
+	
+	# Get the directory of the current script or host
+	$hostPath = [System.IO.Path]::GetDirectoryName($HostInvocation.MyCommand.Path)
+	
+	# Go up 2 levels: x64 -> bin
+	$projectRoot = Split-Path -Path $hostPath -Parent # x64
+	$projectRoot = Split-Path -Path $projectRoot -Parent # bin
+	
+	# Now $projectRoot points to your project root
+	$updater = Join-Path -Path $projectRoot -ChildPath '\src\Updater.ps1'
+	$mainwindow = Join-Path -Path $projectRoot -ChildPath 'src\MainWindow.ps1'
 
     if (Test-Path $updater) { . $updater }
     else { Write-Host "Updater script not found: $updater" -ForegroundColor Red }
