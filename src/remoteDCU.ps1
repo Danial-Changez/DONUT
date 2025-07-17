@@ -148,7 +148,7 @@ $processComputer = {
     $remoteCommand = "$stopDCU & `"$dcuPath`" /$enabledCmd $arguments"
 
     # PsExec command to execute the remote command
-    $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip pwsh -c '$remoteCommand'"
+    $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip powershell -c '$remoteCommand'"
 
     Write-Host "Executing '$enabledCmd' on $computer..."
     Write-Host "Command: $psexec`n"
