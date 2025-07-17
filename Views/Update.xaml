@@ -1,0 +1,63 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="All Processes Complete" Height="240" Width="400" WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize" Background="{x:Null}">
+    <Border CornerRadius="10" BorderThickness="1">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.75">
+                <GradientStop Color="{DynamicResource PrimaryBackgroundDarkColor}" Offset="0" />
+                <GradientStop Color="{DynamicResource PrimaryBackgroundColor}" Offset="1" />
+            </LinearGradientBrush>
+        </Border.Background>
+        <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}" Offset="0" />
+                <GradientStop Color="{DynamicResource WindowBorderAccentColor}" Offset="0.5" />
+                <GradientStop Color="{DynamicResource WindowBorderSecondaryColor}" Offset="1" />
+            </LinearGradientBrush>
+        </Border.BorderBrush>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="36" /> <!-- Control Bar -->
+                <RowDefinition Height="*" />  <!-- Content -->
+            </Grid.RowDefinitions>
+            <!-- Control Bar -->
+            <StackPanel x:Name="panelControlBar" Grid.Row="0" Orientation="Horizontal" FlowDirection="RightToLeft" Background="Transparent" Margin="0,0,5,0">
+                <Button x:Name="btnClose" Style="{DynamicResource controlButton}" Tag="{DynamicResource AccentPink}">
+                    <Path Style="{DynamicResource controlButtonIcon}" Data="{DynamicResource xMark}" />
+                </Button>
+                <Button x:Name="btnMinimize" Style="{DynamicResource controlButton}" Tag="{DynamicResource AccentBlueLight}">
+                    <Path Style="{DynamicResource controlButtonIcon}" Width="13" Data="{DynamicResource Minimize}" />
+                </Button>
+            </StackPanel>
+            <!-- Popup Content -->
+            <Border Grid.Row="1" CornerRadius="10" Margin="0" Padding="0,10,0,18">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.75">
+                        <GradientStop Color="{DynamicResource PrimaryBackgroundDarkColor}" Offset="0" />
+                        <GradientStop Color="{DynamicResource PrimaryBackgroundColor}" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" /> <!-- Header -->
+                        <RowDefinition Height="Auto" /> <!-- Subheader -->
+                        <RowDefinition Height="*" />   <!-- Spacer -->
+                        <RowDefinition Height="Auto" /> <!-- Buttons -->
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Vertical" HorizontalAlignment="Center" Margin="20,0,20,0">
+                        <TextBlock x:Name="popupHeader" Text="Updates Detected!" Foreground="{DynamicResource TitleTextPrimary}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,0" />
+                        <TextBlock x:Name="popupSubHeader" Text="A new version of DONUT has been detected. Would you like to update now?" Foreground="{DynamicResource TitleTextPrimary}" FontSize="16" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,8,0,8" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="btnNow" Content="Now" Width="120" Height="48" Margin="0,10,8,0" Style="{DynamicResource ModernButton}" />
+                        <Button x:Name="btnLater" Content="Later" Width="120" Height="48" Margin="8,10,0,0" Style="{DynamicResource ModernButton}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
