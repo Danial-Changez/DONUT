@@ -8,8 +8,22 @@
             Margin="10"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
+        <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="60" />
+            </Grid.RowDefinitions>
             <TabControl x:Name="LogsTabControl"
+                       Grid.Row="0"
                        Style="{DynamicResource TerminalTabControlStyle}"
-                       Margin="10" />
+                       Margin="10,10,10,10" />
+            <Button x:Name="btnClearLogs"
+              Grid.Row="1"
+              Content="Clear Logs"
+              Style="{DynamicResource ModernButton}" 
+              Margin="0,0,0,15"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Bottom"/>
+        </Grid>
     </Border>
 </Grid>

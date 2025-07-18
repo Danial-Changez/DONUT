@@ -35,7 +35,13 @@ Function Show-LogsView {
     }
     foreach ($file in $logFiles) {
         $tab = [System.Windows.Controls.TabItem]::new()
-        $tab.Header = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        $rawHeader = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        if ($rawHeader.Length -gt 0) {
+            $formattedHeader = $rawHeader.Substring(0,1).ToUpper() + $rawHeader.Substring(1)
+        } else {
+            $formattedHeader = $rawHeader
+        }
+        $tab.Header = $formattedHeader
         $tb = [System.Windows.Controls.TextBox]::new()
         $tb.VerticalScrollBarVisibility = 'Auto'
         $tb.HorizontalScrollBarVisibility = 'Auto'

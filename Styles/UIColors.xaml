@@ -64,4 +64,6 @@
     <!-- Misc Colors -->
     <Color x:Key="GroupBoxBackgroundColor"> #30FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground" Color="{StaticResource GroupBoxBackgroundColor}"/>
+    <Color x:Key="ThrottleLimitColor"> #E92424</Color>
+    <SolidColorBrush x:Key="ThrottleLimit" Color="{StaticResource ThrottleLimitColor}"/>
 </ResourceDictionary>

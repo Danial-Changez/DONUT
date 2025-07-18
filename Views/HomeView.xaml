@@ -15,12 +15,12 @@
                         <Grid>
                                 <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="40" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="1.5*" />
+                                        <ColumnDefinition Width="130" />
                                 </Grid.ColumnDefinitions>
                                 <Path Data="{DynamicResource Search}" Height="20" Width="20" Stretch="Uniform" Fill="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" Margin="4,0,8,0" Grid.Column="0" />
-                                <TextBox x:Name="txtHomeMessage" Style="{DynamicResource GoogleSearchBar}" Grid.Column="1" Margin="0" AcceptsReturn="True" TextWrapping="Wrap" HorizontalAlignment="Left" MinWidth="150" MaxWidth="500" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Center" />
-                                <Button x:Name="btnSearch" Grid.Column="2" Content="Search" FontSize="12" FontFamily="Montserrat" Cursor="Hand" BorderThickness="0" Foreground="White" Height="30" MinWidth="120" Margin="8,0,4,0" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <TextBox x:Name="txtHomeMessage" Style="{DynamicResource GoogleSearchBar}" Grid.Column="1" Margin="0" AcceptsReturn="True" TextWrapping="Wrap" HorizontalAlignment="Stretch" MinWidth="250" MaxWidth="600" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Center" FontWeight="SemiBold" />
+                                <Button x:Name="btnSearch" Grid.Column="2" Content="Search" FontSize="12" FontFamily="Montserrat" Cursor="Hand" BorderThickness="0" Foreground="White" Height="30" MinWidth="120" Margin="8,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Stretch">
                                         <Button.Style>
                                                 <Style TargetType="Button">
                                                         <Setter Property="Background" Value="{DynamicResource AccentPurple}" />
@@ -46,7 +46,14 @@
         </Grid>
         <Grid Grid.Row="1">
                 <Border Background="{DynamicResource PanelBackground}" CornerRadius="6" Margin="10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                        <TabControl x:Name="TerminalTabs" Style="{DynamicResource TerminalTabControlStyle}" Margin="10" />
+                        <Grid>
+                                <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TabControl x:Name="TerminalTabs" Style="{DynamicResource TerminalTabControlStyle}" Margin="10" Grid.Row="0" />
+                                <Button x:Name="btnClearTabs" Content="Clear Completed Tabs" Style="{DynamicResource ModernButton}" VerticalAlignment="Bottom" HorizontalAlignment="Center" Grid.Row="1" Margin="0,0,0,15"/>
+                        </Grid>
                 </Border>
         </Grid>
 </Grid>

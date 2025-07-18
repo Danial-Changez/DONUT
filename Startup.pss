@@ -25,23 +25,27 @@ function Main {
 	# Get the directory of the current script or host
 	$hostPath = [System.IO.Path]::GetDirectoryName($HostInvocation.MyCommand.Path)
 	
-	# Go up 2 levels: x64 -> bin
+	# Go up 3 levels: x64 -> bin -> DONUT
 	$projectRoot = Split-Path -Path $hostPath -Parent # x64
 	$projectRoot = Split-Path -Path $projectRoot -Parent # bin
+	$projectRoot = Split-Path -Path $projectRoot -Parent # DONUT
 	
-	# Now $projectRoot points to your project root
-	$updater = Join-Path -Path $projectRoot -ChildPath '\src\Updater.ps1'
-	$mainwindow = Join-Path -Path $projectRoot -ChildPath 'src\MainWindow.ps1'
-
-    if (Test-Path $updater) { . $updater }
-    else { Write-Host "Updater script not found: $updater" -ForegroundColor Red }
-
-    if (Test-Path $mainwindow) { . $mainwindow }
-    else { Write-Host "MainWindow script not found: $mainwindow" -ForegroundColor Red }
-
-    $script:ExitCode = 0 #Set the exit code for the Packager
-}
-
-]]></Code>
+	# Now $projectRoot points to project root from DONUT.exe
+	$updaterBin = Join-Path -Path $projectRoot -ChildPath 'src\Updater.ps1'
+	$mainWindowBin = Join-Path -Path $projectRoot -ChildPath 'src\MainWindow.ps1'
+	
+	$updater = Join-Path -Path $hostPath -ChildPath 'src\Updater.ps1'
+	$mainWindow = Join-Path -Path $hostPath -ChildPath 'src\MainWindow.ps1'
+	
+    if (Test-Path $updaterBin) { . $updaterBin }
+	elseif (Test-Path $updater) { . $updater }
+	else { Write-Error "Updater script not found: $updaterBin nor $updater" }
+	
+	if (Test-Path $mainWindowBin) { . $mainWindowBin }
+	elseif (Test-Path $mainWindow) { . $mainWindow }
+	else { Write-Error "MainWindow script not found: $mainWindowBin nor $mainWindow" }
+	
+	$script:ExitCode = 0 #Set the exit code for the Packager
+}]]></Code>
   <TV>0</TV>
 </File>
