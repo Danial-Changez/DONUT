@@ -1,6 +1,9 @@
 <!-- ApplyUpdates.xaml - Organized layout to match Python UI screenshots -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource PanelBackground}">
+xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource PanelBackground}">
+    <Grid.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </Grid.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
@@ -12,7 +15,23 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <ToggleButton x:Name="reboot" Style="{DynamicResource ModernToggleSwitch}" />
+                    <Path x:Name="rebootWarningIcon"
+                          Data="{DynamicResource Warning}"
+                          Fill="Yellow"
+                          Width="20" Height="20" Margin="8,0,-4,0"
+                          VerticalAlignment="Center"
+                          Stretch="Uniform"
+                          Visibility="{Binding IsChecked, ElementName=reboot, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                     <TextBlock Text="Reboot" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock x:Name="rebootWarningText"
+                               Text="(WARNING: This will cause the target machine(s) to automatically restart)"
+                               Foreground="Yellow"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               FontFamily="Montserrat"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding IsChecked, ElementName=reboot, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <ToggleButton x:Name="autoSuspendBitLocker" Style="{DynamicResource ModernToggleSwitch}" />
@@ -130,7 +149,7 @@
             <StackPanel Margin="0,20,0,0">
                 <TextBlock Text="Throttle Limit" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,0">
-                    <Path Data="{DynamicResource Rocket}" Fill="#E92424" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0" />
+                    <Path Data="{DynamicResource Rocket}" Fill="{DynamicResource ThrottleLimit}" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0" />
                     <TextBox x:Name="throttleLimit" Width="120" Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
             </StackPanel>
