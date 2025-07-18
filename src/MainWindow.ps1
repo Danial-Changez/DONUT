@@ -19,7 +19,6 @@ $script:StartNextRunspace = {
     if ($script:PendingQueue.Count -eq 0) { return }
     $computer = $script:PendingQueue.Dequeue()
     if (-not $script:TabsMap.ContainsKey($computer)) {
-        Write-Host "No tab for $computer, skipping runspace creation."
         return
     }
     $queue = $script:SyncUI[$computer]
@@ -94,7 +93,6 @@ $script:StartNextRunspace = {
         PowerShell  = $ps
         AsyncResult = $async
     }
-    Write-Host "Started runspace for $computer. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)"
 }
 
 # Function to update WSID.txt with the content of the search bar
@@ -108,7 +106,6 @@ Function Update-WSIDFile {
 
     # Ensure the TextBox has valid content before updating the file
     if ([string]::IsNullOrWhiteSpace($textBox.Text)) {
-        Write-Host "TextBox is empty. File not updated."
         return
     }
         
@@ -117,9 +114,7 @@ Function Update-WSIDFile {
         ForEach-Object { $_.Trim() } |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Select-Object -Unique
-
     Set-Content -Path $wsidFilePath -Value $valid
-    Write-Host "WSID.txt updated with: '$($valid -join ',')'"
 
     # Read throttleLimit from config.txt
     $configPath = Join-Path $PSScriptRoot '..\config.txt'
@@ -154,7 +149,7 @@ Function Update-WSIDFile {
         }
     }
     else {
-        Write-Host "[DEBUG] Config file not found" -ForegroundColor Red
+        Write-Error "Config file not found"
     }
 
     # If applyUpdates is enabled, show a single confirmation popup for all computers
@@ -340,7 +335,6 @@ Function Update-WSIDFile {
                     if ($ps.InvocationStateInfo.State -eq 'Completed' -or $ps.InvocationStateInfo.State -eq 'Failed' -or $ps.InvocationStateInfo.State -eq 'Stopped') {
                         try { $ps.EndInvoke($job.AsyncResult) } catch {}
                         $ps.Dispose()
-                        Write-Host "`n[DEBUG] Runspace for $($job.Computer) finished and disposed. State: $($ps.InvocationStateInfo.State)" -ForegroundColor Green
                         $finished.Add($ps)
                     }
                 }
@@ -348,17 +342,15 @@ Function Update-WSIDFile {
             foreach ($ps in $finished) {
                 if ($script:RunspaceJobs.ContainsKey($ps)) {
                     $comp = $script:RunspaceJobs[$ps].Computer
-                    Write-Host "[DEBUG] Cleaning up Runspace for $comp`n" -ForegroundColor Green
                     $script:RunspaceJobs.Remove($ps)
                 }
                 else {
-                    Write-Host "[DEBUG] Attempted cleanup for runspace not in RunspaceJobs." -ForegroundColor Yellow
+                    Write-Error "Attempted cleanup for runspace not in RunspaceJobs."
                 }
                 $script:ActiveRunspaces.Remove($ps) | Out-Null
             }
             while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
                 & $script:StartNextRunspace
-                Write-Host "[DEBUG] Started new runspace. Active: $($script:ActiveRunspaces.Count), Pending: $($script:PendingQueue.Count)" -ForegroundColor Cyan
             }
 
             # Show Popup when all runspaces and queue are empty
@@ -377,11 +369,11 @@ Function Update-WSIDFile {
                                     $popupWin.Resources.MergedDictionaries.Add($styleDict)
                                 }
                                 catch {
-                                    Write-Host "[WARN] Failed to add style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
+                                    Write-Warning "Failed to add style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
                                 }
                             }
                             catch {
-                                Write-Host "[WARN] Failed to load style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
+                                Write-Warning "Failed to load style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
                             }
                             finally {
                                 $styleStream.Close()
@@ -761,7 +753,6 @@ if ($btnConfig) {
             $configViewInstance = $script:ConfigViewInstance
             $firstLoad = $false
             if (-not $configViewInstance) {
-                Write-Host "[DEBUG] ConfigViewInstance is null, loading ConfigView.xaml"
                 $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
                 $script:ConfigViewInstance = $configViewInstance
                 $firstLoad = $true
@@ -777,7 +768,6 @@ if ($btnConfig) {
                 $SetConfigOptionView = {
                     param($optionContent, $selected)
                     if (-not $optionContent) {
-                        Write-Host "optionContent is null." -ForegroundColor Red
                         return
                     }
                     if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
@@ -830,9 +820,6 @@ if ($btnConfig) {
                                 if ($currentOptionContent) {
                                     & $SetConfigOptionView $currentOptionContent $sel
                                 }
-                                else {
-                                    Write-Host "optionContent is null." -ForegroundColor Red
-                                }
                             }).GetNewClosure())
                     # On first load, set ComboBox to index 0 so event fires and UI syncs
                     if ($mainCommandCombo.Items.Count -gt 0) {
@@ -845,9 +832,6 @@ if ($btnConfig) {
                     if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) { $selected = 'Scan' }
                     & $SetConfigOptionView $optionContent $selected
                 }
-            }
-            else {
-                Write-Host "[ERROR] mainCommandCombo or optionContent not found or not valid." -ForegroundColor Red
             }
 
             # Wire up Save button in ConfigView
