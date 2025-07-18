@@ -16,11 +16,9 @@ if ($config.Args.ContainsKey("outputLog") -and $config.Args["outputLog"]) {
     $outputLogPath = $config.Args["outputLog"];
     $logFileName = Split-Path $outputLogPath -Leaf;
     $localLogFile = Join-Path -Path $PSScriptRoot -ChildPath "..\logs\$logFileName";
-    
-    $remoteLogUNC = [string]($config.Args["outputLog"]).Split("=")[1]
     $logs = $true
-}
-else {
+} else {
+    $outputLogPath = $null
     $localLogFile = Join-Path -Path $PSScriptRoot -ChildPath "..\logs\default.log"
 }
 
@@ -29,9 +27,9 @@ if ($config.Args.ContainsKey("report") -and $config.Args["report"]) {
     $reportPath = $config.Args["report"];
     $reportFileName = Split-Path $reportPath -Leaf;
     $localReportFile = Join-Path -Path $PSScriptRoot -ChildPath "..\reports\$reportFileName";
-    
-    $remoteReportUNC = [string]($config.Args["report"]).Split("=")[1]
     $reports = $true
+} else {
+    $reportPath = $null
 }
 
 # Create log file if it does not exist
@@ -112,11 +110,18 @@ $processComputer = {
         }
     }
 
-    if($remoteLogUNC -ne $null) {
-        $remoteLogUNC = "\\$ip\C$" + $remoteLogUNC
+    # Build UNC paths for remote log and report files
+    $remoteLogUNC = $null
+    $remoteReportUNC = $null
+    if ($using:logs -and $using:outputLogPath) {
+        $logRelPath = $using:outputLogPath
+        if ($logRelPath -match ":") {
+            $logRelPath = $logRelPath.Split(":")[-1].Trim()
+        }
+        $remoteLogUNC = "\\$ip\C$\$logRelPath"
     }
-    if($remoteReportUNC -ne $null) {
-        $remoteReportUNC = "\\$ip\C$" + $remoteReportUNC
+    if ($using:reports -and $using:reportPath) {
+        $remoteReportUNC = "\\$ip\C$\$using:reportPath"
     }
 
     Write-Host " `nProcessing computer: $computer...`n "
@@ -148,7 +153,7 @@ $processComputer = {
     $remoteCommand = "$stopDCU & `"$dcuPath`" /$enabledCmd $arguments"
 
     # PsExec command to execute the remote command
-    $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip powershell -c '$remoteCommand'"
+    $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip pwsh -c '$remoteCommand'"
 
     Write-Host "Executing '$enabledCmd' on $computer..."
     Write-Host "Command: $psexec`n"
@@ -162,12 +167,12 @@ $processComputer = {
     }
 
     Write-Host "Command executed on $computer. Waiting for remote log file generation..."
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 5
 
     # Build path for temporary per-computer log (in case multiple computers are processed)
     $tempLog = Join-Path -Path (Join-Path -Path $using:PSScriptRoot -ChildPath "..\logs") -ChildPath "$computer.log"
     $tempReport = Join-Path -Path (Join-Path -Path $using:PSScriptRoot -ChildPath "..\reports") -ChildPath "$computer.xml"
-    if (Test-Path $remoteLogUNC -ErrorAction SilentlyContinue) {
+    if ($remoteLogUNC -and (Test-Path $remoteLogUNC -ErrorAction SilentlyContinue)) {
         try {
             $logContent = Get-Content -Path $remoteLogUNC -ErrorAction Stop
             Add-Content -Path $tempLog -Value "----- Log for $computer -----"
@@ -181,17 +186,28 @@ $processComputer = {
         }
     }
 
-    if (Test-Path $remoteReportUNC -ErrorAction SilentlyContinue) {
-        try {
-            $reportContent = Get-Content -Path $remoteReportUNC -ErrorAction Stop
-            Add-Content -Path $tempReport -Value "----- Report for $computer -----"
-            Add-Content -Path $tempReport -Value $reportContent
-            Add-Content -Path $tempReport -Value ""
-            Write-Host "Report file for $computer appended to $tempReport"
+    # New logic: find XML file in remote report folder and copy to local as computer.xml
+    if ($using:reports -and $using:reportPath) {
+        $reportRelPath = $using:reportPath
+        if ($reportRelPath -match ":") {
+            $reportRelPath = $reportRelPath.Split(":")[-1].Trim()
         }
-        catch {
-            Write-Error "Failed to read remote report file from $computer : $_"
-            Add-Content -Path $tempReport -Value "[$computer] Failed to retrieve remote report: $_"
+        $remoteReportFolder = "\\$ip\C$\$reportRelPath"
+        $tempReport = Join-Path -Path (Join-Path -Path $using:PSScriptRoot -ChildPath "..\reports") -ChildPath "$computer.xml"
+        try {
+            $xmlFiles = Get-ChildItem -Path $remoteReportFolder -Filter *.xml -ErrorAction Stop
+            if ($xmlFiles.Count -gt 0) {
+                $remoteXmlFile = $xmlFiles[0].FullName
+                $reportContent = Get-Content -Path $remoteXmlFile -ErrorAction Stop
+                Set-Content -Path $tempReport -Value $reportContent
+                Write-Host "Report file for $computer copied to $tempReport"
+            } else {
+                Write-Warning "[$computer] No XML report file found in $remoteReportFolder"
+                Set-Content -Path $tempReport -Value "[$computer] No XML report file found."
+            }
+        } catch {
+            Write-Error "[$computer] Could not find/copy XML report file in $($remoteReportFolder): $_"
+            Set-Content -Path $tempReport -Value "[$computer] Failed to retrieve remote XML report: $_"
         }
     }
 }
