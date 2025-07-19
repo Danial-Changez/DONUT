@@ -2,68 +2,98 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Primary/Secondary Background Colors -->
     <Color x:Key="PrimaryBackgroundDarkColor"> #0A003A</Color>
-    <SolidColorBrush x:Key="PrimaryBackgroundDark" Color="{StaticResource PrimaryBackgroundDarkColor}"/>
+    <SolidColorBrush x:Key="PrimaryBackgroundDark"
+                     Color="{StaticResource PrimaryBackgroundDarkColor}" />
     <Color x:Key="PrimaryBackgroundColor"> #1C0E49</Color>
-    <SolidColorBrush x:Key="PrimaryBackground" Color="{StaticResource PrimaryBackgroundColor}"/>
+    <SolidColorBrush x:Key="PrimaryBackground"
+                     Color="{StaticResource PrimaryBackgroundColor}" />
     <Color x:Key="SecondaryBackgroundDarkColor"> #24105F</Color>
-    <SolidColorBrush x:Key="SecondaryBackgroundDark" Color="{StaticResource SecondaryBackgroundDarkColor}"/>
+    <SolidColorBrush x:Key="SecondaryBackgroundDark"
+                     Color="{StaticResource SecondaryBackgroundDarkColor}" />
     <Color x:Key="SecondaryBackgroundColor"> #210F55</Color>
-    <SolidColorBrush x:Key="SecondaryBackground" Color="{StaticResource SecondaryBackgroundColor}"/>
+    <SolidColorBrush x:Key="SecondaryBackground"
+                     Color="{StaticResource SecondaryBackgroundColor}" />
     <!-- Window Border Colors -->
     <Color x:Key="WindowBorderPrimaryColor"> #6D2FFF</Color>
-    <SolidColorBrush x:Key="WindowBorderPrimary" Color="{StaticResource WindowBorderPrimaryColor}"/>
+    <SolidColorBrush x:Key="WindowBorderPrimary"
+                     Color="{StaticResource WindowBorderPrimaryColor}" />
     <Color x:Key="WindowBorderAccentColor"> #FB539B</Color>
-    <SolidColorBrush x:Key="WindowBorderAccent" Color="{StaticResource WindowBorderAccentColor}"/>
+    <SolidColorBrush x:Key="WindowBorderAccent"
+                     Color="{StaticResource WindowBorderAccentColor}" />
     <Color x:Key="WindowBorderSecondaryColor"> #836EFB</Color>
-    <SolidColorBrush x:Key="WindowBorderSecondary" Color="{StaticResource WindowBorderSecondaryColor}"/>
+    <SolidColorBrush x:Key="WindowBorderSecondary"
+                     Color="{StaticResource WindowBorderSecondaryColor}" />
     <!-- Button/Accent Colors -->
     <Color x:Key="AccentPurpleColor"> #773DFF</Color>
-    <SolidColorBrush x:Key="AccentPurple" Color="{StaticResource AccentPurpleColor}"/>
+    <SolidColorBrush x:Key="AccentPurple"
+                     Color="{StaticResource AccentPurpleColor}" />
     <Color x:Key="AccentPurpleHoverColor"> #836EFB</Color>
-    <SolidColorBrush x:Key="AccentPurpleHover" Color="{StaticResource AccentPurpleHoverColor}"/>
+    <SolidColorBrush x:Key="AccentPurpleHover"
+                     Color="{StaticResource AccentPurpleHoverColor}" />
     <Color x:Key="AccentPinkColor"> #FB539B</Color>
-    <SolidColorBrush x:Key="AccentPink" Color="{StaticResource AccentPinkColor}"/>
+    <SolidColorBrush x:Key="AccentPink"
+                     Color="{StaticResource AccentPinkColor}" />
     <Color x:Key="AccentBlueColor"> #7E82FC</Color>
-    <SolidColorBrush x:Key="AccentBlue" Color="{StaticResource AccentBlueColor}"/>
+    <SolidColorBrush x:Key="AccentBlue"
+                     Color="{StaticResource AccentBlueColor}" />
     <Color x:Key="AccentYellowColor"> #FFC047</Color>
-    <SolidColorBrush x:Key="AccentYellow" Color="{StaticResource AccentYellowColor}"/>
+    <SolidColorBrush x:Key="AccentYellow"
+                     Color="{StaticResource AccentYellowColor}" />
     <Color x:Key="AccentCyanColor"> #4ADAEC</Color>
-    <SolidColorBrush x:Key="AccentCyan" Color="{StaticResource AccentCyanColor}"/>
+    <SolidColorBrush x:Key="AccentCyan"
+                     Color="{StaticResource AccentCyanColor}" />
     <Color x:Key="AccentGreenColor"> #07F3C0</Color>
-    <SolidColorBrush x:Key="AccentGreen" Color="{StaticResource AccentGreenColor}"/>
+    <SolidColorBrush x:Key="AccentGreen"
+                     Color="{StaticResource AccentGreenColor}" />
     <Color x:Key="AccentRedColor"> #EF6C96</Color>
-    <SolidColorBrush x:Key="AccentRed" Color="{StaticResource AccentRedColor}"/>
+    <SolidColorBrush x:Key="AccentRed"
+                     Color="{StaticResource AccentRedColor}" />
     <Color x:Key="AccentBlueLightColor"> #78A3FC</Color>
-    <SolidColorBrush x:Key="AccentBlueLight" Color="{StaticResource AccentBlueLightColor}"/>
+    <SolidColorBrush x:Key="AccentBlueLight"
+                     Color="{StaticResource AccentBlueLightColor}" />
     <Color x:Key="AccentPinkLightColor"> #FBA1AA</Color>
-    <SolidColorBrush x:Key="AccentPinkLight" Color="{StaticResource AccentPinkLightColor}"/>
+    <SolidColorBrush x:Key="AccentPinkLight"
+                     Color="{StaticResource AccentPinkLightColor}" />
     <Color x:Key="AccentPurpleLightColor"> #E285DE</Color>
-    <SolidColorBrush x:Key="AccentPurpleLight" Color="{StaticResource AccentPurpleLightColor}"/>
+    <SolidColorBrush x:Key="AccentPurpleLight"
+                     Color="{StaticResource AccentPurpleLightColor}" />
     <!-- Font Colors -->
     <Color x:Key="TitleTextPrimaryColor"> #E0E1F1</Color>
-    <SolidColorBrush x:Key="TitleTextPrimary" Color="{StaticResource TitleTextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TitleTextPrimary"
+                     Color="{StaticResource TitleTextPrimaryColor}" />
     <Color x:Key="TitleTextSecondaryColor"> #D5CFF5</Color>
-    <SolidColorBrush x:Key="TitleTextSecondary" Color="{StaticResource TitleTextSecondaryColor}"/>
+    <SolidColorBrush x:Key="TitleTextSecondary"
+                     Color="{StaticResource TitleTextSecondaryColor}" />
     <Color x:Key="TitleTextTertiaryColor"> #BCBEE0</Color>
-    <SolidColorBrush x:Key="TitleTextTertiary" Color="{StaticResource TitleTextTertiaryColor}"/>
+    <SolidColorBrush x:Key="TitleTextTertiary"
+                     Color="{StaticResource TitleTextTertiaryColor}" />
     <Color x:Key="BodyTextPrimaryColor"> #9497CD</Color>
-    <SolidColorBrush x:Key="BodyTextPrimary" Color="{StaticResource BodyTextPrimaryColor}"/>
+    <SolidColorBrush x:Key="BodyTextPrimary"
+                     Color="{StaticResource BodyTextPrimaryColor}" />
     <Color x:Key="BodyTextSecondaryColor"> #7C80C2</Color>
-    <SolidColorBrush x:Key="BodyTextSecondary" Color="{StaticResource BodyTextSecondaryColor}"/>
+    <SolidColorBrush x:Key="BodyTextSecondary"
+                     Color="{StaticResource BodyTextSecondaryColor}" />
     <Color x:Key="BodyTextTertiaryColor"> #7376BD</Color>
-    <SolidColorBrush x:Key="BodyTextTertiary" Color="{StaticResource BodyTextTertiaryColor}"/>
+    <SolidColorBrush x:Key="BodyTextTertiary"
+                     Color="{StaticResource BodyTextTertiaryColor}" />
     <Color x:Key="TerminalTextColor"> #e98024</Color>
-    <SolidColorBrush x:Key="TerminalText" Color="{StaticResource TerminalTextColor}"/>
+    <SolidColorBrush x:Key="TerminalText"
+                     Color="{StaticResource TerminalTextColor}" />
     <!-- Panel Colors -->
     <Color x:Key="PanelBackgroundColor"> #200F53</Color>
-    <SolidColorBrush x:Key="PanelBackground" Color="{StaticResource PanelBackgroundColor}"/>
+    <SolidColorBrush x:Key="PanelBackground"
+                     Color="{StaticResource PanelBackgroundColor}" />
     <Color x:Key="PanelBackgroundHoverColor"> #281269</Color>
-    <SolidColorBrush x:Key="PanelBackgroundHover" Color="{StaticResource PanelBackgroundHoverColor}"/>
+    <SolidColorBrush x:Key="PanelBackgroundHover"
+                     Color="{StaticResource PanelBackgroundHoverColor}" />
     <Color x:Key="PanelBackgroundActiveColor"> #2B1372</Color>
-    <SolidColorBrush x:Key="PanelBackgroundActive" Color="{StaticResource PanelBackgroundActiveColor}"/>
+    <SolidColorBrush x:Key="PanelBackgroundActive"
+                     Color="{StaticResource PanelBackgroundActiveColor}" />
     <!-- Misc Colors -->
     <Color x:Key="GroupBoxBackgroundColor"> #30FFFFFF</Color>
-    <SolidColorBrush x:Key="GroupBoxBackground" Color="{StaticResource GroupBoxBackgroundColor}"/>
+    <SolidColorBrush x:Key="GroupBoxBackground"
+                     Color="{StaticResource GroupBoxBackgroundColor}" />
     <Color x:Key="ThrottleLimitColor"> #E92424</Color>
-    <SolidColorBrush x:Key="ThrottleLimit" Color="{StaticResource ThrottleLimitColor}"/>
+    <SolidColorBrush x:Key="ThrottleLimit"
+                     Color="{StaticResource ThrottleLimitColor}" />
 </ResourceDictionary>
