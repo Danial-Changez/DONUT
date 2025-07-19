@@ -1,103 +1,236 @@
 <!-- Configure.xaml -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource PanelBackground}">
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource PanelBackground}">
     <Grid.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Grid.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
-            <TextBlock Text="Flags" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
-            <StackPanel Orientation="Vertical" Margin="0,0,0,18">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="silent" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Silent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Text="Flags"
+                       FontFamily="Montserrat"
+                       FontSize="16"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}"
+                       Margin="0,0,0,8" />
+            <StackPanel Orientation="Vertical"
+                        Margin="0,0,0,18">
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="silent"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Silent"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="allowXML" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Allow Xml" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="allowXML"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Allow Xml"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="lockSettings" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Lock Settings" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="lockSettings"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Lock Settings"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="advancedDriverRestore" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Advanced Driver Restore" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="advancedDriverRestore"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Advanced Driver Restore"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="userConsent" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="User Consent" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="userConsent"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="User Consent"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="customProxy" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Custom Proxy" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="customProxy"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Custom Proxy"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="proxyAuthentication" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Proxy Authentication" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="proxyAuthentication"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Proxy Authentication"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="proxyFallbackToDirectConnection" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Proxy Fallback To Direct Connection" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="proxyFallbackToDirectConnection"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Proxy Fallback To Direct Connection"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="scheduleAuto" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Schedule Auto" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="scheduleAuto"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Schedule Auto"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="scheduleManual" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Schedule Manual" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="scheduleManual"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Schedule Manual"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="restoreDefaults" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Restore Defaults" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="restoreDefaults"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Restore Defaults"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="forceRestart" Style="{DynamicResource ModernToggleSwitch}" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="forceRestart"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
                     <Path x:Name="rebootWarningIcon"
-                            Data="{DynamicResource Warning}"
-                            Fill="Yellow"
-                            Width="20" Height="20" Margin="8,0,-4,0"
-                            VerticalAlignment="Center"
-                            Stretch="Uniform"
-                            Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                    <TextBlock Text="Force Restart" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                          Data="{DynamicResource Warning}"
+                          Fill="Yellow"
+                          Width="20"
+                          Height="20"
+                          Margin="8,0,-4,0"
+                          VerticalAlignment="Center"
+                          Stretch="Uniform"
+                          Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Text="Force Restart"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                     <TextBlock x:Name="rebootWarningText"
-                            Text="(WARNING: This will cause the target machine(s) to automatically restart)"
-                            Foreground="Yellow"
-                            FontWeight="Bold"
-                            FontSize="14"
-                            FontFamily="Montserrat"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center"
-                            Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                               Text="(WARNING: This will cause the target machine(s) to automatically restart)"
+                               Foreground="Yellow"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               FontFamily="Montserrat"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="autoSuspendBitLocker" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Auto Suspend Bit Locker" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="autoSuspendBitLocker"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Auto Suspend Bit Locker"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="defaultSourceLocation" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Default Source Location" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="defaultSourceLocation"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Default Source Location"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="installationDeferral" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Installation Deferral" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="installationDeferral"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Installation Deferral"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <ToggleButton x:Name="systemRestartDeferral" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="System Restart Deferral" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <ToggleButton x:Name="systemRestartDeferral"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="System Restart Deferral"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <ToggleButton x:Name="updatesNotification" Style="{DynamicResource ModernToggleSwitch}" />
-                    <TextBlock Text="Updates Notification" FontFamily="Montserrat" FontSize="14" Foreground="{DynamicResource BodyTextSecondary}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <ToggleButton x:Name="updatesNotification"
+                                  Style="{DynamicResource ModernToggleSwitch}" />
+                    <TextBlock Text="Updates Notification"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               Foreground="{DynamicResource BodyTextSecondary}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
             <!-- Dropdown / Multi-Select Options -->
-            <TextBlock Text="Dropdown / Multi-Select Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
+            <TextBlock Text="Dropdown / Multi-Select Options"
+                       FontFamily="Montserrat"
+                       FontSize="16"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}"
+                       Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <Grid Margin="0,0,0,8" x:Name="updateSeverity">
+                <Grid Margin="0,0,0,8"
+                      x:Name="updateSeverity">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120" />
                         <ColumnDefinition Width="120" />
@@ -110,14 +243,39 @@
                         <RowDefinition Height="Auto" />
                         <!-- Severity -->
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Update Severity" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,0,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
+                    <TextBlock Text="Update Severity"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource BodyTextPrimary}"
+                               Margin="0,0,0,6"
+                               Grid.Row="0"
+                               Grid.Column="0"
+                               Grid.ColumnSpan="4" />
                     <!-- Update Severity Row -->
-                    <CheckBox Content="Security" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
-                    <CheckBox Content="Critical" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
-                    <CheckBox Content="Recommended" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
-                    <CheckBox Content="Optional" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
+                    <CheckBox Content="Security"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="0" />
+                    <CheckBox Content="Critical"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="1" />
+                    <CheckBox Content="Recommended"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="2" />
+                    <CheckBox Content="Optional"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="3" />
                 </Grid>
-                <Grid Margin="0,0,0,8" x:Name="updateType">
+                <Grid Margin="0,0,0,8"
+                      x:Name="updateType">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120" />
                         <ColumnDefinition Width="120" />
@@ -133,15 +291,44 @@
                         <RowDefinition Height="Auto" />
                         <!-- Type -->
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Update Type" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
+                    <TextBlock Text="Update Type"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource BodyTextPrimary}"
+                               Margin="0,10,0,6"
+                               Grid.Row="0"
+                               Grid.Column="0"
+                               Grid.ColumnSpan="4" />
                     <!-- Update Type Row -->
-                    <CheckBox Content="Bios" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
-                    <CheckBox Content="Firmware" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
-                    <CheckBox Content="Driver" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
-                    <CheckBox Content="Application" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="4" />
+                    <CheckBox Content="Bios"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="0" />
+                    <CheckBox Content="Firmware"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="1" />
+                    <CheckBox Content="Driver"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="2" />
+                    <CheckBox Content="Application"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="3" />
+                    <CheckBox Content="Others"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="4" />
                 </Grid>
-                <Grid Margin="0,0,0,8" x:Name="updateDeviceCategory">
+                <Grid Margin="0,0,0,8"
+                      x:Name="updateDeviceCategory">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120" />
                         <ColumnDefinition Width="120" />
@@ -157,139 +344,504 @@
                         <RowDefinition Height="Auto" />
                         <!-- Device Category -->
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Update Device Category" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4" />
+                    <TextBlock Text="Update Device Category"
+                               FontFamily="Montserrat"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource BodyTextPrimary}"
+                               Margin="0,10,0,6"
+                               Grid.Row="0"
+                               Grid.Column="0"
+                               Grid.ColumnSpan="4" />
                     <!-- Update Device Category Row -->
-                    <CheckBox Content="Audio" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="0" />
-                    <CheckBox Content="Video" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="1" />
-                    <CheckBox Content="Network" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="2" />
-                    <CheckBox Content="Storage" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="3" />
-                    <CheckBox Content="Input" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="4" />
-                    <CheckBox Content="Chipset" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="5" />
-                    <CheckBox Content="Others" Style="{DynamicResource ModernCheckBox}" Foreground="{DynamicResource BodyTextPrimary}" Grid.Row="1" Grid.Column="6" />
+                    <CheckBox Content="Audio"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="0" />
+                    <CheckBox Content="Video"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="1" />
+                    <CheckBox Content="Network"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="2" />
+                    <CheckBox Content="Storage"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="3" />
+                    <CheckBox Content="Input"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="4" />
+                    <CheckBox Content="Chipset"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="5" />
+                    <CheckBox Content="Others"
+                              Style="{DynamicResource ModernCheckBox}"
+                              Foreground="{DynamicResource BodyTextPrimary}"
+                              Grid.Row="1"
+                              Grid.Column="6" />
                 </Grid>
-                <TextBlock Text="Schedule Action" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,6" />
-                <ComboBox x:Name="scheduleAction" Width="200" Style="{DynamicResource ModernComboBox}" HorizontalAlignment="Left" Margin="0,0,0,18">
-                    <ComboBoxItem x:Name="NotifyAvailableUpdates" Content="Notify Available Updates" />
-                    <ComboBoxItem x:Name="DownloadAndNotify" Content="Download and Notify" />
-                    <ComboBoxItem x:Name="DownloadInstallAndNotify" Content="Download Install and Notify" />
+                <TextBlock Text="Schedule Action"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,8,0,6" />
+                <ComboBox x:Name="scheduleAction"
+                          Width="200"
+                          Style="{DynamicResource ModernComboBox}"
+                          HorizontalAlignment="Left"
+                          Margin="0,0,0,18">
+                    <ComboBoxItem x:Name="NotifyAvailableUpdates"
+                                  Content="Notify Available Updates" />
+                    <ComboBoxItem x:Name="DownloadAndNotify"
+                                  Content="Download and Notify" />
+                    <ComboBoxItem x:Name="DownloadInstallAndNotify"
+                                  Content="Download Install and Notify" />
                 </ComboBox>
             </StackPanel>
             <!-- Text/Number Options -->
-            <TextBlock Text="Text/Number Options" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,0,0,8" />
+            <TextBlock Text="Text/Number Options"
+                       FontFamily="Montserrat"
+                       FontSize="16"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}"
+                       Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
-                <TextBlock Text="Output Log" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource File}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="outputLog" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                <TextBlock Text="Output Log"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource File}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="outputLog"
+                             Width="304"
+                             Style="{DynamicResource ModernTextBox}"
+                             Margin="0,8,0,0" />
                 </StackPanel>
-                <TextBlock Text="Catalog Location" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Catalog}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="catalogLocation" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                <TextBlock Text="Catalog Location"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,8,0,0" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Catalog}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="catalogLocation"
+                             Width="304"
+                             Style="{DynamicResource ModernTextBox}"
+                             Margin="0,8,0,0" />
                 </StackPanel>
-                <TextBlock Text="Driver Library Location" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource DriverLibrary}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="driverLibraryLocation" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                <TextBlock Text="Driver Library Location"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,8,0,0" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource DriverLibrary}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="driverLibraryLocation"
+                             Width="304"
+                             Style="{DynamicResource ModernTextBox}"
+                             Margin="0,8,0,0" />
                 </StackPanel>
-                <TextBlock Text="Download Location" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Location}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="downloadLocation" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                <TextBlock Text="Download Location"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,8,0,0" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Location}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="downloadLocation"
+                             Width="304"
+                             Style="{DynamicResource ModernTextBox}"
+                             Margin="0,8,0,0" />
                 </StackPanel>
-                <TextBlock Text="Import Settings" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Import}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="importSettings" Width="304" Style="{DynamicResource ModernTextBox}" Margin="0,8,0,0" />
+                <TextBlock Text="Import Settings"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,8,0,0" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Import}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="importSettings"
+                             Width="304"
+                             Style="{DynamicResource ModernTextBox}"
+                             Margin="0,8,0,0" />
                 </StackPanel>
-                <TextBlock Text="Export Settings" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Export}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="exportSettings" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Export Settings"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Export}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="exportSettings"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Bios Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource EncryptionKey}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="biosPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Bios Password"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource EncryptionKey}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="biosPassword"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Secure Bios Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource EncryptionKey}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="secureBiosPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Bios Password"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource EncryptionKey}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="secureBiosPassword"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Proxy Host" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ProxyHost}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="proxyHost" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Host"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ProxyHost}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="proxyHost"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Proxy User Name" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ProxyUserName}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="proxyUserName" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy User Name"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ProxyUserName}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="proxyUserName"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Proxy Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource EncryptionKey}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="proxyPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Password"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource EncryptionKey}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="proxyPassword"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Secure Proxy Password" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource EncryptionKey}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="secureProxyPassword" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Secure Proxy Password"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource EncryptionKey}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="secureProxyPassword"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Proxy Port" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ProxyPort}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="proxyPort" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Proxy Port"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ProxyPort}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="proxyPort"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Schedule Weekly" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ScheduleWeekly}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="scheduleWeekly" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Weekly"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ScheduleWeekly}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="scheduleWeekly"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Schedule Monthly" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ScheduleMonthly}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="scheduleMonthly" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Monthly"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ScheduleMonthly}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="scheduleMonthly"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Schedule Daily" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource ScheduleDaily}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="scheduleDaily" Width="320" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Schedule Daily"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource ScheduleDaily}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="scheduleDaily"
+                             Width="320"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Deferral Install Interval" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Interval}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="deferralInstallInterval" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Install Interval"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Interval}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="deferralInstallInterval"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Deferral Install Count" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Count}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="deferralInstallCount" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Install Count"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Count}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="deferralInstallCount"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Deferral Restart Interval" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Interval}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="deferralRestartInterval" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Restart Interval"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Interval}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="deferralRestartInterval"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Deferral Restart Count" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource Count}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="deferralRestartCount" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Deferral Restart Count"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource Count}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="deferralRestartCount"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
-                <TextBlock Text="Max Retry" FontFamily="Montserrat" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource BodyTextPrimary}" Margin="0,10,0,6" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                    <Path Data="{DynamicResource MaxRetry}" Fill="{DynamicResource AccentYellow}" Width="16" Height="16" Stretch="Uniform" Margin="0,8,8,0" />
-                    <TextBox x:Name="maxRetry" Width="120" Style="{DynamicResource ModernTextBox}" />
+                <TextBlock Text="Max Retry"
+                           FontFamily="Montserrat"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Margin="0,10,0,6" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8">
+                    <Path Data="{DynamicResource MaxRetry}"
+                          Fill="{DynamicResource AccentYellow}"
+                          Width="16"
+                          Height="16"
+                          Stretch="Uniform"
+                          Margin="0,8,8,0" />
+                    <TextBox x:Name="maxRetry"
+                             Width="120"
+                             Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
             </StackPanel>
-            
             <!-- Throttle Limit -->
-            <TextBlock Text="Throttle Limit" FontFamily="Montserrat" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,10,0,8" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,6,0,0">
-                    <Path Data="{DynamicResource Rocket}" Fill="{DynamicResource ThrottleLimit}" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0" />
-                    <TextBox x:Name="throttleLimit" Width="120" Style="{DynamicResource ModernTextBox}" />
-                </StackPanel>
+            <TextBlock Text="Throttle Limit"
+                       FontFamily="Montserrat"
+                       FontSize="16"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}"
+                       Margin="0,10,0,8" />
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,6,0,0">
+                <Path Data="{DynamicResource Rocket}"
+                      Fill="{DynamicResource ThrottleLimit}"
+                      Width="16"
+                      Height="16"
+                      Stretch="Uniform"
+                      Margin="0,0,8,0" />
+                <TextBox x:Name="throttleLimit"
+                         Width="120"
+                         Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Grid>
