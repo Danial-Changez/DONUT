@@ -1,10 +1,10 @@
 ﻿Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName System.Windows.Forms
 
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ConfigView.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "Helpers.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ImportXaml.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "LogsView.psm1")
-Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "WindowEvents.psm1")
 
 if (-not $script:ManualRebootQueue) { $script:ManualRebootQueue = [hashtable]::Synchronized(@{}) }
 if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = [System.Collections.Generic.List[object]]::new() }
@@ -14,7 +14,12 @@ if (-not $script:PendingQueue) { $script:PendingQueue = [System.Collections.Queu
 if (-not $script:TabsMap) { $script:TabsMap = @{} }
 if (-not $script:SyncUI) { $script:SyncUI = [hashtable]::Synchronized(@{}) }
 
-# Define Start-NextRunspace as a script-scoped scriptblock
+# Script block to start a new PowerShell runspace for remote execution.
+# - Dequeues the next computer from the pending queue.
+# - Validates required UI and queue objects.
+# - Launches remoteDCU.ps1 on the target computer in a background process.
+# - Captures and enqueues output and error lines for UI display.
+# - Updates runspace tracking structures for job management.
 $script:StartNextRunspace = {
     if ($script:PendingQueue.Count -eq 0) { return }
     $computer = $script:PendingQueue.Dequeue()
@@ -27,6 +32,8 @@ $script:StartNextRunspace = {
     $tb.ScrollToEnd()
 
     $remoteDCUPathAbs = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'remoteDCU.ps1'))
+    
+    # Create Runspace
     $ps = [PowerShell]::Create()
     $ps.AddScript({
             param($hostName, $scriptPath, $queue, $tb)
@@ -34,6 +41,8 @@ $script:StartNextRunspace = {
                 $queue.Enqueue("ERROR: remoteDCU.ps1 path is invalid or missing.") | Out-Null
                 return
             }
+
+            # Cmd to run remoteDCU.ps1 with the computer name
             $psi = New-Object System.Diagnostics.ProcessStartInfo(
                 'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
             )
@@ -42,6 +51,7 @@ $script:StartNextRunspace = {
             $psi.UseShellExecute = $false
             $psi.CreateNoWindow = $true
 
+            # Start the process
             $proc = [System.Diagnostics.Process]::new()
             $proc.StartInfo = $psi
             $proc.Start() | Out-Null
@@ -49,44 +59,41 @@ $script:StartNextRunspace = {
             $stdout = $proc.StandardOutput
             $stderr = $proc.StandardError
             $lastErrorLine = $null
+
+            # Read output and error streams
             while (-not $stdout.EndOfStream) {
                 $line = $stdout.ReadLine()
                 $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
                 if ($cleanLine -match "pwsh exited on .+ with error code (\d+).") {
                     $lastErrorLine = $matches[0]
                 }
-                # Exclude unwanted lines (case-insensitive, robust)
-                elseif ($cleanLine -notmatch '(?i)Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on' -and $cleanLine -match '\S') {
-                    if ($cleanLine.StartsWith('Command: ')) {
-                        $queue.Enqueue("") | Out-Null
-                        $queue.Enqueue($cleanLine) | Out-Null
-                        $queue.Enqueue("") | Out-Null
-                    } else {
-                        $queue.Enqueue($cleanLine) | Out-Null
-                    }
+                else {
+                    $queue.Enqueue($cleanLine) | Out-Null
                 }
             }
             while (-not $stderr.EndOfStream) {
                 $line = $stderr.ReadLine()
                 $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
-                # Exclude unwanted lines (case-insensitive, robust)
-                if ($cleanLine -notmatch '(?i)Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on' -and $cleanLine -match '\S') {
+                # Exclude unwanted lines
+                if ($cleanLine -notmatch 'Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on' -and $cleanLine -match '\S') {
                     if ($cleanLine.StartsWith('Command: ')) {
-                        $queue.Enqueue("") | Out-Null
                         $queue.Enqueue($cleanLine) | Out-Null
-                        $queue.Enqueue("") | Out-Null
-                    } else {
+                    }
+                    else {
                         $queue.Enqueue($cleanLine) | Out-Null
                     }
                 }
             }
+            # Wait for process to exit
             $proc.WaitForExit()
             if ($lastErrorLine) {
                 $queue.Enqueue("Final status: $lastErrorLine") | Out-Null
             }
         }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
 
+    # Start the PowerShell runspace asynchronously
     $async = $ps.BeginInvoke()
+
     $script:ActiveRunspaces.Add($ps)
     $script:RunspaceJobs[$ps] = @{
         Computer    = $computer
@@ -95,12 +102,18 @@ $script:StartNextRunspace = {
     }
 }
 
-# Function to update WSID.txt with the content of the search bar
+# Updates the WSID.txt file with entries from the search bar.
+# - Validates and parses the search bar content.
+# - Updates the file and prepares the computer queue.
+# - Handles config flags and applyUpdates confirmation popup.
 Function Update-WSIDFile {
-    param($textBox)
+    param(
+        [System.Windows.Controls.TextBox]$textBox,
+        [string]$wsidFilePath
+    )
     # Ensure the TextBox reference is valid
     if ($null -eq $textBox) {
-        Write-Host "TextBox reference is null. Ensure 'txtHomeMessage' exists in the XAML."
+        Write-Host "TextBox reference is null. Ensure 'GoogleSearchBar' exists in the XAML."
         return
     }
 
@@ -111,9 +124,9 @@ Function Update-WSIDFile {
         
     # Split on newlines and commas, trim, remove empty, and take unique entries
     $valid = ($textBox.Text -split "[\r\n,]+") |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-        Select-Object -Unique
+    ForEach-Object { $_.Trim() } |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
     Set-Content -Path $wsidFilePath -Value $valid
 
     # Read throttleLimit from config.txt
@@ -166,8 +179,10 @@ Function Update-WSIDFile {
                     $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
                     try {
                         $popupWin.Resources.MergedDictionaries.Add($styleDict)
-                    } catch {}
-                } catch {} finally { $styleStream.Close() }
+                    }
+                    catch {}
+                }
+                catch {} finally { $styleStream.Close() }
             }
             $computerListBox = $popupWin.FindName('popupComputerList')
             if ($computerListBox) {
@@ -178,43 +193,48 @@ Function Update-WSIDFile {
             $cancelBtn = $popupWin.FindName('btnAbort')
             if ($okBtn) {
                 $okBtn.Add_Click({
-                    $script:ApplyUpdatesConfirmed = $true
-                    try { $popupWin.Close() } catch {}
-                })
+                        $script:ApplyUpdatesConfirmed = $true
+                        try { $popupWin.Close() } catch {}
+                    })
             }
             if ($cancelBtn) {
                 $cancelBtn.Add_Click({
-                    $script:ApplyUpdatesConfirmed = $false
-                    try { $popupWin.Close() } catch {}
-                })
+                        $script:ApplyUpdatesConfirmed = $false
+                        try { $popupWin.Close() } catch {}
+                    })
             }
+
             # Wire control bar drag, minimize, and close for popup
             $panelBar = $popupWin.FindName('panelControlBar')
             $minBtn = $popupWin.FindName('btnMinimize')
             $closeBtn = $popupWin.FindName('btnClose')
             if ($panelBar) {
                 $panelBar.Add_MouseLeftButtonDown({
-                    if ($null -ne $popupWin) {
-                        try { $popupWin.DragMove() } catch {}
-                    }
-                })
+                        if ($null -ne $popupWin) {
+                            try { $popupWin.DragMove() } catch {}
+                        }
+                    })
             }
             if ($minBtn) {
                 $minBtn.Add_Click({
-                    if ($null -ne $popupWin) {
-                        try { $popupWin.WindowState = 'Minimized' } catch {}
-                    }
-                })
+                        if ($null -ne $popupWin) {
+                            try { $popupWin.WindowState = 'Minimized' } catch {}
+                        }
+                    })
             }
             if ($closeBtn) {
                 $closeBtn.Add_Click({
-                    if ($null -ne $popupWin) {
-                        try { $popupWin.Close() } catch {}
-                    }
-                })
+                        if ($null -ne $popupWin) {
+                            try { $popupWin.Close() } catch {}
+                        }
+                    })
             }
+
+            # Show the Confirmation Popup Dialog
             $null = $popupWin.ShowDialog()
         }
+        
+        # Handle Apply Updates abort
         if (-not $script:ApplyUpdatesConfirmed) {
             # User cancelled, abort all computers
             foreach ($computer in $valid) {
@@ -237,6 +257,7 @@ Function Update-WSIDFile {
         }
     }
 
+    # Populate ManualRebootQueue and PendingQueue
     foreach ($computer in $valid) {
         if ($flagPresent -and $needsManualReboot) {
             $script:ManualRebootQueue[$computer] = $true
@@ -246,7 +267,6 @@ Function Update-WSIDFile {
         }
         if (-not $script:QueuedOrRunning.ContainsKey($computer)) {
             $script:PendingQueue.Enqueue($computer)
-            # Create a Tab + readonly TextBox
             $tab = [System.Windows.Controls.TabItem]::new() 
             $tb = [System.Windows.Controls.TextBox]::new()
             $tab.Header = $computer
@@ -268,12 +288,12 @@ Function Update-WSIDFile {
         & $script:StartNextRunspace
     }
 
-    # Only start the DispatcherTimer ONCE per search/click
+    # Start the DispatcherTimer ONCE per search/click
     if ($script:Timer) {
         $script:Timer.Stop()
         $script:Timer = $null
     }
-    # Only clear the output queue and textbox for new computers, not for all tabs
+    # Clear output queue and textbox for new computers only
     foreach ($computer in $valid) {
         if ($script:TabsMap.ContainsKey($computer)) { continue }
         $queue = $script:SyncUI[$computer]
@@ -281,11 +301,14 @@ Function Update-WSIDFile {
         $tb = $script:TabsMap[$computer]
         $tb.Clear()
     }
-    # Debug: Show contents of ManualRebootQueue after population
+    # Main DispatcherTimer for UI and popups
     $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
     $script:Timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $script:Notified = $false
+    
+    # DispatcherTimer Tick Event Handler
     $script:Timer.Add_Tick({
+            # Process output queue for each computer tab
             foreach ($comp in $script:TabsMap.Keys) {
                 $tb = $script:TabsMap[$comp]
                 $queue = $script:SyncUI[$comp]
@@ -293,15 +316,20 @@ Function Update-WSIDFile {
                 while ($queue.Count -gt 0) {
                     $deq = $queue.TryDequeue([ref]$line)
                     if (-not $deq) { break }
+
+                    # Show Update.xaml confirmation popup for applyUpdates
                     if ($line -is [hashtable] -and $line.Type -eq 'ShowApplyUpdatesPopup') {
-                        # Show Update.xaml confirmation popup for applyUpdates
                         $popup = Import-XamlView "..\Views\Update.xaml"
                         if ($popup) {
                             $popupWin = $popup
                             $popupHeader = $popupWin.FindName('popupHeader')
                             $popupText = $popupWin.FindName('popupText')
-                            if ($popupHeader) { $popupHeader.Text = "Confirm Apply Updates" }
-                            if ($popupText) { $popupText.Text = "Are you sure you want to apply updates to the target machine(s)?" }
+                            if ($popupHeader) { 
+                                $popupHeader.Text = "Confirm Apply Updates" 
+                            }
+                            if ($popupText) { 
+                                $popupText.Text = "Are you sure you want to apply updates to the target machine(s)?" 
+                            }
                             $okBtn = $popupWin.FindName('btnOk')
                             $cancelBtn = $popupWin.FindName('btnLater')
                             $script:ApplyUpdatesConfirmed = $false
@@ -318,6 +346,7 @@ Function Update-WSIDFile {
                                     })
                             }
                             $null = $popupWin.ShowDialog()
+                            
                             # Signal the runspace to continue
                             if ($line.SyncEvent) { $line.SyncEvent.Set() | Out-Null }
                         }
@@ -328,6 +357,8 @@ Function Update-WSIDFile {
                     }
                 }
             }
+
+            # Cleanup finished runspaces
             $finished = [System.Collections.Generic.List[object]]::new()
             foreach ($ps in $script:ActiveRunspaces) {
                 if ($ps -and $script:RunspaceJobs.ContainsKey($ps)) {
@@ -339,6 +370,8 @@ Function Update-WSIDFile {
                     }
                 }
             }
+
+            # Remove finished runspaces from ActiveRunspaces and RunspaceJobs
             foreach ($ps in $finished) {
                 if ($script:RunspaceJobs.ContainsKey($ps)) {
                     $comp = $script:RunspaceJobs[$ps].Computer
@@ -349,6 +382,8 @@ Function Update-WSIDFile {
                 }
                 $script:ActiveRunspaces.Remove($ps) | Out-Null
             }
+
+            # Start new runspaces if below throttle limit
             while ($script:ActiveRunspaces.Count -lt $script:throttleLimit -and $script:PendingQueue.Count -gt 0) {
                 & $script:StartNextRunspace
             }
@@ -359,6 +394,7 @@ Function Update-WSIDFile {
                     $popup = Import-XamlView "..\Views\PopUp.xaml"
                     if ($popup) {
                         $popupWin = $popup
+
                         # Merge all style dictionaries from Styles folder
                         $stylesPath = Join-Path $PSScriptRoot '..\Styles'
                         Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
@@ -379,6 +415,8 @@ Function Update-WSIDFile {
                                 $styleStream.Close()
                             }
                         }
+
+                        # Find popup controls and computer list
                         $closeBtn = $popupWin.FindName('btnClose')
                         $okBtn = $popupWin.FindName('btnOk')
                         $panelBar = $popupWin.FindName('panelControlBar')
@@ -386,6 +424,8 @@ Function Update-WSIDFile {
                         $popupSubHeader = $popupWin.FindName('popupSubHeader')
                         $popupComputerList = $popupWin.FindName('popupComputerList')
                         $names = $script:ManualRebootQueue.Keys
+                        
+                        # Show/hide computer list in popup
                         if ($names.Count -gt 0) {
                             if ($popupSubHeader) { $popupSubHeader.Visibility = 'Visible' }
                             if ($popupComputerList) {
@@ -398,6 +438,8 @@ Function Update-WSIDFile {
                             if ($popupSubHeader) { $popupSubHeader.Visibility = 'Collapsed' }
                             if ($popupComputerList) { $popupComputerList.Visibility = 'Collapsed' }
                         }
+                        
+                        # Wire up popup close button
                         if ($closeBtn) {
                             $closeBtn.Add_Click({
                                     if ($null -ne $popupWin) {
@@ -409,6 +451,8 @@ Function Update-WSIDFile {
                                     if ($script:Timer) { $script:Timer.Start() }
                                 })
                         }
+
+                        # Wire up popup ok button
                         if ($okBtn) {
                             $okBtn.Add_Click({
                                     if ($null -ne $popupWin) {
@@ -420,6 +464,8 @@ Function Update-WSIDFile {
                                     if ($script:Timer) { $script:Timer.Start() }
                                 })
                         }
+
+                        # Wire up popup minimize button
                         if ($minBtn) {
                             $minBtn.Add_Click({
                                     if ($null -ne $popupWin) {
@@ -427,6 +473,8 @@ Function Update-WSIDFile {
                                     }
                                 })
                         }
+
+                        # Wire up popup drag move
                         if ($panelBar) {
                             $panelBar.Add_MouseLeftButtonDown({
                                     if ($null -ne $popupWin) {
@@ -434,15 +482,19 @@ Function Update-WSIDFile {
                                     }
                                 })
                         }
+
                         # Pause the main DispatcherTimer while popup is open
                         if ($script:Timer) { $script:Timer.Stop() }
                         $script:PopupOpen = $true
                         $null = $popupWin.ShowDialog()
+                        
                         # After popup closes, allow future popups
                         $script:Notified = $true
                     }
                 }
             }
+
+            # Reset popup state if runspaces or queue are not empty
             if ($script:ActiveRunspaces.Count -gt 0 -or $script:PendingQueue.Count -gt 0) {
                 $script:Notified = $false
                 $script:PopupOpen = $false
@@ -455,15 +507,19 @@ Function Update-WSIDFile {
     }
 }
 
+# Initializes the HomeView UI and wires up event handlers.
+# - Loads HomeView.xaml and sets up the search bar and buttons.
+# - Wires click events for search and clear tabs.
 Function Initialize-HomeView {
-    # One-time setup with event wiring and variable assignment
     $script:HomeView = Import-XamlView "..\Views\HomeView.xaml"
     if ($null -eq $script:HomeView) {
         Write-Host "Failed to load HomeView.xaml."
         return
-    }
+    }    
+    Update-SearchButtonLabel $script:HomeView
+
     # Initialize the search bar
-    $script:SearchBar = $script:HomeView.FindName('txtHomeMessage')
+    $script:SearchBar = $script:HomeView.FindName('GoogleSearchBar')
     if ($script:SearchBar) {
         Initialize-SearchBar $script:SearchBar
         Set-PlaceholderLogic $script:SearchBar "WSID..."
@@ -471,105 +527,95 @@ Function Initialize-HomeView {
     else {
         Write-Host "Search bar not found in HomeView."
     }
+
     # Attach the click event to the Search button
     $searchButton = $script:HomeView.FindName('btnSearch')
     if ($searchButton) {
         $null = $searchButton.Remove_Click
         $searchButton.Add_Click({
-                $bar = $script:HomeView.FindName('txtHomeMessage')
-                Update-WSIDFile $bar
+                $bar = $script:HomeView.FindName('GoogleSearchBar')
+                $wsidFilePath = Join-Path $PSScriptRoot "..\res\WSID.txt"
+                Update-WSIDFile $bar $wsidFilePath
             })
     }
     else {
         Write-Host "Search button not found in HomeView."
     }
-    # Attach the click event to the Clear Completed Tabs button
+
+    # Attach the click event to the "Clear Completed Tabs" button
     $clearButton = $script:HomeView.FindName('btnClearTabs')
     if ($clearButton) {
         $null = $clearButton.Remove_Click
         $clearButton.Add_Click({
-            $tabs = $script:HomeView.FindName('TerminalTabs')
-            $toRemove = @()
-            foreach ($computer in $script:TabsMap.Keys) {
-                $isActive = $false
-                foreach ($ps in $script:ActiveRunspaces) {
-                    if ($script:RunspaceJobs[$ps].Computer -eq $computer) {
-                        $isActive = $true
-                        break
+                $tabs = $script:HomeView.FindName('TerminalTabs')
+                $toRemove = @()
+
+                # Collect computers to remove
+                foreach ($computer in $script:TabsMap.Keys) {
+                    $isActive = $false
+                    foreach ($ps in $script:ActiveRunspaces) {
+                        if ($script:RunspaceJobs[$ps].Computer -eq $computer) {
+                            $isActive = $true
+                            break
+                        }
+                    }
+                    if (-not $isActive) {
+                        $toRemove += $computer
                     }
                 }
-                if (-not $isActive) {
-                    $toRemove += $computer
-                }
-            }
-            foreach ($computer in $toRemove) {
-                # Remove tab from UI
-                $tabItem = $null
-                foreach ($item in $tabs.Items) {
-                    if ($item.Header -eq $computer) {
-                        $tabItem = $item
-                        break
+                
+                # Remove tabs for computers that are not active
+                foreach ($computer in $toRemove) {
+                    $tabItem = $null
+                    foreach ($item in $tabs.Items) {
+                        if ($item.Header -eq $computer) {
+                            $tabItem = $item
+                            break
+                        }
                     }
+                    if ($tabItem) { $tabs.Items.Remove($tabItem) }
+
+                    # Remove from script data structures
+                    $script:TabsMap.Remove($computer)
+                    $script:SyncUI.Remove($computer)
+                    $script:QueuedOrRunning.Remove($computer)
                 }
-                if ($tabItem) { $tabs.Items.Remove($tabItem) }
-                # Remove from script data structures
-                $script:TabsMap.Remove($computer)
-                $script:SyncUI.Remove($computer)
-                $script:QueuedOrRunning.Remove($computer)
-            }
-        })
+            })
     }
 }
 
-# --- Update-HomeView: restore dynamic content (tabs, search bar, etc.) ---
+# Restores dynamic content in the HomeView (tabs, search bar, etc).
+# - Restores tabs from collection and search bar state.
+# - Updates the Search button label.
 Function Update-HomeView {
     if (-not $script:HomeView) { return }
     $tabs = $script:HomeView.FindName('TerminalTabs')
+
+    # Restore tabs from TabsCollection
     if ($tabs -and $script:TabsCollection) {
         $tabs.Items.Clear()
         foreach ($tab in $script:TabsCollection) {
             $tabs.Items.Add($tab)
         }
     }
-    $searchBar = $script:HomeView.FindName('txtHomeMessage')
+    
+    # Restore the search bar
+    $searchBar = $script:HomeView.FindName('GoogleSearchBar')
     if ($searchBar) {
         Initialize-SearchBar $searchBar
         Set-PlaceholderLogic $searchBar "WSID..."
     }
+    Update-SearchButtonLabel $script:HomeView
 }
 
-# Window and Resources 
-$window = Import-Xaml "..\Views\MainWindow.xaml"
-$script:wsidFilePath = Join-Path $PSScriptRoot "..\res\WSID.txt"
-
-# Merge all resource dictionaries from the Styles folder
-$stylesPath = Join-Path $PSScriptRoot '..\Styles'
-Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
-    $styleStream = [System.IO.File]::OpenRead($_.FullName)
-    try {
-        $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
-        $window.Resources.MergedDictionaries.Add($styleDict)
-    }
-    finally {
-        $styleStream.Close()
-    }
-}
-
-# Set logo image
-$logoImage = $window.FindName('Logo')
-$logoPath = Join-Path $PSScriptRoot '..\Images\logo yellow arrow.png'
-$logoImage.Source = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]$logoPath)
-
-# Window Controls and Events 
-Add-Type -AssemblyName System.Windows.Forms
-
-# Maximize/Restore/Minimize/Close buttons
-$script:LastWindowBounds = $null
-$script:IsCustomMaximized = $false
-
-$panelControlBar = $window.FindName('panelControlBar')
-function Switch-CustomMaximize {
-    Add-Type -AssemblyName System.Windows.Forms
+# Custom maximize/restore logic for the main window.
+# - Maximizes window to working area (excluding taskbar).
+# - Restores previous bounds if already maximized.
+# - Tracks custom maximize state for toggling.
+Function Switch-CustomMaximize {
+    param(
+        [System.Windows.Window]$window
+    )
     # Get the screen the window is currently on
     $rect = New-Object System.Drawing.Rectangle([int]$window.Left, [int]$window.Top, [int]$window.Width, [int]$window.Height)
     $screen = [System.Windows.Forms.Screen]::AllScreens | Where-Object { $_.Bounds.IntersectsWith($rect) } | Select-Object -First 1
@@ -613,10 +659,36 @@ function Switch-CustomMaximize {
     }
 }
 
+# Window Initialization
+$window = Import-Xaml "..\Views\MainWindow.xaml"
+$panelControlBar = $window.FindName('panelControlBar')
+
+# Merge all resource dictionaries from the Styles folder
+$stylesPath = Join-Path $PSScriptRoot '..\Styles'
+Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
+    $styleStream = [System.IO.File]::OpenRead($_.FullName)
+    try {
+        $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
+        $window.Resources.MergedDictionaries.Add($styleDict)
+    }
+    finally {
+        $styleStream.Close()
+    }
+}
+
+# Set logo image
+$logoImage = $window.FindName('Logo')
+$logoPath = Join-Path $PSScriptRoot '..\Images\logo yellow arrow.png'
+$logoImage.Source = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]$logoPath)
+
+# Maximize/Restore/Minimize/Close buttons
+$script:LastWindowBounds = $null
+$script:IsCustomMaximized = $false
+
 if ($null -ne $panelControlBar) {
     $panelControlBar.Add_MouseLeftButtonDown({
             if ($_.ClickCount -eq 2) {
-                Switch-CustomMaximize
+                Switch-CustomMaximize $window
                 return
             }
             $window.DragMove()
@@ -633,7 +705,7 @@ if ($null -ne $exitButton) {
 $maximizeButton = $window.FindName('btnMaximize')
 if ($null -ne $maximizeButton) {
     $maximizeButton.Add_Click({
-            Switch-CustomMaximize
+            Switch-CustomMaximize $window
         })
 }
 
@@ -651,6 +723,8 @@ if ($WindowResizeBorder) {
             $pos = [System.Windows.Input.Mouse]::GetPosition($window)
             $margin = 6
             $resizeDir = $null
+            
+            # Determine resize direction based on mouse position
             if ($pos.X -le $margin -and $pos.Y -le $margin) { $resizeDir = 'TopLeft' }
             elseif ($pos.X -ge ($window.Width - $margin) -and $pos.Y -le $margin) { $resizeDir = 'TopRight' }
             elseif ($pos.X -le $margin -and $pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'BottomLeft' }
@@ -660,6 +734,8 @@ if ($WindowResizeBorder) {
             elseif ($pos.Y -le $margin) { $resizeDir = 'Top' }
             elseif ($pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'Bottom' }
             else { $resizeDir = $null }
+            
+            # Set cursor and visibility of resize border based on direction
             if ($resizeDir) {
                 $WindowResizeBorder.IsHitTestVisible = $true
                 switch ($resizeDir) {
@@ -673,11 +749,15 @@ if ($WindowResizeBorder) {
                     'BottomLeft' { $window.Cursor = [System.Windows.Input.Cursors]::SizeNESW }
                 }
             }
+
+            # If not in a resize area, reset cursor and hide border
             else {
                 $WindowResizeBorder.IsHitTestVisible = $false
                 $window.Cursor = [System.Windows.Input.Cursors]::Arrow
             }
         })
+
+    # Handle mouse left button down for resizing
     $WindowResizeBorder.Add_MouseLeftButtonDown({
             $pos = [System.Windows.Input.Mouse]::GetPosition($window)
             $margin = 6
@@ -691,6 +771,8 @@ if ($WindowResizeBorder) {
             elseif ($pos.Y -le $margin) { $resizeDir = 'Top' }
             elseif ($pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'Bottom' }
             else { $resizeDir = $null }
+            
+            # If a resize direction was determined, send the appropriate message to dll
             if ($resizeDir) {
                 $sig = '[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);'
                 $type = Add-Type -MemberDefinition $sig -Name 'Win32SendMessage' -Namespace Win32 -PassThru
@@ -766,7 +848,10 @@ if ($btnConfig) {
 
             if ($mainCommandCombo -and $optionContent) {
                 $SetConfigOptionView = {
-                    param($optionContent, $selected)
+                    param(
+                        [System.Windows.Controls.ContentControl]$optionContent,
+                        [string]$selected
+                    )
                     if (-not $optionContent) {
                         return
                     }

@@ -37,11 +37,6 @@ if (-not (Test-Path $localLogFile) -and $logs) {
     New-Item -Path $localLogFile -ItemType File -Force | Out-Null
 }
 
-# Create report file if it does not exist
-if (-not (Test-Path $localReportFile -ErrorAction SilentlyContinue) -and $reports) {
-    New-Item -Path $localReportFile -ItemType File -Force | Out-Null
-}
-
 # File path for host list, ensuring it exists
 $hostFile = Join-Path -Path $PSScriptRoot -ChildPath "..\res\WSID.txt";
 if (-not (Test-Path $hostFile)) {
@@ -56,9 +51,7 @@ else {
     $hostNames = Get-Content -Path $hostFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 }
 
-Write-Host "Starting processing for $($hostNames.Count) computers using '$($config.EnabledCmdOption)' command."
-
-# Script block to process each computer
+# Script block to process each computer (just one in this case for UI)
 $processComputer = {
     $computer = $_
     $parsedIP = $null
@@ -74,7 +67,7 @@ $processComputer = {
             $ip = [System.Net.Dns]::GetHostAddresses("$computer")[0]
         }
         catch {
-            Write-Error "[$computer] DNS lookup failed: $_"
+            Write-Warning "[$computer] DNS lookup failed: $_"
             Add-Content -Path $using:localLogFile -Value "[$computer] DNS lookup failed: $_"
             return
         }
@@ -98,30 +91,23 @@ $processComputer = {
                 return
             }
             else { 
-                Write-Error "[$computer] SocketException during reverse-DNS: $_"
+                Write-Warning "[$computer] SocketException during reverse-DNS: $_"
                 Add-Content -Path $using:localLogFile -Value "[$computer] SocketException: $_"
                 return
             }
         }
         catch {
-            Write-Error "[$computer] Unexpected error during reverse-DNS: $_"
+            Write-Warning "[$computer] Unexpected error during reverse-DNS: $_"
             Add-Content -Path $using:localLogFile -Value "[$computer] Reverse-DNS error: $_"
             return
         }
     }
 
-    # Build UNC paths for remote log and report files
+    # Build UNC paths for remote log files
     $remoteLogUNC = $null
-    $remoteReportUNC = $null
     if ($using:logs -and $using:outputLogPath) {
-        $logRelPath = $using:outputLogPath
-        if ($logRelPath -match ":") {
-            $logRelPath = $logRelPath.Split(":")[-1].Trim()
-        }
-        $remoteLogUNC = "\\$ip\C$\$logRelPath"
-    }
-    if ($using:reports -and $using:reportPath) {
-        $remoteReportUNC = "\\$ip\C$\$using:reportPath"
+        $logRelPath = $using:outputLogPath -replace ":", "$"
+        $remoteLogUNC = "\\$ip\$logRelPath"
     }
 
     Write-Host " `nProcessing computer: $computer...`n "
@@ -139,7 +125,7 @@ $processComputer = {
         }
     }
     catch {
-        Write-Error "[$computer] $($_.Exception.Message), skipping..."
+        Write-Warning "[$computer] $($_.Exception.Message), skipping..."
         Add-Content -Path $($using:localLogFile) -Value "[$computer] $_"
         return
     }
@@ -156,18 +142,18 @@ $processComputer = {
     $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip pwsh -c '$remoteCommand'"
 
     Write-Host "Executing '$enabledCmd' on $computer..."
-    Write-Host "Command: $psexec`n"
+    Write-Host "`nCommand: $psexec`n"
     try {
         Invoke-Expression $psexec
     }
     catch {
-        Write-Error "[$computer] Failed to run DCU command: $_"
+        Write-Warning "[$computer] Failed to run DCU command: $_"
         Add-Content -Path $($using:localLogFile) -Value "[$computer] Command error: $_"
         return
     }
 
-    Write-Host "Command executed on $computer. Waiting for remote log file generation..."
-    Start-Sleep -Seconds 5
+    Write-Host "Command executed on $computer. Waiting for remote log file generation (if it exists)..."
+    Start-Sleep -Seconds 3
 
     # Build path for temporary per-computer log (in case multiple computers are processed)
     $tempLog = Join-Path -Path (Join-Path -Path $using:PSScriptRoot -ChildPath "..\logs") -ChildPath "$computer.log"
@@ -178,35 +164,31 @@ $processComputer = {
             Add-Content -Path $tempLog -Value "----- Log for $computer -----"
             Add-Content -Path $tempLog -Value $logContent
             Add-Content -Path $tempLog -Value ""
-            Write-Host "Log file for $computer appended to $tempLog"
         }
         catch {
-            Write-Error "Failed to read remote log file from $computer : $_"
+            Write-Warning "Failed to read remote log file from $computer : $_"
             Add-Content -Path $tempLog -Value "[$computer] Failed to retrieve remote log: $_"
         }
     }
 
-    # New logic: find XML file in remote report folder and copy to local as computer.xml
+    # Find XML file in remote report folder and copy to local as computer.xml
     if ($using:reports -and $using:reportPath) {
-        $reportRelPath = $using:reportPath
-        if ($reportRelPath -match ":") {
-            $reportRelPath = $reportRelPath.Split(":")[-1].Trim()
-        }
-        $remoteReportFolder = "\\$ip\C$\$reportRelPath"
+        $reportRelPath = $using:reportPath -replace ":", "$"
+        $remoteReportFolder = "\\$ip\$reportRelPath"
         $tempReport = Join-Path -Path (Join-Path -Path $using:PSScriptRoot -ChildPath "..\reports") -ChildPath "$computer.xml"
         try {
-            $xmlFiles = Get-ChildItem -Path $remoteReportFolder -Filter *.xml -ErrorAction Stop
+            $xmlFiles = Get-ChildItem -Path $remoteReportFolder -Filter *.xml -ErrorAction Stop | Sort-Object LastWriteTime -Descending
             if ($xmlFiles.Count -gt 0) {
-                $remoteXmlFile = $xmlFiles[0].FullName
-                $reportContent = Get-Content -Path $remoteXmlFile -ErrorAction Stop
+                $latestXmlFile = $xmlFiles[0].FullName
+                $reportContent = Get-Content -Path $latestXmlFile -ErrorAction Stop
                 Set-Content -Path $tempReport -Value $reportContent
-                Write-Host "Report file for $computer copied to $tempReport"
+                Write-Host "`nReport file for $computer copied to $tempReport`n"
             } else {
-                Write-Warning "[$computer] No XML report file found in $remoteReportFolder"
+                Write-Warning "`n[$computer] No XML report file found in $remoteReportFolder`n"
                 Set-Content -Path $tempReport -Value "[$computer] No XML report file found."
             }
         } catch {
-            Write-Error "[$computer] Could not find/copy XML report file in $($remoteReportFolder): $_"
+            Write-Warning "`n[$computer] Could not find/copy XML report file in $($remoteReportFolder): $_`n"
             Set-Content -Path $tempReport -Value "[$computer] Failed to retrieve remote XML report: $_"
         }
     }
@@ -216,15 +198,10 @@ $processComputer = {
 $hostNames | ForEach-Object -Parallel $processComputer -ThrottleLimit $config.ThrottleLimit
 Add-Content -Path $localLogFile -Value ""
 
-
 $logFolder = Join-Path -Path $PSScriptRoot -ChildPath "..\logs"
-$reportFolder = Join-Path -Path $PSScriptRoot -ChildPath "..\reports"
 
 foreach ($computer in $hostNames) {
     $perHostLog = "$logFolder\$computer.log"
-    $perHostReportDir = Join-Path $reportFolder $computer
-
-    # Consolidate logs
     if (Test-Path $perHostLog) {
         try {
             $logData = Get-Content -Path $perHostLog
@@ -240,5 +217,3 @@ foreach ($computer in $hostNames) {
         Add-Content -Path $localLogFile -Value "[$computer] No log generated (skipped)."
     }
 }
-
-Write-Host "Processing completed." -ForegroundColor Green

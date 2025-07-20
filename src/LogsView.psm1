@@ -1,8 +1,12 @@
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ImportXaml.psm1")
 
+# Displays the logs view in the main content area.
+# - Loads LogsView.xaml and sets it as the content.
+# - Populates tabs with log files from the logs directory.
+# - Handles empty/missing logs and errors.
+# - Wires up the Clear Logs button to clear all log files and refresh tabs.
 Function Show-LogsView {
     param(
-        [Parameter(Mandatory)]
         [System.Windows.Controls.ContentControl]$contentControl
     )
     $logsViewInstance = Import-XamlView "..\Views\LogsView.xaml"

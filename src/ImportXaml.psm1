@@ -1,6 +1,8 @@
+# Loads a XAML file from a relative path and returns the parsed WPF object.
+# - Validates file existence and handles errors.
+# - Returns the loaded object or $null on failure.
 Function Import-Xaml {
     param (
-        [Parameter(Mandatory)]
         [string]$RelativePath
     )
     $fullPath = Join-Path $PSScriptRoot $RelativePath
@@ -21,10 +23,13 @@ Function Import-Xaml {
     }
 }
 
+# Loads a XAML view from a relative path and returns the parsed WPF object.
+# - Validates file existence and handles errors.
+# - Returns the loaded view object or $null on failure.
 Function Import-XamlView {
     param([string]$RelativePath)
     $fullPath = Join-Path $PSScriptRoot $RelativePath
-    if (-Not (Test-Path $fullPath)) {
+    if (-not (Test-Path $fullPath)) {
         Write-Host "File not found: $fullPath"
         return $null
     }
