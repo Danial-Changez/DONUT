@@ -33,7 +33,7 @@
                       VerticalAlignment="Center"
                       Margin="4,0,8,0"
                       Grid.Column="0" />
-                <TextBox x:Name="txtHomeMessage"
+                <TextBox x:Name="GoogleSearchBar"
                          Style="{DynamicResource GoogleSearchBar}"
                          Grid.Column="1"
                          Margin="0"
