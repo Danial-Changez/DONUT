@@ -94,7 +94,7 @@ Function Invoke-Update {
                     Copy-Item $src $dst -Force
                     $localHash = (Get-FileHash $dst -Algorithm SHA256).Hash
                     if ($localHash -ne $file.hash) {
-                        Write-Error "Hash mismatch for $($file.path) after retry!"
+                        Write-Warning "Hash mismatch for $($file.path) after retry!"
                         exit 2
                     }
                 }

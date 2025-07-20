@@ -142,7 +142,7 @@ $processComputer = {
     $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip pwsh -c '$remoteCommand'"
 
     Write-Host "Executing '$enabledCmd' on $computer..."
-    Write-Host "`nCommand: $psexec`n"
+    Write-Host "`nCommand: $psexec"
     try {
         Invoke-Expression $psexec
     }
@@ -196,8 +196,6 @@ $processComputer = {
 
 # Run the parallel loop using the ThrottleLimit from config
 $hostNames | ForEach-Object -Parallel $processComputer -ThrottleLimit $config.ThrottleLimit
-Add-Content -Path $localLogFile -Value ""
-
 $logFolder = Join-Path -Path $PSScriptRoot -ChildPath "..\logs"
 
 foreach ($computer in $hostNames) {
