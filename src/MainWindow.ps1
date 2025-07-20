@@ -162,7 +162,7 @@ Function Update-WSIDFile {
         }
     }
     else {
-        Write-Error "Config file not found"
+        Write-Warning "Config file not found"
     }
 
     # If applyUpdates is enabled, show a single confirmation popup for all computers
@@ -378,7 +378,7 @@ Function Update-WSIDFile {
                     $script:RunspaceJobs.Remove($ps)
                 }
                 else {
-                    Write-Error "Attempted cleanup for runspace not in RunspaceJobs."
+                    Write-Warning "Attempted cleanup for runspace not in RunspaceJobs."
                 }
                 $script:ActiveRunspaces.Remove($ps) | Out-Null
             }
