@@ -4,24 +4,23 @@
 
 function Main {
 <#
-    .SYNOPSIS
-        The Main function starts the project application.
-    
-    .PARAMETER Commandline
-        $Commandline contains the complete argument string passed to the script packager executable.
-    
-    .NOTES
-        Use this function to initialize your script and to call GUI forms.
-        
-    .NOTES
-        To get the console output in the Packager (Forms Engine) use: 
-        $ConsoleOutput (Type: System.Collections.ArrayList)
-#>
-    Param ([String]$Commandline)
-        
-    #--------------------------------------------------------------------------
-    # Robust script root resolution for packaged and dev environments
+	.SYNOPSIS
+		The Main function starts the project application.
 	
+	.PARAMETER Commandline
+		$Commandline contains the complete argument string passed to the script packager executable.
+	
+	.NOTES
+		Use this function to initialize your script and to call GUI forms.
+		
+	.NOTES
+		To get the console output in the Packager (Forms Engine) use: 
+		$ConsoleOutput (Type: System.Collections.ArrayList)
+#>
+	Param ([String]$Commandline)
+	# Ensure all scripts run with bypassed execution policy for this process
+	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+		
 	# Get the directory of the current script or host
 	$hostPath = [System.IO.Path]::GetDirectoryName($HostInvocation.MyCommand.Path)
 	
@@ -37,7 +36,7 @@ function Main {
 	$updater = Join-Path -Path $hostPath -ChildPath 'src\Updater.ps1'
 	$mainWindow = Join-Path -Path $hostPath -ChildPath 'src\MainWindow.ps1'
 	
-    if (Test-Path $updaterBin) { . $updaterBin }
+	if (Test-Path $updaterBin) { . $updaterBin }
 	elseif (Test-Path $updater) { . $updater }
 	else { Write-Error "Updater script not found: $updaterBin nor $updater" }
 	
