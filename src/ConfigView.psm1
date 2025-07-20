@@ -1,9 +1,13 @@
+# Saves the current configuration from the UI to config.txt.
+# - Reads all relevant controls from the child view for the selected command.
+# - Handles toggles, multi-selects, textboxes, and dropdowns.
+# - Preserves existing script options and throttle limit.
+# - Updates config.txt with the new settings.
 Function Save-ConfigFromUI {
     param(
-        [Parameter(Mandatory)]
         [string]$selectedKey,
         [System.Windows.Controls.ContentControl]$contentControl,
-        $childView
+        [System.Windows.FrameworkElement]$childView
     )
     # Command and option tables
     $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
@@ -28,18 +32,17 @@ Function Save-ConfigFromUI {
         version                   = @()
     }
 
-
+    # Validate parameters
     if (-not $selectedKey) {
         Write-Host "[Config] No key for selected command (argument missing)." -ForegroundColor Red
         return
     }
     if (-not $childView) { 
-        Write-Host "[Config] No child view loaded."; return 
+        Write-Host "[Config] No child view loaded."
+        return 
     }
 
-    # Recursive function to find all controls of a type (optionally by Tag)
-
-
+    # Loop to find all controls of a type by name
     $lines = @()
     foreach ($cmd in $MAIN_COMMANDS) {
         $enabled = if ($cmd -eq $selectedKey) { 'enable' } else { 'disable' }
@@ -54,11 +57,11 @@ Function Save-ConfigFromUI {
                     $lines += "- $flag = $val"
                 }
             }
+            
             # Multi-checkboxes (multi-select)
             foreach ($multi in @("updateSeverity", "updateType", "updateDeviceCategory")) {
                 if ($COMMAND_OPTIONS[$cmd] -contains $multi) {
                     $checked = @()
-                    # Try to find a parent panel by name
                     $panel = $null
                     try { $panel = $childView.FindName($multi) } catch {}
                     if ($panel -and $panel.Children) {
@@ -73,16 +76,19 @@ Function Save-ConfigFromUI {
                     }
                 }
             }
+            
             # Textboxes
             foreach ($opt in $COMMAND_OPTIONS[$cmd]) {
                 if ($FLAG_OPTIONS[$cmd] -contains $opt) { continue }
                 if ($opt -in @("updateSeverity", "updateType", "updateDeviceCategory", "scheduleAction")) { continue }
+                
                 $tb = $null
                 try { $tb = $childView.FindName($opt) } catch {}
                 if ($tb -and $tb.PSObject.TypeNames[0] -match 'TextBox' -and $tb.Text -and -not [string]::IsNullOrWhiteSpace($tb.Text)) {
                     $lines += "- $opt = $($tb.Text)"
                 }
             }
+            
             # Dropdowns (ComboBox)
             if ($COMMAND_OPTIONS[$cmd] -contains "scheduleAction") {
                 $combo = $null
@@ -97,20 +103,22 @@ Function Save-ConfigFromUI {
             }
         }
     }
+    
     # Write to config.txt and preserve any existing script options at the end
     $configPath = Join-Path $PSScriptRoot '../config.txt'
     if (Test-Path $configPath) {
         $scriptLines = Get-Content $configPath | Where-Object { $_ -match '^[a-zA-Z]+\s*=\s*\d+$' -and ($_ -notmatch '^(scan|applyupdates|configure|customnotification|driverinstall|generateencryptedpassword|help|version|throttleLimit)\s*=') }
         foreach ($g in $scriptLines) { $lines += $g }
     }
-    # Add throttleLimit if present in the UI (after removing all previous ones)
+    
+    # Add throttleLimit if present in the UI, otherwise default to 5
     $throttleBox = $null
     try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
     if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox' -and $throttleBox.Text -and -not [string]::IsNullOrWhiteSpace($throttleBox.Text)) {
         $lines += "throttleLimit = $($throttleBox.Text)"
-    } else {
+    }
+    else {
         $lines += "throttleLimit = 5"
     }
     Set-Content -Path $configPath -Value $lines
-    Write-Host "[Config] Saved config to $configPath"
 }
