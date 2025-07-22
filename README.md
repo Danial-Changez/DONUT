@@ -1,101 +1,142 @@
+# DONUT
 
-# Automated Remote Dell Command Update
+This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates.
 
-This PowerShell script automates the remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands to simplify update execution remotely.
+---
 
 ## Table of Contents
-- [Automated Remote Dell Command Update](#automated-remote-dell-command-update)
+- [DONUT](#donut)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
   - [Prerequisites](#prerequisites)
-    - [Required Tools](#required-tools)
-      - [Installation Steps:](#installation-steps)
   - [Usage](#usage)
     - [Steps to Run](#steps-to-run)
+  - [Developer Guide](#developer-guide)
+    - [Project Structure](#project-structure)
+    - [Getting Started](#getting-started)
+    - [Key Concepts](#key-concepts)
+    - [Extending the Project](#extending-the-project)
+    - [Testing](#testing)
   - [Example Configuration](#example-configuration)
   - [Future Enhancements](#future-enhancements)
   - [Known Issues \& Additional Notes](#known-issues--additional-notes)
+  - [Contributing](#contributing)
 
 ---
 
 ## Features
 
-1. **Remote DCU Execution**:
-   - Executes Dell Command Update CLI remotely on Dell computers over the network.
-
-2. **Parallel Execution**:
-   - Uses PowerShell's parallel execution capability for fast, concurrent updates.
-
-3. **Dynamic Configuration**:
-   - Driven by user-friendly configuration files (`config.txt`) for flexible adjustments.
-
-4. **Detailed Logging**:
-   - Generates detailed logs for each host, recording execution outcomes and errors for easy debugging.
-
-5. **DNS and Error Validation**:
-   - Validates DNS records and IP assignments before executing commands to ensure accurate targeting.
+- **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
+- **Parallel Execution:** Uses PowerShell runspaces for parallel updates.
+- **Dynamic Configuration:** Driven by user-friendly configuration files (`config.txt`).
+- **Detailed Logging:** Per-host logs for execution outcomes and errors.
+- **DNS and Error Validation:** Validates DNS/IP before execution.
 
 ---
 
 ## Prerequisites
 
-### Required Tools
-
-- **PowerShell 7**  
-  Necessary for parallel processing capabilities.
-
-- **Dell Command Update CLI (`dcu-cli.exe`)**  
-  Must be installed on each target computer.
-
-- **PsExec (Sysinternals Suite)**  
-  Enables remote command execution.
-
-  #### Installation Steps:
-  1. Download PsExec from [Sysinternals Official Site](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec).
-  2. Extract and place `PsExec.exe` in a system `PATH` directory, such as `C:\Windows\System32`.
-
+- **PowerShell 7+** (required for parallel processing, current project runs on 7.5.2)
+- **Dell Command Update CLI (`dcu-cli.exe`)** (must be installed on each target)
+- **PsExec (Sysinternals Suite)** (for remote command execution)
+- **.NET Desktop 9.0+** (needed for WPF to run with the current packaged version)
 ---
 
 ## Usage
 
 ### Steps to Run
 
-**Step 1: Configure Commands (`config.txt`)**
-- Ensure only **one** command option is set to `enable` at any time; all others should be `disable`.
-- Set arguments clearly or leave blank if not applicable.
-  - Argument ignored example:
-    ```plaintext
-    - updateType =
-    ```
-  - Argument accepted example:
-    ```plaintext
-    - updateType = bios,others
-    ```
-- Reference the [DCU-CLI Documentation](https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-%7C-update-cli-commands?guid=guid-92619086-5f7c-4a05-bce2-0d560c15e8ed&lang=en-us) for additional commands.
+1. **Launch the Application:**
+   - Open app through the Start Menu.
+   - Apply any updates if prompted (unless specificed otherwise by Team).  
 
-**Note**:  
-Currently, only the `outputLog` parameter is automatically collected locally. Logs defined as `.xml` or other attributes must be retrieved manually.
+2. **Configure Commands:**
+   - Use the Config tab in the UI to select and configure DCU commands and options.
+   - For more information on "Text Option" parameters, select the Help option from Config and use TPS5330AP as the target machine.
+   - See [DCU-CLI Documentation](https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-%7C-update-cli-commands?guid=guid-92619086-5f7c-4a05-bce2-0d560c15e8ed&lang=en-us) for more details.
 
-**Step 2: List Target Computers**
-- Populate `res/WSID.txt` with computer hostnames, one per line.
+3. **List Target Computers:**
+   - Enter WSID's in the search bar, separated by commas or new lines.
+   - The UI will display a tab for each computer and manage the queue automatically.
 
-**Step 3: Execute Script**
-- From Admin PowerShell, run:
-  ```powershell
-  ./src/remoteDCU.ps1
-  ```
+4. **Run and Monitor:**
+   - Click the search button (button with command name, i.e **ApplyUpdates**, **Scan**, etc) to start remote updates.
+   - Progress and logs are shown in real time in each computer's tab.
+   - Manual reboot prompts and update confirmations are handled via popups in the UI.
 
-**Step 4: Monitor Execution**
-- Terminal output displays progress and errors in real-time.
-- Detailed logs are located within the `logs/` directory.
+    **Note: If you disconnect from the network while updates are running, they will continue, you will just lose live feed.**
+
+5. **Review Logs:**
+   - Detailed logs are saved in the logs tab for each run.
+   - If a file path is specificed in "Output Log", a tab in its name will be appended to under the Logs page.
+   - If no file path is specified, "Default" tab, or the last command specific will be appended to.
+     - For example if the "Output Log" was last set to `C:\temp\dcuLogs\applyUpdates.log`, new data will be appended to ApplyUpdates tab.
+
+---
+
+## Developer Guide
+
+### Project Structure
+
+- `src/` — Main PowerShell modules and scripts
+  - `MainWindow.ps1` — Main WPF UI logic
+  - `Updater.ps1` — Update logic and manifest handling
+  - `remoteDCU.ps1` — Remote execution logic
+  - Supporting modules: `ConfigView.psm1`, `Helpers.psm1`, `ImportXaml.psm1`, `LogsView.psm1`, `Read-Config.psm1`
+- `Views/` — XAML files for WPF UI
+  - `Config Options/` — All Config tab dropdown pages
+  - `PopUp.xaml` — UI for finished threads pop up
+  - `Update.xaml` — UI for updater
+  - `Confirmation.xaml` — UI for Apply Updates confirmation
+- `Styles/` — XAML style resources
+  - `UIColors.xaml` — Centralized UI colors
+  - `Icons.xaml` — Icon geometry data
+  - `ModernControls.xaml` — Custom controls for textboxes, checkboxes, comboboxes, etc.
+  - `ButtonStyles.xaml` — Sidebar UI controls
+- `Images/` — UI assets
+- `res/` — Host list (`WSID.txt`) and other resources
+- `logs/` — Log file target directory
+- `reports/` — XML file target directory
+- `Startup.pss` — Entry point for Updater.ps1 and MainWindow.ps1
+
+### Getting Started
+
+1. **Clone the repository** and open in VS Code or PowerShell Studio.
+2. **Install dependencies** (see Prerequisites).
+3. **Review configuration files** (`config.txt`, `WSID.txt`) and XAML UI files in `Views/` and `Styles/`.
+4. **For packaging, use PowerShell Studio's packager to build the MSI/executable.**
+   - All new modules or script files should be called within `MainWindow.ps1`, so we should never have to repackage with PowerShell Studio.
+   - Update file paths in `Manifest-Generator.ps1` as needed.
+
+### Key Concepts
+
+- **Runspaces:** Used for parallel remote execution. See `MainWindow.ps1` for runspace management and UI updates.
+- **WPF UI:** All user interaction is via the XAML-based interface. UI logic is in `MainWindow.ps1` and supporting modules.
+- **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
+- **Manifest Generation:** See `Manifest-Generator.ps1` for file hashing and signing.
+
+### Extending the Project
+
+- **Add new commands:** Update `ConfigView.psm1`, related XAML files, and UI event handlers.
+- **UI changes:** Edit XAML files in `Views/` and `Styles/`, and update event logic in `MainWindow.ps1`.
+- **Deploying Changes:**
+  - Add updated files in the correct directory (e.g., `src/MainWindow.ps1`, `Styles/Icons.xaml`).
+  - Update `$Files` parameter in `Manifest-Generator.ps1`.
+  - Increment `$Version`.
+  - Run the manifest generator script to update the manifest.
+
+### Testing
+
+- Use test hostnames in `WSID.txt` or the UI search bar.
+- Review logs in `logs/` and UI tabs for troubleshooting.
+- Use PowerShell Studio's debugger for step-through UI and script logic. UI events and runspaces can be debugged interactively.
 
 ---
 
 ## Example Configuration
 
-Default `config.txt` provided; sample configurations below for clarity:
+See `config.txt` for templates. Only one main command should be enabled.
 
-**Simple update config:**
 ```plaintext
 applyUpdates = enable
 - silent = enable
@@ -104,63 +145,28 @@ applyUpdates = enable
 throttleLimit = 50
 ```
 
-**Multiple commands template:**
-(Only one main command should be enabled)
-```plaintext
-applyUpdates = disable
-- silent = enable
-
-scan = disable
-
-driverInstall = disable
-
-configure = disable
-- updateType = firmware,driver,bios
-- biosPassword =
-- scheduleAction = DownloadAndNotify
-- scheduleWeekly = Friday,00:00
-- autoSuspendBitLocker = enable
-
-help = disable
-
-version = enable
-
-throttleLimit = 5
-```
-
 ---
 
 ## Future Enhancements
 
-1. **Graphical User Interface (GUI)**  
-   Explore implementation using frameworks like CustomTkinter for user-friendly interactions.
-
-2. **Enhanced Error Recovery**  
-   Introduce retries and state checks to recover from dropped connections or interrupted updates (common with network driver installs).
+- **GUI Improvements:** More user-friendly controls, better error dialogs.
+- **Advanced Error Recovery:** Retries, state checks for interrupted updates.
+- **Cross-platform Support:** Investigate compatibility with PowerShell Core on Linux/Mac.
 
 ---
 
 ## Known Issues & Additional Notes
 
-1. **BIOS Update Issues:**
-      - Some Dell models do not receive the latest BIOS updates via DCU CLI:
-        - **Latitude 5330**: Updates only to BIOS v1.24.0 (latest v1.27.0 at the time of writing).
-        - **Latitude 7490**: Updates only to BIOS v1.41.0 (latest v1.42.0 at the time of writing).
+- **BIOS Update Limitations:** Some Dell models may not receive the latest BIOS via DCU CLI.
+- **Manual Reboots:** Some updates require manual intervention; see logs and reboot queue.
+- **Remote Only:** Designed for remote execution; local runs may behave unexpectedly.
 
-      - Certain BIOS updates may fail and require manual installation.
+---
 
-      **Current Update Failures Identified For:**
-      - Latitude 5340
-      - Latitude 3390
+## Contributing
 
-      These issues stem from limitations in Dell's DCU CLI tool itself rather than the automation script.
+- Fork and submit pull requests for improvements.
+- Open issues for bugs or feature requests.
+- Follow PowerShell best practices and comment your code.
 
-2. **Limited to Remote Computers:**
-    - **Designed for Remote Use Only:**
-
-      This script is intended to execute remotely and relies on retrieving the host address of remote machines.
-  
-    - **Local Host Limitation:**
-
-      Executing the script on the local host will cause unexpected behaviour. It attempts to resolve and pass every host address associated with the machine, which can lead to errors or script failure.
-
+---
