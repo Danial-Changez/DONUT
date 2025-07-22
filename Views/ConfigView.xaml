@@ -37,12 +37,15 @@
                           Style="{DynamicResource ModernComboBox}">
                     <ComboBoxItem Content="Scan" />
                     <ComboBoxItem Content="Apply Updates" />
-                    <ComboBoxItem Content="Configure" />
+
+                    <!-- Pages Commented out after discussion with leadership -->
+                    <!-- <ComboBoxItem Content="Configure" />
                     <ComboBoxItem Content="Custom Notification" />
                     <ComboBoxItem Content="Driver Install" />
                     <ComboBoxItem Content="Generate Encrypted Password" />
                     <ComboBoxItem Content="Help" />
-                    <ComboBoxItem Content="Version" />
+                    <ComboBoxItem Content="Version" /> -->
+                    
                 </ComboBox>
             </StackPanel>
             <!-- Dynamic Options Section (child view) -->
