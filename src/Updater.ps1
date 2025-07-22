@@ -1,7 +1,7 @@
 # Updater script for DONUT, checks for updates using manifest.json, updates if needed, then launches the main app
 param(
-    [string]$manifestFile = "\\cgic.ca\GPHFILES\SCRATCH\DC\manifest.json",
-    [string]$shareRoot = "\\cgic.ca\GPHFILES\SCRATCH\DC"
+    [string]$manifestFile = "\\cgic.ca\GPHFILES\TPSFiles\Support-Applications\DONUT\Development\manifest.json",
+    [string]$shareRoot = "\\cgic.ca\GPHFILES\TPSFiles\Support-Applications\DONUT\Development"
 )
 
 Add-Type -AssemblyName PresentationFramework
