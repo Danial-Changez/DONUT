@@ -13,6 +13,7 @@ if (-not $script:QueuedOrRunning) { $script:QueuedOrRunning = @{} }
 if (-not $script:PendingQueue) { $script:PendingQueue = [System.Collections.Queue]::new() }
 if (-not $script:TabsMap) { $script:TabsMap = @{} }
 if (-not $script:SyncUI) { $script:SyncUI = [hashtable]::Synchronized(@{}) }
+if (-not $script:RebootDetection) { $script:RebootDetection = @{} }
 
 # Script block to start a new PowerShell runspace for remote execution.
 # - Dequeues the next computer from the pending queue.
@@ -354,6 +355,40 @@ Function Update-WSIDFile {
                     else {
                         $tb.AppendText("$line`n")
                         $tb.ScrollToEnd()
+
+                        # Check for reboot detection lines
+                        if (-not $script:RebootDetection.ContainsKey($comp)) {
+                            $script:RebootDetection[$comp] = @{ 
+                                SawRebootLine     = $false
+                                SawAutoRebootLine = $false
+                                NeedsManualReboot = $false
+                            }
+                        }
+                        if ($line -like '*The system has been updated and requires a reboot to complete the process.*') {
+                            $script:RebootDetection[$comp].SawRebootLine = $true
+                        }
+                        elseif ($line -like '*The system will automatically reboot to finish applying the updates.*') {
+                            $script:RebootDetection[$comp].SawAutoRebootLine = $true
+                        }
+
+                        if ($script:RebootDetection[$comp].SawRebootLine -and -not $script:RebootDetection[$comp].SawAutoRebootLine) {
+                            if (-not $script:ManualRebootQueue.ContainsKey($comp)) {
+                                $script:ManualRebootQueue[$comp] = $true
+                            }
+                            $script:RebootDetection[$comp].NeedsManualReboot = $true
+                        }
+                        elseif ($script:RebootDetection[$comp].SawRebootLine -and $script:RebootDetection[$comp].SawAutoRebootLine) {
+                            if ($script:ManualRebootQueue.ContainsKey($comp)) {
+                                $script:ManualRebootQueue.Remove($comp)
+                            }
+                            $script:RebootDetection[$comp].NeedsManualReboot = $false
+                        }
+                        elseif (-not $script:RebootDetection[$comp].SawRebootLine -and -not $script:RebootDetection[$comp].SawAutoRebootLine) {
+                            if ($script:ManualRebootQueue.ContainsKey($comp)) {
+                                $script:ManualRebootQueue.Remove($comp)
+                            }
+                            $script:RebootDetection[$comp].NeedsManualReboot = $false
+                        }
                     }
                 }
             }
@@ -859,6 +894,8 @@ if ($btnConfig) {
                         $optionContent.Content = $null
                         return
                     }
+
+                    # Map selected option to corresponding XAML view file (some commented out in the xaml after leadership discussion)
                     $viewMap = @{
                         "Scan"                        = "Scan.xaml"
                         "Apply Updates"               = "ApplyUpdates.xaml"
