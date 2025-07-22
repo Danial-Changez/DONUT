@@ -1,7 +1,7 @@
 # Updater script for DONUT, checks for updates using manifest.json, updates if needed, then launches the main app
 param(
-    [string]$manifestFile = "\\contoso.com\shared\SCRATCH\DC\manifest.json",
-    [string]$shareRoot = "\\contoso.com\shared\SCRATCH\DC"
+    [string]$manifestFile = "\\contoso.com\shared\apps\Support-Applications\DONUT\Development\manifest.json",
+    [string]$shareRoot = "\\contoso.com\shared\apps\Support-Applications\DONUT\Development"
 )
 
 Add-Type -AssemblyName PresentationFramework
