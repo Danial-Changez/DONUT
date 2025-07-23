@@ -19,7 +19,7 @@ Function Get-InstalledDisplayVersion {
         foreach ($subKey in $subKeys) {
             try {
                 $app = Get-ItemProperty -Path $subKey.PSPath -ErrorAction SilentlyContinue
-                if ($app.DisplayName -like "*DONUT*" -and $app.Publisher -like "*Co-operators*") {
+                if ($app.DisplayName -like "*DONUT*" -and $app.Publisher -like "*Bakery*") {
                     return $app.DisplayVersion
                     Write-Host "Found DONUT version: $($app.DisplayVersion)"
                 }
@@ -56,7 +56,7 @@ Function Update-RegistryVersion {
                     $isDonut = $false
                     if ($app.DisplayName -like "*DONUT*") { $isDonut = $true }
                     if ($app.InstallLocation -like "*DONUT*") { $isDonut = $true }
-                    if ($app.Publisher -like "*Co-operators*") { $isDonut = $true }
+                    if ($app.Publisher -like "*Bakery*") { $isDonut = $true }
                     if ($isDonut) {
                         # Update the version and install date
                         Set-ItemProperty -Path $subKey.PSPath -Name "DisplayVersion" -Value $Version -ErrorAction SilentlyContinue
