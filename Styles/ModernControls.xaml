@@ -45,6 +45,24 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="RichTextBox">
+        <Setter Property="Background"
+                Value="Transparent" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource TerminalText}" />
+        <Setter Property="FontFamily"
+                Value="Cascadia Code" />
+        <Setter Property="FontSize"
+                Value="14" />
+        <Setter Property="BorderThickness"
+                Value="0" />
+        <Setter Property="Margin"
+                Value="10" />
+        <Setter Property="IsReadOnly"
+                Value="True" />
+        <Setter Property="Focusable"
+                Value="True" />
+    </Style>
     <!-- implicit style for all TextBox controls -->
     <Style TargetType="TextBox">
         <Setter Property="Background"

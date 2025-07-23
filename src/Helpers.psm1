@@ -8,24 +8,25 @@ Function Set-PlaceholderLogic {
     )
     if ([string]::IsNullOrWhiteSpace($txt.Text) -or $txt.Text -eq $placeHolder) {
         Show-Placeholder $txt $placeHolder
-    } else {
+    }
+    else {
         $txt.Tag = $null
     }
     $txt.Add_GotFocus({
-        if ($this.Tag -eq "placeholder") {
-            $this.Text = ""
-            $this.Tag = $null
-        }
-    })
+            if ($this.Tag -eq "placeholder") {
+                $this.Text = ""
+                $this.Tag = $null
+            }
+        })
     $txt.Add_LostFocus({
-        if ([string]::IsNullOrWhiteSpace($this.Text)) {
-            Show-Placeholder $this $placeHolder
-        } elseif ($this.Tag -ne "placeholder") {
-            $script:HomeViewText = $this.Text
-        }
-    })
+            if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                Show-Placeholder $this $placeHolder
+            }
+            elseif ($this.Tag -ne "placeholder") {
+                $script:HomeViewText = $this.Text
+            }
+        })
 }
-
 
 # Displays placeholder text in a TextBox and marks it as a placeholder.
 Function Show-Placeholder {
@@ -68,10 +69,8 @@ Function Show-HeaderPanel {
     if ($headerLogs) { $headerLogs.Visibility = $logsVisibility }
 }
 
-# Updates the label of the Search button based on config.txt settings.
-# - Reads config.txt to determine which command is enabled.
-# - Sets the button label accordingly in the HomeView.
-Function Update-SearchButtonLabel {
+# Returns the enabled command in the config
+Function Get-EnabledConfigCommand {
     param($homeView)
     $configPath = Join-Path $PSScriptRoot '..\config.txt'
     $enabledCmd = $null
@@ -86,6 +85,41 @@ Function Update-SearchButtonLabel {
             }
         }
     }
+    return $enabledCmd
+}
+
+# Adds all resource dictionaries from the Styles folder to the window.
+Function Add-ResourceDictionaries {
+    param(
+        [System.Windows.Window]$window
+    )
+    $stylesPath = Join-Path $PSScriptRoot '..\Styles'
+    Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
+        $styleStream = [System.IO.File]::OpenRead($_.FullName)
+        try {
+            $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
+            try {
+                $window.Resources.MergedDictionaries.Add($styleDict)
+            }
+            catch {
+                Write-Warning "Failed to add style dictionary: $($_.FullName) - $_"
+            }
+        }
+        catch {
+            Write-Warning "Failed to load style dictionary: $($_.FullName) - $_"
+        }
+        finally {
+            $styleStream.Close()
+        }
+    }
+}
+
+# Updates the label of the Search button based on config.txt settings.
+# - Reads config.txt to determine which command is enabled.
+# - Sets the button label accordingly in the HomeView.
+Function Update-SearchButtonLabel {
+    param($homeView)
+    $enabledCmd = Get-EnabledConfigCommand -homeView $homeView
     $viewMap = @{
         "Scan"                        = "scan"
         "Apply Updates"               = "applyUpdates"
