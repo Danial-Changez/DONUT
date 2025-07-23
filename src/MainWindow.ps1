@@ -873,95 +873,121 @@ if ($btnHome) {
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-            # Use a local variable for the config view instance
-            $configViewInstance = $script:ConfigViewInstance
-            $firstLoad = $false
-            if (-not $configViewInstance) {
-                $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
-                $script:ConfigViewInstance = $configViewInstance
-                $firstLoad = $true
-            }
+        # Use a local variable for the config view instance
+        $configViewInstance = $script:ConfigViewInstance
+        $firstLoad = $false
+        if (-not $configViewInstance) {
+            $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
+            $script:ConfigViewInstance = $configViewInstance
+            $firstLoad = $true
+        }
 
-            $contentControl.Content = $configViewInstance
-            Show-HeaderPanel "Collapsed" "Visible" "Collapsed" $headerHome $headerConfig $headerLogs
+        $contentControl.Content = $configViewInstance
+        Show-HeaderPanel "Collapsed" "Visible" "Collapsed" $headerHome $headerConfig $headerLogs
 
-            $mainCommandCombo = $configViewInstance.FindName('MainCommandComboBox')
-            $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
+        $mainCommandCombo = $configViewInstance.FindName('MainCommandComboBox')
+        $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
 
-            if ($mainCommandCombo -and $optionContent) {
-                $SetConfigOptionView = {
-                    param(
-                        [System.Windows.Controls.ContentControl]$optionContent,
-                        [string]$selected
-                    )
-                    if (-not $optionContent) {
-                        return
-                    }
-                    if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
-                        $optionContent.Content = $null
-                        return
-                    }
+        if ($mainCommandCombo -and $optionContent) {
+            $SetConfigOptionView = {
+                param(
+                    [System.Windows.Controls.ContentControl]$optionContent,
+                    [string]$selected
+                )
+                if (-not $optionContent) {
+                    return
+                }
+                if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
+                    $optionContent.Content = $null
+                    return
+                }
 
-                    # Map selected option to corresponding XAML view file (some commented out in the xaml after leadership discussion)
-                    $viewMap = @{
-                        "Scan"                        = "Scan.xaml"
-                        "Apply Updates"               = "ApplyUpdates.xaml"
-                        "Configure"                   = "Configure.xaml"
-                        "Driver Install"              = "DriverInstall.xaml"
-                        "Version"                     = "Version.xaml"
-                        "Help"                        = "Help.xaml"
-                        "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
-                        "Custom Notification"         = "CustomNotification.xaml"
-                    }
-                    $file = $viewMap[$selected]
-                    if ($file) {
-                        $childView = Import-XamlView "..\Views\Config Options\$file"
-                        if ($childView) {
-                            $optionContent.Content = $childView
-                        }
-                        else {
-                            $optionContent.Content = $null
-                            Write-Host "Failed to load child view: $file" -ForegroundColor Red
-                        }
+                # Map selected option to corresponding XAML view file (some commented out in the xaml after leadership discussion)
+                $viewMap = @{
+                    "Scan"                        = "Scan.xaml"
+                    "Apply Updates"               = "ApplyUpdates.xaml"
+                    "Configure"                   = "Configure.xaml"
+                    "Driver Install"              = "DriverInstall.xaml"
+                    "Version"                     = "Version.xaml"
+                    "Help"                        = "Help.xaml"
+                    "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
+                    "Custom Notification"         = "CustomNotification.xaml"
+                }
+                $file = $viewMap[$selected]
+                if ($file) {
+                    $childView = Import-XamlView "..\Views\Config Options\$file"
+                    if ($childView) {
+                        $optionContent.Content = $childView
                     }
                     else {
                         $optionContent.Content = $null
-                    }
-                }
-                if ($firstLoad) {
-                    # Remove any previous SelectionChanged handlers before adding a new one
-                    $null = $mainCommandCombo.Remove_SelectionChanged
-                    $mainCommandCombo.Add_SelectionChanged(({
-                                $selEventArgs = $args[1]
-                                if ($selEventArgs.AddedItems.Count -gt 0) {
-                                    $selItem = $selEventArgs.AddedItems[0]
-                                    if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
-                                        $sel = $selItem.Content
-                                    }
-                                    else {
-                                        $sel = $selItem.ToString()
-                                    }
-                                }
-                                else {
-                                    $sel = $mainCommandCombo.Text
-                                }
-                                $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
-                                if ($currentOptionContent) {
-                                    & $SetConfigOptionView $currentOptionContent $sel
-                                }
-                            }).GetNewClosure())
-                    # On first load, set ComboBox to index 0 so event fires and UI syncs
-                    if ($mainCommandCombo.Items.Count -gt 0) {
-                        $mainCommandCombo.SelectedIndex = 0
+                        Write-Host "Failed to load child view: $file" -ForegroundColor Red
                     }
                 }
                 else {
-                    # On subsequent loads, just load the current selection or default to Scan
-                    $selected = $mainCommandCombo.Text
-                    if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) { $selected = 'Scan' }
-                    & $SetConfigOptionView $optionContent $selected
+                    $optionContent.Content = $null
                 }
             }
+
+            # Always read enabled command from config and set ComboBox accordingly
+            $enabledCmd = Get-EnabledConfigCommand
+            $viewMapCmd = @{
+                "Scan"                        = "scan"
+                "Apply Updates"               = "applyUpdates"
+                "Configure"                   = "configure"
+                "Driver Install"              = "driverInstall"
+                "Version"                     = "version"
+                "Help"                        = "help"
+                "Generate Encrypted Password" = "generateEncryptedPassword"
+                "Custom Notification"         = "customnotification"
+            }
+            $selectedKey = $null
+            foreach ($k in $viewMapCmd.Keys) {
+                if ($viewMapCmd[$k] -eq $enabledCmd) { $selectedKey = $k; break }
+            }
+            if ($selectedKey) {
+                # Set ComboBox to the enabled command
+                for ($i = 0; $i -lt $mainCommandCombo.Items.Count; $i++) {
+                    $item = $mainCommandCombo.Items[$i]
+                    $itemText = if ($item -is [System.Windows.Controls.ComboBoxItem]) { $item.Content } else { $item.ToString() }
+                    if ($itemText -eq $selectedKey) {
+                        $mainCommandCombo.SelectedIndex = $i
+                        break
+                    }
+                }
+                & $SetConfigOptionView $optionContent $selectedKey
+            } else {
+                # Fallback to first item if no match
+                if ($mainCommandCombo.Items.Count -gt 0) {
+                    $mainCommandCombo.SelectedIndex = 0
+                    $sel = $mainCommandCombo.Items[0]
+                    $selText = if ($sel -is [System.Windows.Controls.ComboBoxItem]) { $sel.Content } else { $sel.ToString() }
+                    & $SetConfigOptionView $optionContent $selText
+                }
+            }
+
+            # Remove any previous SelectionChanged handlers before adding a new one
+            $null = $mainCommandCombo.Remove_SelectionChanged
+            $mainCommandCombo.Add_SelectionChanged(({
+                $selEventArgs = $args[1]
+                if ($selEventArgs.AddedItems.Count -gt 0) {
+                    $selItem = $selEventArgs.AddedItems[0]
+                    if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
+                        $sel = $selItem.Content
+                    }
+                    else {
+                        $sel = $selItem.ToString()
+                    }
+                }
+                else {
+                    $sel = $mainCommandCombo.Text
+                }
+                $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
+                if ($currentOptionContent) {
+                    & $SetConfigOptionView $currentOptionContent $sel
+                }
+            }).GetNewClosure())
+        }
 
             # Wire up Save button in ConfigView
             $saveBtn = $configViewInstance.FindName('btnSaveConfig')
