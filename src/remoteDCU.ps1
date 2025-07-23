@@ -110,7 +110,7 @@ $processComputer = {
         $remoteLogUNC = "\\$ip\$logRelPath"
     }
 
-    Write-Host " `nProcessing computer: $computer...`n "
+    Write-Host "Processing computer: $computer...`n "
 
     # Checks for dcu-cli.exe (32-bit or 64-bit)
     try {
@@ -142,7 +142,8 @@ $processComputer = {
     $psexec = "psexec -accepteula -nobanner -s -h -i \\$ip pwsh -c '$remoteCommand'"
 
     Write-Host "Executing '$enabledCmd' on $computer..."
-    Write-Host "`nCommand: $psexec"
+    Write-Host "`nCommand: $psexec`n"
+
     try {
         Invoke-Expression $psexec
     }
