@@ -1,6 +1,6 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="All Processes Complete"
+        Title="Updater"
         Height="240"
         Width="400"
         WindowStartupLocation="CenterScreen"
