@@ -29,9 +29,8 @@ $script:StartNextRunspace = {
     }
     $queue = $script:SyncUI[$computer]
     $tb = $script:TabsMap[$computer]
-    $tb.AppendText("[$computer] Runspace started at $(Get-Date).`n")
-    $tb.ScrollToEnd()
 
+    # Used AbsPath as at the time with IO.Path lib, as it was the only parameter being accepted as full path for $ps.AddScript 
     $remoteDCUPathAbs = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'remoteDCU.ps1'))
     
     # Create Runspace
@@ -77,12 +76,7 @@ $script:StartNextRunspace = {
                 $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
                 # Exclude unwanted lines
                 if ($cleanLine -notmatch 'Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on' -and $cleanLine -match '\S') {
-                    if ($cleanLine.StartsWith('Command: ')) {
-                        $queue.Enqueue($cleanLine) | Out-Null
-                    }
-                    else {
-                        $queue.Enqueue($cleanLine) | Out-Null
-                    }
+                    $queue.Enqueue($cleanLine) | Out-Null
                 }
             }
             # Wait for process to exit
@@ -172,19 +166,10 @@ Function Update-WSIDFile {
         $script:ApplyUpdatesConfirmed = $false
         if ($popup) {
             $popupWin = $popup
+            
             # Merge all style dictionaries from Styles folder
-            $stylesPath = Join-Path $PSScriptRoot '..\Styles'
-            Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
-                $styleStream = [System.IO.File]::OpenRead($_.FullName)
-                try {
-                    $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
-                    try {
-                        $popupWin.Resources.MergedDictionaries.Add($styleDict)
-                    }
-                    catch {}
-                }
-                catch {} finally { $styleStream.Close() }
-            }
+            Add-ResourceDictionaries -window $popupWin
+            
             $computerListBox = $popupWin.FindName('popupComputerList')
             if ($computerListBox) {
                 $computerListBox.Items.Clear()
@@ -242,7 +227,7 @@ Function Update-WSIDFile {
                 # Create tab if missing, show abort message
                 if (-not $script:TabsMap.ContainsKey($computer)) {
                     $tab = [System.Windows.Controls.TabItem]::new()
-                    $tb = [System.Windows.Controls.TextBox]::new()
+                    $tb = [System.Windows.Controls.RichTextBox]::new()
                     $tab.Header = $computer
                     $tab.Content = $tb
                     $tabs.Items.Add($tab)
@@ -269,17 +254,13 @@ Function Update-WSIDFile {
         if (-not $script:QueuedOrRunning.ContainsKey($computer)) {
             $script:PendingQueue.Enqueue($computer)
             $tab = [System.Windows.Controls.TabItem]::new() 
-            $tb = [System.Windows.Controls.TextBox]::new()
+            $tb = [System.Windows.Controls.RichTextBox]::new()
             $tab.Header = $computer
             $tab.Content = $tb
             $tabs.Items.Add($tab)
 
             $script:TabsMap[$computer] = $tb
             $script:SyncUI[$computer] = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
-
-            # Set default text for this computer's textbox
-            $tb.AppendText("[$($computer)] Starting runspace and remoteDCU.ps1...`n")
-            $tb.ScrollToEnd()
             $script:QueuedOrRunning[$computer] = $true
         }
     }
@@ -353,7 +334,61 @@ Function Update-WSIDFile {
                         }
                     }
                     else {
-                        $tb.AppendText("$line`n")
+                        # [BUG-FIX] Remove initial empty lines by clearing Document.Blocks if the first block is empty
+                        if ($tb.Document.Blocks.Count -gt 0) {
+                            $firstBlock = $tb.Document.Blocks.FirstBlock
+                            $blockText = $null
+                            if ($firstBlock -is [System.Windows.Documents.Paragraph]) {
+                                $blockText = ($firstBlock.Inlines | ForEach-Object { $_.Text }) -join ''
+                            } else {
+                                $blockText = $firstBlock.ToString()
+                            }
+                            if ([string]::IsNullOrWhiteSpace($blockText) -and $tb.Document.Blocks.Count -le 2) {
+                                $tb.Document.Blocks.Clear()
+                            }
+                        }
+
+                        $para = New-Object System.Windows.Documents.Paragraph
+                        $para.Margin = [System.Windows.Thickness]::new(0)
+
+                        # Generalized command-to-color mapping (add more as needed)
+                        $commandColorMap = @{
+                            '/applyUpdates' = $window.FindResource('AccentCyan')
+                            '/scan'         = $window.FindResource('AccentBlueLight')
+                        }
+
+                        $matched = $false
+                        if ($line.StartsWith('Command: ')) {
+                            $delimiterIdx = $line.IndexOf(":")
+                            $before = $line.Substring(0, $delimiterIdx + 1)
+                            $after = $line.Substring($delimiterIdx + 1)
+                            
+                            # Try to match a known command in the after part
+                            foreach ($cmd in $commandColorMap.Keys) {
+                                if ($after.TrimStart() -like "*$cmd*") {
+                                    $matched = $true
+                                    $color = $commandColorMap[$cmd]
+                                    
+                                    # Add the part before and including colon in default color
+                                    $runBefore = New-Object System.Windows.Documents.Run($before)
+                                    $para.Inlines.Add($runBefore)
+                                    
+                                    # Add the after part in color
+                                    if ($after) {
+                                        $runAfter = New-Object System.Windows.Documents.Run($after)
+                                        $runAfter.Foreground = $color
+                                        $para.Inlines.Add($runAfter)
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                        if (-not $matched) {
+                            $run = New-Object System.Windows.Documents.Run($line)
+                            $para.Inlines.Add($run)
+                        }
+
+                        $tb.Document.Blocks.Add($para)
                         $tb.ScrollToEnd()
 
                         # Check for reboot detection lines
@@ -431,25 +466,7 @@ Function Update-WSIDFile {
                         $popupWin = $popup
 
                         # Merge all style dictionaries from Styles folder
-                        $stylesPath = Join-Path $PSScriptRoot '..\Styles'
-                        Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
-                            $styleStream = [System.IO.File]::OpenRead($_.FullName)
-                            try {
-                                $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
-                                try {
-                                    $popupWin.Resources.MergedDictionaries.Add($styleDict)
-                                }
-                                catch {
-                                    Write-Warning "Failed to add style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
-                                }
-                            }
-                            catch {
-                                Write-Warning "Failed to load style dictionary: $($_.FullName) - $_" -ForegroundColor Yellow
-                            }
-                            finally {
-                                $styleStream.Close()
-                            }
-                        }
+                        Add-ResourceDictionaries -window $popupWin
 
                         # Find popup controls and computer list
                         $closeBtn = $popupWin.FindName('btnClose')
@@ -699,17 +716,7 @@ $window = Import-Xaml "..\Views\MainWindow.xaml"
 $panelControlBar = $window.FindName('panelControlBar')
 
 # Merge all resource dictionaries from the Styles folder
-$stylesPath = Join-Path $PSScriptRoot '..\Styles'
-Get-ChildItem -Path $stylesPath -Filter '*.xaml' | ForEach-Object {
-    $styleStream = [System.IO.File]::OpenRead($_.FullName)
-    try {
-        $styleDict = [Windows.Markup.XamlReader]::Load($styleStream)
-        $window.Resources.MergedDictionaries.Add($styleDict)
-    }
-    finally {
-        $styleStream.Close()
-    }
-}
+Add-ResourceDictionaries -window $window
 
 # Set logo image
 $logoImage = $window.FindName('Logo')
