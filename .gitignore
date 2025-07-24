@@ -3,9 +3,9 @@ config.txt
 res/*
 MainWindow.RestorePoint*
 MainWindow-*
-DONUT.*
 .vs/
 notes.txt
 bin/
 reports/
 OldUpdates.ps1
+*Temp*
