@@ -1,0 +1,15 @@
+﻿<ProjectState>
+  <Version>1.0</Version>
+  <FileID>1d8cd2fa-8800-4f50-9780-ae45f3d54189</FileID>
+  <OpenFolders>
+    <Folder>Styles</Folder>
+    <Folder>src</Folder>
+    <Folder>Views</Folder>
+    <Folder>Views\Config Options</Folder>
+  </OpenFolders>
+  <OpenFiles>
+    <File>Startup.pss</File>
+    <File>src\MainWindow.ps1</File>
+    <File>src\remoteDCU.ps1</File>
+  </OpenFiles>
+</ProjectState>
