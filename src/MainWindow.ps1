@@ -129,6 +129,9 @@ param(
     if ([string]::IsNullOrWhiteSpace($textBox.Text)) {
         return
     }
+    
+    # Reset ApplyUpdatesConfirmed flag for this run
+    $script:ApplyUpdatesConfirmed = $false
         
     # Split on newlines and commas, trim, remove empty, and take unique entries
     $valid = ($textBox.Text -split "[\r\n,]+") |
@@ -157,13 +160,13 @@ param(
     $flagPresent = $false
     $applyUpdatesEnabled = $false
     if ($config) {
-        if ($config.reboot -or $config.forceRestart) { $flagPresent = $true }
-        if (($config.reboot -eq $false) -or ($config.forceRestart -eq $false)) { $needsManualReboot = $true }
-        if ($config.applyUpdates -eq 'enable') { $applyUpdatesEnabled = $true }
+        if ($config.Args -and ($config.Args.reboot -or $config.Args.forceRestart)) { $flagPresent = $true }
+        if ($config.Args -and (($config.Args.reboot -eq $false) -or ($config.Args.forceRestart -eq $false))) { $needsManualReboot = $true }
+        if ($config.EnabledCmdOption -eq 'applyUpdates') { $applyUpdatesEnabled = $true }
     }
 
-    # If applyUpdates is enabled, show a single confirmation popup for all computers
-    if ($applyUpdatesEnabled) {
+    # If applyUpdates is enabled and there's more than 1 computer, show a single confirmation popup
+    if ($applyUpdatesEnabled -and $valid.Count -gt 1) {
         $popup = Import-XamlView "..\Views\Confirmation.xaml"
         $script:ApplyUpdatesConfirmed = $false
         if ($popup) {
@@ -243,6 +246,9 @@ param(
             }
             return
         }
+    } else {
+        # If applyUpdates is enabled but there's only 1 computer, or applyUpdates is not enabled, proceed without confirmation
+        $script:ApplyUpdatesConfirmed = $true
     }
 
     # Populate ManualRebootQueue and PendingQueue
