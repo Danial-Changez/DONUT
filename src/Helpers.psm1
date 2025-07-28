@@ -1,3 +1,5 @@
+Import-Module (Join-Path $PSScriptRoot 'Read-Config.psm1') -Force
+
 # Sets placeholder text and logic for a TextBox control.
 # - Shows placeholder when empty.
 # - Handles focus events to clear or restore placeholder.
@@ -69,25 +71,6 @@ Function Show-HeaderPanel {
     if ($headerLogs) { $headerLogs.Visibility = $logsVisibility }
 }
 
-# Returns the enabled command in the config
-Function Get-EnabledConfigCommand {
-    param($homeView)
-    $configPath = Join-Path $PSScriptRoot '..\config.txt'
-    $enabledCmd = $null
-    if (Test-Path $configPath) {
-        $configLines = Get-Content $configPath
-        foreach ($line in $configLines) {
-            if ($line -notmatch '^-') {
-                if ($line -match '^\s*(?<cmd>\w+)\s*=\s*enable') {
-                    $enabledCmd = $matches['cmd']
-                    break
-                }
-            }
-        }
-    }
-    return $enabledCmd
-}
-
 # Adds all resource dictionaries from the Styles folder to the window.
 Function Add-ResourceDictionaries {
     param(
@@ -118,8 +101,15 @@ Function Add-ResourceDictionaries {
 # - Reads config.txt to determine which command is enabled.
 # - Sets the button label accordingly in the HomeView.
 Function Update-SearchButtonLabel {
-    param($homeView)
-    $enabledCmd = Get-EnabledConfigCommand -homeView $homeView
+    param(
+        $homeView,
+        [string]$configPath
+    )
+    $enabledCmd = $null
+    if (Test-Path $configPath) {
+        $cfg = Read-Config -configPath $configPath
+        $enabledCmd = $cfg.EnabledCmdOption
+    }
     $viewMap = @{
         "Scan"                        = "scan"
         "Apply Updates"               = "applyUpdates"

@@ -1,10 +1,22 @@
 ﻿Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "Read-Config.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ConfigView.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "Helpers.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ImportXaml.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "LogsView.psm1")
+
+# Define config path at script level for consistency
+$script:configPath = Join-Path $PSScriptRoot '..\config.txt'
+
+# Initialize global state hashtable for config view persistence
+if (-not $Global:ConfigViewStates) { $Global:ConfigViewStates = @{} }
+
+# Track the last selected config option for state management
+$script:LastSelectedConfigOption = $null
+$script:LastSelectedComboBoxOption = $null
+$script:ConfigPageFirstLoad = $true
 
 if (-not $script:ManualRebootQueue) { $script:ManualRebootQueue = [hashtable]::Synchronized(@{}) }
 if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = [System.Collections.Generic.List[object]]::new() }
@@ -102,10 +114,11 @@ $script:StartNextRunspace = {
 # - Updates the file and prepares the computer queue.
 # - Handles config flags and applyUpdates confirmation popup.
 Function Update-WSIDFile {
-    param(
-        [System.Windows.Controls.TextBox]$textBox,
-        [string]$wsidFilePath
-    )
+param(
+    [System.Windows.Controls.TextBox]$textBox,
+    [string]$wsidFilePath,
+    [string]$configPath
+)
     # Ensure the TextBox reference is valid
     if ($null -eq $textBox) {
         Write-Host "TextBox reference is null. Ensure 'GoogleSearchBar' exists in the XAML."
@@ -124,40 +137,29 @@ Function Update-WSIDFile {
     Select-Object -Unique
     Set-Content -Path $wsidFilePath -Value $valid
 
-    # Read throttleLimit from config.txt
-    $configPath = Join-Path $PSScriptRoot '..\config.txt'
-    $script:throttleLimit = 5
-    if (Test-Path $configPath) {
-        $configLines = Get-Content $configPath | Where-Object { $_ -match 'throttleLimit' }
-        if ($configLines) {
-            $line = $configLines -replace '[\r\n ]', ''
-            if ($line -match 'throttleLimit=(\d+)') {
-                $script:throttleLimit = [int]$matches[1]
-            }
+    $config = $null
+    try {
+        if (Test-Path $script:configPath) {
+            $config = Read-Config -configPath $script:configPath
+        } else {
+            Write-Warning "Config file not found"
         }
+    } catch {
+        Write-Warning "Error reading config file: $_"
     }
+
+    # Set throttleLimit from config
+    $script:throttleLimit = if ($config -and $config.throttleLimit) { $config.throttleLimit } else { 5 }
     $tabs = $script:HomeView.FindName('TerminalTabs')
 
     # Prepare queue of computers to process, and only append new computers, do not reset existing tabs/queues
-    $configPath = Join-Path $PSScriptRoot '..\config.txt'
     $needsManualReboot = $false
     $flagPresent = $false
     $applyUpdatesEnabled = $false
-    if (Test-Path $configPath) {
-        $configLines = Get-Content $configPath
-        foreach ($line in $configLines) {
-            if ($line -match 'reboot') { $flagPresent = $true }
-            if ($line -match 'forceRestart') { $flagPresent = $true }
-            if (($line -match 'reboot\s*=\s*false' -or $line -match 'forceRestart\s*=\s*false' -or $line -match '-\s*reboot\s*=\s*$' -or $line -match '-\s*forceRestart\s*=\s*$')) {
-                $needsManualReboot = $true
-            }
-            if ($line -match '^applyUpdates\s*=\s*enable') {
-                $applyUpdatesEnabled = $true
-            }
-        }
-    }
-    else {
-        Write-Warning "Config file not found"
+    if ($config) {
+        if ($config.reboot -or $config.forceRestart) { $flagPresent = $true }
+        if (($config.reboot -eq $false) -or ($config.forceRestart -eq $false)) { $needsManualReboot = $true }
+        if ($config.applyUpdates -eq 'enable') { $applyUpdatesEnabled = $true }
     }
 
     # If applyUpdates is enabled, show a single confirmation popup for all computers
@@ -568,7 +570,7 @@ Function Initialize-HomeView {
         Write-Host "Failed to load HomeView.xaml."
         return
     }    
-    Update-SearchButtonLabel $script:HomeView
+    Update-SearchButtonLabel $script:HomeView $script:configPath
 
     # Initialize the search bar
     $script:SearchBar = $script:HomeView.FindName('GoogleSearchBar')
@@ -587,7 +589,8 @@ Function Initialize-HomeView {
         $searchButton.Add_Click({
                 $bar = $script:HomeView.FindName('GoogleSearchBar')
                 $wsidFilePath = Join-Path $PSScriptRoot "..\res\WSID.txt"
-                Update-WSIDFile $bar $wsidFilePath
+                # Pass only configPath for maintainability
+                Update-WSIDFile $bar $wsidFilePath $script:configPath
             })
     }
     else {
@@ -657,7 +660,7 @@ Function Update-HomeView {
         Initialize-SearchBar $searchBar
         Set-PlaceholderLogic $searchBar "WSID..."
     }
-    Update-SearchButtonLabel $script:HomeView
+    Update-SearchButtonLabel $script:HomeView $script:configPath
 }
 
 # Custom maximize/restore logic for the main window.
@@ -863,6 +866,25 @@ if ($contentControl) {
 
 if ($btnHome) {
     $btnHome.Add_Checked({
+            # Save config state when leaving config page
+            if ($script:LastSelectedConfigOption -and $script:ConfigViewInstance) {
+                $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionsContent')
+                if ($optionContent -and $optionContent.Content) {
+                    Save-ConfigViewState -commandKey $script:LastSelectedConfigOption -childView $optionContent.Content
+                }
+                
+                # Update the combo box selection to reflect what the user was last viewing
+                $mainCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
+                if ($mainCombo -and $mainCombo.SelectedItem) {
+                    $selectedText = if ($mainCombo.SelectedItem -is [System.Windows.Controls.ComboBoxItem]) { 
+                        $mainCombo.SelectedItem.Content 
+                    } else { 
+                        $mainCombo.SelectedItem.ToString() 
+                    }
+                    $script:LastSelectedComboBoxOption = $selectedText
+                }
+            }
+            
             if (-not $script:HomeView) {
                 Initialize-HomeView
             }
@@ -875,11 +897,11 @@ if ($btnConfig) {
     $btnConfig.Add_Checked({
         # Use a local variable for the config view instance
         $configViewInstance = $script:ConfigViewInstance
-        $firstLoad = $false
+        $isFirstTimeLoad = $false
         if (-not $configViewInstance) {
             $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
             $script:ConfigViewInstance = $configViewInstance
-            $firstLoad = $true
+            $isFirstTimeLoad = $true
         }
 
         $contentControl.Content = $configViewInstance
@@ -897,8 +919,16 @@ if ($btnConfig) {
                 if (-not $optionContent) {
                     return
                 }
+                
+                # Save current view state before switching if there's already content
+                if ($optionContent.Content -and $script:LastSelectedConfigOption) {
+                    $currentView = $optionContent.Content
+                    Save-ConfigViewState -commandKey $script:LastSelectedConfigOption -childView $currentView
+                }
+                
                 if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
                     $optionContent.Content = $null
+                    $script:LastSelectedConfigOption = $null
                     return
                 }
 
@@ -913,24 +943,86 @@ if ($btnConfig) {
                     "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
                     "Custom Notification"         = "CustomNotification.xaml"
                 }
+                $commandMap = @{
+                    "Scan"                        = "scan"
+                    "Apply Updates"               = "applyUpdates"
+                    "Configure"                   = "configure"
+                    "Driver Install"              = "driverInstall"
+                    "Version"                     = "version"
+                    "Help"                        = "help"
+                    "Generate Encrypted Password" = "generateEncryptedPassword"
+                    "Custom Notification"         = "customnotification"
+                }
+                
                 $file = $viewMap[$selected]
+                $commandKey = $commandMap[$selected]
+                
                 if ($file) {
                     $childView = Import-XamlView "..\Views\Config Options\$file"
                     if ($childView) {
                         $optionContent.Content = $childView
+                        $script:LastSelectedConfigOption = $commandKey
+                        
+                        # Determine loading strategy:
+                        # 1. If we have state in memory, use it (user has been here before in this session)
+                        # 2. If first load and this is the enabled command, load from config file
+                        # 3. Otherwise, leave controls at default values
+                        
+                        if ($Global:ConfigViewStates.ContainsKey($commandKey)) {
+                            # We have memory state - restore it
+                            Restore-ConfigViewState -commandKey $commandKey -childView $childView
+                        }
+                        else {
+                            # No memory state - check if we should load from config file
+                            $shouldLoadFromConfig = $false
+                            
+                            # Load from config file if this is the enabled command and we're on first load
+                            if ($script:ConfigPageFirstLoad -and (Test-Path $script:configPath)) {
+                                $cfg = Read-Config -configPath $script:configPath
+                                if ($cfg.EnabledCmdOption -eq $commandKey) {
+                                    $shouldLoadFromConfig = $true
+                                }
+                            }
+                            
+                            if ($shouldLoadFromConfig) {
+                                Get-ConfigFromFile -commandKey $commandKey -childView $childView -configPath $script:configPath
+                            }
+                            # If not loading from config, controls will remain at their default values
+                        }
+                        
+                        # Always ensure throttleLimit is loaded from config for every view (global setting)
+                        if (Test-Path $script:configPath) {
+                            $cfg = Read-Config -configPath $script:configPath
+                            if ($cfg.ThrottleLimit) {
+                                $throttleBox = $null
+                                try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
+                                if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox') {
+                                    $throttleBox.Text = $cfg.ThrottleLimit
+                                }
+                            }
+                        }
                     }
                     else {
                         $optionContent.Content = $null
+                        $script:LastSelectedConfigOption = $null
                         Write-Host "Failed to load child view: $file" -ForegroundColor Red
                     }
                 }
                 else {
                     $optionContent.Content = $null
+                    $script:LastSelectedConfigOption = $null
                 }
             }
 
-            # Always read enabled command from config and set ComboBox accordingly
-            $enabledCmd = Get-EnabledConfigCommand
+            # Always read enabled command from config and set ComboBox accordingly - but only on first load
+            $enabledCmd = $null
+            $shouldLoadEnabledFromConfig = $script:ConfigPageFirstLoad
+            
+            if ($shouldLoadEnabledFromConfig -and (Test-Path $script:configPath)) {
+                $cfg = Read-Config -configPath $script:configPath
+                $enabledCmd = $cfg.EnabledCmdOption
+            }
+            
             $viewMapCmd = @{
                 "Scan"                        = "scan"
                 "Apply Updates"               = "applyUpdates"
@@ -941,10 +1033,21 @@ if ($btnConfig) {
                 "Generate Encrypted Password" = "generateEncryptedPassword"
                 "Custom Notification"         = "customnotification"
             }
+            
             $selectedKey = $null
-            foreach ($k in $viewMapCmd.Keys) {
-                if ($viewMapCmd[$k] -eq $enabledCmd) { $selectedKey = $k; break }
+            
+            # Determine which option to select
+            if ($shouldLoadEnabledFromConfig -and $enabledCmd) {
+                # First load - use config file
+                foreach ($k in $viewMapCmd.Keys) {
+                    if ($viewMapCmd[$k] -eq $enabledCmd) { $selectedKey = $k; break }
+                }
             }
+            elseif ($script:LastSelectedComboBoxOption) {
+                # Returning to config page - use last selected option
+                $selectedKey = $script:LastSelectedComboBoxOption
+            }
+            
             if ($selectedKey) {
                 # Set ComboBox to the enabled command
                 for ($i = 0; $i -lt $mainCommandCombo.Items.Count; $i++) {
@@ -955,13 +1058,20 @@ if ($btnConfig) {
                         break
                     }
                 }
+                $script:LastSelectedComboBoxOption = $selectedKey
                 & $SetConfigOptionView $optionContent $selectedKey
+                
+                # After first load, mark as no longer first time
+                if ($script:ConfigPageFirstLoad) {
+                    $script:ConfigPageFirstLoad = $false
+                }
             } else {
                 # Fallback to first item if no match
                 if ($mainCommandCombo.Items.Count -gt 0) {
                     $mainCommandCombo.SelectedIndex = 0
                     $sel = $mainCommandCombo.Items[0]
                     $selText = if ($sel -is [System.Windows.Controls.ComboBoxItem]) { $sel.Content } else { $sel.ToString() }
+                    $script:LastSelectedComboBoxOption = $selText
                     & $SetConfigOptionView $optionContent $selText
                 }
             }
@@ -982,6 +1092,10 @@ if ($btnConfig) {
                 else {
                     $sel = $mainCommandCombo.Text
                 }
+                
+                # Update the last selected combo box option
+                $script:LastSelectedComboBoxOption = $sel
+                
                 $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
                 if ($currentOptionContent) {
                     & $SetConfigOptionView $currentOptionContent $sel
@@ -1016,13 +1130,32 @@ if ($btnConfig) {
                         $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
                         $childView = $null
                         if ($optionContent) { $childView = $optionContent.Content }
-                        Save-ConfigFromUI -selectedKey $selectedKey -ContentControl $contentControl -childView $childView
+                        Save-ConfigFromUI -selectedKey $selectedKey -ContentControl $contentControl -childView $childView -configPath $script:configPath
                     })
             }
         })
 }
 if ($btnLogs) {
     $btnLogs.Add_Checked({
+            # Save config state when leaving config page
+            if ($script:LastSelectedConfigOption -and $script:ConfigViewInstance) {
+                $optionContent = $script:ConfigViewInstance.FindName('ConfigOptionsContent')
+                if ($optionContent -and $optionContent.Content) {
+                    Save-ConfigViewState -commandKey $script:LastSelectedConfigOption -childView $optionContent.Content
+                }
+                
+                # Update the combo box selection to reflect what the user was last viewing
+                $mainCombo = $script:ConfigViewInstance.FindName('MainCommandComboBox')
+                if ($mainCombo -and $mainCombo.SelectedItem) {
+                    $selectedText = if ($mainCombo.SelectedItem -is [System.Windows.Controls.ComboBoxItem]) { 
+                        $mainCombo.SelectedItem.Content 
+                    } else { 
+                        $mainCombo.SelectedItem.ToString() 
+                    }
+                    $script:LastSelectedComboBoxOption = $selectedText
+                }
+            }
+            
             Show-HeaderPanel "Collapsed" "Collapsed" "Visible" $headerHome $headerConfig $headerLogs
             $script:LogsViewInstance = Show-LogsView -contentControl $contentControl
         })

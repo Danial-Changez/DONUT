@@ -1,75 +1,56 @@
-# Global hashtable for in-memory persistent view states
-if (-not $Global:ConfigViewStates) {
-    $Global:ConfigViewStates = @{}
-}
+Import-Module (Join-Path $PSScriptRoot 'Read-Config.psm1') -Force
 
 # Loads config.txt and pre-fills all controls in the child view for the given command
 Function Get-ConfigFromFile {
-    param(
-        [string]$commandKey,
-        [System.Windows.FrameworkElement]$childView,
-        $config
-    )
+param(
+    [string]$commandKey,
+    [System.Windows.FrameworkElement]$childView,
+    [string]$configPath
+)
+    if (-not (Test-Path $configPath)) { return }
+    $cfg = Read-Config -configPath $configPath
     
-    $configPath = Join-Path $PSScriptRoot '../config.txt'
-    if (-not (Test-Path $configPath)) { 
-        return
-    }
+    # Prefill controls from Args for the current command
+    $multiCheckboxGroups = @('updateSeverity', 'updateType', 'updateDeviceCategory')
     
-    $lines = Get-Content $configPath
-    $config = @{}
-    foreach ($line in $lines) {
-        if ($line -match '^-\\s*(\\w+)\\s*=\\s*(.*)$') {
-            $name = $matches[1]
-            $val = $matches[2]
-            $config[$name] = $val
-        }
-        elseif ($line -match '^throttleLimit\\s*=\\s*(\\d+)$') {
-            $config['throttleLimit'] = $matches[1]
-        }
-    }
-    # Only prefill controls for the enabled command's child view
-    $enabledCmd = $config.EnabledCmdOption
-    if ($enabledCmd -and $enabledCmd -ne $commandKey) { return }
-    # Prefill controls
-    foreach ($key in $config.Keys) {
+    foreach ($key in $cfg.Args.Keys) {
         $ctrl = $null
         try { $ctrl = $childView.FindName($key) } catch {}
         if (-not $ctrl) { continue }
-        if ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
-            $ctrl.Text = $config[$key]
+        
+        # Handle multi-checkbox groups (StackPanels containing multiple checkboxes)
+        if ($key -in $multiCheckboxGroups -and $ctrl -is [System.Windows.Controls.Panel]) {
+            $values = if ($cfg.Args[$key]) { $cfg.Args[$key] -split ',' | ForEach-Object { $_.Trim() } } else { @() }
+            foreach ($child in $ctrl.Children) {
+                if ($child -is [System.Windows.Controls.CheckBox]) {
+                    $child.IsChecked = $child.Content.ToString() -in $values
+                }
+            }
+        }
+        # Handle individual controls
+        elseif ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
+            $ctrl.Text = $cfg.Args[$key]
         }
         elseif ($ctrl.PSObject.TypeNames[0] -match 'ComboBox') {
             foreach ($item in $ctrl.Items) {
                 $content = $item
                 if ($item -is [System.Windows.Controls.ComboBoxItem]) { $content = $item.Content }
-                if ($content -eq $config[$key]) {
+                if ($content -eq $cfg.Args[$key]) {
                     $ctrl.SelectedItem = $item
                     break
                 }
             }
         }
         elseif ($ctrl.PSObject.TypeNames[0] -match 'ToggleButton|CheckBox') {
-            $ctrl.IsChecked = ($config[$key] -eq 'enable')
-        }
-        elseif ($ctrl.Children) {
-            # Multi-checkbox panel
-            foreach ($c in $ctrl.Children) {
-                if ($c -is [System.Windows.Controls.CheckBox]) {
-                    $c.IsChecked = $false
-                    if ($config[$key] -and $config[$key] -match $c.Content) {
-                        $c.IsChecked = $true
-                    }
-                }
-            }
+            $ctrl.IsChecked = ($cfg.Args[$key] -eq 'enable')
         }
     }
     # Prefill throttleLimit if present
-    if ($config.ContainsKey('throttleLimit')) {
+    if ($cfg.ThrottleLimit) {
         $throttleBox = $null
         try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
         if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox') {
-            $throttleBox.Text = $config['throttleLimit']
+            $throttleBox.Text = $cfg.ThrottleLimit
         }
     }
 }
@@ -81,8 +62,54 @@ Function Save-ConfigViewState {
         [System.Windows.FrameworkElement]$childView
     )
     $state = @{}
-    foreach ($ctrl in $childView.Children) {
-        if ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
+    
+    # Recursively find all named controls
+    function Get-AllControls {
+        param([System.Windows.FrameworkElement]$parent)
+        $controls = @()
+        
+        if ($parent.Name -and -not [string]::IsNullOrWhiteSpace($parent.Name)) {
+            $controls += $parent
+        }
+        
+        # Handle different container types
+        if ($parent -is [System.Windows.Controls.Panel]) {
+            foreach ($child in $parent.Children) {
+                if ($child -is [System.Windows.FrameworkElement]) {
+                    $controls += Get-AllControls $child
+                }
+            }
+        }
+        elseif ($parent -is [System.Windows.Controls.ContentControl] -and $parent.Content -is [System.Windows.FrameworkElement]) {
+            $controls += Get-AllControls $parent.Content
+        }
+        elseif ($parent -is [System.Windows.Controls.ScrollViewer] -and $parent.Content -is [System.Windows.FrameworkElement]) {
+            $controls += Get-AllControls $parent.Content
+        }
+        
+        return $controls
+    }
+    
+    $allControls = Get-AllControls $childView
+    
+    # Special handling for multi-checkbox groups
+    $multiCheckboxGroups = @('updateSeverity', 'updateType', 'updateDeviceCategory')
+    
+    foreach ($ctrl in $allControls) {
+        if (-not $ctrl.Name -or [string]::IsNullOrWhiteSpace($ctrl.Name)) { continue }
+        
+        # Handle multi-checkbox groups (StackPanels containing multiple checkboxes)
+        if ($ctrl.Name -in $multiCheckboxGroups -and $ctrl -is [System.Windows.Controls.Panel]) {
+            $checkedItems = @()
+            foreach ($child in $ctrl.Children) {
+                if ($child -is [System.Windows.Controls.CheckBox] -and $child.IsChecked) {
+                    $checkedItems += $child.Content.ToString()
+                }
+            }
+            $state[$ctrl.Name] = $checkedItems
+        }
+        # Handle individual controls
+        elseif ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
             $state[$ctrl.Name] = $ctrl.Text
         }
         elseif ($ctrl.PSObject.TypeNames[0] -match 'ComboBox') {
@@ -93,14 +120,8 @@ Function Save-ConfigViewState {
         elseif ($ctrl.PSObject.TypeNames[0] -match 'ToggleButton|CheckBox') {
             $state[$ctrl.Name] = $ctrl.IsChecked
         }
-        elseif ($ctrl.Children) {
-            foreach ($c in $ctrl.Children) {
-                if ($c -is [System.Windows.Controls.CheckBox]) {
-                    $state[$c.Name] = $c.IsChecked
-                }
-            }
-        }
     }
+    
     $Global:ConfigViewStates[$commandKey] = $state
 }
 
@@ -110,13 +131,42 @@ Function Restore-ConfigViewState {
         [string]$commandKey,
         [System.Windows.FrameworkElement]$childView
     )
-    if (-not $Global:ConfigViewStates.ContainsKey($commandKey)) { return }
+    if (-not $Global:ConfigViewStates.ContainsKey($commandKey)) { 
+        return 
+    }
+    
     $state = $Global:ConfigViewStates[$commandKey]
+    
+    # Special handling for multi-checkbox groups
+    $multiCheckboxGroups = @('updateSeverity', 'updateType', 'updateDeviceCategory')
+    
     foreach ($key in $state.Keys) {
         $ctrl = $null
         try { $ctrl = $childView.FindName($key) } catch {}
-        if (-not $ctrl) { continue }
-        if ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
+        if (-not $ctrl) { 
+            continue 
+        }
+        
+        # Handle multi-checkbox groups (StackPanels containing multiple checkboxes)
+        if ($key -in $multiCheckboxGroups -and $ctrl -is [System.Windows.Controls.Panel]) {
+            $checkedItems = $state[$key]
+            if ($checkedItems -is [Array]) {
+                # First, uncheck all checkboxes in this group
+                foreach ($child in $ctrl.Children) {
+                    if ($child -is [System.Windows.Controls.CheckBox]) {
+                        $child.IsChecked = $false
+                    }
+                }
+                # Then, check the ones that should be checked
+                foreach ($child in $ctrl.Children) {
+                    if ($child -is [System.Windows.Controls.CheckBox] -and $child.Content.ToString() -in $checkedItems) {
+                        $child.IsChecked = $true
+                    }
+                }
+            }
+        }
+        # Handle individual controls
+        elseif ($ctrl.PSObject.TypeNames[0] -match 'TextBox') {
             $ctrl.Text = $state[$key]
         }
         elseif ($ctrl.PSObject.TypeNames[0] -match 'ComboBox') {
@@ -133,16 +183,6 @@ Function Restore-ConfigViewState {
             $ctrl.IsChecked = $state[$key]
         }
     }
-    # Multi-checkboxes
-    foreach ($ctrl in $childView.Children) {
-        if ($ctrl.Children) {
-            foreach ($c in $ctrl.Children) {
-                if ($c -is [System.Windows.Controls.CheckBox] -and $state.ContainsKey($c.Name)) {
-                    $c.IsChecked = $state[$c.Name]
-                }
-            }
-        }
-    }
 }
 # Saves the current configuration from the UI to config.txt.
 # - Reads all relevant controls from the child view for the selected command.
@@ -153,7 +193,8 @@ Function Save-ConfigFromUI {
     param(
         [string]$selectedKey,
         [System.Windows.Controls.ContentControl]$contentControl,
-        [System.Windows.FrameworkElement]$childView
+        [System.Windows.FrameworkElement]$childView,
+        [string]$configPath
     )
     # Command and option tables
     $MAIN_COMMANDS = @("scan", "applyUpdates", "configure", "customnotification", "driverInstall", "generateEncryptedPassword", "help", "version")
@@ -251,7 +292,6 @@ Function Save-ConfigFromUI {
     }
     
     # Write to config.txt and preserve any existing script options at the end
-    $configPath = Join-Path $PSScriptRoot '../config.txt'
     if (Test-Path $configPath) {
         $scriptLines = Get-Content $configPath | Where-Object { $_ -match '^[a-zA-Z]+\s*=\s*\d+$' -and ($_ -notmatch '^(scan|applyupdates|configure|customnotification|driverinstall|generateencryptedpassword|help|version|throttleLimit)\s*=') }
         foreach ($g in $scriptLines) { $lines += $g }
