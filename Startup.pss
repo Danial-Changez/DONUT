@@ -19,6 +19,7 @@ function Main {
 #>
 	Param ([String]$Commandline)
 	# Ensure all scripts run with bypassed execution policy for this process
+	$ErrorActionPreference = 'SilentlyContinue'
 	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 		
 	# Get the directory of the current script or host

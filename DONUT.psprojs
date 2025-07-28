@@ -11,5 +11,6 @@
     <File>Startup.pss</File>
     <File>src\MainWindow.ps1</File>
     <File>src\remoteDCU.ps1</File>
+    <File>src\Updater.ps1</File>
   </OpenFiles>
 </ProjectState>
