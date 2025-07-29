@@ -67,7 +67,7 @@ $processComputer = {
             $ip = [System.Net.Dns]::GetHostAddresses("$computer")[0]
         }
         catch {
-            Write-Warning "[$computer] DNS lookup failed: $_"
+            Write-Error "[$computer] DNS lookup failed: $_"
             Add-Content -Path $using:localLogFile -Value "[$computer] DNS lookup failed: $_"
             return
         }
@@ -78,7 +78,7 @@ $processComputer = {
             $resolvedName = $hostEntry.HostName.Split('.')[0]
         
             if ($resolvedName -ne $computer) {
-                Write-Warning "[$computer] Reverse-DNS returned '$resolvedName' (expected '$computer'), skipping..."
+                Write-Error "[$computer] Reverse-DNS returned '$resolvedName' (expected '$computer'), skipping..."
                 Add-Content -Path $using:localLogFile -Value "[$computer] Incorrect reverse-DNS: $resolvedName"
                 return
             }
@@ -86,18 +86,18 @@ $processComputer = {
         catch [System.Net.Sockets.SocketException] {
             # 1722 is RPC SERVER UNAVAILABLE
             if ($_.Exception.ErrorCode -eq 1722) {
-                Write-Warning "[$computer] RPC Server unavailable, skipping..."
+                Write-Error "[$computer] RPC Server unavailable, skipping..."
                 Add-Content -Path $using:localLogFile -Value "[$computer] RPC server unavailable"
                 return
             }
             else { 
-                Write-Warning "[$computer] SocketException during reverse-DNS: $_"
+                Write-Error "[$computer] SocketException during reverse-DNS: $_"
                 Add-Content -Path $using:localLogFile -Value "[$computer] SocketException: $_"
                 return
             }
         }
         catch {
-            Write-Warning "[$computer] Unexpected error during reverse-DNS: $_"
+            Write-Error "[$computer] Unexpected error during reverse-DNS: $_"
             Add-Content -Path $using:localLogFile -Value "[$computer] Reverse-DNS error: $_"
             return
         }
@@ -125,7 +125,7 @@ $processComputer = {
         }
     }
     catch {
-        Write-Warning "[$computer] $($_.Exception.Message), skipping..."
+        Write-Error "[$computer] $($_.Exception.Message), skipping..."
         Add-Content -Path $($using:localLogFile) -Value "[$computer] $_"
         return
     }
@@ -185,11 +185,11 @@ $processComputer = {
                 Set-Content -Path $tempReport -Value $reportContent
                 Write-Host "`nReport file for $computer copied to $tempReport`n"
             } else {
-                Write-Warning "`n[$computer] No XML report file found in $remoteReportFolder`n"
+                Write-Error "`n[$computer] No XML report file found in $remoteReportFolder`n"
                 Set-Content -Path $tempReport -Value "[$computer] No XML report file found."
             }
         } catch {
-            Write-Warning "`n[$computer] Could not find/copy XML report file in $($remoteReportFolder): $_`n"
+            Write-Error "`n[$computer] Could not find/copy XML report file in $($remoteReportFolder): $_`n"
             Set-Content -Path $tempReport -Value "[$computer] Failed to retrieve remote XML report: $_"
         }
     }
@@ -208,11 +208,8 @@ foreach ($computer in $hostNames) {
             Remove-Item -Path $perHostLog -Force
         }
         catch {
-            Write-Warning "[$computer] Error consolidating log file: $_"
+            Write-Error "[$computer] Error consolidating log file: $_"
             Add-Content -Path $localLogFile -Value "[$computer] Error consolidating log file: $_"
         }
-    } else {
-        Write-Warning "[$computer] No individual log found, skipping."
-        Add-Content -Path $localLogFile -Value "[$computer] No log generated (skipped)."
     }
 }
