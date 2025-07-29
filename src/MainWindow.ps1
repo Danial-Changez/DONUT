@@ -18,14 +18,15 @@ $script:LastSelectedConfigOption = $null
 $script:LastSelectedComboBoxOption = $null
 $script:ConfigPageFirstLoad = $true
 
-if (-not $script:ManualRebootQueue) { $script:ManualRebootQueue = [hashtable]::Synchronized(@{}) }
-if (-not $script:ActiveRunspaces) { $script:ActiveRunspaces = [System.Collections.Generic.List[object]]::new() }
-if (-not $script:RunspaceJobs) { $script:RunspaceJobs = @{} }
-if (-not $script:QueuedOrRunning) { $script:QueuedOrRunning = @{} }
-if (-not $script:PendingQueue) { $script:PendingQueue = [System.Collections.Queue]::new() }
-if (-not $script:TabsMap) { $script:TabsMap = @{} }
-if (-not $script:SyncUI) { $script:SyncUI = [hashtable]::Synchronized(@{}) }
-if (-not $script:RebootDetection) { $script:RebootDetection = @{} }
+$script:ManualRebootQueue = [hashtable]::Synchronized(@{})
+$script:ActiveRunspaces = [System.Collections.Generic.List[object]]::new()
+$script:RunspaceJobs = @{}
+$script:QueuedOrRunning = @{}
+$script:PendingQueue = [System.Collections.Queue]::new()
+$script:TabsMap = @{}
+$script:SyncUI = [hashtable]::Synchronized(@{})
+$script:PopupData = [hashtable]::Synchronized(@{})
+$script:RebootDetection = @{}
 
 # Script block to start a new PowerShell runspace for remote execution.
 # - Dequeues the next computer from the pending queue.
@@ -44,17 +45,205 @@ $script:StartNextRunspace = {
 
     # Used AbsPath as at the time with IO.Path lib, as it was the only parameter being accepted as full path for $ps.AddScript 
     $remoteDCUPathAbs = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'remoteDCU.ps1'))
-    
+    $enabled = (Read-Config -configPath $script:configPath).EnabledCmdOption
+
     # Create Runspace
     $ps = [PowerShell]::Create()
+    
+    # Single script that handles both phases sequentially
     $ps.AddScript({
-            param($hostName, $scriptPath, $queue, $tb)
+            param($hostName, $scriptPath, $queue, $tb, $configPath, $isApplyUpdates, $popupDataSync)
+        
             if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
                 $queue.Enqueue("ERROR: remoteDCU.ps1 path is invalid or missing.") | Out-Null
                 return
             }
+        
+            if ($isApplyUpdates) {
+                # PHASE 1: Preliminary scan
+                $queue.Enqueue("Starting preliminary scan for $hostName...") | Out-Null
+            
+                # Save original config
+                $originalConfig = ""
+                if (Test-Path $configPath) {
+                    $originalConfig = Get-Content $configPath -Raw
+                }
+            
+                # Create scan configuration (proper format)
+                $scanConfig = @"
+scan = enable
+- report = C:\temp\DONUT
+- updateDeviceCategory = Audio,Video,Network,Storage,Input,Chipset,Others
+throttleLimit = 5
+"@
+            
+                try {
+                    # Write scan config temporarily
+                    Set-Content -Path $configPath -Value $scanConfig -Force
+                
+                    # Run scan - suppress stdout, only capture stderr
+                    $psi = New-Object System.Diagnostics.ProcessStartInfo(
+                        'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
+                    )
+                    $psi.RedirectStandardOutput = $true
+                    $psi.RedirectStandardError = $true
+                    $psi.UseShellExecute = $false
+                    $psi.CreateNoWindow = $true
 
-            # Cmd to run remoteDCU.ps1 with the computer name
+                    $proc = [System.Diagnostics.Process]::new()
+                    $proc.StartInfo = $psi
+                    $proc.Start() | Out-Null
+                
+                    # Capture ALL stdout for testing - detect critical errors
+                    $criticalErrorDetected = $false
+                    while (-not $proc.StandardOutput.EndOfStream) { 
+                        $line = $proc.StandardOutput.ReadLine()
+                        $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
+                        
+                        # Check for critical connection errors that should abort
+                        if ($cleanLine -match "SocketException during reverse-DNS: No such host is known|Access is denied|The network path was not found|RPC server is unavailable|Write-Error") {
+                            $criticalErrorDetected = $true
+                            $queue.Enqueue("$cleanLine") | Out-Null
+                        }
+                    }
+                
+                    # Capture ALL stderr for testing - no filtering
+                    while (-not $proc.StandardError.EndOfStream) { 
+                        $line = $proc.StandardError.ReadLine()
+                        $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
+                        
+                        if ($cleanLine -notmatch 'Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on|pwsh exited on' -and $cleanLine -match '\S') {
+                            $criticalErrorDetected = $true
+                            $queue.Enqueue("[STDERR] $cleanLine") | Out-Null
+                        }
+                    }
+                
+                    $proc.WaitForExit()
+                
+                    # If critical error detected, abort and don't proceed to Phase 2
+                    if ($criticalErrorDetected) {
+                        $queue.Enqueue("Aborting due to critical connection error - cannot reach $hostName") | Out-Null
+                        return
+                    }
+                
+                    # Wait for report file to be copied back and parse it
+                    $reportsDir = [System.IO.Path]::GetDirectoryName($configPath) + "\reports"
+                    $reportPath = "$reportsDir\$hostName.xml"
+                    $reportFound = $false
+                    $updatesAvailable = $false
+                    $updatesList = @()
+
+                    while (-not $reportFound) {
+                        Start-Sleep -Seconds 1
+                    
+                        if (Test-Path $reportPath) {
+                            $reportInfo = Get-Item $reportPath
+                            if ((Get-Date) - $reportInfo.LastWriteTime -lt [TimeSpan]::FromMinutes(2)) {
+                                $reportFound = $true
+                            
+                                # Parse report contents
+                                try {
+                                    [xml]$reportXml = Get-Content $reportPath
+                                    $updates = $reportXml.SelectNodes("//update")
+                                
+                                    if ($updates.Count -gt 0) {
+                                        $updatesAvailable = $true
+                                        $queue.Enqueue("Found $($updates.Count) applicable updates for $($hostName):") | Out-Null
+                                        foreach ($update in $updates) {
+                                            $name = if ($update.name) { $update.name } else { "Unknown Name" }
+                                            $type = if ($update.type) { $update.type } else { "Unknown Type" }
+                                            $category = if ($update.category) { $update.category } else { "Unknown Category" }
+                                            $version = if ($update.version) { $update.version } else { "Unknown Version" }
+                                            $updateInfo = "$name, $version (latest) - $type - $category"
+                                            $updatesList += $updateInfo
+                                            $queue.Enqueue(" - $updateInfo") | Out-Null
+                                        }
+                                        
+                                        # Copy updates list to clipboard
+                                        try {
+                                            $clipboardText = "DONUT returned $($updates.Count) applicable updates for $($hostName):`n"
+                                            foreach ($updateItem in $updatesList) {
+                                                $clipboardText += "- $updateItem`n"
+                                            }
+                                            Set-Clipboard -Value $clipboardText
+                                            $queue.Enqueue("Updates list copied to clipboard.") | Out-Null
+                                        }
+                                        catch {
+                                            $queue.Enqueue("Failed to copy to clipboard: $($_.Exception.Message)") | Out-Null
+                                        }
+                                    }
+                                    else {
+                                        $queue.Enqueue("System is up to date - no updates available.") | Out-Null
+                                    }
+                                }
+                                catch {
+                                    $queue.Enqueue("Report generated but could not parse contents: $($_.Exception.Message)") | Out-Null
+                                }
+                            }
+                        }
+                    }
+                                
+                    # If updates are available, show confirmation popup
+                    if ($updatesAvailable -and $updatesList.Count -gt 0) {
+                        $userConfirmed = $false
+                        $confirmationEvent = [System.Threading.ManualResetEventSlim]::new($false)
+                    
+                        # Store popup data in synchronized hashtable accessible to both runspace and UI thread
+                        $popupDataSync[$hostName] = @{
+                            Type          = 'ShowUpdateConfirmation'
+                            ComputerName  = $hostName
+                            Updates       = $updatesList
+                            SyncEvent     = $confirmationEvent
+                            UserConfirmed = [ref]$userConfirmed
+                        }
+                        
+                        # Signal UI thread that popup data is ready
+                        $queue.Enqueue("SHOW_UPDATE_CONFIRMATION:$hostName") | Out-Null
+                    
+                        # Wait for user response
+                        $confirmationEvent.Wait()
+                        $confirmationEvent.Dispose()
+                    
+                        # Clean up report file after user response
+                        try {
+                            if (Test-Path $reportPath) {
+                                Remove-Item $reportPath -Force
+                            }
+                        }
+                        catch {
+                            $queue.Enqueue("Warning: Could not delete report file: $($_.Exception.Message)") | Out-Null
+                        }
+                    
+                        if (-not $userConfirmed) {
+                            $queue.Enqueue("User cancelled update installation - skipping apply updates phase.") | Out-Null
+                            return  # Skip the apply updates phase
+                        }
+                        else {
+                            $queue.Enqueue("User confirmed - proceeding with update installation...") | Out-Null
+                        }
+                    }
+                    elseif (-not $updatesAvailable) {
+                        # No updates available, skip apply phase
+                        return
+                    }
+                
+                }
+                finally {
+                    # Restore original config
+                    if ($originalConfig) {
+                        Set-Content -Path $configPath -Value $originalConfig -Force
+                    }
+                }
+            
+                $queue.Enqueue("Scan complete!") | Out-Null
+            }
+        
+            # PHASE 2: Normal execution (runs after scan for applyUpdates, or immediately for other commands)
+            if ($isApplyUpdates) {
+                $queue.Enqueue("Starting apply updates for $hostName...") | Out-Null
+            }
+        
+            # Run normal remoteDCU.ps1 execution with full output capture
             $psi = New-Object System.Diagnostics.ProcessStartInfo(
                 'pwsh', "-NoProfile -NoLogo -File `"$scriptPath`" -ComputerName $hostName"
             )
@@ -72,7 +261,7 @@ $script:StartNextRunspace = {
             $stderr = $proc.StandardError
             $lastErrorLine = $null
 
-            # Read output and error streams
+            # Read output and error streams normally
             while (-not $stdout.EndOfStream) {
                 $line = $stdout.ReadLine()
                 $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
@@ -83,10 +272,11 @@ $script:StartNextRunspace = {
                     $queue.Enqueue($cleanLine) | Out-Null
                 }
             }
+            # Capture ALL stderr for testing - no filtering
             while (-not $stderr.EndOfStream) {
                 $line = $stderr.ReadLine()
                 $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
-                # Exclude unwanted lines
+                
                 if ($cleanLine -notmatch 'Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on' -and $cleanLine -match '\S') {
                     $queue.Enqueue($cleanLine) | Out-Null
                 }
@@ -96,7 +286,8 @@ $script:StartNextRunspace = {
             if ($lastErrorLine) {
                 $queue.Enqueue("Final status: $lastErrorLine") | Out-Null
             }
-        }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb)
+        
+        }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb).AddArgument($script:configPath).AddArgument($enabled -eq "applyUpdates").AddArgument($script:PopupData)
 
     # Start the PowerShell runspace asynchronously
     $async = $ps.BeginInvoke()
@@ -114,11 +305,11 @@ $script:StartNextRunspace = {
 # - Updates the file and prepares the computer queue.
 # - Handles config flags and applyUpdates confirmation popup.
 Function Update-WSIDFile {
-param(
-    [System.Windows.Controls.TextBox]$textBox,
-    [string]$wsidFilePath,
-    [string]$configPath
-)
+    param(
+        [System.Windows.Controls.TextBox]$textBox,
+        [string]$wsidFilePath,
+        [string]$configPath
+    )
     # Ensure the TextBox reference is valid
     if ($null -eq $textBox) {
         Write-Host "TextBox reference is null. Ensure 'GoogleSearchBar' exists in the XAML."
@@ -144,10 +335,12 @@ param(
     try {
         if (Test-Path $script:configPath) {
             $config = Read-Config -configPath $script:configPath
-        } else {
+        }
+        else {
             Write-Warning "Config file not found"
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Error reading config file: $_"
     }
 
@@ -246,7 +439,8 @@ param(
             }
             return
         }
-    } else {
+    }
+    else {
         # If applyUpdates is enabled but there's only 1 computer, or applyUpdates is not enabled, proceed without confirmation
         $script:ApplyUpdatesConfirmed = $true
     }
@@ -307,8 +501,104 @@ param(
                     $deq = $queue.TryDequeue([ref]$line)
                     if (-not $deq) { break }
 
+                    # Check for special popup trigger message
+                    if ($line.StartsWith('SHOW_UPDATE_CONFIRMATION:')) {
+                        $computerName = $line.Substring('SHOW_UPDATE_CONFIRMATION:'.Length)
+                        $popupData = $script:PopupData[$computerName]
+                        
+                        if ($popupData) {
+                            $popup = Import-XamlView "..\Views\Confirmation.xaml"
+                            if ($popup) {
+                                $popupWin = $popup
+
+                                # Set popup size to 200% scale (H320, W800)
+                                $popupWin.Height = 320
+                                $popupWin.Width = 800
+                                
+                                # Merge all style dictionaries from Styles folder
+                                Add-ResourceDictionaries -window $popupWin
+                            
+                            # Configure popup for update confirmation (reusing Confirmation.xaml)
+                            $popupHeader = $popupWin.FindName('popupHeader')
+                            if ($popupHeader) {
+                                $popupHeader.Text = "Confirm Update Installation"
+                            }
+                            
+                            # Configure the sub-header for computer name
+                            $popupSubHeader = $popupWin.FindName('popupSubHeader')
+                            if ($popupSubHeader) {
+                                $popupSubHeader.Text = "Found $($popupData.Updates.Count) applicable updates for $($popupData.ComputerName):"
+                            }
+                            
+                            # Populate the updates list
+                            $computerListBox = $popupWin.FindName('popupComputerList')
+                            if ($computerListBox) {
+                                $computerListBox.Items.Clear()
+                                foreach ($update in $popupData.Updates) {
+                                    $null = $computerListBox.Items.Add($update)
+                                }
+                            }
+                            
+                            # Configure buttons for update confirmation
+                            $continueBtn = $popupWin.FindName('btnContinue')
+                            $abortBtn = $popupWin.FindName('btnAbort')
+                            
+                            if ($continueBtn) {
+                                $continueBtn.Content = "Install"
+                                $continueBtn.Add_Click({
+                                    $popupData.UserConfirmed.Value = $true
+                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                    try { $popupWin.Close() } catch {}
+                                })
+                            }
+                            
+                            if ($abortBtn) {
+                                $abortBtn.Content = "Cancel"
+                                $abortBtn.Add_Click({
+                                    $popupData.UserConfirmed.Value = $false
+                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                    try { $popupWin.Close() } catch {}
+                                })
+                            }
+                            
+                            # Wire control bar drag, minimize, and close for popup
+                            $panelBar = $popupWin.FindName('panelControlBar')
+                            $minBtn = $popupWin.FindName('btnMinimize')
+                            $closeBtn = $popupWin.FindName('btnClose')
+                            if ($panelBar) {
+                                $panelBar.Add_MouseLeftButtonDown({
+                                    if ($null -ne $popupWin) {
+                                        try { $popupWin.DragMove() } catch {}
+                                    }
+                                })
+                            }
+                            if ($minBtn) {
+                                $minBtn.Add_Click({
+                                    if ($null -ne $popupWin) {
+                                        try { $popupWin.WindowState = 'Minimized' } catch {}
+                                    }
+                                })
+                            }
+                            if ($closeBtn) {
+                                $closeBtn.Add_Click({
+                                    $popupData.UserConfirmed.Value = $false
+                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                    if ($null -ne $popupWin) {
+                                        try { $popupWin.Close() } catch {}
+                                    }
+                                })
+                            }
+                            
+                            # Show the popup dialog
+                            $null = $popupWin.ShowDialog()
+                            
+                            # Clean up popup data after dialog closes
+                            $script:PopupData.Remove($computerName)
+                            }
+                        }
+                    }
                     # Show Update.xaml confirmation popup for applyUpdates
-                    if ($line -is [hashtable] -and $line.Type -eq 'ShowApplyUpdatesPopup') {
+                    elseif ($line -is [hashtable] -and $line.Type -eq 'ShowApplyUpdatesPopup') {
                         $popup = Import-XamlView "..\Views\Update.xaml"
                         if ($popup) {
                             $popupWin = $popup
@@ -348,7 +638,8 @@ param(
                             $blockText = $null
                             if ($firstBlock -is [System.Windows.Documents.Paragraph]) {
                                 $blockText = ($firstBlock.Inlines | ForEach-Object { $_.Text }) -join ''
-                            } else {
+                            }
+                            else {
                                 $blockText = $firstBlock.ToString()
                             }
                             if ([string]::IsNullOrWhiteSpace($blockText) -and $tb.Document.Blocks.Count -le 2) {
@@ -884,7 +1175,8 @@ if ($btnHome) {
                 if ($mainCombo -and $mainCombo.SelectedItem) {
                     $selectedText = if ($mainCombo.SelectedItem -is [System.Windows.Controls.ComboBoxItem]) { 
                         $mainCombo.SelectedItem.Content 
-                    } else { 
+                    }
+                    else { 
                         $mainCombo.SelectedItem.ToString() 
                     }
                     $script:LastSelectedComboBoxOption = $selectedText
@@ -901,55 +1193,135 @@ if ($btnHome) {
 }
 if ($btnConfig) {
     $btnConfig.Add_Checked({
-        # Use a local variable for the config view instance
-        $configViewInstance = $script:ConfigViewInstance
-        $isFirstTimeLoad = $false
-        if (-not $configViewInstance) {
-            $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
-            $script:ConfigViewInstance = $configViewInstance
-            $isFirstTimeLoad = $true
-        }
+            # Use a local variable for the config view instance
+            $configViewInstance = $script:ConfigViewInstance
+            $isFirstTimeLoad = $false
+            if (-not $configViewInstance) {
+                $configViewInstance = Import-XamlView "..\Views\ConfigView.xaml"
+                $script:ConfigViewInstance = $configViewInstance
+                $isFirstTimeLoad = $true
+            }
 
-        $contentControl.Content = $configViewInstance
-        Show-HeaderPanel "Collapsed" "Visible" "Collapsed" $headerHome $headerConfig $headerLogs
+            $contentControl.Content = $configViewInstance
+            Show-HeaderPanel "Collapsed" "Visible" "Collapsed" $headerHome $headerConfig $headerLogs
 
-        $mainCommandCombo = $configViewInstance.FindName('MainCommandComboBox')
-        $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
+            $mainCommandCombo = $configViewInstance.FindName('MainCommandComboBox')
+            $optionContent = $configViewInstance.FindName('ConfigOptionsContent')
 
-        if ($mainCommandCombo -and $optionContent) {
-            $SetConfigOptionView = {
-                param(
-                    [System.Windows.Controls.ContentControl]$optionContent,
-                    [string]$selected
-                )
-                if (-not $optionContent) {
-                    return
-                }
+            if ($mainCommandCombo -and $optionContent) {
+                $SetConfigOptionView = {
+                    param(
+                        [System.Windows.Controls.ContentControl]$optionContent,
+                        [string]$selected
+                    )
+                    if (-not $optionContent) {
+                        return
+                    }
                 
-                # Save current view state before switching if there's already content
-                if ($optionContent.Content -and $script:LastSelectedConfigOption) {
-                    $currentView = $optionContent.Content
-                    Save-ConfigViewState -commandKey $script:LastSelectedConfigOption -childView $currentView
-                }
+                    # Save current view state before switching if there's already content
+                    if ($optionContent.Content -and $script:LastSelectedConfigOption) {
+                        $currentView = $optionContent.Content
+                        Save-ConfigViewState -commandKey $script:LastSelectedConfigOption -childView $currentView
+                    }
                 
-                if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
-                    $optionContent.Content = $null
-                    $script:LastSelectedConfigOption = $null
-                    return
+                    if (-not $selected -or [string]::IsNullOrWhiteSpace($selected)) {
+                        $optionContent.Content = $null
+                        $script:LastSelectedConfigOption = $null
+                        return
+                    }
+
+                    # Map selected option to corresponding XAML view file (some commented out in the xaml after leadership discussion)
+                    $viewMap = @{
+                        "Scan"                        = "Scan.xaml"
+                        "Apply Updates"               = "ApplyUpdates.xaml"
+                        "Configure"                   = "Configure.xaml"
+                        "Driver Install"              = "DriverInstall.xaml"
+                        "Version"                     = "Version.xaml"
+                        "Help"                        = "Help.xaml"
+                        "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
+                        "Custom Notification"         = "CustomNotification.xaml"
+                    }
+                    $commandMap = @{
+                        "Scan"                        = "scan"
+                        "Apply Updates"               = "applyUpdates"
+                        "Configure"                   = "configure"
+                        "Driver Install"              = "driverInstall"
+                        "Version"                     = "version"
+                        "Help"                        = "help"
+                        "Generate Encrypted Password" = "generateEncryptedPassword"
+                        "Custom Notification"         = "customnotification"
+                    }
+                
+                    $file = $viewMap[$selected]
+                    $commandKey = $commandMap[$selected]
+                
+                    if ($file) {
+                        $childView = Import-XamlView "..\Views\Config Options\$file"
+                        if ($childView) {
+                            $optionContent.Content = $childView
+                            $script:LastSelectedConfigOption = $commandKey
+                        
+                            # Determine loading strategy:
+                            # 1. If we have state in memory, use it (user has been here before in this session)
+                            # 2. If first load and this is the enabled command, load from config file
+                            # 3. Otherwise, leave controls at default values
+                        
+                            if ($Global:ConfigViewStates.ContainsKey($commandKey)) {
+                                # We have memory state - restore it
+                                Restore-ConfigViewState -commandKey $commandKey -childView $childView
+                            }
+                            else {
+                                # No memory state - check if we should load from config file
+                                $shouldLoadFromConfig = $false
+                            
+                                # Load from config file if this is the enabled command and we're on first load
+                                if ($script:ConfigPageFirstLoad -and (Test-Path $script:configPath)) {
+                                    $cfg = Read-Config -configPath $script:configPath
+                                    if ($cfg.EnabledCmdOption -eq $commandKey) {
+                                        $shouldLoadFromConfig = $true
+                                    }
+                                }
+                            
+                                if ($shouldLoadFromConfig) {
+                                    Get-ConfigFromFile -commandKey $commandKey -childView $childView -configPath $script:configPath
+                                }
+                                # If not loading from config, controls will remain at their default values
+                            }
+                        
+                            # Always ensure throttleLimit is loaded from config for every view (global setting)
+                            if (Test-Path $script:configPath) {
+                                $cfg = Read-Config -configPath $script:configPath
+                                if ($cfg.ThrottleLimit) {
+                                    $throttleBox = $null
+                                    try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
+                                    if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox') {
+                                        $throttleBox.Text = $cfg.ThrottleLimit
+                                    }
+                                }
+                            }
+                        }
+                        else {
+                            $optionContent.Content = $null
+                            $script:LastSelectedConfigOption = $null
+                            Write-Host "Failed to load child view: $file" -ForegroundColor Red
+                        }
+                    }
+                    else {
+                        $optionContent.Content = $null
+                        $script:LastSelectedConfigOption = $null
+                    }
                 }
 
-                # Map selected option to corresponding XAML view file (some commented out in the xaml after leadership discussion)
-                $viewMap = @{
-                    "Scan"                        = "Scan.xaml"
-                    "Apply Updates"               = "ApplyUpdates.xaml"
-                    "Configure"                   = "Configure.xaml"
-                    "Driver Install"              = "DriverInstall.xaml"
-                    "Version"                     = "Version.xaml"
-                    "Help"                        = "Help.xaml"
-                    "Generate Encrypted Password" = "GenerateEncryptedPassword.xaml"
-                    "Custom Notification"         = "CustomNotification.xaml"
+                # Always read enabled command from config and set ComboBox accordingly - but only on first load
+                $enabledCmd = $null
+                $shouldLoadEnabledFromConfig = $script:ConfigPageFirstLoad
+            
+                if ($shouldLoadEnabledFromConfig -and (Test-Path $script:configPath)) {
+                    $cfg = Read-Config -configPath $script:configPath
+                    $enabledCmd = $cfg.EnabledCmdOption
                 }
-                $commandMap = @{
+            
+                $viewMapCmd = @{
                     "Scan"                        = "scan"
                     "Apply Updates"               = "applyUpdates"
                     "Configure"                   = "configure"
@@ -959,155 +1331,76 @@ if ($btnConfig) {
                     "Generate Encrypted Password" = "generateEncryptedPassword"
                     "Custom Notification"         = "customnotification"
                 }
-                
-                $file = $viewMap[$selected]
-                $commandKey = $commandMap[$selected]
-                
-                if ($file) {
-                    $childView = Import-XamlView "..\Views\Config Options\$file"
-                    if ($childView) {
-                        $optionContent.Content = $childView
-                        $script:LastSelectedConfigOption = $commandKey
-                        
-                        # Determine loading strategy:
-                        # 1. If we have state in memory, use it (user has been here before in this session)
-                        # 2. If first load and this is the enabled command, load from config file
-                        # 3. Otherwise, leave controls at default values
-                        
-                        if ($Global:ConfigViewStates.ContainsKey($commandKey)) {
-                            # We have memory state - restore it
-                            Restore-ConfigViewState -commandKey $commandKey -childView $childView
-                        }
-                        else {
-                            # No memory state - check if we should load from config file
-                            $shouldLoadFromConfig = $false
-                            
-                            # Load from config file if this is the enabled command and we're on first load
-                            if ($script:ConfigPageFirstLoad -and (Test-Path $script:configPath)) {
-                                $cfg = Read-Config -configPath $script:configPath
-                                if ($cfg.EnabledCmdOption -eq $commandKey) {
-                                    $shouldLoadFromConfig = $true
-                                }
-                            }
-                            
-                            if ($shouldLoadFromConfig) {
-                                Get-ConfigFromFile -commandKey $commandKey -childView $childView -configPath $script:configPath
-                            }
-                            # If not loading from config, controls will remain at their default values
-                        }
-                        
-                        # Always ensure throttleLimit is loaded from config for every view (global setting)
-                        if (Test-Path $script:configPath) {
-                            $cfg = Read-Config -configPath $script:configPath
-                            if ($cfg.ThrottleLimit) {
-                                $throttleBox = $null
-                                try { $throttleBox = $childView.FindName('throttleLimit') } catch {}
-                                if ($throttleBox -and $throttleBox.PSObject.TypeNames[0] -match 'TextBox') {
-                                    $throttleBox.Text = $cfg.ThrottleLimit
-                                }
-                            }
+            
+                $selectedKey = $null
+            
+                # Determine which option to select
+                if ($shouldLoadEnabledFromConfig -and $enabledCmd) {
+                    # First load - use config file
+                    foreach ($k in $viewMapCmd.Keys) {
+                        if ($viewMapCmd[$k] -eq $enabledCmd) { $selectedKey = $k; break }
+                    }
+                }
+                elseif ($script:LastSelectedComboBoxOption) {
+                    # Returning to config page - use last selected option
+                    $selectedKey = $script:LastSelectedComboBoxOption
+                }
+            
+                if ($selectedKey) {
+                    # Set ComboBox to the enabled command
+                    for ($i = 0; $i -lt $mainCommandCombo.Items.Count; $i++) {
+                        $item = $mainCommandCombo.Items[$i]
+                        $itemText = if ($item -is [System.Windows.Controls.ComboBoxItem]) { $item.Content } else { $item.ToString() }
+                        if ($itemText -eq $selectedKey) {
+                            $mainCommandCombo.SelectedIndex = $i
+                            break
                         }
                     }
-                    else {
-                        $optionContent.Content = $null
-                        $script:LastSelectedConfigOption = $null
-                        Write-Host "Failed to load child view: $file" -ForegroundColor Red
+                    $script:LastSelectedComboBoxOption = $selectedKey
+                    & $SetConfigOptionView $optionContent $selectedKey
+                
+                    # After first load, mark as no longer first time
+                    if ($script:ConfigPageFirstLoad) {
+                        $script:ConfigPageFirstLoad = $false
                     }
                 }
                 else {
-                    $optionContent.Content = $null
-                    $script:LastSelectedConfigOption = $null
+                    # Fallback to first item if no match
+                    if ($mainCommandCombo.Items.Count -gt 0) {
+                        $mainCommandCombo.SelectedIndex = 0
+                        $sel = $mainCommandCombo.Items[0]
+                        $selText = if ($sel -is [System.Windows.Controls.ComboBoxItem]) { $sel.Content } else { $sel.ToString() }
+                        $script:LastSelectedComboBoxOption = $selText
+                        & $SetConfigOptionView $optionContent $selText
+                    }
                 }
-            }
 
-            # Always read enabled command from config and set ComboBox accordingly - but only on first load
-            $enabledCmd = $null
-            $shouldLoadEnabledFromConfig = $script:ConfigPageFirstLoad
-            
-            if ($shouldLoadEnabledFromConfig -and (Test-Path $script:configPath)) {
-                $cfg = Read-Config -configPath $script:configPath
-                $enabledCmd = $cfg.EnabledCmdOption
-            }
-            
-            $viewMapCmd = @{
-                "Scan"                        = "scan"
-                "Apply Updates"               = "applyUpdates"
-                "Configure"                   = "configure"
-                "Driver Install"              = "driverInstall"
-                "Version"                     = "version"
-                "Help"                        = "help"
-                "Generate Encrypted Password" = "generateEncryptedPassword"
-                "Custom Notification"         = "customnotification"
-            }
-            
-            $selectedKey = $null
-            
-            # Determine which option to select
-            if ($shouldLoadEnabledFromConfig -and $enabledCmd) {
-                # First load - use config file
-                foreach ($k in $viewMapCmd.Keys) {
-                    if ($viewMapCmd[$k] -eq $enabledCmd) { $selectedKey = $k; break }
-                }
-            }
-            elseif ($script:LastSelectedComboBoxOption) {
-                # Returning to config page - use last selected option
-                $selectedKey = $script:LastSelectedComboBoxOption
-            }
-            
-            if ($selectedKey) {
-                # Set ComboBox to the enabled command
-                for ($i = 0; $i -lt $mainCommandCombo.Items.Count; $i++) {
-                    $item = $mainCommandCombo.Items[$i]
-                    $itemText = if ($item -is [System.Windows.Controls.ComboBoxItem]) { $item.Content } else { $item.ToString() }
-                    if ($itemText -eq $selectedKey) {
-                        $mainCommandCombo.SelectedIndex = $i
-                        break
-                    }
-                }
-                $script:LastSelectedComboBoxOption = $selectedKey
-                & $SetConfigOptionView $optionContent $selectedKey
+                # Remove any previous SelectionChanged handlers before adding a new one
+                $null = $mainCommandCombo.Remove_SelectionChanged
+                $mainCommandCombo.Add_SelectionChanged(({
+                            $selEventArgs = $args[1]
+                            if ($selEventArgs.AddedItems.Count -gt 0) {
+                                $selItem = $selEventArgs.AddedItems[0]
+                                if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
+                                    $sel = $selItem.Content
+                                }
+                                else {
+                                    $sel = $selItem.ToString()
+                                }
+                            }
+                            else {
+                                $sel = $mainCommandCombo.Text
+                            }
                 
-                # After first load, mark as no longer first time
-                if ($script:ConfigPageFirstLoad) {
-                    $script:ConfigPageFirstLoad = $false
-                }
-            } else {
-                # Fallback to first item if no match
-                if ($mainCommandCombo.Items.Count -gt 0) {
-                    $mainCommandCombo.SelectedIndex = 0
-                    $sel = $mainCommandCombo.Items[0]
-                    $selText = if ($sel -is [System.Windows.Controls.ComboBoxItem]) { $sel.Content } else { $sel.ToString() }
-                    $script:LastSelectedComboBoxOption = $selText
-                    & $SetConfigOptionView $optionContent $selText
-                }
+                            # Update the last selected combo box option
+                            $script:LastSelectedComboBoxOption = $sel
+                
+                            $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
+                            if ($currentOptionContent) {
+                                & $SetConfigOptionView $currentOptionContent $sel
+                            }
+                        }).GetNewClosure())
             }
-
-            # Remove any previous SelectionChanged handlers before adding a new one
-            $null = $mainCommandCombo.Remove_SelectionChanged
-            $mainCommandCombo.Add_SelectionChanged(({
-                $selEventArgs = $args[1]
-                if ($selEventArgs.AddedItems.Count -gt 0) {
-                    $selItem = $selEventArgs.AddedItems[0]
-                    if ($selItem -is [System.Windows.Controls.ComboBoxItem]) {
-                        $sel = $selItem.Content
-                    }
-                    else {
-                        $sel = $selItem.ToString()
-                    }
-                }
-                else {
-                    $sel = $mainCommandCombo.Text
-                }
-                
-                # Update the last selected combo box option
-                $script:LastSelectedComboBoxOption = $sel
-                
-                $currentOptionContent = $configViewInstance.FindName('ConfigOptionsContent')
-                if ($currentOptionContent) {
-                    & $SetConfigOptionView $currentOptionContent $sel
-                }
-            }).GetNewClosure())
-        }
 
             # Wire up Save button in ConfigView
             $saveBtn = $configViewInstance.FindName('btnSaveConfig')
@@ -1155,7 +1448,8 @@ if ($btnLogs) {
                 if ($mainCombo -and $mainCombo.SelectedItem) {
                     $selectedText = if ($mainCombo.SelectedItem -is [System.Windows.Controls.ComboBoxItem]) { 
                         $mainCombo.SelectedItem.Content 
-                    } else { 
+                    }
+                    else { 
                         $mainCombo.SelectedItem.ToString() 
                     }
                     $script:LastSelectedComboBoxOption = $selectedText
