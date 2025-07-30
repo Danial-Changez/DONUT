@@ -86,7 +86,7 @@
                                 VerticalAlignment="Top"
                                 HorizontalAlignment="Center">
                         <TextBlock x:Name="popupHeader"
-                                   Text="All Done!"
+                                   Text="All Current Jobs Complete!"
                                    Foreground="{DynamicResource TitleTextPrimary}"
                                    FontSize="24"
                                    FontWeight="Bold"
