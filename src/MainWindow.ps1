@@ -114,7 +114,7 @@ throttleLimit = 5
                         
                         if ($cleanLine -notmatch 'Connecting to|Starting PSEXESVC|Copying authentication key|Connecting with PsExec service|Starting pwsh on|pwsh exited on' -and $cleanLine -match '\S') {
                             $criticalErrorDetected = $true
-                            $queue.Enqueue("[STDERR] $cleanLine") | Out-Null
+                            $queue.Enqueue("$cleanLine") | Out-Null
                         }
                     }
                 
@@ -132,6 +132,7 @@ throttleLimit = 5
                     $reportFound = $false
                     $updatesAvailable = $false
                     $updatesList = @()
+                    $clipboardUpdatesList = @()
 
                     while (-not $reportFound) {
                         Start-Sleep -Seconds 1
@@ -146,6 +147,224 @@ throttleLimit = 5
                                     [xml]$reportXml = Get-Content $reportPath
                                     $updates = $reportXml.SelectNodes("//update")
                                 
+                                    # Get current system drivers and info for comparison
+                                    $systemInfo = Invoke-Command -ComputerName $hostName -ScriptBlock {
+                                        $bios = Get-CimInstance -Class Win32_BIOS | Select-Object SMBIOSBIOSVersion, Manufacturer
+                                        $allDrivers = Get-CimInstance -Class Win32_PnPSignedDriver | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass
+                                        
+                                        $audio = $allDrivers | Where-Object { $_.DeviceClass -eq "MEDIA" }
+                                        $network = $allDrivers | Where-Object { $_.DeviceClass -in @("NET", "NETWORK", "Bluetooth") }
+                                        $video = $allDrivers | Where-Object { $_.DeviceClass -eq "DISPLAY" }
+                                        
+                                        return @{
+                                            BIOS = $bios
+                                            Audio = $audio
+                                            Network = $network
+                                            Video = $video
+                                        }
+                                    }
+                                    
+                                    # Extract the individual collections
+                                    $biosInfo = $systemInfo.BIOS
+                                    $audioDrivers = $systemInfo.Audio
+                                    $networkDrivers = $systemInfo.Network
+                                    $videoDrivers = $systemInfo.Video
+
+                                    # Function to check if version formats match exactly (same digit pattern)
+                                    Function Test-VersionFormatMatch {
+                                        param([string]$Version1, [string]$Version2)
+                                        
+                                        $v1Parts = $Version1 -split '\.'
+                                        $v2Parts = $Version2 -split '\.'
+                                        
+                                        # Must have same number of segments
+                                        if ($v1Parts.Count -ne $v2Parts.Count) { return $false }
+                                        
+                                        # Each segment must have same number of digits
+                                        for ($i = 0; $i -lt $v1Parts.Count; $i++) {
+                                            if ($v1Parts[$i].Length -ne $v2Parts[$i].Length) { return $false }
+                                        }
+                                        
+                                        return $true
+                                    }
+
+                                    # Function to filter drivers by version compatibility with XML updates
+                                    Function Get-DriversByVersion {
+                                        param(
+                                            [array]$Drivers,
+                                            [array]$Updates,
+                                            [string]$Category
+                                        )
+                                        
+                                        $filteredDrivers = @()
+                                        
+                                        foreach ($driver in $Drivers) {
+                                            $hasValidUpdate = $false
+                                            
+                                            # Check if this driver has any compatible updates
+                                            foreach ($update in $Updates) {
+                                                $updateCategory = if ($update.category) { $update.category } else { "Unknown Category" }
+                                                $updateVersion = if ($update.version) { $update.version } else { "Unknown Version" }
+                                                $updateName = if ($update.name) { $update.name } else { "Unknown Name" }
+                                                
+                                                # Check if update matches this category and manufacturer
+                                                $categoryMatch = $false
+                                                switch ($Category) {
+                                                    "Audio" { $categoryMatch = $updateCategory -in @("Audio", "MEDIA") }
+                                                    "Network" { $categoryMatch = $updateCategory -in @("Network", "NET", "Docks/Stands") }
+                                                    "Video" { $categoryMatch = $updateCategory -in @("Video", "DISPLAY") }
+                                                }
+                                                
+                                                if ($categoryMatch) {
+                                                    # Use brand arrays for matching
+                                                    $brands = @{
+                                                        'Audio' = @('Realtek', 'Intel', 'AMD', 'NVIDIA', 'Conexant', 'IDT', 'VIA', 'Creative', 'SoundMAX')
+                                                        'Network' = @('Realtek', 'Intel', 'Broadcom', 'Qualcomm', 'Marvell', 'Killer', 'MediaTek', 'Ralink', 'Microsoft', 'Bluetooth', 'USB', 'GbE', 'Ethernet')
+                                                        'Video' = @('NVIDIA', 'AMD', 'Intel', 'ATI', 'Radeon', 'GeForce', 'UHD', 'Iris', 'Xe')
+                                                    }
+                                                    
+                                                    $manufacturerMatch = $false
+                                                    
+                                                    # Check if update name matches any brand for this category
+                                                    if ($brands.ContainsKey($Category)) {
+                                                        foreach ($brand in $brands[$Category]) {
+                                                            if ($updateName -match [regex]::Escape($brand)) {
+                                                                $manufacturerMatch = $true
+                                                                break
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    if ($manufacturerMatch) {
+                                                        # Check version compatibility - be more lenient with version format matching
+                                                        if ($driver.DriverVersion -ne "Unknown" -and $updateVersion -ne "Unknown Version") {
+                                                            # Try version comparison without strict format matching first
+                                                            try {
+                                                                $currentVersionObj = [System.Version]$driver.DriverVersion
+                                                                $xmlVersionObj = [System.Version]$updateVersion
+                                                                
+                                                                # XML version should be same or newer than current
+                                                                if ($xmlVersionObj -ge $currentVersionObj) {
+                                                                    $hasValidUpdate = $true
+                                                                    break
+                                                                }
+                                                            }
+                                                            catch {
+                                                                # If direct version comparison fails, try format matching
+                                                                if (Test-VersionFormatMatch -Version1 $driver.DriverVersion -Version2 $updateVersion) {
+                                                                    try {
+                                                                        $currentVersionObj = [System.Version]$driver.DriverVersion
+                                                                        $xmlVersionObj = [System.Version]$updateVersion
+                                                                        
+                                                                        # XML version should be same or newer than current
+                                                                        if ($xmlVersionObj -ge $currentVersionObj) {
+                                                                            $hasValidUpdate = $true
+                                                                            break
+                                                                        }
+                                                                    }
+                                                                    catch {}
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            # Only include drivers that have valid updates
+                                            if ($hasValidUpdate) {
+                                                $filteredDrivers += $driver
+                                            }
+                                        }
+                                        
+                                        return $filteredDrivers
+                                    }
+
+                                    # Pre-filter drivers based on version compatibility with updates
+                                    $audioDrivers = Get-DriversByVersion -Drivers $audioDrivers -Updates $updates -Category "Audio"
+                                    $networkDrivers = Get-DriversByVersion -Drivers $networkDrivers -Updates $updates -Category "Network"
+                                    $videoDrivers = Get-DriversByVersion -Drivers $videoDrivers -Updates $updates -Category "Video"
+
+                                    # Function to find best matching driver based on brand arrays
+                                    Function Find-BestDriverMatch {
+                                        param(
+                                            [string]$UpdateName,
+                                            [array]$SystemDrivers,
+                                            [string]$Category
+                                        )
+                                        
+                                        # Define brand arrays for matching
+                                        $brands = @{
+                                            'Audio' = @('Realtek', 'Intel', 'AMD', 'NVIDIA', 'Conexant', 'IDT', 'VIA', 'Creative', 'SoundMAX')
+                                            'Network' = @('Realtek', 'Intel', 'Broadcom', 'Qualcomm', 'Marvell', 'Killer', 'MediaTek', 'Ralink', 'Microsoft', 'Bluetooth', 'USB', 'GbE', 'Ethernet')
+                                            'Video' = @('NVIDIA', 'AMD', 'Intel', 'ATI', 'Radeon', 'GeForce', 'UHD', 'Iris', 'Xe')
+                                        }
+                                        
+                                        $bestMatch = $null
+                                        $highestScore = 0
+                                        
+                                        foreach ($driver in $SystemDrivers) {
+                                            $score = 0
+                                            
+                                            # Check which brand the update belongs to
+                                            $updateBrand = ""
+                                            if ($brands.ContainsKey($Category)) {
+                                                foreach ($brand in $brands[$Category]) {
+                                                    if ($UpdateName -match [regex]::Escape($brand)) {
+                                                        $updateBrand = $brand
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                            
+                                            # Check if driver matches the same brand
+                                            $driverBrandMatch = $false
+                                            if ($updateBrand -ne "" -and $brands.ContainsKey($Category)) {
+                                                foreach ($brand in $brands[$Category]) {
+                                                    if ($driver.DeviceName -match [regex]::Escape($brand)) {
+                                                        if ($brand -eq $updateBrand) {
+                                                            $driverBrandMatch = $true
+                                                            break
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if ($driverBrandMatch) {
+                                                $score += 10  # High score for brand match
+                                                
+                                                # Special handling for Bluetooth - give extra score for Bluetooth-specific matching
+                                                if ($UpdateName -match "Bluetooth" -and $driver.DeviceName -match "Bluetooth") {
+                                                    $score += 20  # Extra high score for Bluetooth-to-Bluetooth match
+                                                }
+                                                elseif ($UpdateName -match "Bluetooth" -and $driver.DeviceName -notmatch "Bluetooth") {
+                                                    $score -= 5   # Penalize Bluetooth update matching non-Bluetooth driver
+                                                }
+                                                elseif ($UpdateName -notmatch "Bluetooth" -and $driver.DeviceName -match "Bluetooth") {
+                                                    $score -= 5   # Penalize non-Bluetooth update matching Bluetooth driver
+                                                }
+                                                
+                                                # Additional keyword matching for better precision
+                                                $updateWords = $UpdateName -split '\s+|[-_]' | Where-Object { $_.Length -gt 2 }
+                                                $deviceWords = $driver.DeviceName -split '\s+|[-_]' | Where-Object { $_.Length -gt 2 }
+                                                
+                                                foreach ($updateWord in $updateWords) {
+                                                    foreach ($deviceWord in $deviceWords) {
+                                                        if ($updateWord -like "*$deviceWord*" -or $deviceWord -like "*$updateWord*") {
+                                                            $score += 0.5
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                if ($score -gt $highestScore) {
+                                                    $highestScore = $score
+                                                    $bestMatch = $driver
+                                                }
+                                            }
+                                        }
+                                        
+                                        return $bestMatch
+                                    }
+
                                     if ($updates.Count -gt 0) {
                                         $updatesAvailable = $true
                                         $queue.Enqueue("Found $($updates.Count) applicable updates for $($hostName):") | Out-Null
@@ -154,15 +373,50 @@ throttleLimit = 5
                                             $type = if ($update.type) { $update.type } else { "Unknown Type" }
                                             $category = if ($update.category) { $update.category } else { "Unknown Category" }
                                             $version = if ($update.version) { $update.version } else { "Unknown Version" }
+                                            
+                                            # Try to match with current system drivers for comparison
+                                            $currentVersion = "Unknown"
+                                            $matchedDriver = $null
+                                            
+                                            switch ($category) {
+                                                { $_ -in @("Audio", "MEDIA") } {
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $audioDrivers -Category "Audio"
+                                                }
+                                                { $_ -in @("Network", "NET", "Docks/Stands") } {
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $networkDrivers -Category "Network"
+                                                }
+                                                { $_ -in @("Video", "DISPLAY") } {
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $videoDrivers -Category "Video"
+                                                }
+                                                "BIOS" {
+                                                    $currentVersion = $biosInfo.SMBIOSBIOSVersion
+                                                }
+                                            }
+                                            
+                                            # Set current version from matched driver if found
+                                            if ($matchedDriver) {
+                                                $currentVersion = $matchedDriver.DriverVersion
+                                            }
+                                                                                        
                                             $updateInfo = "$name, $version (latest) - $type - $category"
+                                            $clipboardUpdateInfo = "$name, $version (latest)"
+                                            if ($currentVersion -ne "Unknown") {
+                                                $updateInfo = "$name, $currentVersion -> $version - $type - $category"
+                                                $clipboardUpdateInfo = "$name, $currentVersion -> $version"
+                                            }
                                             $updatesList += $updateInfo
+                                            $clipboardUpdatesList += $clipboardUpdateInfo
                                             $queue.Enqueue(" - $updateInfo") | Out-Null
+                                            
+                                            if ($matchedDriver) {
+                                                $queue.Enqueue("  - Matched: $($matchedDriver.DeviceName) (Current: $currentVersion)") | Out-Null
+                                            }
                                         }
                                         
                                         # Copy updates list to clipboard
                                         try {
-                                            $clipboardText = "DONUT returned $($updates.Count) applicable updates for $($hostName):`n"
-                                            foreach ($updateItem in $updatesList) {
+                                            $clipboardText = "Scanned in DONUT, found and installed the following $($updates.Count) updates on $($hostName)`n"
+                                            foreach ($updateItem in $clipboardUpdatesList) {
                                                 $clipboardText += "- $updateItem`n"
                                             }
                                             Set-Clipboard -Value $clipboardText
@@ -511,89 +765,89 @@ Function Update-WSIDFile {
                             if ($popup) {
                                 $popupWin = $popup
 
-                                # Set popup size to 200% scale (H320, W800)
+                                # Custom window scaling (H320, W800)
                                 $popupWin.Height = 320
                                 $popupWin.Width = 800
                                 
                                 # Merge all style dictionaries from Styles folder
                                 Add-ResourceDictionaries -window $popupWin
                             
-                            # Configure popup for update confirmation (reusing Confirmation.xaml)
-                            $popupHeader = $popupWin.FindName('popupHeader')
-                            if ($popupHeader) {
-                                $popupHeader.Text = "Confirm Update Installation"
-                            }
-                            
-                            # Configure the sub-header for computer name
-                            $popupSubHeader = $popupWin.FindName('popupSubHeader')
-                            if ($popupSubHeader) {
-                                $popupSubHeader.Text = "Found $($popupData.Updates.Count) applicable updates for $($popupData.ComputerName):"
-                            }
-                            
-                            # Populate the updates list
-                            $computerListBox = $popupWin.FindName('popupComputerList')
-                            if ($computerListBox) {
-                                $computerListBox.Items.Clear()
-                                foreach ($update in $popupData.Updates) {
-                                    $null = $computerListBox.Items.Add($update)
+                                # Configure popup for update confirmation (reusing Confirmation.xaml)
+                                $popupHeader = $popupWin.FindName('popupHeader')
+                                if ($popupHeader) {
+                                    $popupHeader.Text = "Confirm Update Installation"
                                 }
-                            }
                             
-                            # Configure buttons for update confirmation
-                            $continueBtn = $popupWin.FindName('btnContinue')
-                            $abortBtn = $popupWin.FindName('btnAbort')
+                                # Configure the sub-header for computer name
+                                $popupSubHeader = $popupWin.FindName('popupSubHeader')
+                                if ($popupSubHeader) {
+                                    $popupSubHeader.Text = "Found $($popupData.Updates.Count) applicable updates for $($popupData.ComputerName):"
+                                }
                             
-                            if ($continueBtn) {
-                                $continueBtn.Content = "Install"
-                                $continueBtn.Add_Click({
-                                    $popupData.UserConfirmed.Value = $true
-                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
-                                    try { $popupWin.Close() } catch {}
-                                })
-                            }
-                            
-                            if ($abortBtn) {
-                                $abortBtn.Content = "Cancel"
-                                $abortBtn.Add_Click({
-                                    $popupData.UserConfirmed.Value = $false
-                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
-                                    try { $popupWin.Close() } catch {}
-                                })
-                            }
-                            
-                            # Wire control bar drag, minimize, and close for popup
-                            $panelBar = $popupWin.FindName('panelControlBar')
-                            $minBtn = $popupWin.FindName('btnMinimize')
-                            $closeBtn = $popupWin.FindName('btnClose')
-                            if ($panelBar) {
-                                $panelBar.Add_MouseLeftButtonDown({
-                                    if ($null -ne $popupWin) {
-                                        try { $popupWin.DragMove() } catch {}
+                                # Populate the updates list
+                                $computerListBox = $popupWin.FindName('popupComputerList')
+                                if ($computerListBox) {
+                                    $computerListBox.Items.Clear()
+                                    foreach ($update in $popupData.Updates) {
+                                        $null = $computerListBox.Items.Add($update)
                                     }
-                                })
-                            }
-                            if ($minBtn) {
-                                $minBtn.Add_Click({
-                                    if ($null -ne $popupWin) {
-                                        try { $popupWin.WindowState = 'Minimized' } catch {}
-                                    }
-                                })
-                            }
-                            if ($closeBtn) {
-                                $closeBtn.Add_Click({
-                                    $popupData.UserConfirmed.Value = $false
-                                    if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
-                                    if ($null -ne $popupWin) {
-                                        try { $popupWin.Close() } catch {}
-                                    }
-                                })
-                            }
+                                }
                             
-                            # Show the popup dialog
-                            $null = $popupWin.ShowDialog()
+                                # Configure buttons for update confirmation
+                                $continueBtn = $popupWin.FindName('btnContinue')
+                                $abortBtn = $popupWin.FindName('btnAbort')
                             
-                            # Clean up popup data after dialog closes
-                            $script:PopupData.Remove($computerName)
+                                if ($continueBtn) {
+                                    $continueBtn.Content = "Install"
+                                    $continueBtn.Add_Click({
+                                            $popupData.UserConfirmed.Value = $true
+                                            if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                            try { $popupWin.Close() } catch {}
+                                        })
+                                }
+                            
+                                if ($abortBtn) {
+                                    $abortBtn.Content = "Cancel"
+                                    $abortBtn.Add_Click({
+                                            $popupData.UserConfirmed.Value = $false
+                                            if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                            try { $popupWin.Close() } catch {}
+                                        })
+                                }
+                            
+                                # Wire control bar drag, minimize, and close for popup
+                                $panelBar = $popupWin.FindName('panelControlBar')
+                                $minBtn = $popupWin.FindName('btnMinimize')
+                                $closeBtn = $popupWin.FindName('btnClose')
+                                if ($panelBar) {
+                                    $panelBar.Add_MouseLeftButtonDown({
+                                            if ($null -ne $popupWin) {
+                                                try { $popupWin.DragMove() } catch {}
+                                            }
+                                        })
+                                }
+                                if ($minBtn) {
+                                    $minBtn.Add_Click({
+                                            if ($null -ne $popupWin) {
+                                                try { $popupWin.WindowState = 'Minimized' } catch {}
+                                            }
+                                        })
+                                }
+                                if ($closeBtn) {
+                                    $closeBtn.Add_Click({
+                                            $popupData.UserConfirmed.Value = $false
+                                            if ($popupData.SyncEvent) { $popupData.SyncEvent.Set() | Out-Null }
+                                            if ($null -ne $popupWin) {
+                                                try { $popupWin.Close() } catch {}
+                                            }
+                                        })
+                                }
+                            
+                                # Show the popup dialog
+                                $null = $popupWin.ShowDialog()
+                            
+                                # Clean up popup data after dialog closes
+                                $script:PopupData.Remove($computerName)
                             }
                         }
                     }
@@ -786,7 +1040,10 @@ Function Update-WSIDFile {
                             }
                         }
                         else {
-                            if ($popupSubHeader) { $popupSubHeader.Visibility = 'Collapsed' }
+                            if ($popupSubHeader) { 
+                                $popupSubHeader.Visibility = 'Visible'
+                                $popupSubHeader.Text = "Bakery is closed... ⸜(｡˃ ᵕ ˂ )⸝🍩"
+                            }
                             if ($popupComputerList) { $popupComputerList.Visibility = 'Collapsed' }
                         }
                         
