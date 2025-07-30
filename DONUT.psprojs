@@ -8,9 +8,9 @@
     <Folder>Views\Config Options</Folder>
   </OpenFolders>
   <OpenFiles>
-    <File>Startup.pss</File>
-    <File>src\MainWindow.ps1</File>
-    <File>src\remoteDCU.ps1</File>
     <File>src\Updater.ps1</File>
+    <File>src\remoteDCU.ps1</File>
+    <File>src\MainWindow.ps1</File>
+    <File>Startup.pss</File>
   </OpenFiles>
 </ProjectState>
