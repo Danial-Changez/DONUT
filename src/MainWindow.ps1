@@ -73,6 +73,7 @@ $script:StartNextRunspace = {
                 $scanConfig = @"
 scan = enable
 - report = C:\temp\DONUT
+- outputLog = C:\temp\DONUT\scan.log
 - updateDeviceCategory = Audio,Video,Network,Storage,Input,Chipset,Others
 throttleLimit = 5
 "@
