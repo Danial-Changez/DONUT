@@ -1,0 +1,13 @@
+scan = disable
+applyUpdates = enable
+- silent = 
+- reboot = 
+- autoSuspendBitLocker = 
+- forceupdate = 
+configure = disable
+customnotification = disable
+driverInstall = disable
+generateEncryptedPassword = disable
+help = disable
+version = disable
+throttleLimit = 5
