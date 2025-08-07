@@ -10,7 +10,7 @@
         WindowStyle="None"
         Background="Transparent"
         AllowsTransparency="True"
-        ResizeMode="CanResize">
+        ResizeMode="CanResizeWithGrip">
     <Grid>
         <!-- Main window border and content -->
         <Border CornerRadius="10"
