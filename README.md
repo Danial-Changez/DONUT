@@ -23,7 +23,8 @@ This PowerShell project automates remote execution of the Dell Command Update (D
   - [Parameter Handling](#parameter-handling)
   - [Required Settings](#required-settings)
   - [How It Works](#how-it-works)
-- [Future Fixes \& Improvements](#future-fixes--improvements)
+- [Future Improvements](#future-improvements)
+- [Bugs](#bugs)
 - [Contributing](#contributing)
 - [Additional Notes](#additional-notes)
 
@@ -219,11 +220,13 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 The `config.txt` file controls which DCU command will be executed and its parameters. The configuration follows these rules:
 
 ### Command Selection
+
 - **Only one main command** can be set to `enable` at any time; all others must be set to `disable`.
 - Available commands: `scan`, `applyUpdates`, `configure`, `customnotification`, `driverInstall`, `generateEncryptedPassword`, `help`, `version`
   - Only `scan` and `applyUpdates` are available in the UI after leadership discussion.
-  
+
 ### Configuration Example
+
 ```plaintext
 scan = disable
 applyUpdates = enable
@@ -241,34 +244,55 @@ throttleLimit = 5
 ```
 
 ### Parameter Handling
+
 - **Blank parameters are ignored:** If a parameter value is left empty, it will not be passed to the DCU command.
-  
+
   **Ignored example:**
+
   ```plaintext
   - updateType =
   ```
-  
+
   **Applied example:**
+
   ```plaintext
   - updateType = Bios,Others
   ```
 
 ### Required Settings
+
 - **throttleLimit:** Must always be declared. This controls how many computers can run the command simultaneously.
 
 ### How It Works
+
 1. The application reads `config.txt` on startup
 2. Validates that only one main command is enabled
 3. Builds the DCU command string based on enabled parameters
 4. Executes the command remotely on each target computer using the specified throttle limit
 
-## Future Fixes & Improvements
+## Future Improvements
 
-- **Versioning:** Update versioning work note to include application current versions as well.
+- **🟡 Versioning:** Update versioning work note to include application current versions as well.
   - Increase speed as well (currently takes 10-20 seconds to complete).
-- **Failed Update Prompt:** Prompt for failed updates with hyperlinks to the specific driver page.
-- **Set Output Log as Default:** Needs to be discussed further, but will implement if needed.
-  - Preliminary scan for Apply Updates has this, but only because it is a meaningful default record to have.
+- **🟡 Failed Update Prompt:** Prompt for failed updates with hyperlinks to the specific driver page.
+- **❌ Set Output Log as Default:** Set as a default whenever Scan or ApplyUpdates is chosen in Config.
+  - Note: Preliminary scan for Apply Updates has this already.
+- **❌ Change Tab Name to WSID if IP is Passed (Low Priority):** Use the System.Net.DNS library to extract hostName and set it as the tab name if an IP is passed instead of WSID.
+- **❌ Battery Report Page (Low Priority):** TBD
+- **❌ Add a Loading Bar for the Preliminary Scan (Low Priority):** TBD
+
+**Note: Low Priority = Tasks for Lola and Daniel**
+
+## Bugs
+
+- **✅ Resize Logic Crash:** Possible workaround, set CanResize to CanResizeWithGrip.
+  - Note: Only happens with packaged version, not with the script itself.
+- **✅ Report Folder not Generating:** PowerShell Studio will not package the folder if it is empty.
+  - Solution: Had MainWindow.ps1 check if the report folder exists, otherwise creats it on startup.
+- **✅ Versioning Logic Can't Accept IP's:**
+  - IP's need to be part of the "TrustedHosts list" if using WinRM.
+  - Solution: Changed Protocol to fallback on DCOM if necessary.
+  - Alternative: Can temporarily add the IP to the TrustedHosts list, then remove it at the end of the process.
 
 ---
 
