@@ -2,6 +2,6 @@ logs/*
 res/*
 MainWindow-*
 .vs/
-bin/
-reports/
+bin/*
+reports/*
 *Temp*

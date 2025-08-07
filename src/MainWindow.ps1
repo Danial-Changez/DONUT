@@ -1,6 +1,7 @@
 ﻿Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 
+
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "Read-Config.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "ConfigView.psm1")
 Import-Module (Join-Path -Path $PSScriptRoot -ChildPath "Helpers.psm1")
@@ -12,6 +13,37 @@ $script:configPath = Join-Path $PSScriptRoot '..\config.txt'
 
 # Initialize global state hashtable for config view persistence
 if (-not $Global:ConfigViewStates) { $Global:ConfigViewStates = @{} }
+if (-not (Test-Path -Path ([System.IO.Path]::GetDirectoryName($script:configPath) + "\reports"))) {
+    New-Item -Path ([System.IO.Path]::GetDirectoryName($script:configPath) + "\reports") -ItemType Directory | Out-Null
+}
+
+# Try to set up P/Invoke for advanced window resizing
+$script:UseWin32Resize = $false
+try {
+    # Attempt to compile P/Invoke declarations (fails in packaged apps)
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+namespace Win32 {
+    public class User32 {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    }
+}
+"@ -ErrorAction Stop
+    $script:UseWin32Resize = $true
+}
+catch {
+    # P/Invoke compilation failed (expected in packaged apps) - use pure WPF fallback
+    $script:UseWin32Resize = $false
+}
+
+# Known brand patterns (update if needed)
+$script:brandPatterns = @{
+    'Audio'   = @('Realtek', 'Intel', 'AMD', 'NVIDIA', 'Conexant', 'IDT', 'VIA', 'Creative', 'SoundMAX')
+    'Network' = @('Realtek', 'Intel', 'Broadcom', 'Qualcomm', 'Marvell', 'Killer', 'MediaTek', 'Ralink', 'Microsoft', 'Bluetooth', 'USB', 'GbE', 'Ethernet')
+    'Video'   = @('NVIDIA', 'AMD', 'Intel', 'ATI', 'Radeon', 'GeForce', 'UHD', 'Iris', 'Xe')
+}
 
 # Track the last selected config option for state management
 $script:LastSelectedConfigOption = $null
@@ -52,7 +84,7 @@ $script:StartNextRunspace = {
     
     # Single script that handles both phases sequentially
     $ps.AddScript({
-            param($hostName, $scriptPath, $queue, $tb, $configPath, $isApplyUpdates, $popupDataSync)
+            param($hostName, $scriptPath, $queue, $tb, $configPath, $isApplyUpdates, $popupDataSync, $brandPatterns)
         
             if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
                 $queue.Enqueue("ERROR: remoteDCU.ps1 path is invalid or missing.") | Out-Null
@@ -95,7 +127,7 @@ throttleLimit = 5
                     $proc.StartInfo = $psi
                     $proc.Start() | Out-Null
                 
-                    # Capture ALL stdout for testing - detect critical errors
+                    # Capture lines indicatings errors in stdout (sometimes redirected here instead of stderr)
                     $criticalErrorDetected = $false
                     while (-not $proc.StandardOutput.EndOfStream) { 
                         $line = $proc.StandardOutput.ReadLine()
@@ -108,7 +140,7 @@ throttleLimit = 5
                         }
                     }
                 
-                    # Capture ALL stderr for testing - no filtering
+                    # Capture all stderr except connection noise 
                     while (-not $proc.StandardError.EndOfStream) { 
                         $line = $proc.StandardError.ReadLine()
                         $cleanLine = ($line -replace "`e\[[\d;]*[A-Za-z]", "").Trim()
@@ -117,6 +149,7 @@ throttleLimit = 5
                             $criticalErrorDetected = $true
                             $queue.Enqueue("$cleanLine") | Out-Null
                         }
+
                     }
                 
                     $proc.WaitForExit()
@@ -148,20 +181,71 @@ throttleLimit = 5
                                     [xml]$reportXml = Get-Content $reportPath
                                     $updates = $reportXml.SelectNodes("//update")
                                 
-                                    # Get current system drivers and info for comparison
-                                    $systemInfo = Invoke-Command -ComputerName $hostName -ScriptBlock {
-                                        $bios = Get-CimInstance -Class Win32_BIOS | Select-Object SMBIOSBIOSVersion, Manufacturer
-                                        $allDrivers = Get-CimInstance -Class Win32_PnPSignedDriver | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass
+                                    # Get current system drivers and info for comparison using PsExec (same approach as remoteDCU.ps1)
+                                    try {
+                                        $queue.Enqueue("Collecting remote driver data...") | Out-Null
                                         
-                                        $audio = $allDrivers | Where-Object { $_.DeviceClass -eq "MEDIA" }
-                                        $network = $allDrivers | Where-Object { $_.DeviceClass -in @("NET", "NETWORK", "Bluetooth") }
-                                        $video = $allDrivers | Where-Object { $_.DeviceClass -eq "DISPLAY" }
+                                        # Use PsExec to run PowerShell script directly as argument (no temp files)
+                                        $driverCollectionScript = @"
+`$bios = Get-CimInstance -Class Win32_BIOS | Select-Object SMBIOSBIOSVersion, Manufacturer;
+`$allDrivers = Get-CimInstance -Class Win32_PnPSignedDriver |
+ Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass; 
+
+ `$audio = `$allDrivers | Where-Object { `$_.DeviceClass -eq 'MEDIA' }; 
+`$network = `$allDrivers | Where-Object { `$_.DeviceClass -in @('NET', 'NETWORK', 'Bluetooth') }; 
+`$video = `$allDrivers | Where-Object { `$_.DeviceClass -eq 'DISPLAY' }; 
+`$systemInfo = @{ BIOS = `$bios; Audio = `$audio; Network = `$network; Video = `$video }; 
+`$systemInfo | ConvertTo-Json -Depth 10
+"@
                                         
-                                        return @{
-                                            BIOS = $bios
-                                            Audio = $audio
-                                            Network = $network
-                                            Video = $video
+                                        $psi = New-Object System.Diagnostics.ProcessStartInfo(
+                                            "psexec", "-s -h -nobanner -accepteula \\$hostName pwsh -c `"$driverCollectionScript`""
+                                        )
+                                        $psi.RedirectStandardOutput = $true
+                                        $psi.RedirectStandardError = $true
+                                        $psi.UseShellExecute = $false
+                                        $psi.CreateNoWindow = $true
+
+                                        $proc = [System.Diagnostics.Process]::new()
+                                        $proc.StartInfo = $psi
+                                        $proc.Start() | Out-Null
+                                        
+                                        $stdout = $proc.StandardOutput.ReadToEnd()
+                                        $stderr = $proc.StandardError.ReadToEnd()
+                                        $proc.WaitForExit()
+                                        
+                                        if ($proc.ExitCode -eq 0 -and $stdout.Trim()) {
+                                            # Parse JSON response
+                                            $systemInfo = $stdout.Trim() | ConvertFrom-Json
+                                            
+                                            # Convert PSObjects back to proper format
+                                            if ($systemInfo.BIOS) {
+                                                $systemInfo.BIOS = $systemInfo.BIOS | Select-Object SMBIOSBIOSVersion, Manufacturer
+                                            }
+                                            if ($systemInfo.Audio) {
+                                                $systemInfo.Audio = $systemInfo.Audio | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass
+                                            }
+                                            if ($systemInfo.Network) {
+                                                $systemInfo.Network = $systemInfo.Network | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass
+                                            }
+                                            if ($systemInfo.Video) {
+                                                $systemInfo.Video = $systemInfo.Video | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer, DeviceClass
+                                            }                                            
+                                        }
+                                        else {
+                                            throw "PsExec failed with exit code $($proc.ExitCode): $stderr"
+                                        }
+                                    }
+                                    catch {
+                                        # If PsExec collection fails, create empty structure but continue
+                                        $queue.Enqueue("PsExec driver collection failed: $($_.Exception.Message)") | Out-Null
+                                        $queue.Enqueue("Continuing with empty driver data - this may affect driver matching accuracy") | Out-Null
+                                        
+                                        $systemInfo = @{
+                                            BIOS    = @{ SMBIOSBIOSVersion = "Unknown"; Manufacturer = "Unknown" }
+                                            Audio   = @()
+                                            Network = @()
+                                            Video   = @()
                                         }
                                     }
                                     
@@ -171,205 +255,144 @@ throttleLimit = 5
                                     $networkDrivers = $systemInfo.Network
                                     $videoDrivers = $systemInfo.Video
 
-                                    # Function to check if version formats match exactly (same digit pattern)
-                                    Function Test-VersionFormatMatch {
-                                        param([string]$Version1, [string]$Version2)
-                                        
-                                        $v1Parts = $Version1 -split '\.'
-                                        $v2Parts = $Version2 -split '\.'
-                                        
-                                        # Must have same number of segments
-                                        if ($v1Parts.Count -ne $v2Parts.Count) { return $false }
-                                        
-                                        # Each segment must have same number of digits
-                                        for ($i = 0; $i -lt $v1Parts.Count; $i++) {
-                                            if ($v1Parts[$i].Length -ne $v2Parts[$i].Length) { return $false }
-                                        }
-                                        
-                                        return $true
-                                    }
-
                                     # Function to filter drivers by version compatibility with XML updates
                                     Function Get-DriversByVersion {
                                         param(
                                             [array]$Drivers,
                                             [array]$Updates,
-                                            [string]$Category
+                                            [string]$Category,
+                                            [hashtable]$Brands
                                         )
-                                        
-                                        $filteredDrivers = @()
-                                        
-                                        foreach ($driver in $Drivers) {
-                                            $hasValidUpdate = $false
-                                            
-                                            # Check if this driver has any compatible updates
-                                            foreach ($update in $Updates) {
-                                                $updateCategory = if ($update.category) { $update.category } else { "Unknown Category" }
-                                                $updateVersion = if ($update.version) { $update.version } else { "Unknown Version" }
-                                                $updateName = if ($update.name) { $update.name } else { "Unknown Name" }
-                                                
-                                                # Check if update matches this category and manufacturer
-                                                $categoryMatch = $false
-                                                switch ($Category) {
-                                                    "Audio" { $categoryMatch = $updateCategory -in @("Audio", "MEDIA") }
-                                                    "Network" { $categoryMatch = $updateCategory -in @("Network", "NET", "Docks/Stands") }
-                                                    "Video" { $categoryMatch = $updateCategory -in @("Video", "DISPLAY") }
-                                                }
-                                                
-                                                if ($categoryMatch) {
-                                                    # Use brand arrays for matching
-                                                    $brands = @{
-                                                        'Audio' = @('Realtek', 'Intel', 'AMD', 'NVIDIA', 'Conexant', 'IDT', 'VIA', 'Creative', 'SoundMAX')
-                                                        'Network' = @('Realtek', 'Intel', 'Broadcom', 'Qualcomm', 'Marvell', 'Killer', 'MediaTek', 'Ralink', 'Microsoft', 'Bluetooth', 'USB', 'GbE', 'Ethernet')
-                                                        'Video' = @('NVIDIA', 'AMD', 'Intel', 'ATI', 'Radeon', 'GeForce', 'UHD', 'Iris', 'Xe')
-                                                    }
-                                                    
-                                                    $manufacturerMatch = $false
-                                                    
-                                                    # Check if update name matches any brand for this category
-                                                    if ($brands.ContainsKey($Category)) {
-                                                        foreach ($brand in $brands[$Category]) {
-                                                            if ($updateName -match [regex]::Escape($brand)) {
-                                                                $manufacturerMatch = $true
-                                                                break
-                                                            }
+    
+                                        # Pre-filter updates by category first
+                                        $categoryUpdates = $Updates | Where-Object {
+                                            $updateCategory = if ($_.category) { $_.category } else { "Unknown Category" }
+                                            switch ($Category) {
+                                                "Audio" { $updateCategory -in @("Audio", "MEDIA") }
+                                                "Network" { $updateCategory -in @("Network", "NET", "Docks/Stands") }
+                                                "Video" { $updateCategory -in @("Video", "DISPLAY") }
+                                                default { $false }
+                                            }
+                                        }
+    
+                                        if (-not $categoryUpdates) { return @() }
+    
+                                        # Create lookup hash for faster brand matching
+                                        $updateBrandMap = @{}
+                                        foreach ($update in $categoryUpdates) {
+                                            $updateName = if ($update.name) { $update.name } else { "Unknown Name" }
+                                            $updateVersion = if ($update.version) { $update.version } else { "Unknown Version" }
+        
+                                            if ($Brands.ContainsKey($Category)) {
+                                                foreach ($brand in $Brands[$Category]) {
+                                                    if ($updateName -match $brand) {
+                                                        if (-not $updateBrandMap[$brand]) { $updateBrandMap[$brand] = @() }
+                                                        $updateBrandMap[$brand] += @{
+                                                            Name    = $updateName
+                                                            Version = $updateVersion
+                                                            Update  = $update
                                                         }
+                                                        break
                                                     }
-                                                    
-                                                    if ($manufacturerMatch) {
-                                                        # Check version compatibility - be more lenient with version format matching
-                                                        if ($driver.DriverVersion -ne "Unknown" -and $updateVersion -ne "Unknown Version") {
-                                                            # Try version comparison without strict format matching first
+                                                }
+                                            }
+                                        }
+                                            
+                                        # Now filter drivers efficiently
+                                        $filteredDrivers = foreach ($driver in $Drivers) {
+                                            if ($driver.DriverVersion -eq "Unknown") { continue }
+        
+                                            $hasValidUpdate = $true
+        
+                                            foreach ($brand in $Brands[$Category]) {
+                                                if ($driver.DeviceName -match $brand -and $updateBrandMap[$brand]) {
+                                                    foreach ($updateInfo in $updateBrandMap[$brand]) {
+                                                        if ($updateInfo.Version -ne "Unknown Version") {
                                                             try {
                                                                 $currentVersionObj = [System.Version]$driver.DriverVersion
-                                                                $xmlVersionObj = [System.Version]$updateVersion
-                                                                
-                                                                # XML version should be same or newer than current
+                                                                $xmlVersionObj = [System.Version]$updateInfo.Version
+                            
                                                                 if ($xmlVersionObj -ge $currentVersionObj) {
                                                                     $hasValidUpdate = $true
                                                                     break
                                                                 }
                                                             }
-                                                            catch {
-                                                                # If direct version comparison fails, try format matching
-                                                                if (Test-VersionFormatMatch -Version1 $driver.DriverVersion -Version2 $updateVersion) {
-                                                                    try {
-                                                                        $currentVersionObj = [System.Version]$driver.DriverVersion
-                                                                        $xmlVersionObj = [System.Version]$updateVersion
-                                                                        
-                                                                        # XML version should be same or newer than current
-                                                                        if ($xmlVersionObj -ge $currentVersionObj) {
-                                                                            $hasValidUpdate = $true
-                                                                            break
-                                                                        }
-                                                                    }
-                                                                    catch {}
-                                                                }
-                                                            }
+                                                            catch { continue }
                                                         }
                                                     }
+                                                    if ($hasValidUpdate) { break }
                                                 }
                                             }
-                                            
-                                            # Only include drivers that have valid updates
-                                            if ($hasValidUpdate) {
-                                                $filteredDrivers += $driver
-                                            }
+                                            if ($hasValidUpdate) { $driver }
                                         }
-                                        
                                         return $filteredDrivers
                                     }
 
                                     # Pre-filter drivers based on version compatibility with updates
-                                    $audioDrivers = Get-DriversByVersion -Drivers $audioDrivers -Updates $updates -Category "Audio"
-                                    $networkDrivers = Get-DriversByVersion -Drivers $networkDrivers -Updates $updates -Category "Network"
-                                    $videoDrivers = Get-DriversByVersion -Drivers $videoDrivers -Updates $updates -Category "Video"
+                                    $audioDrivers = Get-DriversByVersion -Drivers $audioDrivers -Updates $updates -Category "Audio" -Brands $script:brandPatterns
+                                    $networkDrivers = Get-DriversByVersion -Drivers $networkDrivers -Updates $updates -Category "Network" -Brands $script:brandPatterns
+                                    $videoDrivers = Get-DriversByVersion -Drivers $videoDrivers -Updates $updates -Category "Video" -Brands $script:brandPatterns
 
-                                    # Function to find best matching driver based on brand arrays
+                                    # Replace Find-BestDriverMatch with this optimized version:
                                     Function Find-BestDriverMatch {
                                         param(
                                             [string]$UpdateName,
                                             [array]$SystemDrivers,
-                                            [string]$Category
+                                            [string]$Category,
+                                            [hashtable]$Brands
                                         )
                                         
-                                        # Define brand arrays for matching
-                                        $brands = @{
-                                            'Audio' = @('Realtek', 'Intel', 'AMD', 'NVIDIA', 'Conexant', 'IDT', 'VIA', 'Creative', 'SoundMAX')
-                                            'Network' = @('Realtek', 'Intel', 'Broadcom', 'Qualcomm', 'Marvell', 'Killer', 'MediaTek', 'Ralink', 'Microsoft', 'Bluetooth', 'USB', 'GbE', 'Ethernet')
-                                            'Video' = @('NVIDIA', 'AMD', 'Intel', 'ATI', 'Radeon', 'GeForce', 'UHD', 'Iris', 'Xe')
+                                        # Find update brand once
+                                        $updateBrand = ""
+                                        if ($Brands.ContainsKey($Category)) {
+                                            foreach ($brand in $Brands[$Category]) {
+                                                if ($UpdateName -match [regex]::Escape($brand)) {
+                                                    $updateBrand = $brand
+                                                    break
+                                                }
+                                            }
                                         }
-                                        
+    
+                                        if (-not $updateBrand) { return $null }
+    
+                                        # Pre-filter drivers by same brand
+                                        $matchingDrivers = $SystemDrivers | Where-Object { 
+                                            $_.DeviceName -match [regex]::Escape($updateBrand) 
+                                        }
+    
+                                        if (-not $matchingDrivers) { return $null }
+    
+                                        # Score only the pre-filtered drivers
                                         $bestMatch = $null
                                         $highestScore = 0
-                                        
-                                        foreach ($driver in $SystemDrivers) {
-                                            $score = 0
-                                            
-                                            # Check which brand the update belongs to
-                                            $updateBrand = ""
-                                            if ($brands.ContainsKey($Category)) {
-                                                foreach ($brand in $brands[$Category]) {
-                                                    if ($UpdateName -match [regex]::Escape($brand)) {
-                                                        $updateBrand = $brand
-                                                        break
-                                                    }
-                                                }
+    
+                                        foreach ($driver in $matchingDrivers) {
+                                            $score = 10  # Base score for brand match
+        
+                                            # Bluetooth-specific scoring
+                                            $isUpdateBluetooth = $UpdateName -match "Bluetooth"
+                                            $isDriverBluetooth = $driver.DeviceName -match "Bluetooth"
+        
+                                            if ($isUpdateBluetooth -and $isDriverBluetooth) {
+                                                $score += 20
                                             }
-                                            
-                                            # Check if driver matches the same brand
-                                            $driverBrandMatch = $false
-                                            if ($updateBrand -ne "" -and $brands.ContainsKey($Category)) {
-                                                foreach ($brand in $brands[$Category]) {
-                                                    if ($driver.DeviceName -match [regex]::Escape($brand)) {
-                                                        if ($brand -eq $updateBrand) {
-                                                            $driverBrandMatch = $true
-                                                            break
-                                                        }
-                                                    }
-                                                }
+                                            elseif ($isUpdateBluetooth -xor $isDriverBluetooth) {
+                                                $score -= 5
                                             }
-                                            
-                                            if ($driverBrandMatch) {
-                                                $score += 10  # High score for brand match
-                                                
-                                                # Special handling for Bluetooth - give extra score for Bluetooth-specific matching
-                                                if ($UpdateName -match "Bluetooth" -and $driver.DeviceName -match "Bluetooth") {
-                                                    $score += 20  # Extra high score for Bluetooth-to-Bluetooth match
-                                                }
-                                                elseif ($UpdateName -match "Bluetooth" -and $driver.DeviceName -notmatch "Bluetooth") {
-                                                    $score -= 5   # Penalize Bluetooth update matching non-Bluetooth driver
-                                                }
-                                                elseif ($UpdateName -notmatch "Bluetooth" -and $driver.DeviceName -match "Bluetooth") {
-                                                    $score -= 5   # Penalize non-Bluetooth update matching Bluetooth driver
-                                                }
-                                                
-                                                # Additional keyword matching for better precision
-                                                $updateWords = $UpdateName -split '\s+|[-_]' | Where-Object { $_.Length -gt 2 }
-                                                $deviceWords = $driver.DeviceName -split '\s+|[-_]' | Where-Object { $_.Length -gt 2 }
-                                                
-                                                foreach ($updateWord in $updateWords) {
-                                                    foreach ($deviceWord in $deviceWords) {
-                                                        if ($updateWord -like "*$deviceWord*" -or $deviceWord -like "*$updateWord*") {
-                                                            $score += 0.5
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                if ($score -gt $highestScore) {
-                                                    $highestScore = $score
-                                                    $bestMatch = $driver
-                                                }
+        
+                                            if ($score -gt $highestScore) {
+                                                $highestScore = $score
+                                                $bestMatch = $driver
                                             }
                                         }
-                                        
+    
                                         return $bestMatch
                                     }
 
                                     if ($updates.Count -gt 0) {
                                         $updatesAvailable = $true
                                         $queue.Enqueue("Found $($updates.Count) applicable updates for $($hostName):") | Out-Null
-                                        foreach ($update in $updates) {
+                                        foreach ($update in $updates) {                                            
                                             $name = if ($update.name) { $update.name } else { "Unknown Name" }
                                             $type = if ($update.type) { $update.type } else { "Unknown Type" }
                                             $category = if ($update.category) { $update.category } else { "Unknown Category" }
@@ -381,13 +404,13 @@ throttleLimit = 5
                                             
                                             switch ($category) {
                                                 { $_ -in @("Audio", "MEDIA") } {
-                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $audioDrivers -Category "Audio"
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $audioDrivers -Category "Audio" -Brands $script:brandPatterns
                                                 }
                                                 { $_ -in @("Network", "NET", "Docks/Stands") } {
-                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $networkDrivers -Category "Network"
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $networkDrivers -Category "Network" -Brands $script:brandPatterns
                                                 }
                                                 { $_ -in @("Video", "DISPLAY") } {
-                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $videoDrivers -Category "Video"
+                                                    $matchedDriver = Find-BestDriverMatch -UpdateName $name -SystemDrivers $videoDrivers -Category "Video" -Brands $script:brandPatterns
                                                 }
                                                 "BIOS" {
                                                     $currentVersion = $biosInfo.SMBIOSBIOSVersion
@@ -437,7 +460,7 @@ throttleLimit = 5
                             }
                         }
                     }
-                                
+
                     # If updates are available, show confirmation popup
                     if ($updatesAvailable -and $updatesList.Count -gt 0) {
                         $userConfirmed = $false
@@ -459,16 +482,6 @@ throttleLimit = 5
                         $confirmationEvent.Wait()
                         $confirmationEvent.Dispose()
                     
-                        # Clean up report file after user response
-                        try {
-                            if (Test-Path $reportPath) {
-                                Remove-Item $reportPath -Force
-                            }
-                        }
-                        catch {
-                            $queue.Enqueue("Warning: Could not delete report file: $($_.Exception.Message)") | Out-Null
-                        }
-                    
                         if (-not $userConfirmed) {
                             $queue.Enqueue("User cancelled update installation - skipping apply updates phase.") | Out-Null
                             return  # Skip the apply updates phase
@@ -487,6 +500,16 @@ throttleLimit = 5
                     # Restore original config
                     if ($originalConfig) {
                         Set-Content -Path $configPath -Value $originalConfig -Force
+                    }
+                    
+                    # Clean up report file after user response
+                    try {
+                        if (Test-Path $reportPath) {
+                            Remove-Item $reportPath -Force
+                        }
+                    }
+                    catch {
+                        $queue.Enqueue("Warning: Could not delete report file: $($_.Exception.Message)") | Out-Null
                     }
                 }
             
@@ -542,7 +565,7 @@ throttleLimit = 5
                 $queue.Enqueue("Final status: $lastErrorLine") | Out-Null
             }
         
-        }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb).AddArgument($script:configPath).AddArgument($enabled -eq "applyUpdates").AddArgument($script:PopupData)
+        }).AddArgument($computer).AddArgument($remoteDCUPathAbs).AddArgument($queue).AddArgument($tb).AddArgument($script:configPath).AddArgument($enabled -eq "applyUpdates").AddArgument($script:PopupData).AddArgument($script:brandPatterns)
 
     # Start the PowerShell runspace asynchronously
     $async = $ps.BeginInvoke()
@@ -1318,7 +1341,7 @@ if ($null -ne $minimizeButton) {
 
 # Resize Border and MouseMove/LeftButtonDown events
 $WindowResizeBorder = $window.FindName('WindowResizeBorder')
-if ($WindowResizeBorder) {
+if ($WindowResizeBorder -and $script:UseWin32Resize) {
     $window.Add_MouseMove({
             $pos = [System.Windows.Input.Mouse]::GetPosition($window)
             $margin = 6
@@ -1372,24 +1395,30 @@ if ($WindowResizeBorder) {
             elseif ($pos.Y -ge ($window.Height - $margin)) { $resizeDir = 'Bottom' }
             else { $resizeDir = $null }
             
-            # If a resize direction was determined, send the appropriate message to dll
+            # If a resize direction was determined, attempt Win32 resize if available
             if ($resizeDir) {
-                $sig = '[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);'
-                $type = Add-Type -MemberDefinition $sig -Name 'Win32SendMessage' -Namespace Win32 -PassThru
-                $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
-                $msg = 0x112 # WM_SYSCOMMAND
-                $sc = switch ($resizeDir) {
-                    'Left' { 0xF001 }
-                    'Right' { 0xF002 }
-                    'Top' { 0xF003 }
-                    'Bottom' { 0xF006 }
-                    'TopLeft' { 0xF004 }
-                    'TopRight' { 0xF005 }
-                    'BottomLeft' { 0xF007 }
-                    'BottomRight' { 0xF008 }
+                try {
+                    $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
+                    if ($hwnd -and $hwnd -ne [System.IntPtr]::Zero) {
+                        $msg = 0x112 # WM_SYSCOMMAND
+                        $sc = switch ($resizeDir) {
+                            'Left' { 0xF001 }
+                            'Right' { 0xF002 }
+                            'Top' { 0xF003 }
+                            'Bottom' { 0xF006 }
+                            'TopLeft' { 0xF004 }
+                            'TopRight' { 0xF005 }
+                            'BottomLeft' { 0xF007 }
+                            'BottomRight' { 0xF008 }
+                        }
+                        [Win32.User32]::SendMessage($hwnd, $msg, $sc, 0) | Out-Null
+                    }
                 }
-                $type::SendMessage($hwnd, $msg, $sc, 0) | Out-Null
-            }
+                catch {
+                    # If P/Invoke fails, disable it for future attempts
+                    $script:UseWin32Resize = $false
+                }
+            }         
         })
 }
 
