@@ -272,14 +272,15 @@ throttleLimit = 5
 
 ## Future Improvements
 
-- **🟡 Versioning:** Update versioning work note to include application current versions as well.
+- **🟡 Versioning (Danial):** Update versioning work note to include application current versions as well.
   - Increase speed as well (currently takes 10-20 seconds to complete).
-- **🟡 Failed Update Prompt:** Prompt for failed updates with hyperlinks to the specific driver page.
-- **❌ Set Output Log as Default:** Set as a default whenever Scan or ApplyUpdates is chosen in Config.
+- **🟡 Failed Update Prompt (Danial):** Prompt for failed updates with hyperlinks to the specific driver page.
+- **🟡 Set Output Log as Default (Daniel):** Set as a default whenever Scan or ApplyUpdates is chosen in Config.
   - Note: Preliminary scan for Apply Updates has this already.
 - **❌ Change Tab Name to WSID if IP is Passed (Low Priority):** Use the System.Net.DNS library to extract hostName and set it as the tab name if an IP is passed instead of WSID.
 - **❌ Battery Report Page (Low Priority):** TBD
 - **❌ Add a Loading Bar for the Preliminary Scan (Low Priority):** TBD
+- **❌ Version Number on Sidebar:** Pull version from registry and display at the bottom of the sidebar.
 
 **Note: Low Priority = Tasks for Lola and Daniel**
 
