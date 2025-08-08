@@ -1,0 +1,16 @@
+# CODEOWNERS File
+# Lines starting with '#' are comments.
+# Each line is a file pattern followed by one or more owners.
+
+# Default owner(s) for everything
+*  @danial-changez_cgl @deep-patel_cgl
+
+# Owner(s) for specific directories (examples)
+# /src/    @danial-changez_cgl @deep-patel_cgl
+# /Styles/ @daniel-cho_cgl
+
+# Owner(s) for XAML files
+# *.xaml @maxime-coignus_cgl
+
+# Owner(s) for a specfic file
+# src/MainWindow.ps1 @danial-changez_cgl @omolola-igbasan_cgl
