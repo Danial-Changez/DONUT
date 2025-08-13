@@ -277,8 +277,8 @@ throttleLimit = 5
 - **🟡 Failed Update Prompt (Danial):** Prompt for failed updates with hyperlinks to the specific driver page.
 - **🟡 Set Output Log as Default (Daniel):** Set as a default whenever Scan or ApplyUpdates is chosen in Config.
   - Note: Preliminary scan for Apply Updates has this already.
+- **🟡 Battery Report Page (Lola):** Add a battery report button that navigates to a separate page.
 - **❌ Change Tab Name to WSID if IP is Passed (Low Priority):** Use the System.Net.DNS library to extract hostName and set it as the tab name if an IP is passed instead of WSID.
-- **❌ Battery Report Page (Low Priority):** TBD
 - **❌ Add a Loading Bar for the Preliminary Scan (Low Priority):** TBD
 - **❌ Version Number on Sidebar:** Pull version from registry and display at the bottom of the sidebar.
 
