@@ -168,4 +168,47 @@
         <Setter Property="Fill"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
     </Style>
+    
+        <!-- Circular image button: hit area is the circle only -->
+        <Style x:Key="circleImageButton"
+                   TargetType="Button">
+                <Setter Property="Width" Value="165" />
+                <Setter Property="Height" Value="165" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Template">
+                        <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                        <!-- Root has no background so clicks outside the ellipse don't register -->
+                                        <Grid>
+                                                <!-- Image fill bound to Background to allow runtime ImageBrush -->
+                                                <Ellipse x:Name="ellipseBg"
+                                                                 Stretch="Fill"
+                                                                 Fill="{TemplateBinding Background}" />
+                                                <!-- Optional hover ring -->
+                                                <Ellipse x:Name="hoverRing"
+                                                                 Stretch="Fill"
+                                                                 Fill="Transparent"
+                                                                 StrokeThickness="0"
+                                                                 Stroke="{DynamicResource PanelBackgroundActive}" />
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="hoverRing" Property="StrokeThickness" Value="2" />
+                                                        <Setter TargetName="hoverRing" Property="Stroke" Value="{DynamicResource TitleTextPrimary}" />
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                        <Setter TargetName="ellipseBg" Property="Opacity" Value="0.85" />
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter TargetName="ellipseBg" Property="Opacity" Value="0.6" />
+                                                </Trigger>
+                                        </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                        </Setter.Value>
+                </Setter>
+        </Style>
 </ResourceDictionary>
