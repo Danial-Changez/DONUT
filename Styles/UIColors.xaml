@@ -13,6 +13,12 @@
     <Color x:Key="SecondaryBackgroundColor"> #210F55</Color>
     <SolidColorBrush x:Key="SecondaryBackground"
                      Color="{StaticResource SecondaryBackgroundColor}" />
+    <Color x:Key="LoginBackgroundDarkColor"> #060531</Color>
+    <SolidColorBrush x:Key="LoginBackgroundDark"
+                     Color="{StaticResource LoginBackgroundDarkColor}" />
+    <Color x:Key="LoginBackgroundColor"> #1B1448</Color>
+    <SolidColorBrush x:Key="LoginBackground"
+                     Color="{StaticResource LoginBackgroundColor}" />
     <!-- Window Border Colors -->
     <Color x:Key="WindowBorderPrimaryColor"> #6D2FFF</Color>
     <SolidColorBrush x:Key="WindowBorderPrimary"
@@ -23,6 +29,16 @@
     <Color x:Key="WindowBorderSecondaryColor"> #836EFB</Color>
     <SolidColorBrush x:Key="WindowBorderSecondary"
                      Color="{StaticResource WindowBorderSecondaryColor}" />
+    <!-- Login Window Border Colors -->
+    <Color x:Key="LoginWindowBorderPrimaryColor"> #462AD8</Color>
+    <SolidColorBrush x:Key="LoginWindowBorderPrimary"
+                     Color="{StaticResource LoginWindowBorderPrimaryColor}" />
+    <Color x:Key="LoginWindowBorderAccentColor"> #DA34AE</Color>
+    <SolidColorBrush x:Key="LoginWindowBorderAccent"
+                     Color="{StaticResource LoginWindowBorderAccentColor}" />
+    <Color x:Key="LoginWindowBorderSecondaryColor"> #8A16C1</Color>
+    <SolidColorBrush x:Key="LoginWindowBorderSecondary"
+                     Color="{StaticResource LoginWindowBorderSecondaryColor}" />
     <!-- Button/Accent Colors -->
     <Color x:Key="AccentPurpleColor"> #773DFF</Color>
     <SolidColorBrush x:Key="AccentPurple"
@@ -90,6 +106,9 @@
     <SolidColorBrush x:Key="PanelBackgroundActive"
                      Color="{StaticResource PanelBackgroundActiveColor}" />
     <!-- Misc Colors -->
+    <Color x:Key="LoginBoxColor"> #33000000</Color>
+    <SolidColorBrush x:Key="LoginBox"
+                     Color="{StaticResource LoginBoxColor}" />
     <Color x:Key="GroupBoxBackgroundColor"> #30FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground"
                      Color="{StaticResource GroupBoxBackgroundColor}" />
