@@ -23,7 +23,6 @@ This PowerShell project automates remote execution of the Dell Command Update (D
   - [Parameter Handling](#parameter-handling)
   - [Required Settings](#required-settings)
   - [How It Works](#how-it-works)
-- [Future Improvements](#future-improvements)
 - [Bugs](#bugs)
 - [Contributing](#contributing)
 - [Additional Notes](#additional-notes)
@@ -35,6 +34,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 - **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
 - **Parallel Execution:** Uses PowerShell runspaces for parallel updates, with each computer being assigned its own tab.
 - **Dynamic Configuration:** Driven by user-friendly configuration files (`config.txt`).
+- **GitHub App Updates:** Authenticates via a GitHub App (Device Flow) and self-updates from the latest GitHub release (supports rollback by tag).
 - **Detailed Logging:** Per-host logs for execution outcomes and errors.
 - **DNS and Error Validation:** Validates DNS/IP before execution.
 
@@ -47,7 +47,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 - **PsExec (Sysinternals Suite)** (for remote command execution)
 - **.NET Desktop 9.0+** (needed for WPF to run with the current packaged version)
 - **Windows Admin Access** (for remote access)
-- **TPSFiles Share** (needed for access to the manifest)
+- **GitHub App Access** (to allow your team to sign in via Device Flow and receive updates from your org's GitHub Releases)
 
 ---
 
@@ -57,11 +57,11 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 1. All [Prerequisites](#prerequisites) must be installed or acquired before using DONUT.
 2. Review Step 2 to set up PsTools, otherwise skip to Step 3 if already installed.
-   - PsTools is available at `\\cgic.ca\GPHFiles\TPSFiles\Support-Applications\DONUT\Production\PsTools`.
-   - Copy the folder to **Documents**, **Downloads**, or **Desktop** (any one of these directories will suffice).
+   - PsTools is available at `https://learn.microsoft.com/en-us/sysinternals/downloads/pstools`.
+   - Extract the zip to **Documents**, **Downloads**, or **Desktop** (any one of these directories will suffice).
    - Transfer the **contents** of the folder to `C:\Windows\System32`.
-3. Run the .NET Desktop runtime installer (MSI available in `DONUT\Production`).
-4. Install DONUT (MSI available in `DONUT\Production`).
+3. Run the .NET Desktop SDK installer (available at `https://dotnet.microsoft.com/en-us/download/dotnet/9.0`).
+4. Install DONUT (MSI available under releases).
 5. Navigate to **Virus & Threat Protection > Manage Settings > Add or remove exclusions** (this is NOT a virus, just not digitally signed).
 6. Click **Add an exclusion**.
 7. Select **Folder**.
@@ -72,6 +72,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 1. **Launch the Application:**
 
    - Open the app through the Start Menu.
+   - On first launch (or if the token expired), sign in with your GitHub App using the device code prompt so the updater can pull releases.
    - Apply any updates if prompted (unless specified otherwise by the team).
 
 2. **Configure Commands:**
@@ -83,7 +84,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 3. **List Target Computers:**
 
-   - Enter WSID(s) in the search bar, separated by commas or new lines.
+   - Enter the target hostname(s) in the search bar, separated by commas or new lines.
    - The UI will display a tab for each computer and manage the queue automatically.
 
 4. **Run and Monitor:**
@@ -97,7 +98,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 5. **Review Logs:**
    - Detailed logs are saved in the logs tab for each run (if specified).
    - If a file path is specified in "Output Log", a tab in its name will be appended under the Logs page.
-   - If no file path is specified, "Default" tab will be appended to if any errors with the run were detected.
+   - If no file path is specified, the "Default" tab will be appended to if any errors with the run are detected.
      - For example, if the "Output Log" was set to `C:\temp\DONUT\applyUpdates.log`, new data will be appended to the ApplyUpdates tab.
 
 ---
@@ -131,7 +132,8 @@ This PowerShell project automates remote execution of the Dell Command Update (D
  ┃ ┣ 🔧Read-Config.psm1
  ┃ ┣ 📜MainWindow.ps1
  ┃ ┣ 📜remoteDCU.ps1
- ┃ ┗ 📜Updater.ps1
+ ┃ ┣ 📜Updater.ps1
+ ┃ ┗ 📜InstallWorker.ps1
  ┣ 📂Styles - XAML Resource Dictionaries
  ┃ ┣ 🎨ButtonStyles.xaml
  ┃ ┣ 🎨Icons.xaml
@@ -166,9 +168,10 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ### File Explanations
 
 - `src/`
-  - `MainWindow.ps1` — Main WPF UI logic handling events, runspace management, etc.
-  - `Updater.ps1` — Update logic and manifest handling
-  - `remoteDCU.ps1` — Remote execution logic
+  - `MainWindow.ps1` - Main WPF UI logic handling events, runspace management, etc.
+  - `Updater.ps1` - GitHub App/device-flow updater that pulls the latest GitHub release asset and hands off to `InstallWorker.ps1`
+  - `InstallWorker.ps1` - Background installer that runs the downloaded MSI, handles rollback flag, and relaunches the app
+  - `remoteDCU.ps1` - Remote execution logic
   - Supporting modules: `ConfigView.psm1`, `Helpers.psm1`, `ImportXaml.psm1`, `LogsView.psm1`, `Read-Config.psm1`
 - `Views/`
   - `Config Options/` — All Config tab dropdown pages (Only Scan.xaml and ApplyUpdates.xaml are active)
@@ -184,7 +187,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
   - `ModernControls.xaml` — Custom controls for textboxes, checkboxes, comboboxes, etc.
   - `ButtonStyles.xaml` — Sidebar button styles
 - `res/`
-  - `WSID.txt` — Stores all WSID(s) updated through search bar
+  - `WSID.txt` — Stores all WSIDs (Work Station ID) updated through search bar
 - `logs/` — Log file target directory
 - `reports/` — XML file target directory
 - `config.txt` — Config file that determines the settings of remote command run
@@ -196,17 +199,17 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 1. **Clone the repository** and open in VS Code or PowerShell Studio.
 2. **Install dependencies** (see [Prerequisites](#prerequisites)).
 3. **Review configuration files** (`config.txt`, `WSID.txt`) and XAML UI files in `Views/` and `Styles/`.
-4. **For packaging, use PowerShell Studio's packager to build the MSI/executable.**
-   - All new modules or script files should be called within `MainWindow.ps1`, so we should never have to redistribute the app.
-   - Update file paths in `Manifest-Generator.ps1` and version as needed.
-   - Run it to generate a new manifest to push updates.
+4. **Package and publish updates via GitHub Releases.**
+   - Build the MSI with PowerShell Studio's packager (set the Product Version to your release tag).
+   - Create a GitHub release with that tag and upload the MSI asset (matches `MsiAssetPattern`, default `*.msi`).
+   - The app authenticates via your GitHub App (Device Flow), compares the installed version to the latest release tag, and self-updates or rolls back accordingly.
 
 ### Key Concepts
 
 - **Runspaces:** Used for parallel remote execution. See `MainWindow.ps1` for runspace management and UI updates.
 - **WPF UI:** All user interaction is via the XAML-based interface. UI logic is in `MainWindow.ps1` and supporting modules.
 - **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
-- **Manifest Generation:** Use `Manifest-Generator.ps1` for version updates.
+- **GitHub App Updates:** `Updater.ps1` requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256, and hands off install/rollback to `InstallWorker.ps1`.
 
 ### Testing
 
@@ -270,24 +273,6 @@ throttleLimit = 5
 3. Builds the DCU command string based on enabled parameters
 4. Executes the command remotely on each target computer using the specified throttle limit
 
-## Future Improvements
-
-- **🟡 Versioning (Danial):** Update versioning work note to include application current versions as well.
-  - Increase speed as well (currently takes 10-20 seconds to complete).
-- **🟡 Failed Update Prompt (Danial):** Prompt for failed updates with hyperlinks to the specific driver page.
-- **🟡 Set Output Log as Default (Daniel):** Set as a default whenever Scan or ApplyUpdates is chosen in Config.
-  - Note: Preliminary scan for Apply Updates has this already.
-  - Steps To Make It Work:
-    - Save original outputLog path from the UI.
-    - Put in remote path if outputLog is enabled or specified (basically if there is anything in the config file after the equals sign for outputLog).
-    - Then, when saving to analyst machine, change localLogFile variable.
-- **🟡 Battery Report Page (Lola):** Add a battery report button that navigates to a separate page.
-- **❌ Change Tab Name to WSID if IP is Passed (Low Priority):** Use the System.Net.DNS library to extract hostName and set it as the tab name if an IP is passed instead of WSID.
-- **❌ Add a Loading Bar for the Preliminary Scan (Low Priority):** TBD
-- **❌ Version Number on Sidebar:** Pull version from registry and display at the bottom of the sidebar.
-
-**Note: Low Priority = Tasks for Lola and Daniel**
-
 ## Bugs
 
 - **✅ Resize Logic Crash:** Possible workaround, set CanResize to CanResizeWithGrip.
@@ -306,21 +291,17 @@ throttleLimit = 5
 - **UI Changes:** Edit XAML files in `Views/` and `Styles/`.
 - **Logic Changes:** Update event logic in `MainWindow.ps1`, with each page's supporting function(s) in its relevant module file.
 - **Deploying Changes:**
-  - Navigate to `\\cgic.ca\GPHFiles\TPSFiles\Support-Applications\DONUT\Development`
-  - Add updated files in the correct directory format (i.e., `src/MainWindow.ps1`, `Styles/Icons.xaml`).
-  - These should mirror the relative file paths in your project directory.
-  - Update `$Files` parameter in `Manifest-Generator.ps1`.
-  - Increment `$Version`.
-  - Run the manifest generator script to update the manifest.
-  - Users will be prompted for updates on next app startup.
+  - Build a new MSI in PowerShell Studio (update the Product Version).
+  - Draft a GitHub release with a tag matching that version and upload the MSI asset (honor `MsiAssetPattern` if you rename it).
+  - Org admins sign in once via the GitHub App; the app will pick up the latest release on startup and prompt users to update or roll back based on the tag.
 - **Optional:**
   - Repackage the project in PowerShell Studio with the new version (i.e., 1.0.0.4) and build the MSI.
-  - Replace the old MSI in the file share with the new package.
+  - Keep a copy of the MSI on the internal file share for manual installs or recovery.
 
 ---
 
 ## Additional Notes
 
-- **Remote Only:** Designed for remote execution; local runs may behave unexpectedly.
+- **Remote Only:** Designed for remote execution; local runs can behave unexpectedly.
 
 ---

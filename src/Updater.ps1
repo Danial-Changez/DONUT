@@ -14,10 +14,10 @@
 #>
 param(
     # GitHub configuration (private org repo)
-    [string]$GitOwner = 'Cooperators-EIOS',
+    [string]$GitOwner = 'Your Org/Repo Owner',
     [string]$GitRepo = 'DONUT',
     # App Client ID (Device Flow for GitHub App user token)
-    [string]$GitClientId = 'Iv23liCYT0SXs7j31VnT',
+    [string]$GitClientId = 'Your Client ID',
     # For testing: force showing the Device Flow UI even if a token exists
     [switch]$ForceDeviceFlow,
     # (Optional) Name/pattern of the release MSI asset (if naming convention is changed in the future)
