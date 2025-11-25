@@ -4,8 +4,7 @@
 The app auto-updates from GitHub Releases using a GitHub App with Device Flow. No server backend is required. On startup, the app checks the latest release, compares versions, and installs the target MSI if different (supports update or rollback by tag).
 
 ## Prerequisites
-- RFS submitted to Cloud Platforms Operations & Engineering (CPOE).
-- A GitHub App configured for Device Flow and authorized by organization owners.
+- A GitHub App configured for Device Flow and authorized by organization or repository owners.
 
 ## Tokens and Security
 - `Updater.ps1` requests a user access token and a refresh token via the GitHub App (Device Flow).
@@ -35,8 +34,8 @@ The app auto-updates from GitHub Releases using a GitHub App with Device Flow. N
 - On startup, `MainWindow.ps1` restores these items (creating folders if missing) so updates do not impact user settings, logs, or saved reports.
 
 ## Sequence Summary
-1. Request approved and GitHub App created (Device Flow).
-2. Org owners authorize the app.
+1. GitHub App created (Device Flow).
+2. Organization/Repository owners authorize the app.
 3. `Updater.ps1` acquires tokens and stores them encrypted (DPAPI CurrentUser).
 4. App start: decrypt → query latest release → compare version → install MSI if different.
 5. MSI install via `InstallWorker.ps1` under `%LOCALAPPDATA%\DONUT` → relaunch.
