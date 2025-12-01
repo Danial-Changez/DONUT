@@ -18,22 +18,16 @@ flowchart TD
   subgraph S["Startup & Window Initialization"]
     direction TB
     S1["Load assemblies</br>- PresentationFramework</br>- System.Windows.Forms"]:::action
-    S2["Import modules</br>- Read-Config.psm1</br>- ConfigView.psm1</br>- Helpers.psm1</br>- ImportXaml.psm1</br>- LogsView.psm1</br>- BatteryReport.psm1"]:::action
-    S3["Set script:configPath → ..\\config.txt"]:::data
+    S2["Import modules</br>- Read-Config.psm1</br>- ConfigView.psm1</br>- Helpers.psm1</br>- ImportXaml.psm1</br>- LogsView.psm1"]:::action
+    S3["Set script:configPath -> ..\\config.txt"]:::data
     S4["Ensure directories</br>- ..\\reports</br>- ..\\logs"]:::action
-    S5{"Compile P/Invoke User32?"}:::decision
-    S5a["UseWin32Resize = $true"]:::data
-    S5b["UseWin32Resize = $false"]:::data
-    S6["Initialize data maps</br>- brandPatterns</br>- LastSelected*</br>- Sync hashtables/queues</br>- Runspace tracking"]:::data
-    S7["Import-Xaml ..\\Views\\MainWindow.xaml"]:::action
-    S8["Merge Style Resource Dictionaries"]:::action
-    S9["Wire chrome & window controls</br>- DragMove</br>- Min/Max/Close</br>- Custom Resize Border"]:::action
-    S10["Set HomeView as default content"]:::action
+    S5["Initialize data maps</br>- brandPatterns</br>- LastSelected*</br>- Sync hashtables/queues</br>- Runspace tracking"]:::data
+    S6["Import-Xaml ..\\Views\\MainWindow.xaml"]:::action
+    S7["Merge Style Resource Dictionaries"]:::action
+    S8["Wire window chrome & controls</br>- WindowChrome resize</br>- DragMove</br>- Min/Max/Close"]:::action
+    S9["Set HomeView as default content"]:::action
 
-    S1-->S2-->S3-->S4-->S5
-    S5 -- success --> S5a --> S6
-    S5 -- failure --> S5b --> S6
-    S6-->S7-->S8-->S9-->S10
+    S1-->S2-->S3-->S4-->S5-->S6-->S7-->S8-->S9
   end
 
   %% ----------------------
@@ -43,12 +37,12 @@ flowchart TD
     direction TB
     D1["$script:PendingQueue</br>Type: System.Collections.Queue"]:::data
     D2["$script:ActiveRunspaces</br>Type: System.Collections.Generic.List[object]"]:::data
-    D3["$script:RunspaceJobs</br>Map: PowerShell → { Computer; PowerShell; AsyncResult }"]:::data
-    D4["$script:TabsMap</br>Map: Computer → RichTextBox"]:::data
-    D5["$script:SyncUI</br>Map: Computer → ConcurrentQueue[string]"]:::data
-    D6["$script:QueuedOrRunning</br>Map: Computer → bool"]:::data
-    D7["$script:ManualRebootQueue</br>Map: Computer → bool"]:::data
-    D8["$script:PopupData</br>Map: Computer → { Type; Data; SyncEvent; UserConfirmedRef }"]:::data
+    D3["$script:RunspaceJobs</br>Map: PowerShell -> { Computer; PowerShell; AsyncResult }"]:::data
+    D4["$script:TabsMap</br>Map: Computer -> RichTextBox"]:::data
+    D5["$script:SyncUI</br>Map: Computer -> ConcurrentQueue[string]"]:::data
+    D6["$script:QueuedOrRunning</br>Map: Computer -> bool"]:::data
+    D7["$script:ManualRebootQueue</br>Map: Computer -> bool"]:::data
+    D8["$script:PopupData</br>Map: Computer -> { Type; Data; SyncEvent; UserConfirmedRef }"]:::data
     D9["$script:Timer</br>Type: DispatcherTimer (UI thread)"]:::data
     D10["$script:throttleLimit</br>Type: int (default 5 or config)"]:::data
   end
@@ -66,18 +60,9 @@ flowchart TD
       VH1["Import-Xaml ..\\Views\\HomeView.xaml"]:::action
       VH2["Update-SearchButtonLabel(HomeView, configPath)"]:::action
       VH3["Initialize-SearchBar + Placeholder 'WSID...'"]:::action
-      VH4["Wire btnSearch → Update-WSIDFile"]:::action
-      VH5["Wire btnClearTabs → remove inactive tabs"]:::action
+      VH4["Wire btnSearch -> Update-WSIDFile"]:::action
+      VH5["Wire btnClearTabs -> remove inactive tabs"]:::action
       VH1-->VH2-->VH3-->VH4-->VH5
-    end
-
-    subgraph VB["Initialize-BatteryView"]
-      direction TB
-      VB1["Import-Xaml ..\\Views\\BatteryView.xaml"]:::action
-      VB2["Initialize-SearchBar + Placeholder 'WSID For Battery Report...'"]:::action
-      VB3["Wire btnRunBatteryReport → per-WSID battery flow"]:::action
-      VB4["Wire btnClearTabs → cleanup browser/report"]:::action
-      VB1-->VB2-->VB3-->VB4
     end
 
     subgraph VC["Config & Logs"]
@@ -88,27 +73,26 @@ flowchart TD
 
     subgraph VN["Navigation Buttons"]
       direction TB
-      VN1["btnHome.Checked → HomeView + headerHome visible"]:::action
-      VN2["btnConfig.Checked → ConfigView + headerConfig visible"]:::action
-      VN3["btnLogs.Checked → LogsView + headerLogs visible"]:::action
-      VN4["btnBattery.Checked → BatteryView + headerBattery visible"]:::action
+      VN1["btnHome.Checked -> HomeView + headerHome visible"]:::action
+      VN2["btnConfig.Checked -> ConfigView + headerConfig visible"]:::action
+      VN3["btnLogs.Checked -> LogsView + headerLogs visible"]:::action
     end
 
     S10-->VH
     VH-->VN
-    VN-->VB
     VN-->VC
   end
 
   %% -----------------
   %% Update-WSIDFile()
+  %% -----------------()
   %% -----------------
   subgraph U["Update-WSIDFile(textBox, wsidFilePath, configPath)"]
     direction TB
     U1["TextBox valid & non-empty?"]:::decision
     U2["Reset ApplyUpdatesConfirmed"]:::action
-    U3["Parse inputs → split on newlines/commas</br>Trim → Remove empty → Unique"]:::action
-    U4["Write list → WSID.txt"]:::io
+    U3["Parse inputs -> split on newlines/commas</br>Trim -> Remove empty -> Unique"]:::action
+    U4["Write list -> WSID.txt"]:::io
     U5["Read config (Read-Config)"]:::action
     U6["Set throttleLimit from config or default"]:::data
 
@@ -117,7 +101,7 @@ flowchart TD
     U9["Approved?"]:::decision
     U10["Populate queues & tabs</br>- PendingQueue.Enqueue</br>- TabsMap/SyncUI/QueuedOrRunning"]:::action
     U10a["ManualRebootQueue update if flags present"]:::data
-    U11["Start up to throttleLimit runspaces</br>→ StartNextRunspace"]:::action
+    U11["Start up to throttleLimit runspaces</br>-> StartNextRunspace"]:::action
     U12["Create & start DispatcherTimer</br>100ms tick"]:::action
 
     U1 -- no --> Uend1["Return"]:::warn
@@ -150,7 +134,7 @@ flowchart TD
       RPH1["Param(hostName, scriptPath, queue, tb, configPath, isApplyUpdates, popupDataSync, brandPatterns)"]:::data
       RPH2["scriptPath exists?"]:::decision
       RPH3["If isApplyUpdates</br>PHASE 1: Preliminary scan"]:::action
-      RPH3a["Write temp scan config → config.txt"]:::io
+      RPH3a["Write temp scan config -> config.txt"]:::io
       RPH3b["Launch pwsh -File remoteDCU.ps1 -ComputerName host"]:::action
       RPH3c["Capture stdout/stderr; filter noise"]:::action
       RPH3d["Wait for and parse report XML</br>Select nodes; build updates list</br>Collect remote driver/app data (PsExec)"]:::action
@@ -193,7 +177,7 @@ flowchart TD
     T3["Append to RichTextBox; scroll to end"]:::action
     T4["Handle special messages (e.g., SHOW_UPDATE_CONFIRMATION)"]:::action
 
-    T5["Find finished runspaces → collect"]:::action
+    T5["Find finished runspaces -> collect"]:::action
     T6["Remove from ActiveRunspaces & RunspaceJobs"]:::action
     T7["ActiveRunspaces < throttle & PendingQueue > 0?"]:::decision
     T8["StartNextRunspace"]:::action
@@ -211,35 +195,12 @@ flowchart TD
 
   U12 --> T
 
-  %% --------------------
-  %% Battery Report Flow
-  %% --------------------
-  subgraph B["BatteryView: btnRunBatteryReport"]
-    direction TB
-    B0["Write-Host debug lines (button clicked + textbox value)"]:::action
-    B1["Read text from GoogleSearchBar"]:::action
-    B2["Text is non-empty</br>and not placeholder?"]:::decision
-    B2a["TODO: Multi-input flow</br>(runspaces + tabs + per-WSID HTML)"]:::warn
-    B3["Current placeholder path:</br>C:\\temp\\DONUT\\battery-report.html"]:::data
-    B4["Placeholder: Add-RemotePath + Add-BatteryReport"]:::action
-    B5["Ensure/copy local report (if implemented)"]:::action
-    B6["Find WebBrowser 'Display' + 'BrowserOverlay'"]:::action
-    B7["Overlay Visible; Browser Hidden"]:::action
-    B8["Build file:/// URI → $browser.Source"]:::io
-    B9["Dispatcher async: show Browser; hide overlay after delay"]:::action
-
-    B0-->B1-->B2
-    B2 -- no --> Bend["Return"]:::warn
-    B2 -- yes --> B3 --> B4 --> B5 --> B6 --> B7 --> B8 --> B9
-  end
-
   %% -----------------
   %% Clear Buttons
   %% -----------------
   subgraph C["Clear Buttons"]
     direction TB
-    C1["HomeView: btnClearTabs → remove inactive tabs + cleanup maps"]:::action
-    C2["BatteryView: btnClearTabs (TODO placeholder)</br>- Planned: navigate about:blank</br>- Hide browser; show overlay</br>- Delete local report(s)</br>- Clear textbox"]:::action
+    C1["HomeView: btnClearTabs -> remove inactive tabs + cleanup maps"]:::action
   end
 
   %% ----------------------
@@ -247,10 +208,10 @@ flowchart TD
   %% ----------------------
   subgraph W["Window Chrome & Resize"]
     direction TB
-    W1["panelControlBar.MouseLeftButtonDown → DragMove or Max/Restore"]:::action
+    W1["panelControlBar.MouseLeftButtonDown -> DragMove or Max/Restore"]:::action
     W2["btnMinimize/Maximize/Close"]:::action
-    W3["WindowResizeBorder.MouseMove → set cursors</br>hit-test for resize zones"]:::action
-    W4["WindowResizeBorder.MouseLeftButtonDown →</br>Win32 resize if available; else WPF fallback"]:::action
+    W3["WindowResizeBorder.MouseMove -> set cursors</br>hit-test for resize zones"]:::action
+    W4["WindowResizeBorder.MouseLeftButtonDown -></br>Win32 resize if available; else WPF fallback"]:::action
   end
 
   %% Wiring
@@ -263,8 +224,8 @@ flowchart TD
   %% ------------------
   subgraph E["Error & Edge Cases"]
     direction TB
-    E1["Config read errors → Write-Warning"]:::warn
-    E2["PsExec/timeouts → continue with empty structures"]:::warn
+    E1["Config read errors -> Write-Warning"]:::warn
+    E2["PsExec/timeouts -> continue with empty structures"]:::warn
     E3["Popup synchronization via ManualResetEventSlim"]:::data
     E4["Queues cleaned when tabs removed"]:::action
     E5["Try/Catch around IO & navigation"]:::warn
@@ -272,3 +233,11 @@ flowchart TD
 
   D-->E
 ```
+
+
+
+
+
+
+
+
