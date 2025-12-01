@@ -1,0 +1,46 @@
+@startuml
+package "Presentation Layer (src/UI)" {
+    [Views (XAML)]
+    [Styles (XAML)]
+    [MainController]
+}
+
+package "Service Layer (src/Services)" {
+    [RemoteExecutionService]
+    [UpdateService]
+    [DriverMatchingService]
+    [UserDataBackupService]
+}
+
+package "Core Layer (src/Core)" {
+    [ConfigManager]
+    [LogService]
+    [NetworkProbe]
+}
+
+package "Model Layer (src/Models)" {
+    [AppConfig]
+    [DeviceContext]
+}
+
+package "Infrastructure" {
+    [FileSystem (config/logs)]
+    [Network (DNS/RPC)]
+    [GitHub API]
+    [PsExec Wrapper]
+}
+
+[MainController] --> [RemoteExecutionService]
+[MainController] --> [UpdateService]
+[MainController] --> [BatteryService]
+[MainController] --> [ConfigManager]
+
+[RemoteExecutionService] --> [NetworkProbe]
+[RemoteExecutionService] --> [LogService]
+[RemoteExecutionService] --> [PsExec Wrapper]
+[RemoteExecutionService] --> [DriverMatchingService]
+
+[UpdateService] --> [GitHub API]
+[UpdateService] --> [UserDataBackupService]
+[ConfigManager] --> [FileSystem (config/logs)]
+@enduml

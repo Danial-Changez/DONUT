@@ -1,0 +1,59 @@
+@startuml
+component "C# Wrapper" {
+    [Donut.Launcher.exe]
+}
+
+component "UI Components (src/UI)" {
+    [MainWindow.xaml]
+    [ConfigView.xaml]
+    [LogsView.xaml]
+    [MainController.ps1]
+}
+
+component "PowerShell Scripts" {
+    [Start-Donut.ps1]
+    package "src/Scripts" {
+        [InstallWorker.ps1]
+    }
+}
+
+component "PowerShell Classes (src)" {
+    package "Services" {
+        [RemoteExecutionService.ps1]
+        [UpdateService.ps1]
+        [DriverMatchingService.ps1]
+        [UserDataBackupService.ps1]
+    }
+    package "Core" {
+        [ConfigManager.ps1]
+        [LogService.ps1]
+        [NetworkProbe.ps1]
+    }
+    package "Models" {
+        [AppConfig.ps1]
+        [DeviceContext.ps1]
+    }
+}
+
+database "Configuration (config)" {
+    [config.json]
+    [wsid.json]
+}
+
+[Donut.Launcher.exe] ..> [Start-Donut.ps1] : Hosts/Launches
+[Start-Donut.ps1] ..> [MainController.ps1] : Initializes
+[MainController.ps1] ..> [MainWindow.xaml] : Manages
+[MainController.ps1] ..> [RemoteExecutionService.ps1] : Uses
+[MainController.ps1] ..> [UpdateService.ps1] : Uses
+[MainController.ps1] ..> [ConfigManager.ps1] : Uses
+
+[RemoteExecutionService.ps1] ..> [LogService.ps1] : Logs to
+[RemoteExecutionService.ps1] ..> [NetworkProbe.ps1] : Uses
+[RemoteExecutionService.ps1] ..> [DriverMatchingService.ps1] : Uses
+[UpdateService.ps1] ..> [ConfigManager.ps1] : Reads Config
+[UpdateService.ps1] ..> [InstallWorker.ps1] : Deploys/Runs
+[UpdateService.ps1] ..> [UserDataBackupService.ps1] : Backs up data
+[UpdateService.ps1] ..> [DriverMatchingService.ps1] : Uses
+[ConfigManager.ps1] ..> [config.json] : Reads/Writes
+[ConfigManager.ps1] ..> [wsid.json] : Reads/Writes
+@enduml

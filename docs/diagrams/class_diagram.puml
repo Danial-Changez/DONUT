@@ -1,0 +1,102 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+package "Donut.Models" {
+    class AppConfig {
+        +ThrottleLimit: int
+        +Commands: Hashtable
+    }
+
+    class DeviceContext {
+        +HostName: string
+        +IPAddress: string
+        +IsOnline: bool
+        +StatusMessage: string
+    }
+}
+
+package "Donut.Services" {
+    class ConfigManager {
+        -configPath: string
+        +LoadConfig(): AppConfig
+        +SaveConfig(config: AppConfig): void
+        +IsCommandEnabled(commandName: string): bool
+    }
+
+    class LogService {
+        -logFilePath: string
+        +LogInfo(message: string): void
+        +LogError(message: string): void
+        +GetRecentLogs(): string[]
+    }
+
+    class NetworkProbe {
+        +ResolveHost(hostname: string): IPAddress
+        +CheckReverseDNS(ip: IPAddress, expectedName: string): bool
+        +IsRpcAvailable(hostname: string): bool
+    }
+
+    class RemoteExecutionService {
+        -networkProbe: NetworkProbe
+        -logger: LogService
+        -driverMatcher: DriverMatchingService
+        +ExecuteTask(device: DeviceContext): void
+        +RunScanPhase(device: DeviceContext): array
+        +RunApplyPhase(device: DeviceContext, updates: array): void
+        +CopyRemoteLogs(device: DeviceContext): void
+        -RunPsExec(command: string): void
+    }
+
+    class DriverMatchingService {
+        -brandPatterns: Hashtable
+        +FindBestDriverMatch(updateName: string, drivers: array): Driver
+        +GetDriversByVersion(drivers: array, updates: array): array
+    }
+
+    class UpdateService {
+        -currentVersion: Version
+        -driverMatcher: DriverMatchingService
+        -backup: UserDataBackupService
+        +CheckForUpdates(): bool
+        +DownloadUpdate(): FileInfo
+        +InstallUpdate(installer: FileInfo): void
+        +LaunchWorkerScript(): void
+    }
+
+    class UserDataBackupService {
+        +Backup(): void
+        +Restore(): void
+    }
+}
+
+package "Donut.UI" {
+    class MainController {
+        -configManager: ConfigManager
+        -remoteService: RemoteExecutionService
+        -updateService: UpdateService
+        +Initialize(): void
+        +OnScanClick(target: string): void
+        +OnUpdateClick(): void
+        <<event>> +OnProgress
+        <<event>> +OnLog
+    }
+
+    class MainWindow {
+        -controller: MainController
+        +UpdateStatus(msg: string): void
+        -SubscribeToEvents(): void
+    }
+}
+
+MainWindow --> MainController
+MainController --> ConfigManager
+MainController --> RemoteExecutionService
+MainController --> UpdateService
+RemoteExecutionService --> NetworkProbe
+RemoteExecutionService --> LogService
+RemoteExecutionService --> DriverMatchingService
+ConfigManager ..> AppConfig
+RemoteExecutionService ..> DeviceContext
+UpdateService --> UserDataBackupService
+
+@enduml

@@ -1,0 +1,35 @@
+@startuml
+start
+:Receive Computer Name;
+:Attempt DNS Lookup;
+
+if (DNS Resolve Success?) then (yes)
+    :Get IP Address;
+    :Perform Reverse DNS Lookup;
+    
+    if (Hostname Matches?) then (yes)
+        :Check RPC Availability (Port 135);
+        
+        if (RPC Available?) then (yes)
+            :Prepare PsExec Command;
+            :Execute Remote Command;
+            :Copy remote log/report to local;
+            if (Execution Success?) then (yes)
+                :Log Success;
+            else (no)
+                :Log Execution Error;
+            endif
+        else (no)
+            :Log Error: RPC Unavailable;
+        endif
+        
+    else (no)
+        :Log Error: Reverse DNS Mismatch;
+    endif
+    
+else (no)
+    :Log Error: DNS Lookup Failed;
+endif
+
+stop
+@enduml
