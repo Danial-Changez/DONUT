@@ -1,0 +1,45 @@
+@startuml
+actor User
+participant "MainController" as Ctrl
+participant "UpdateService" as Updater
+participant "GitHub API" as GH
+participant "InstallWorker.ps1" as Worker
+participant "PowerShell Process" as PS
+participant "UserDataBackupService" as Backup
+
+User -> Ctrl: Clicks "Update App"
+Ctrl -> Updater: CheckForUpdates()
+activate Updater
+
+Updater -> GH: Get Latest Release
+GH --> Updater: Release Info (Tag, Asset URL)
+
+alt Update Available
+    Updater -> Backup: Backup logs/reports/config
+    Updater -> Updater: Download MSI (guard against HTML/SSO)
+    Updater -> Updater: Verify SHA256
+    
+    Updater -> Updater: LaunchWorkerScript()
+    activate Updater
+    
+    Updater -> Worker: Start-Process (Arguments: MSI Path, /passive)
+    activate Worker
+    
+    Worker -> PS: Stop-Process "DONUT"
+    PS -> Ctrl: Kill Process
+    deactivate Ctrl
+    destroy Ctrl
+    
+    Worker -> PS: msiexec /i "NewVersion.msi"
+    
+    Worker -> PS: Start-Process "Donut.Launcher.exe"
+    deactivate Worker
+else No Update
+    Updater --> Ctrl: "Up to date"
+    deactivate Updater
+end
+
+alt Rollback (remote tag < local)
+    Updater -> Worker: Start-Process (Arguments: MSI Path, /rollback)
+end
+@enduml

@@ -1,0 +1,30 @@
+@startsalt
+{
+{T
++ <&folder> Root
+++ <&folder> assets
++++ <&folder> Images
+++ <&folder> bin
+++ <&folder> config
++++ <&file> config.json
++++ <&file> wsid.json
+++ <&folder> docs
+++ <&folder> logs
+++ <&folder> reports
+++ <&folder> src
++++ <&folder> Core
++++ <&folder> Models
++++ <&folder> Services
++++ <&folder> Scripts
+++++ <&file> InstallWorker.ps1
++++ <&folder> UI
+++++ <&folder> Views
+++++ <&folder> Styles
+++++ <&folder> Controllers
++++ <&file> Start-Donut.ps1
+++ <&folder> tests
++++ <&folder> Unit
++++ <&folder> Integration
+}
+}
+@endsalt

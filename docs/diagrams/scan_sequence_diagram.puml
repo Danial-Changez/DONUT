@@ -1,0 +1,44 @@
+@startuml
+actor User
+participant "MainWindow" as UI
+participant "MainController" as Ctrl
+participant "ConfigManager" as Cfg
+participant "RemoteExecutionService" as Remote
+participant "NetworkProbe" as Net
+participant "LogService" as Log
+
+User -> UI: Clicks "Scan"
+UI -> Ctrl: OnScanClick("PC-01")
+activate Ctrl
+
+Ctrl -> Cfg: LoadConfig()
+activate Cfg
+Cfg --> Ctrl: AppConfig
+deactivate Cfg
+
+Ctrl -> Remote: ExecuteTask(DeviceContext("PC-01"))
+activate Remote
+
+Remote -> Net: ResolveHost("PC-01")
+activate Net
+Net --> Remote: IPAddress
+deactivate Net
+
+Remote -> Net: CheckReverseDNS(IP, "PC-01")
+activate Net
+Net --> Remote: true
+deactivate Net
+
+Remote -> Net: IsRpcAvailable("PC-01")
+activate Net
+Net --> Remote: true
+deactivate Net
+
+Remote -> Remote: RunPsExec(...)
+Remote -> Log: LogInfo("Execution Successful")
+Remote --> Ctrl: Success
+deactivate Remote
+
+Ctrl -> UI: UpdateStatus("Scan Complete")
+deactivate Ctrl
+@enduml

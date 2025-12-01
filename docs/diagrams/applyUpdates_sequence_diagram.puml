@@ -1,0 +1,65 @@
+@startuml
+actor User
+participant "MainWindow" as UI
+participant "MainController" as Ctrl
+participant "ConfigManager" as Cfg
+participant "RemoteExecutionService" as Remote
+participant "NetworkProbe" as Net
+participant "LogService" as Log
+participant "DriverMatchingService" as Match
+
+User -> UI: Clicks "Apply Updates"
+UI -> Ctrl: OnApplyUpdatesClick("PC-01")
+activate Ctrl
+
+Ctrl -> Cfg: LoadConfig()
+activate Cfg
+Cfg --> Ctrl: AppConfig (applyUpdates=enable)
+deactivate Cfg
+
+Ctrl -> Remote: ExecuteTask(DeviceContext("PC-01"))
+activate Remote
+
+group Phase 1: Scan & Detect
+    Remote -> Remote: RunPsExec("/scan")
+    Remote -> Remote: Copy report XML/logs back locally
+    Remote -> Match: Build update list + driver/app matches
+    
+    alt Updates Available
+        Remote -> Ctrl: RequestConfirmation(UpdatesList)
+        Ctrl -> UI: Show Confirmation Popup
+        User -> UI: Confirms Update
+        UI -> Ctrl: UserConfirmed(true)
+        Ctrl -> Remote: ProceedWithUpdate()
+        Remote -> Log: LogInfo("Confirmed; clipboard updated")
+    else No Updates
+        Remote -> Log: LogInfo("System up to date")
+        Remote --> Ctrl: Complete
+    end
+end
+
+group Phase 2: Apply Updates
+    Remote -> Remote: RunPsExec("/applyUpdates")
+    activate Remote
+    
+    loop Output Stream
+        Remote -> Remote: Check for Reboot Flags
+        Remote -> Ctrl: ReportProgress(Line)
+        Ctrl -> UI: Update Terminal
+    end
+    
+    alt Reboot Required
+        Remote -> Ctrl: RequestManualReboot()
+        Ctrl -> UI: Show Reboot Popup
+    end
+    
+    Remote -> Log: LogInfo("Update Complete")
+    deactivate Remote
+end
+
+Remote --> Ctrl: Task Finished
+deactivate Remote
+
+Ctrl -> UI: UpdateStatus("Ready")
+deactivate Ctrl
+@enduml
