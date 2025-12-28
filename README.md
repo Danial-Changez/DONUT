@@ -140,22 +140,21 @@ This PowerShell project automates remote execution of the Dell Command Update (D
  ┃ ┣ 🎨ModernControls.xaml
  ┃ ┗ 🎨UIColors.xaml
  ┣ 📂Views - XAML Window and Child Views
- ┃ ┣ 📂Config Options - All Config Child Views (only Scan.xaml and ApplyUpdates.xaml are active)
- ┃ ┃ ┣ 🎨ApplyUpdates.xaml
- ┃ ┃ ┣ 🎨Configure.xaml
- ┃ ┃ ┣ 🎨CustomNotification.xaml
- ┃ ┃ ┣ 🎨DriverInstall.xaml
- ┃ ┃ ┣ 🎨GenerateEncryptedPassword.xaml
- ┃ ┃ ┣ 🎨Help.xaml
- ┃ ┃ ┣ 🎨Scan.xaml
- ┃ ┃ ┗ 🎨Version.xaml
+ ┃ ┣ 📂Config Options - All Config Child Views (only ScanOptionView.xaml and ApplyUpdatesOptionView.xaml are active)
+ ┃ ┃ ┣ 🎨ApplyUpdatesOptionView.xaml
+ ┃ ┃ ┣ 🎨ConfigureOptionView.xaml
+ ┃ ┃ ┣ 🎨CustomNotificationOptionView.xaml
+ ┃ ┃ ┣ 🎨DriverInstallOptionView.xaml
+ ┃ ┃ ┣ 🎨GenerateEncryptedPasswordOptionView.xaml
+ ┃ ┃ ┣ 🎨HelpOptionView.xaml
+ ┃ ┃ ┣ 🎨ScanOptionView.xaml
+ ┃ ┃ ┗ 🎨VersionOptionView.xaml
  ┃ ┣ 🎨ConfigView.xaml
- ┃ ┣ 🎨Confirmation.xaml
+ ┃ ┣ 🎨DialogWindow.xaml
  ┃ ┣ 🎨HomeView.xaml
+ ┃ ┣ 🎨LoginWindow.xaml
  ┃ ┣ 🎨LogsView.xaml
- ┃ ┣ 🎨MainWindow.xaml
- ┃ ┣ 🎨PopUp.xaml
- ┃ ┗ 🎨Update.xaml
+ ┃ ┗ 🎨MainWindow.xaml
  ┣ 🚫.gitignore
  ┣ ⚙️config.txt
  ┣ 💠DONUT.psproj
@@ -174,10 +173,12 @@ This PowerShell project automates remote execution of the Dell Command Update (D
   - `remoteDCU.ps1` - Remote execution logic
   - Supporting modules: `ConfigView.psm1`, `Helpers.psm1`, `ImportXaml.psm1`, `LogsView.psm1`, `Read-Config.psm1`
 - `Views/`
-  - `Config Options/` — All Config tab dropdown pages (Only Scan.xaml and ApplyUpdates.xaml are active)
+  - `Config Options/` — All Config tab dropdown pages (Only ScanOptionView.xaml and ApplyUpdatesOptionView.xaml are active)
   - `HomeView.xaml` — UI for Home page
   - `ConfigView.xaml` — UI for Config page
   - `LogsView.xaml` — UI for Logs page
+  - `DialogWindow.xaml` — Generic UI for alerts, confirmations, and updates
+  - `LoginWindow.xaml` — UI for GitHub Device Flow login
   - `PopUp.xaml` — UI for finished threads popup
   - `Update.xaml` — UI for update popup
   - `Confirmation.xaml` — UI for confirmation popups (i.e., manual reboot and apply updates popups)

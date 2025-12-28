@@ -1,45 +1,98 @@
-@startuml
+@startuml Self-Update Sequence Diagram
 actor User
-participant "MainController" as Ctrl
-participant "UpdateService" as Updater
+participant "UpdatePresenter" as Presenter
+participant "SelfUpdateService" as Service
 participant "GitHub API" as GH
 participant "InstallWorker.ps1" as Worker
-participant "PowerShell Process" as PS
-participant "UserDataBackupService" as Backup
 
-User -> Ctrl: Clicks "Update App"
-Ctrl -> Updater: CheckForUpdates()
-activate Updater
+User -> Presenter: Clicks "Check for Updates"
+activate Presenter
 
-Updater -> GH: Get Latest Release
-GH --> Updater: Release Info (Tag, Asset URL)
+Presenter -> Service: GetStoredToken()
+activate Service
+Service --> Presenter: DPAPI-decrypted token (or null)
+deactivate Service
+
+alt No Token
+    Presenter -> Service: InitiateDeviceFlow()
+    activate Service
+    Service -> GH: POST /login/device/code
+    GH --> Service: device_code, user_code, verification_uri
+    Service --> Presenter: DeviceFlowResponse
+    deactivate Service
+    
+    Presenter -> User: Show user_code & verification_uri
+    
+    loop Poll until authorized
+        Presenter -> Service: PollForToken(deviceCode)
+        activate Service
+        Service -> GH: POST /login/oauth/access_token
+        GH --> Service: access_token (or pending)
+        Service --> Presenter: TokenData (or null)
+        deactivate Service
+    end
+    
+    Presenter -> Service: SaveToken(tokenData)
+    activate Service
+    Service --> Presenter: (saved with DPAPI)
+    deactivate Service
+end
+
+Presenter -> Service: GetLatestRelease(token)
+activate Service
+Service -> GH: GET /repos/.../releases/latest
+GH --> Service: Release JSON (tag, assets)
+Service --> Presenter: Release object
+deactivate Service
+
+Presenter -> Service: GetLocalVersion()
+activate Service
+Service --> Presenter: local version
+deactivate Service
+
+Presenter -> Presenter: Compare versions
 
 alt Update Available
-    Updater -> Backup: Backup logs/reports/config
-    Updater -> Updater: Download MSI (guard against HTML/SSO)
-    Updater -> Updater: Verify SHA256
+    Presenter -> User: Show update prompt
+    User --> Presenter: Confirm update
     
-    Updater -> Updater: LaunchWorkerScript()
-    activate Updater
+    Presenter -> Service: GetReleaseAsset(release, "*.msi")
+    activate Service
+    Service --> Presenter: MSI asset info
+    deactivate Service
     
-    Updater -> Worker: Start-Process (Arguments: MSI Path, /passive)
+    Presenter -> Service: DownloadAsset(token, asset, destDir)
+    activate Service
+    Service -> GH: Download MSI
+    GH --> Service: MSI file
+    Service --> Presenter: Local MSI path
+    deactivate Service
+    
+    Presenter -> Service: VerifyFileHash(path, expectedHash)
+    activate Service
+    note right: SHA-256 verification
+    Service --> Presenter: true/false
+    deactivate Service
+    
+    Presenter -> Service: ApplyUpdate(msiPath, false, sourceRoot)
+    activate Service
+    
+    Service -> Worker: Start-Process pwsh -File InstallWorker.ps1
     activate Worker
     
-    Worker -> PS: Stop-Process "DONUT"
-    PS -> Ctrl: Kill Process
-    deactivate Ctrl
-    destroy Ctrl
+    Worker -> Worker: Stop-Process "DONUT" (graceful)
+    Worker -> Worker: msiexec /i "NewVersion.msi" /passive
+    Worker -> Worker: Start-Process "Donut.Launcher.exe"
     
-    Worker -> PS: msiexec /i "NewVersion.msi"
-    
-    Worker -> PS: Start-Process "Donut.Launcher.exe"
     deactivate Worker
-else No Update
-    Updater --> Ctrl: "Up to date"
-    deactivate Updater
+    deactivate Service
+    
+    destroy Presenter
+    note over Presenter: App restarts with new version
+    
+else No Update Available
+    Presenter -> User: Show "Already up to date"
 end
 
-alt Rollback (remote tag < local)
-    Updater -> Worker: Start-Process (Arguments: MSI Path, /rollback)
-end
+deactivate Presenter
 @enduml

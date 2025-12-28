@@ -1,10 +1,24 @@
-@startuml
+@startuml Class Diagram
 skinparam classAttributeIconSize 0
 
 package "Donut.Models" {
     class AppConfig {
-        +ThrottleLimit: int
-        +Commands: Hashtable
+        +SourceRoot: string
+        +LogsPath: string
+        +ReportsPath: string
+        +Settings: Hashtable
+        +{static} Defaults: Hashtable
+        --
+        +GetSetting(key: string, default: object): object
+        +SetSetting(key: string, value: object): void
+        +GetActiveCommand(): string
+        +SetActiveCommand(command: string): void
+        +GetCommandArgs(command: string): Hashtable
+        +SetCommandArg(command: string, argName: string, value: object): void
+        +GetThrottleLimit(): int
+        +SetThrottleLimit(limit: int): void
+        +BuildDcuArgs(command: string, overrides: Hashtable): string
+        -MergeWithDefaults(userSettings: Hashtable): Hashtable
     }
 
     class DeviceContext {
@@ -15,88 +29,255 @@ package "Donut.Models" {
     }
 }
 
-package "Donut.Services" {
+package "Donut.Core" {
     class ConfigManager {
-        -configPath: string
+        +SourceRoot: string
+        +ConfigPath: string
+        +LogsPath: string
+        +ReportsPath: string
         +LoadConfig(): AppConfig
         +SaveConfig(config: AppConfig): void
-        +IsCommandEnabled(commandName: string): bool
-    }
-
-    class LogService {
-        -logFilePath: string
-        +LogInfo(message: string): void
-        +LogError(message: string): void
-        +GetRecentLogs(): string[]
+        +EnsureDirectories(): void
     }
 
     class NetworkProbe {
         +ResolveHost(hostname: string): IPAddress
         +CheckReverseDNS(ip: IPAddress, expectedName: string): bool
         +IsRpcAvailable(hostname: string): bool
+        +IsOnline(hostname: string): bool
     }
 
-    class RemoteExecutionService {
-        -networkProbe: NetworkProbe
-        -logger: LogService
-        -driverMatcher: DriverMatchingService
-        +ExecuteTask(device: DeviceContext): void
-        +RunScanPhase(device: DeviceContext): array
-        +RunApplyPhase(device: DeviceContext, updates: array): void
-        +CopyRemoteLogs(device: DeviceContext): void
-        -RunPsExec(command: string): void
+    class AsyncJob {
+        +HostName: string
+        +JobType: string
+        +Status: string
+        +Logs: ConcurrentQueue<string>
+        +Result: object
+        +TempConfigPath: string
+        -PowerShell: PowerShell
+        -AsyncResult: IAsyncResult
+        +Start(scriptPath: string, arguments: Hashtable, tempConfigPath: string): void
+        +Poll(): void
+        +Dispose(): void
+    }
+
+    class RunspaceManager {
+        -{static} RunspacePool: RunspacePool
+        +{static} Initialize(min: int, max: int): void
+        +{static} GetPool(): RunspacePool
+        +{static} Close(): void
+    }
+}
+
+package "Donut.Services" {
+    class LogService {
+        +LogFilePath: string
+        -SyncRoot: object
+        +LogInfo(message: string): void
+        +LogError(message: string): void
+        +LogWarning(message: string): void
+        +WriteLog(level: string, message: string): void
+        +GetRecentLogs(count: int): string[]
+    }
+
+    class RemoteJobService {
+        #Config: AppConfig
+        #Probe: NetworkProbe
+        #Logger: LogService
+        -ValidateHostConnectivity(host: string): void
+        -BuildWorkerArgs(host: string, type: string, options: Hashtable): Hashtable
+    }
+
+    class ScanService extends RemoteJobService {
+        +PrepareScan(host: string): Hashtable
+    }
+
+    class RemoteUpdateService extends RemoteJobService {
+        -DriverMatcher: DriverMatchingService
+        +PrepareScanForUpdates(host: string): Hashtable
+        +ParseUpdateReport(host: string): XmlDocument
+        +PrepareApplyUpdates(host: string, options: Hashtable): Hashtable
+    }
+
+    class ExecutionService {
+        +Logger: LogService
+        +Probe: NetworkProbe
+        +Matcher: DriverMatchingService
+        +Config: AppConfig
+        +RemoteScriptPath: string
+        +LocalLogsDir: string
+        +LocalReportsDir: string
+        +{static} StartWorker(HostName: string, JobType: string, Options: Hashtable, Config: AppConfig, ...): Hashtable
+        +RunScanPhase(device: DeviceContext): Hashtable
+        +RunApplyPhase(device: DeviceContext, options: Hashtable): Hashtable
+        +ExecuteTask(device: DeviceContext, options: Hashtable): Hashtable
+        +CopyRemoteArtifacts(hostName: string, ip: string): Hashtable
+        -AssertReachable(device: DeviceContext): void
+        -InvokePsExec(params: Hashtable): void
+        -FindDcuCli(ip: string): string
     }
 
     class DriverMatchingService {
-        -brandPatterns: Hashtable
-        +FindBestDriverMatch(updateName: string, drivers: array): Driver
-        +GetDriversByVersion(drivers: array, updates: array): array
+        +BrandPatterns: Hashtable
+        +CategoryPatterns: Hashtable
+        +CategoryBrands: Hashtable
+        +CategoryMappings: Hashtable
+        +DeviceClassMappings: Hashtable
+        +DetectBrand(manufacturer: string): string
+        +DetectCategory(name: string): string
+        +FindBestDriverMatch(updates: array, installedDrivers: array): array
+        -MatchByCategory(update: object, drivers: array): object
+        -ExtractBrandFromName(name: string, category: string): string
+        -CompareVersions(v1: string, v2: string): int
     }
 
-    class UpdateService {
-        -currentVersion: Version
-        -driverMatcher: DriverMatchingService
-        -backup: UserDataBackupService
-        +CheckForUpdates(): bool
-        +DownloadUpdate(): FileInfo
-        +InstallUpdate(installer: FileInfo): void
-        +LaunchWorkerScript(): void
+    class SelfUpdateService {
+        +ClientId: string
+        +Scope: string
+        +TokenFile: string
+        +Owner: string
+        +Repo: string
+        +GetStoredToken(): string
+        +SaveToken(tokenData: PSCustomObject): void
+        +InitiateDeviceFlow(): PSCustomObject
+        +PollForToken(deviceCode: string): PSCustomObject
+        +GetLatestRelease(token: string): PSCustomObject
+        +GetReleaseAsset(release: PSCustomObject, pattern: string): PSCustomObject
+        +DownloadAsset(token: string, asset: PSCustomObject, destDir: string): string
+        +GetLocalVersion(): version
+        +VerifyFileHash(filePath: string, expectedHash: string): bool
+        +ApplyUpdate(msiPath: string, isRollback: bool, sourceRoot: string): void
     }
 
-    class UserDataBackupService {
-        +Backup(): void
-        +Restore(): void
+    class ResourceService {
+        -StylesPath: string
+        +LoadGlobalResources(): ResourceDictionary
+        +ApplyResourcesToWindow(window: Window): void
+        -LoadStylesInto(targetDictionary: ResourceDictionary): void
     }
 }
 
-package "Donut.UI" {
-    class MainController {
-        -configManager: ConfigManager
-        -remoteService: RemoteExecutionService
-        -updateService: UpdateService
+package "Donut.UI.Presenters" {
+    class MainPresenter {
+        -Config: AppConfig
+        -ConfigManager: ConfigManager
+        -NetworkProbe: NetworkProbe
+        -Resources: ResourceService
+        -HomePresenter: HomePresenter
+        -ConfigPresenter: ConfigPresenter
+        -LogsPresenter: LogsPresenter
+        -BatteryPresenter: BatteryPresenter
         +Initialize(): void
-        +OnScanClick(target: string): void
-        +OnUpdateClick(): void
-        <<event>> +OnProgress
-        <<event>> +OnLog
+        +Show(): void
+        +LoadView(viewName: string): FrameworkElement
+        +NavigateTo(viewName: string): void
+        +ToggleHeaderVisibility(): void
     }
 
-    class MainWindow {
-        -controller: MainController
-        +UpdateStatus(msg: string): void
-        -SubscribeToEvents(): void
+    class HomePresenter {
+        -ScanService: ScanService
+        -UpdateService: RemoteUpdateService
+        -DialogPresenter: DialogPresenter
+        -ActiveJobs: List<AsyncJob>
+        -ManualRebootQueue: List<string>
+        +OnSearch(): void
+        +StartProcess(host: string): void
+        +OnTimerTick(): void
+        +UpdateSearchButtonLabel(): void
+        +InitializeSearchBar(): void
+        +CopyUpdatesToClipboard(): void
+    }
+
+    class ConfigPresenter {
+        -ConfigManager: ConfigManager
+        -CurrentSection: string
+        -CurrentOptionView: FrameworkElement
+        +LoadCurrentConfig(): void
+        +OnCommandChanged(item: object): void
+        +LoadOptionView(viewName: string): void
+        +PopulateFields(): void
+        +OnSave(): void
+        -UpdateArgFromControl(cmdArgs: Hashtable, ctrl: FrameworkElement): void
+    }
+
+    class LogsPresenter {
+        -LogsDir: string
+        +LoadLogs(): void
+        +LoadLogTab(logPath: string): void
+        +ClearLogs(): void
+    }
+
+    class BatteryPresenter {
+        -NetworkProbe: NetworkProbe
+        -ActiveJobs: List<AsyncJob>
+        +OnSearch(): void
+        +StartBatteryReport(hostName: string): void
+        +OnTimerTick(): void
+    }
+
+    class DialogPresenter {
+        +ShowConfirmation(title: string, message: string): bool
+        +ShowUpdateConfirmation(updates: array): bool
+        -Initialize(): void
+        -SetText(controlName: string, text: string): void
+        -SetList(items: string[]): void
+        -ConfigureButton(btnName: string, text: string, action: ScriptBlock): void
+        -HideControl(controlName: string): void
+    }
+
+    class LoginPresenter {
+        -Service: SelfUpdateService
+        -Resources: ResourceService
+        -LoginWindow: Window
+        -PollTimer: DispatcherTimer
+        -DeviceCode: string
+        -Interval: int
+        -LoginSuccess: bool
+        +ShowLogin(): bool
+        -LoadImages(): void
+        -StartAuthFlow(): void
+        -OnPollTick(): void
+    }
+
+    class UpdatePresenter {
+        -Service: SelfUpdateService
+        -Resources: ResourceService
+        -Dialog: DialogPresenter
+        +CheckAndPrompt(): void
+        -ShowUpdateWindow(release: PSCustomObject, localVer: version, remoteVer: version): void
     }
 }
 
-MainWindow --> MainController
-MainController --> ConfigManager
-MainController --> RemoteExecutionService
-MainController --> UpdateService
-RemoteExecutionService --> NetworkProbe
-RemoteExecutionService --> LogService
-RemoteExecutionService --> DriverMatchingService
+MainPresenter --> HomePresenter
+MainPresenter --> ConfigPresenter
+MainPresenter --> LogsPresenter
+MainPresenter --> BatteryPresenter
+MainPresenter --> ResourceService
+
+HomePresenter --> ScanService
+HomePresenter --> RemoteUpdateService
+HomePresenter --> DialogPresenter
+HomePresenter --> AsyncJob
+
+BatteryPresenter --> NetworkProbe
+BatteryPresenter --> AsyncJob
+
+ScanService --> ExecutionService
+RemoteUpdateService --> ExecutionService
+RemoteUpdateService --> DriverMatchingService
+
+ExecutionService --> NetworkProbe
+ExecutionService --> LogService
+ExecutionService --> DriverMatchingService
+
 ConfigManager ..> AppConfig
-RemoteExecutionService ..> DeviceContext
-UpdateService --> UserDataBackupService
+ExecutionService ..> DeviceContext
+
+AsyncJob --> RunspaceManager
+
+UpdatePresenter --> SelfUpdateService
+UpdatePresenter --> DialogPresenter
+LoginPresenter --> SelfUpdateService
+LoginPresenter --> ResourceService
 
 @enduml

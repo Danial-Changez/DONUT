@@ -1,7 +1,21 @@
-logs/*
-res/*
-MainWindow-*
+# .NET / Visual Studio
 .vs/
-bin/*
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# PowerShell / Donut Runtime
+logs/*
 reports/*
+res/*
+CoverageReport/*
+Screenshots/*
 *Temp*
+
+# Configuration (User specific)
+.config
+*.log
+
+# Legacy
+MainWindow-*

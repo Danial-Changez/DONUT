@@ -1,21 +1,34 @@
-@startuml
+@startuml Package Diagram
 package "Presentation Layer (src/UI)" {
     [Views (XAML)]
     [Styles (XAML)]
-    [MainController]
+    package "Presenters" {
+        [MainPresenter]
+        [HomePresenter]
+        [ConfigPresenter]
+        [LogsPresenter]
+        [BatteryPresenter]
+        [LoginPresenter]
+        [UpdatePresenter]
+        [DialogPresenter]
+    }
 }
 
 package "Service Layer (src/Services)" {
-    [RemoteExecutionService]
-    [UpdateService]
+    [ScanService]
+    [RemoteUpdateService]
+    [ExecutionService]
     [DriverMatchingService]
-    [UserDataBackupService]
+    [SelfUpdateService]
+    [LogService]
+    [ResourceService]
 }
 
 package "Core Layer (src/Core)" {
     [ConfigManager]
-    [LogService]
     [NetworkProbe]
+    [AsyncJob]
+    [RunspaceManager]
 }
 
 package "Model Layer (src/Models)" {
@@ -24,23 +37,40 @@ package "Model Layer (src/Models)" {
 }
 
 package "Infrastructure" {
-    [FileSystem (config/logs)]
-    [Network (DNS/RPC)]
-    [GitHub API]
-    [PsExec Wrapper]
+    [FileSystem (LocalAppData)]
+    [RunspacePool]
+    [DonutApp.ps1]
+    [RemoteWorker.ps1]
+    [InstallWorker.ps1]
 }
 
-[MainController] --> [RemoteExecutionService]
-[MainController] --> [UpdateService]
-[MainController] --> [BatteryService]
-[MainController] --> [ConfigManager]
+[MainPresenter] --> [HomePresenter]
+[MainPresenter] --> [ConfigPresenter]
+[MainPresenter] --> [LogsPresenter]
+[MainPresenter] --> [BatteryPresenter]
 
-[RemoteExecutionService] --> [NetworkProbe]
-[RemoteExecutionService] --> [LogService]
-[RemoteExecutionService] --> [PsExec Wrapper]
-[RemoteExecutionService] --> [DriverMatchingService]
+[HomePresenter] --> [ScanService]
+[HomePresenter] --> [RemoteUpdateService]
+[HomePresenter] --> [AsyncJob]
+[HomePresenter] --> [DialogPresenter]
 
-[UpdateService] --> [GitHub API]
-[UpdateService] --> [UserDataBackupService]
-[ConfigManager] --> [FileSystem (config/logs)]
+[BatteryPresenter] --> [AsyncJob]
+
+[ScanService] --> [ExecutionService]
+[RemoteUpdateService] --> [ExecutionService]
+[RemoteUpdateService] --> [DriverMatchingService]
+
+[ExecutionService] --> [RemoteWorker.ps1]
+[ExecutionService] --> [NetworkProbe]
+
+[ConfigPresenter] --> [ConfigManager]
+[ConfigManager] --> [AppConfig]
+
+[AsyncJob] --> [RunspaceManager]
+[RunspaceManager] --> [RunspacePool]
+
+[UpdatePresenter] --> [SelfUpdateService]
+[LoginPresenter] --> [SelfUpdateService]
+[SelfUpdateService] --> [InstallWorker.ps1]
+
 @enduml
