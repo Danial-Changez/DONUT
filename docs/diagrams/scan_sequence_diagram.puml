@@ -1,44 +1,69 @@
-@startuml
+@startuml Scan Sequence Diagram
 actor User
-participant "MainWindow" as UI
-participant "MainController" as Ctrl
-participant "ConfigManager" as Cfg
-participant "RemoteExecutionService" as Remote
+participant "HomeView" as View
+participant "HomePresenter" as Presenter
+participant "ScanService" as Scan
+participant "AsyncJob" as Job
+participant "ExecutionService" as Exec
 participant "NetworkProbe" as Net
-participant "LogService" as Log
+participant "RunspaceManager" as Pool
 
-User -> UI: Clicks "Scan"
-UI -> Ctrl: OnScanClick("PC-01")
-activate Ctrl
+User -> View: Clicks "Scan"
+View -> Presenter: OnSearch()
+activate Presenter
 
-Ctrl -> Cfg: LoadConfig()
-activate Cfg
-Cfg --> Ctrl: AppConfig
-deactivate Cfg
+Presenter -> Presenter: Parse hostnames from input
+Presenter -> Presenter: Validate host count
 
-Ctrl -> Remote: ExecuteTask(DeviceContext("PC-01"))
-activate Remote
+loop For each hostname
+    Presenter -> Scan: PrepareScan("PC-01")
+    activate Scan
 
-Remote -> Net: ResolveHost("PC-01")
-activate Net
-Net --> Remote: IPAddress
-deactivate Net
+    Scan -> Scan: ValidateHostConnectivity("PC-01")
+    Scan -> Net: ResolveHost("PC-01")
+    Net --> Scan: IPAddress
+    Scan -> Net: CheckReverseDNS(ip, "PC-01")
+    Net --> Scan: true/false (warning only)
+    
+    Scan -> Scan: BuildWorkerArgs("PC-01", "Scan", {})
+    Scan --> Presenter: JobParams (scriptPath, arguments)
+    deactivate Scan
 
-Remote -> Net: CheckReverseDNS(IP, "PC-01")
-activate Net
-Net --> Remote: true
-deactivate Net
+    Presenter -> Pool: GetPool()
+    Pool --> Presenter: RunspacePool
+    
+    Presenter -> Job: new AsyncJob("PC-01", "Scan")
+    Presenter -> Job: Start(scriptPath, arguments, configPath)
+    activate Job
+    Job --> Presenter: (async started)
+    deactivate Job
+end
 
-Remote -> Net: IsRpcAvailable("PC-01")
-activate Net
-Net --> Remote: true
-deactivate Net
+Presenter -> View: UpdateStatus("Scanning...")
+deactivate Presenter
 
-Remote -> Remote: RunPsExec(...)
-Remote -> Log: LogInfo("Execution Successful")
-Remote --> Ctrl: Success
-deactivate Remote
+loop Timer tick (500ms)
+    Presenter -> Job: Poll()
+    activate Job
+    
+    alt Job completed
+        Job -> Exec: StartWorker("PC-01", "Scan", Options, Config, ...)
+        activate Exec
+        Exec -> Exec: RunScanPhase(DeviceContext)
+        Exec -> Net: IsOnline("PC-01")
+        Net --> Exec: true
+        Exec -> Exec: InvokePsExec(...)
+        note right: Runs DCU-CLI via PsExec
+        Exec -> Exec: CopyRemoteArtifacts(...)
+        Exec --> Job: ScanResults
+        deactivate Exec
+        Job --> Presenter: Status = "Completed"
+    else Job still running
+        Job --> Presenter: Status = "Running"
+    end
+    deactivate Job
+end
 
-Ctrl -> UI: UpdateStatus("Scan Complete")
-deactivate Ctrl
+Presenter -> Presenter: ProcessJobResults()
+Presenter -> View: DisplayResults(ScanResults)
 @enduml

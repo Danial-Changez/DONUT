@@ -1,30 +1,71 @@
-@startsalt
+@startsalt Deployment File Structure
 {
 {T
-+ <&folder> Root
++ <&folder> Program Files\\DONUT
+++ <&file> Donut.Launcher.exe
 ++ <&folder> assets
-+++ <&folder> Images
-++ <&folder> bin
-++ <&folder> config
-+++ <&file> config.json
-+++ <&file> wsid.json
-++ <&folder> docs
-++ <&folder> logs
-++ <&folder> reports
++++<&folder> Images
+++ <&folder> res
++++<&file> config.json
++++<&file> WSID.txt
 ++ <&folder> src
++++ <&file> Start-DONUT.ps1
 +++ <&folder> Core
+++++ <&file> AsyncJob.psm1
+++++ <&file> ConfigManager.psm1
+++++ <&file> NetworkProbe.psm1
+++++ <&file> RunspaceManager.psm1
 +++ <&folder> Models
+++++ <&file> AppConfig.psm1
+++++ <&file> DeviceContext.psm1
 +++ <&folder> Services
+++++ <&file> DriverMatchingService.psm1
+++++ <&file> LogService.psm1
+++++ <&file> RemoteServices.psm1
+++++ <&file> ResourceService.psm1
+++++ <&file> SelfUpdateService.psm1
+++++ <&file> WorkerServices.psm1
 +++ <&folder> Scripts
+++++ <&file> DonutApp.ps1
+++++ <&file> RemoteWorker.ps1
 ++++ <&file> InstallWorker.ps1
 +++ <&folder> UI
+++++ <&folder> Presenters
++++++ <&file> MainPresenter.psm1
++++++ <&file> HomePresenter.psm1
++++++ <&file> ConfigPresenter.psm1
++++++ <&file> LogsPresenter.psm1
++++++ <&file> BatteryPresenter.psm1
++++++ <&file> LoginPresenter.psm1
++++++ <&file> UpdatePresenter.psm1
++++++ <&file> DialogPresenter.psm1
 ++++ <&folder> Views
++++++ <&file> MainWindow.xaml
++++++ <&file> HomeView.xaml
++++++ <&file> ConfigView.xaml
++++++ <&file> LogsView.xaml
++++++ <&file> BatteryView.xaml
++++++ <&file> DialogWindow.xaml
++++++ <&file> LoginWindow.xaml
++++++ <&folder> Config Options
 ++++ <&folder> Styles
-++++ <&folder> Controllers
-+++ <&file> Start-Donut.ps1
-++ <&folder> tests
-+++ <&folder> Unit
-+++ <&folder> Integration
++++++ <&file> ModernControls.xaml
++++++ <&file> UIColors.xaml
++++++ <&file> ButtonStyles.xaml
++++++ <&file> Icons.xaml
+}
+
+{T
++ <&folder> %LOCALAPPDATA%\\DONUT
+++ <&folder> config
++++ <&file> config.json (user overrides)
++++ <&file> WSID.txt (user overrides)
++++ <&file> github_token.dat (DPAPI encrypted)
+++ <&folder> logs
++++ <&file> {hostname}.log
+++ <&folder> reports
++++ <&file> {hostname}.xml
++++ <&file> {hostname}-battery.html
 }
 }
 @endsalt

@@ -1,65 +1,83 @@
-@startuml
+@startuml Apply Updates Sequence Diagram
 actor User
-participant "MainWindow" as UI
-participant "MainController" as Ctrl
-participant "ConfigManager" as Cfg
-participant "RemoteExecutionService" as Remote
-participant "NetworkProbe" as Net
-participant "LogService" as Log
-participant "DriverMatchingService" as Match
+participant "HomeView" as View
+participant "HomePresenter" as Presenter
+participant "RemoteUpdateService" as Update
+participant "AsyncJob" as Job
+participant "ExecutionService" as Exec
+participant "DriverMatchingService" as Matcher
+participant "DialogPresenter" as Dialog
 
-User -> UI: Clicks "Apply Updates"
-UI -> Ctrl: OnApplyUpdatesClick("PC-01")
-activate Ctrl
+User -> View: Clicks "Apply Updates"
+View -> Presenter: OnSearch()
+activate Presenter
 
-Ctrl -> Cfg: LoadConfig()
-activate Cfg
-Cfg --> Ctrl: AppConfig (applyUpdates=enable)
-deactivate Cfg
+alt Multiple hosts entered
+    Presenter -> Dialog: ShowConfirmation("Apply updates to N hosts?")
+    Dialog --> Presenter: true/false
+end
 
-Ctrl -> Remote: ExecuteTask(DeviceContext("PC-01"))
-activate Remote
-
-group Phase 1: Scan & Detect
-    Remote -> Remote: RunPsExec("/scan")
-    Remote -> Remote: Copy report XML/logs back locally
-    Remote -> Match: Build update list + driver/app matches
+loop For each hostname
+    Presenter -> Presenter: StartProcess("PC-01")
     
+    Presenter -> Update: PrepareScanForUpdates("PC-01")
+    activate Update
+    Update -> Update: ValidateHostConnectivity("PC-01")
+    Update -> Update: BuildWorkerArgs("PC-01", "Scan", {})
+    Update --> Presenter: JobParams (scriptPath, arguments)
+    deactivate Update
+
+    Presenter -> Job: new AsyncJob("PC-01", "UpdateScan")
+    Presenter -> Job: Start(scriptPath, arguments, configPath)
+    activate Job
+    ... Job executes ExecutionService.StartWorker() ...
+    Job -> Exec: StartWorker("PC-01", "Scan", ...)
+    Exec -> Exec: RunScanPhase(device)
+    Exec --> Job: ScanResults
+    Presenter -> Job: Poll()
+    Job --> Presenter: Status = "Completed"
+    deactivate Job
+
+    Presenter -> Update: ParseUpdateReport("PC-01")
+    activate Update
+    Update -> Matcher: FindBestDriverMatch(updates, drivers)
+    Matcher --> Update: MatchedUpdates
+    Update --> Presenter: UpdateList
+    deactivate Update
+
     alt Updates Available
-        Remote -> Ctrl: RequestConfirmation(UpdatesList)
-        Ctrl -> UI: Show Confirmation Popup
-        User -> UI: Confirms Update
-        UI -> Ctrl: UserConfirmed(true)
-        Ctrl -> Remote: ProceedWithUpdate()
-        Remote -> Log: LogInfo("Confirmed; clipboard updated")
+        Presenter -> Dialog: ShowUpdateConfirmation(UpdateList)
+        activate Dialog
+        Dialog -> User: Show Update Popup
+        User --> Dialog: Confirms
+        Dialog --> Presenter: Confirmed
+        deactivate Dialog
+        
+        Presenter -> Update: PrepareApplyUpdates("PC-01", selectedUpdates)
+        activate Update
+        Update -> Update: BuildWorkerArgs("PC-01", "Apply", selectedUpdates)
+        Update --> Presenter: JobParams
+        deactivate Update
+        
+        Presenter -> Job: new AsyncJob("PC-01", "UpdateApply")
+        Presenter -> Job: Start(scriptPath, arguments, configPath)
+        activate Job
+        ... Job executes ExecutionService.StartWorker() ...
+        Job -> Exec: StartWorker("PC-01", "Apply", options, ...)
+        Exec -> Exec: RunApplyPhase(device, options)
+        Exec --> Job: ApplyResults
+        Presenter -> Job: Poll()
+        Job --> Presenter: Status = "Completed"
+        deactivate Job
+        
+        Presenter -> Presenter: Add to ManualRebootQueue if needed
+        Presenter -> View: UpdateStatus("Updates Applied")
     else No Updates
-        Remote -> Log: LogInfo("System up to date")
-        Remote --> Ctrl: Complete
+        Presenter -> View: UpdateStatus("No Updates Found")
     end
 end
 
-group Phase 2: Apply Updates
-    Remote -> Remote: RunPsExec("/applyUpdates")
-    activate Remote
-    
-    loop Output Stream
-        Remote -> Remote: Check for Reboot Flags
-        Remote -> Ctrl: ReportProgress(Line)
-        Ctrl -> UI: Update Terminal
-    end
-    
-    alt Reboot Required
-        Remote -> Ctrl: RequestManualReboot()
-        Ctrl -> UI: Show Reboot Popup
-    end
-    
-    Remote -> Log: LogInfo("Update Complete")
-    deactivate Remote
+opt Manual Reboot Queue not empty
+    Presenter -> View: Display reboot required hosts
 end
-
-Remote --> Ctrl: Task Finished
-deactivate Remote
-
-Ctrl -> UI: UpdateStatus("Ready")
-deactivate Ctrl
 @enduml

@@ -1,59 +1,79 @@
-@startuml
+@startuml Component Diagram
 component "C# Wrapper" {
     [Donut.Launcher.exe]
 }
 
 component "UI Components (src/UI)" {
     [MainWindow.xaml]
+    [HomeView.xaml]
     [ConfigView.xaml]
     [LogsView.xaml]
-    [MainController.ps1]
+    [BatteryView.xaml]
+    [DialogWindow.xaml]
+    [LoginWindow.xaml]
 }
 
 component "PowerShell Scripts" {
     [Start-Donut.ps1]
-    package "src/Scripts" {
-        [InstallWorker.ps1]
-    }
+    [DonutApp.ps1]
+    [RemoteWorker.ps1]
+    [InstallWorker.ps1]
 }
 
 component "PowerShell Classes (src)" {
+    package "Presenters" {
+        [MainPresenter]
+        [HomePresenter]
+        [ConfigPresenter]
+        [LogsPresenter]
+        [BatteryPresenter]
+        [LoginPresenter]
+        [UpdatePresenter]
+        [DialogPresenter]
+    }
     package "Services" {
-        [RemoteExecutionService.ps1]
-        [UpdateService.ps1]
-        [DriverMatchingService.ps1]
-        [UserDataBackupService.ps1]
+        [ScanService]
+        [RemoteUpdateService]
+        [ExecutionService]
+        [DriverMatchingService]
+        [SelfUpdateService]
+        [LogService]
+        [ResourceService]
     }
     package "Core" {
-        [ConfigManager.ps1]
-        [LogService.ps1]
-        [NetworkProbe.ps1]
+        [ConfigManager]
+        [NetworkProbe]
+        [AsyncJob]
+        [RunspaceManager]
     }
     package "Models" {
-        [AppConfig.ps1]
-        [DeviceContext.ps1]
+        [AppConfig]
+        [DeviceContext]
     }
 }
 
-database "Configuration (config)" {
+database "Configuration" {
     [config.json]
-    [wsid.json]
+    [WSID.txt]
+}
+
+database "%LOCALAPPDATA%\\DONUT" {
+    [config/]
+    [logs/]
+    [reports/]
 }
 
 [Donut.Launcher.exe] ..> [Start-Donut.ps1] : Hosts/Launches
-[Start-Donut.ps1] ..> [MainController.ps1] : Initializes
-[MainController.ps1] ..> [MainWindow.xaml] : Manages
-[MainController.ps1] ..> [RemoteExecutionService.ps1] : Uses
-[MainController.ps1] ..> [UpdateService.ps1] : Uses
-[MainController.ps1] ..> [ConfigManager.ps1] : Uses
-
-[RemoteExecutionService.ps1] ..> [LogService.ps1] : Logs to
-[RemoteExecutionService.ps1] ..> [NetworkProbe.ps1] : Uses
-[RemoteExecutionService.ps1] ..> [DriverMatchingService.ps1] : Uses
-[UpdateService.ps1] ..> [ConfigManager.ps1] : Reads Config
-[UpdateService.ps1] ..> [InstallWorker.ps1] : Deploys/Runs
-[UpdateService.ps1] ..> [UserDataBackupService.ps1] : Backs up data
-[UpdateService.ps1] ..> [DriverMatchingService.ps1] : Uses
-[ConfigManager.ps1] ..> [config.json] : Reads/Writes
-[ConfigManager.ps1] ..> [wsid.json] : Reads/Writes
+[Start-Donut.ps1] ..> [MainPresenter] : Initializes
+[MainPresenter] ..> [MainWindow.xaml] : Manages
+[MainPresenter] ..> [HomePresenter] : Creates
+[MainPresenter] ..> [BatteryPresenter] : Creates
+[HomePresenter] ..> [ScanService] : Uses
+[HomePresenter] ..> [RemoteUpdateService] : Uses
+[HomePresenter] ..> [AsyncJob] : Creates
+[ScanService] ..> [ExecutionService] : Uses
+[RemoteUpdateService] ..> [ExecutionService] : Uses
+[ExecutionService] ..> [RemoteWorker.ps1] : Invokes via PsExec
+[AsyncJob] ..> [RunspaceManager] : Uses Pool
+[SelfUpdateService] ..> [InstallWorker.ps1] : Invokes
 @enduml

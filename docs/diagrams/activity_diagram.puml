@@ -1,34 +1,64 @@
-@startuml
-start
-:Receive Computer Name;
-:Attempt DNS Lookup;
+@startuml Activity Diagram
+title Remote Execution Flow (ExecutionService)
 
-if (DNS Resolve Success?) then (yes)
-    :Get IP Address;
-    :Perform Reverse DNS Lookup;
+start
+:Receive Host Name;
+
+:Check if Host is Online;
+note right: NetworkProbe.IsOnline()
+
+if (Host Online?) then (yes)
+    :Resolve DNS to IP Address;
+    note right: NetworkProbe.ResolveHost()
     
-    if (Hostname Matches?) then (yes)
-        :Check RPC Availability (Port 135);
+    if (DNS Resolve Success?) then (yes)
+        :Perform Reverse DNS Lookup;
+        note right: NetworkProbe.CheckReverseDNS()
         
-        if (RPC Available?) then (yes)
-            :Prepare PsExec Command;
-            :Execute Remote Command;
-            :Copy remote log/report to local;
-            if (Execution Success?) then (yes)
-                :Log Success;
+        if (Hostname Matches?) then (yes)
+            :Check RPC/SMB Availability (Port 445);
+            note right: NetworkProbe.IsRpcAvailable()
+            
+            if (RPC Available?) then (yes)
+                :Find DCU-CLI Path;
+                note right: ExecutionService.FindDcuCli()
+                
+                :Build PsExec Command;
+                :Execute PsExec on Remote Host;
+                note right: ExecutionService.InvokePsExec()
+                
+                if (Execution Success?) then (yes)
+                    :Copy Remote Artifacts to Local;
+                    note right
+                        UNC paths:
+                        \\IP\C$\ProgramData\Dell\...
+                        → %LOCALAPPDATA%\DONUT\logs\
+                        → %LOCALAPPDATA%\DONUT\reports\
+                    end note
+                    
+                    :Parse XML Report if exists;
+                    :Return Success with Artifacts;
+                else (no)
+                    :Log Execution Error;
+                    :Return Failure;
+                endif
             else (no)
-                :Log Execution Error;
+                :Log Error: RPC/SMB Unavailable;
+                :Return Failure;
             endif
+            
         else (no)
-            :Log Error: RPC Unavailable;
+            :Log Error: Reverse DNS Mismatch;
+            :Return Failure;
         endif
         
     else (no)
-        :Log Error: Reverse DNS Mismatch;
+        :Log Error: DNS Lookup Failed;
+        :Return Failure;
     endif
-    
 else (no)
-    :Log Error: DNS Lookup Failed;
+    :Log Error: Host Offline;
+    :Return Failure;
 endif
 
 stop
