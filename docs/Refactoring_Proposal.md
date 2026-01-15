@@ -84,7 +84,7 @@ Runtime Data Location:
 3.  **`assets`**: Cleans up the root by grouping `Images` and `Screenshots`.
 4.  **`tests`**: Adds a dedicated location for Pester tests.
 
-**Note:** For more changes, please refer to the [PUML diagrams](docs/diagrams).
+**Note:** For more changes, please refer to the [PUML diagrams](diagrams).
 
 ---
 
