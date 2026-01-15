@@ -55,20 +55,19 @@ Runtime Data Location:
 The project adopts the **Passive View** variant of the MVP pattern.
 
 ### Why MVP?
-*   **Migration Friction:** MVP is similar to the existing scripts. It allows logic to be moved from scripts to classes with minimal rewriting.
+*   **Migration:** MVP is similar to the existing scripts. It allows logic to be moved from scripts to classes with minimal rewriting.
 *   **PowerShell Constraints:** MVVM requires `INotifyPropertyChanged` and complex data binding, which is error-prone in PowerShell classes. MVP avoids this by having the Presenter directly manipulate the View.
 
 ### The Layers
 1.  **Model Layer (`src/Models`, `src/Services`, `src/Core`)**:
     *   Represents the data, business logic, and infrastructure.
-    *   **Models**: The "Nouns" (e.g., `AppConfig`).
-    *   **Services**: The "Verbs" (e.g., `SelfUpdateService`).
-    *   **Core**: The "Plumbing" (e.g., `NetworkProbe`).
+    *   **Models**: The data models (e.g., `AppConfig`).
+    *   **Services**: Project-specific modules (e.g., `SelfUpdateService`).
+    *   **Core**: General (reusable) modules (e.g., `NetworkProbe`).
 2.  **View Layer (`src/UI/Views`)**:
-    *   "Dumb" XAML files. No code-behind logic.
+    *   Passive XAML files. No code-behind logic.
     *   Sole responsibility is structure and layout.
 3.  **Presenter Layer (`src/UI/Presenters`)**:
-    *   The middleman.
     *   Loads the View.
     *   Handles UI events (Clicks, etc.).
     *   Calls the Service layer to get data.
@@ -107,7 +106,7 @@ The project adopts the **Passive View** variant of the MVP pattern.
 | `MainPresenter` | Main window, navigation, view loading |
 | `HomePresenter` | Scan/apply operations, job management, clipboard copy |
 | `ConfigPresenter` | Configuration UI, command selection, args persistence |
-| `LogsPresenter` | Log viewing, tab management, clear functionality |
+| `LogsPresenter` | Log viewing, tab management, and clear functionality |
 | `BatteryPresenter` | Battery report generation |
 | `LoginPresenter` | GitHub Device Flow authentication UI |
 | `UpdatePresenter` | Self-update check and prompt |
@@ -117,7 +116,7 @@ The project adopts the **Passive View** variant of the MVP pattern.
 
 ## 4. Implementation Considerations
 
-This section addresses how the refactor handles design choices and limitations identified in the original project.
+This section discusses how the refactor addresses the design choices and limitations identified in the original project.
 
 ### Parallel Execution (Runspaces)
 **Challenge:** The original project uses PowerShell Runspaces for parallel execution.
@@ -183,7 +182,7 @@ This section addresses how the refactor handles design choices and limitations i
 **Refactor Strategy:**
 - **High-Frequency Updates (Logs):** As decided in the "Parallel Execution" section, we will use a **Polling Pattern** for logs. The View (or Presenter) will use a `DispatcherTimer` to drain the thread-safe queue and update the UI in batches. This prevents UI freezing caused by flooding the Dispatcher with individual event invocations.
 - **State Changes (Events):** To avoid any direct interference from background threads (which caused freezing issues in the past), we will **not** use `Dispatcher.Invoke` or `BeginInvoke`. Instead, state changes (e.g., `ScanStarted`, `ScanCompleted`) will update a thread-safe state object or queue. The same `DispatcherTimer` used for logs will poll this state and update the UI controls (buttons, status bars) on the next tick.
-- **ApplyUpdates two-phase flow:** Mirror the existing behavior: temporary scan config -> run scan -> copy report XML -> gather remote driver/app data via PsExec -> brand-based driver/app matching -> per-host confirmation popup (skip apply if not confirmed) -> skip apply when no updates are found -> copy updates list to clipboard.
+- **ApplyUpdates two-phase flow:** Mirror the existing behaviour: temporary scan config -> run scan -> copy report XML -> gather remote driver/app data via PsExec -> brand-based driver/app matching -> per-host confirmation popup (skip apply if not confirmed) -> skip apply when no updates are found -> copy updates list to clipboard.
 - **Manual reboot detection:** Parse log lines for reboot-required vs auto-reboot; surface a completion popup listing machines needing manual reboot. Pre-seed the manual reboot list when config flags disable automatic reboot (`reboot`/`forceRestart`).
 - **Multi-device safety prompt:** If ApplyUpdates is enabled and multiple hosts are queued, show a single confirmation listing all targets before enqueueing runspaces.
 
@@ -191,8 +190,8 @@ This section addresses how the refactor handles design choices and limitations i
 **Challenge:** `config.txt` and `WSID.txt` persistence.
 
 **Refactor Strategy:**
-- **JSON Migration:** Both `config.txt` and `WSID.txt` will be refactored into JSON format (`config.json` and `wsid.json`) to support common standards.
-- **Location:** `wsid.json` will be stored in `%LOCALAPPDATA%\DONUT\` to persist across updates. `config.json` will be deployed to `Program Files` as a default, but if the user modifies it, the active copy should be saved to `%LOCALAPPDATA%`.
+- **JSON Migration:** `config.txt` will be refactored into JSON format (`config.json`) to support common standards.
+- **Location:** `wsid.txt` and `config.json` will be stored in `%LOCALAPPDATA%\DONUT\` to persist across updates.
 - **ConfigManager:** This service will handle reading/writing both configuration files, prioritizing the `%LOCALAPPDATA%` version if it exists.
 - **Modern Config Structure:** The config uses a simplified format aligned with Dell Command Update CLI:
   - `activeCommand`: Single field specifying which command is active (`scan` or `applyUpdates`)
