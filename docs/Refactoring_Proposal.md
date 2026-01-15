@@ -1,6 +1,42 @@
-# DONUT Refactoring Proposal
+<h1> DONUT Refactoring Proposal </h1>
 
 This document serves as the proposal/guide for refactoring the DONUT project from a script-based architecture to an OOP structure. There is no support for this implementation, and is being refactored to test what I have learnt.
+
+<h2> Table of Contents </h2>
+
+- [1. Directory Structure](#1-directory-structure)
+  - [Key Changes](#key-changes)
+- [2. Architecture: Model-View-Presenter (MVP)](#2-architecture-model-view-presenter-mvp)
+  - [Why MVP?](#why-mvp)
+  - [The Layers](#the-layers)
+  - [Key Classes](#key-classes)
+    - [Models (`src/Models/`)](#models-srcmodels)
+    - [Core (`src/Core/`)](#core-srccore)
+    - [Services (`src/Services/`)](#services-srcservices)
+    - [Presenters (`src/UI/Presenters/`)](#presenters-srcuipresenters)
+- [4. Implementation Considerations](#4-implementation-considerations)
+  - [Parallel Execution (Runspaces)](#parallel-execution-runspaces)
+  - [Remote Execution (PsExec)](#remote-execution-psexec)
+  - [The `InstallWorker.ps1` Script](#the-installworkerps1-script)
+  - [Packaging \& Deployment (Visual Studio)](#packaging--deployment-visual-studio)
+  - [UI \& Threading](#ui--threading)
+  - [Configuration \& Persistence](#configuration--persistence)
+    - [Example `config.json`](#example-configjson)
+    - [DCU CLI Options Reference](#dcu-cli-options-reference)
+  - [PowerShell Constraints to Retain](#powershell-constraints-to-retain)
+- [5. Testing Strategy](#5-testing-strategy)
+  - [The Problem: Side Effects](#the-problem-side-effects)
+  - [The Solution: The Wrapper Pattern](#the-solution-the-wrapper-pattern)
+    - [1. The Wrapper Class (`src/Core/NetworkProbe.psm1`)](#1-the-wrapper-class-srccorenetworkprobepsm1)
+    - [2. The Service Class (`src/Services/RemoteServices.psm1`)](#2-the-service-class-srcservicesremoteservicespsm1)
+    - [3. The Pester Test (`tests/Unit/RemoteServices.Tests.ps1`)](#3-the-pester-test-testsunitremoteservicestestsps1)
+  - [Summary of What to Test](#summary-of-what-to-test)
+  - [Test Structure](#test-structure)
+- [6. Code Coverage](#6-code-coverage)
+  - [Generating the Report](#generating-the-report)
+  - [Viewing the Report](#viewing-the-report)
+  - [Credits](#credits)
+
 
 ## 1. Directory Structure
 
@@ -47,6 +83,8 @@ Runtime Data Location:
 2.  **`src/Scripts`**: Contains the bootstrap script (`DonutApp.ps1`) and standalone workers.
 3.  **`assets`**: Cleans up the root by grouping `Images` and `Screenshots`.
 4.  **`tests`**: Adds a dedicated location for Pester tests.
+
+**Note:** For more changes, please refer to the [PUML diagrams](docs/diagrams).
 
 ---
 
