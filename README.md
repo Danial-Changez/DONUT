@@ -1,6 +1,6 @@
 <h1> DONUT </h1>
 
-This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates.
+This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored in accordance with the [Refactored Proposal](docs/Refactoring_Proposal.md). Refer to it for more details.
 
 ---
 
@@ -105,192 +105,27 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 ## Developer Guide
 
-### Project Structure
-
-```
-📦DONUT
- ┣ 📂bin - DLL's and EXE
- ┃ ┗ 📂x64
- ┃ ┃ ┗ 📂DONUT
- ┃ ┃ ┃ ┣ 🍩DONUT.exe
- ┣ 📂Images - UI Assets
- ┃ ┣ 📷donut icon48x48.ico
- ┃ ┣ 🖼️logo purple arrow.png
- ┃ ┗ 🖼️logo yellow arrow.png
- ┣ 📂logs
- ┃ ┣ 🪵applyUpdates.log
- ┃ ┣ 🪵default.log
- ┃ ┗ 🪵scan.log
- ┣ 📂reports
- ┣ 📂res - Any Resources for Persistent Data
- ┃ ┗ 📄WSID.txt
- ┣ 📂src - PowerShell Modules and Scripts
- ┃ ┣ 🔧ConfigView.psm1
- ┃ ┣ 🔧Helpers.psm1
- ┃ ┣ 🔧ImportXaml.psm1
- ┃ ┣ 🔧LogsView.psm1
- ┃ ┣ 🔧Read-Config.psm1
- ┃ ┣ 📜MainWindow.ps1
- ┃ ┣ 📜remoteDCU.ps1
- ┃ ┣ 📜Updater.ps1
- ┃ ┗ 📜InstallWorker.ps1
- ┣ 📂Styles - XAML Resource Dictionaries
- ┃ ┣ 🎨ButtonStyles.xaml
- ┃ ┣ 🎨Icons.xaml
- ┃ ┣ 🎨ModernControls.xaml
- ┃ ┗ 🎨UIColors.xaml
- ┣ 📂Views - XAML Window and Child Views
- ┃ ┣ 📂Config Options - All Config Child Views (only ScanOptionView.xaml and ApplyUpdatesOptionView.xaml are active)
- ┃ ┃ ┣ 🎨ApplyUpdatesOptionView.xaml
- ┃ ┃ ┣ 🎨ConfigureOptionView.xaml
- ┃ ┃ ┣ 🎨CustomNotificationOptionView.xaml
- ┃ ┃ ┣ 🎨DriverInstallOptionView.xaml
- ┃ ┃ ┣ 🎨GenerateEncryptedPasswordOptionView.xaml
- ┃ ┃ ┣ 🎨HelpOptionView.xaml
- ┃ ┃ ┣ 🎨ScanOptionView.xaml
- ┃ ┃ ┗ 🎨VersionOptionView.xaml
- ┃ ┣ 🎨ConfigView.xaml
- ┃ ┣ 🎨DialogWindow.xaml
- ┃ ┣ 🎨HomeView.xaml
- ┃ ┣ 🎨LoginWindow.xaml
- ┃ ┣ 🎨LogsView.xaml
- ┃ ┗ 🎨MainWindow.xaml
- ┣ 🚫.gitignore
- ┣ ⚙️config.txt
- ┣ 💠DONUT.psproj
- ┣ 💠DONUT.psproj.psbuild
- ┣ 💠DONUT.psprojs
- ┗ 💠Startup.pss
- ┣ 📖README.md - Documentation
-```
-
-### File Explanations
-
-- `src/`
-  - `MainWindow.ps1` - Main WPF UI logic handling events, runspace management, etc.
-  - `Updater.ps1` - GitHub App/device-flow updater that pulls the latest GitHub release asset and hands off to `InstallWorker.ps1`
-  - `InstallWorker.ps1` - Background installer that runs the downloaded MSI, handles rollback flag, and relaunches the app
-  - `remoteDCU.ps1` - Remote execution logic
-  - Supporting modules: `ConfigView.psm1`, `Helpers.psm1`, `ImportXaml.psm1`, `LogsView.psm1`, `Read-Config.psm1`
-- `Views/`
-  - `Config Options/` — All Config tab dropdown pages (Only ScanOptionView.xaml and ApplyUpdatesOptionView.xaml are active)
-  - `HomeView.xaml` — UI for Home page
-  - `ConfigView.xaml` — UI for Config page
-  - `LogsView.xaml` — UI for Logs page
-  - `DialogWindow.xaml` — Generic UI for alerts, confirmations, and updates
-  - `LoginWindow.xaml` — UI for GitHub Device Flow login
-  - `PopUp.xaml` — UI for finished threads popup
-  - `Update.xaml` — UI for update popup
-  - `Confirmation.xaml` — UI for confirmation popups (i.e., manual reboot and apply updates popups)
-- `Styles/`
-  - `UIColors.xaml` — UI colors dictionary
-  - `Icons.xaml` — Icon geometry data
-  - `ModernControls.xaml` — Custom controls for textboxes, checkboxes, comboboxes, etc.
-  - `ButtonStyles.xaml` — Sidebar button styles
-- `res/`
-  - `WSID.txt` — Stores all WSIDs (Work Station ID) updated through search bar
-- `logs/` — Log file target directory
-- `reports/` — XML file target directory
-- `config.txt` — Config file that determines the settings of remote command run
-- `.gitignore` — Any files that need to be ignored
-- `Startup.pss` — Entry point for Updater.ps1 and MainWindow.ps1 (Code for EXE)
-
 ### Getting Started
 
 1. **Clone the repository** and open in VS Code or PowerShell Studio.
 2. **Install dependencies** (see [Prerequisites](#prerequisites)).
-3. **Review configuration files** (`config.txt`, `WSID.txt`) and XAML UI files in `Views/` and `Styles/`.
+3. **Review configuration files** and XAML UI files in `Views/` and `Styles/`.
 4. **Package and publish updates via GitHub Releases.**
-   - Build the MSI with PowerShell Studio's packager (set the Product Version to your release tag).
+   - Build the MSI with Visual Studio's packager (set the Product Version to your release tag).
    - Create a GitHub release with that tag and upload the MSI asset (matches `MsiAssetPattern`, default `*.msi`).
    - The app authenticates via your GitHub App (Device Flow), compares the installed version to the latest release tag, and self-updates or rolls back accordingly.
 
 ### Key Concepts
 
-- **Runspaces:** Used for parallel remote execution. See `MainWindow.ps1` for runspace management and UI updates.
-- **WPF UI:** All user interaction is via the XAML-based interface. UI logic is in `MainWindow.ps1` and supporting modules.
+- **Runspaces:** Used for parallel remote execution, runspace management, and UI updates.
+- **WPF UI:** All user interaction is via the XAML-based interface and supporting presenter modules.
 - **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
-- **GitHub App Updates:** `Updater.ps1` requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256, and hands off install/rollback to `InstallWorker.ps1`.
-
-### Testing
-
-- Use lab machines for testing changes before deployment.
-- Review log tabs for any errors needing troubleshooting.
-
----
-
-## Configuration File Logic
-
-The `config.txt` file controls which DCU command will be executed and its parameters. The configuration follows these rules:
-
-### Command Selection
-
-- **Only one main command** can be set to `enable` at any time; all others must be set to `disable`.
-- Available commands: `scan`, `applyUpdates`, `configure`, `customnotification`, `driverInstall`, `generateEncryptedPassword`, `help`, `version`
-  - Only `scan` and `applyUpdates` are available in the UI after leadership discussion.
-
-### Configuration Example
-
-```plaintext
-scan = disable
-applyUpdates = enable
-  - silent = enable
-  - reboot = enable
-  - autoSuspendBitLocker = disable
-  - forceupdate = disable
-configure = disable
-customnotification = disable
-driverInstall = disable
-generateEncryptedPassword = disable
-help = disable
-version = disable
-throttleLimit = 5
-```
-
-### Parameter Handling
-
-- **Blank parameters are ignored:** If a parameter value is left empty, it will not be passed to the DCU command.
-
-  **Ignored example:**
-
-  ```plaintext
-  - updateType =
-  ```
-
-  **Applied example:**
-
-  ```plaintext
-  - updateType = Bios,Others
-  ```
-
-### Required Settings
-
-- **throttleLimit:** Must always be declared. This controls how many computers can run the command simultaneously.
-
-### How It Works
-
-1. The application reads `config.txt` on startup
-2. Validates that only one main command is enabled
-3. Builds the DCU command string based on enabled parameters
-4. Executes the command remotely on each target computer using the specified throttle limit
-
-## Bugs
-
-- **✅ Resize Logic Crash:** Possible workaround, set CanResize to CanResizeWithGrip.
-  - Note: Only happens with packaged version, not with the script itself.
-- **✅ Report Folder not Generating:** PowerShell Studio will not package the folder if it is empty.
-  - Solution: Had MainWindow.ps1 check if the report folder exists, otherwise creats it on startup.
-- **✅ Versioning Logic Can't Accept IP's:**
-  - IP's need to be part of the "TrustedHosts list" if using WinRM.
-  - Solution: Changed Protocol to fallback on DCOM if necessary.
-  - Alternative: Can temporarily add the IP to the TrustedHosts list, then remove it at the end of the process.
-
----
+- **GitHub App Updates:** Requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256.
 
 ## Contributing
 
 - **UI Changes:** Edit XAML files in `Views/` and `Styles/`.
-- **Logic Changes:** Update event logic in `MainWindow.ps1`, with each page's supporting function(s) in its relevant module file.
+- **Logic Changes:** Update event logic in the respective `Core/` or `Service/` directories, with each page's supporting function(s) in its relevant module file.
 - **Deploying Changes:**
   - Build a new MSI in PowerShell Studio (update the Product Version).
   - Draft a GitHub release with a tag matching that version and upload the MSI asset (honor `MsiAssetPattern` if you rename it).
