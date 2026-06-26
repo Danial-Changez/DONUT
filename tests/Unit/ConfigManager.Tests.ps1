@@ -1,5 +1,7 @@
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Core\ConfigManager.psm1"
+using module "..\..\src\Core\LogService.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 
 Describe "ConfigManager" {
 
@@ -168,6 +170,38 @@ Describe "ConfigManager" {
             # Should not throw, should return config with empty settings
             $config = $manager.LoadConfig()
             $config | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context "Logging" {
+        It "Should log an error through the injected logger on malformed JSON" {
+            $logger = [CapturingLogService]::new()
+            $manager = [ConfigManager]::new($script:testSourceRoot, $logger)
+
+            "{ invalid json }" | Set-Content -Path $manager.ConfigPath
+
+            $config = $manager.LoadConfig()
+
+            $config | Should -Not -BeNullOrEmpty
+            $logger.HasLevel("ERROR") | Should -Be $true
+        }
+
+        It "Should log an info entry when a config is loaded" {
+            $logger = [CapturingLogService]::new()
+            $manager = [ConfigManager]::new($script:testSourceRoot, $logger)
+            @{ activeCommand = "scan" } | ConvertTo-Json | Set-Content -Path $manager.ConfigPath
+
+            $manager.LoadConfig() | Out-Null
+
+            $logger.HasLevel("INFO") | Should -Be $true
+        }
+
+        It "Should default to a no-op logger when constructed without one" {
+            $manager = [ConfigManager]::new($script:testSourceRoot)
+
+            $manager.Logger | Should -Not -BeNullOrEmpty
+            "{ invalid json }" | Set-Content -Path $manager.ConfigPath
+            { $manager.LoadConfig() } | Should -Not -Throw
         }
     }
 

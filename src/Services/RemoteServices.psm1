@@ -1,36 +1,56 @@
 using module "..\Models\AppConfig.psm1"
 using module "..\Core\NetworkProbe.psm1"
+using module "..\Core\LogService.psm1"
 using module ".\DriverMatchingService.psm1"
 
 # Base class for remote host operations
 class RemoteJobService {
     [AppConfig] $Config
     [NetworkProbe] $Probe
+    [LogService] $Logger
 
     RemoteJobService([AppConfig] $config, [NetworkProbe] $probe) {
         $this.Config = $config
         $this.Probe = $probe
+        $this.Logger = [NullLogService]::new()
+    }
+
+    RemoteJobService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) {
+        $this.Config = $config
+        $this.Probe = $probe
+        if ($null -eq $logger) {
+            $this.Logger = [NullLogService]::new()
+        }
+        else {
+            $this.Logger = $logger
+        }
     }
 
     hidden [void] ValidateHostConnectivity([string]$hostName) {
         if (-not $this.Probe.IsOnline($hostName)) {
+            $this.Logger.LogError("Connectivity check failed: host '$hostName' is offline or unreachable.")
             throw "Host '$hostName' is offline or unreachable."
         }
-        
+
         $ip = $this.Probe.ResolveHost($hostName)
         if (-not $ip) {
+            $this.Logger.LogError("Connectivity check failed: could not resolve IP for '$hostName'.")
             throw "Could not resolve IP for '$hostName'."
         }
 
         if (-not $this.Probe.IsRpcAvailable($hostName)) {
+            $this.Logger.LogError("Connectivity check failed: RPC (Port 135) not available on '$hostName'.")
             throw "RPC (Port 135) is not available on '$hostName'. Check firewall rules."
         }
+
+        $this.Logger.LogDebug("Host '$hostName' passed connectivity checks ($ip).")
     }
 
     hidden [hashtable] BuildWorkerArgs([string]$hostName, [string]$jobType, [hashtable]$options) {
         $scriptPath = Join-Path $this.Config.SourceRoot "Scripts\RemoteWorker.ps1"
-        
+
         if (-not (Test-Path $scriptPath)) {
+            $this.Logger.LogError("RemoteWorker script not found at $scriptPath")
             throw "RemoteWorker script not found at $scriptPath"
         }
 
@@ -51,16 +71,18 @@ class RemoteJobService {
 
 # Handles remote host scanning
 class ScanService : RemoteJobService {
-    
+
     ScanService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
+
+    ScanService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
     [hashtable] PrepareScan([string]$hostName) {
         $this.ValidateHostConnectivity($hostName)
-        
+
         # Check Reverse DNS (warning only)
         $ip = $this.Probe.ResolveHost($hostName)
         if (-not $this.Probe.CheckReverseDNS($ip, $hostName)) {
-            Write-Warning "Reverse DNS mismatch for '$hostName' ($ip). Proceeding anyway..."
+            $this.Logger.LogWarning("Reverse DNS mismatch for '$hostName' ($ip). Proceeding anyway.")
         }
 
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
@@ -75,6 +97,10 @@ class RemoteUpdateService : RemoteJobService {
         $this.DriverMatcher = $matcher
     }
 
+    RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe, [DriverMatchingService] $matcher, [LogService] $logger) : base($config, $probe, $logger) {
+        $this.DriverMatcher = $matcher
+    }
+
     [hashtable] PrepareScanForUpdates([string]$hostName) {
         $this.ValidateHostConnectivity($hostName)
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
@@ -83,11 +109,12 @@ class RemoteUpdateService : RemoteJobService {
     [xml] ParseUpdateReport([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-Updates.xml"
         if (-not (Test-Path $reportPath)) { return $null }
-        
+
         try {
             return [xml](Get-Content $reportPath)
-        } catch {
-            Write-Warning "Failed to parse update report for $hostName"
+        }
+        catch {
+            $this.Logger.LogException("Failed to parse update report for $hostName", $_)
             return $null
         }
     }

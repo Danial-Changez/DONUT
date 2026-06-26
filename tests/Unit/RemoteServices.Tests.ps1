@@ -1,7 +1,9 @@
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Core\NetworkProbe.psm1"
+using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Services\DriverMatchingService.psm1"
 using module "..\..\src\Services\RemoteServices.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 using namespace System.Net
 
 # Mock NetworkProbe for testing
@@ -9,13 +11,14 @@ class MockNetworkProbe : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [IPAddress] $ResolveHostResult = [IPAddress]::Parse("127.0.0.1")
+    [bool] $ReverseDnsResult = $true
 
     MockNetworkProbe() {}
 
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [IPAddress] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
-    [bool] CheckReverseDNS([IPAddress]$ip, [string]$hostName) { return $true }
+    [bool] CheckReverseDNS([IPAddress]$ip, [string]$hostName) { return $this.ReverseDnsResult }
 }
 
 Describe "RemoteServices" {
@@ -171,6 +174,36 @@ Describe "RemoteServices" {
             $service = [ScanService]::new($config, $probe)
 
             { $service.PrepareScan("NoRpcHost") } | Should -Throw "*RPC (Port 135) is not available*"
+        }
+    }
+
+    Context "Logging" {
+        It "Should log an error through the injected logger when the host is offline" {
+            $logger = [CapturingLogService]::new()
+            $probe = [MockNetworkProbe]::new()
+            $probe.IsOnlineResult = $false
+            $service = [ScanService]::new($config, $probe, $logger)
+
+            { $service.PrepareScan("OfflineHost") } | Should -Throw
+            $logger.HasLevel("ERROR") | Should -Be $true
+        }
+
+        It "Should log a warning on reverse DNS mismatch" {
+            $logger = [CapturingLogService]::new()
+            $probe = [MockNetworkProbe]::new()
+            $probe.ReverseDnsResult = $false
+            $service = [ScanService]::new($config, $probe, $logger)
+
+            $service.PrepareScan("TestHost") | Out-Null
+
+            $logger.HasLevel("WARN") | Should -Be $true
+        }
+
+        It "Should default to a no-op logger when constructed without one" {
+            $probe = [MockNetworkProbe]::new()
+            $service = [ScanService]::new($config, $probe)
+
+            $service.Logger | Should -Not -BeNullOrEmpty
         }
     }
 

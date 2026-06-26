@@ -123,9 +123,10 @@ The project adopts the **Passive View** variant of the MVP pattern.
 | Class | Purpose |
 |-------|---------|
 | `ConfigManager` | Load/save JSON config, directory initialization |
-| `NetworkProbe` | DNS resolution, reverse-DNS validation, RPC/SMB availability checks |
+| `NetworkProbe` | Domain-controller-authoritative DNS resolution (cached DC discovery + `Resolve-DnsName -Server`, fail-hard), reverse-DNS validation, RPC/online checks |
 | `AsyncJob` | Runspace-based async job wrapper with PowerShell execution |
 | `RunspaceManager` | Static RunspacePool management for parallel execution |
+| `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
 
 #### Services (`src/Services/`)
 | Class | Purpose |
@@ -135,7 +136,6 @@ The project adopts the **Passive View** variant of the MVP pattern.
 | `RemoteUpdateService` | Prepare update operations with driver matching |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
-| `LogService` | Thread-safe logging to file |
 | `ResourceService` | XAML resource dictionary loading |
 
 #### Presenters (`src/UI/Presenters/`)

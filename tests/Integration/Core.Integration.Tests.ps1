@@ -229,10 +229,18 @@ return @{
 
         It "Should resolve hostname before job execution" {
             $probe = [NetworkProbe]::new()
-            
+
+            # Resolution is DC-authoritative and fail-hard: it only returns an
+            # address when an Active Directory domain controller is reachable.
             $ip = $probe.ResolveHost("localhost")
-            $ip | Should -Not -BeNullOrEmpty
-            
+            if (Get-Command Get-ADDomainController -ErrorAction SilentlyContinue) {
+                $ip | Should -Not -BeNullOrEmpty
+            }
+            else {
+                # Off-domain (no AD module): resolution fails hard, returning null.
+                $ip | Should -BeNullOrEmpty
+            }
+
             # Create job with resolved info
             $job = [AsyncJob]::new("localhost", "Scan")
             $job.Start($script:testWorker, @{

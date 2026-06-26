@@ -1,4 +1,4 @@
-using module "..\..\src\Services\LogService.psm1"
+using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Core\NetworkProbe.psm1"
 using module "..\..\src\Services\DriverMatchingService.psm1"
 using module "..\..\src\Models\DeviceContext.psm1"

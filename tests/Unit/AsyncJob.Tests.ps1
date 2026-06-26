@@ -1,6 +1,8 @@
 using namespace System.Collections.Concurrent
 using module "..\..\src\Core\RunspaceManager.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
+using module "..\..\src\Core\LogService.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 
 Describe "AsyncJob" {
 
@@ -236,8 +238,33 @@ throw "Test exception: $Message"
     Context "DrainStream" {
         It "Should handle null stream gracefully" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             { $job.DrainStream($null) } | Should -Not -Throw
+        }
+    }
+
+    Context "Logging" {
+        It "Should default to a no-op logger when constructed without one" {
+            $job = [AsyncJob]::new("TestHost", "Scan")
+
+            $job.Logger | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should log an error through the injected logger when the script fails" {
+            $logger = [CapturingLogService]::new()
+            $job = [AsyncJob]::new("TestHost", "Scan", $logger)
+            $job.Start($script:errorScript, @{ Message = "Logged failure" }, "")
+
+            $timeout = [DateTime]::Now.AddSeconds(10)
+            while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
+                $job.Poll()
+                Start-Sleep -Milliseconds 50
+            }
+
+            $job.Status | Should -Be "Failed"
+            $logger.HasLevel("ERROR") | Should -Be $true
+
+            $job.Cleanup()
         }
     }
 }

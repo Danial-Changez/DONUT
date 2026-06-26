@@ -2,15 +2,29 @@
 # SelfUpdateService
 # Handles updating the DONUT application itself via GitHub Releases
 # -----------------------------------------------------------------------------
+using module "..\Core\LogService.psm1"
+
 class SelfUpdateService {
     [string]$ClientId = 'Your Github App Client ID'
     [string]$Scope = 'repo read:packages'
     [string]$TokenFile
     [string]$Owner = 'dania-net'
     [string]$Repo = 'DONUT'
+    [LogService]$Logger
 
     SelfUpdateService() {
+        $this.Logger = [NullLogService]::new()
         # Token stored in config directory to match structure
+        $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
+    }
+
+    SelfUpdateService([LogService]$logger) {
+        if ($null -eq $logger) {
+            $this.Logger = [NullLogService]::new()
+        }
+        else {
+            $this.Logger = $logger
+        }
         $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
     }
 
@@ -34,7 +48,7 @@ class SelfUpdateService {
             return $data.access_token
         }
         catch {
-            Write-Host "[SelfUpdateService] Failed to read stored token: $_"
+            $this.Logger.LogException("Failed to read stored token", $_)
             return $null
         }
     }
@@ -75,6 +89,7 @@ class SelfUpdateService {
             return $response
         }
         catch {
+            $this.Logger.LogDebug("Device-flow token poll failed (will retry): $($_.Exception.Message)")
             return $null
         }
     }

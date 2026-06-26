@@ -1,5 +1,6 @@
 using namespace System.Collections.Concurrent
 using module '.\RunspaceManager.psm1'
+using module '.\LogService.psm1'
 
 class AsyncJob {
     [System.Management.Automation.PowerShell] $PowerShell
@@ -10,8 +11,23 @@ class AsyncJob {
     [object] $Result
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
+    [LogService] $Logger
 
     AsyncJob([string]$hostName, [string]$type) {
+        $this.Initialize($hostName, $type, [NullLogService]::new())
+    }
+
+    AsyncJob([string]$hostName, [string]$type, [LogService]$logger) {
+        $this.Initialize($hostName, $type, $logger)
+    }
+
+    hidden [void] Initialize([string]$hostName, [string]$type, [LogService]$logger) {
+        if ($null -eq $logger) {
+            $this.Logger = [NullLogService]::new()
+        }
+        else {
+            $this.Logger = $logger
+        }
         $this.HostName = $hostName
         $this.JobType = $type
         $this.Status = 'Created'
@@ -20,18 +36,26 @@ class AsyncJob {
 
     [void] Start([string]$scriptPath, [hashtable]$arguments, [string]$tempConfigPath) {
         $this.TempConfigPath = $tempConfigPath
-        
-        $pool = [RunspaceManager]::GetPool()
-        $this.PowerShell = [System.Management.Automation.PowerShell]::Create()
-        $this.PowerShell.RunspacePool = $pool
-        $this.PowerShell.AddCommand($scriptPath) | Out-Null
-        
-        foreach ($key in $arguments.Keys) {
-            $this.PowerShell.AddParameter($key, $arguments[$key]) | Out-Null
-        }
 
-        $this.Status = 'Running'
-        $this.AsyncResult = $this.PowerShell.BeginInvoke()
+        try {
+            $pool = [RunspaceManager]::GetPool()
+            $this.PowerShell = [System.Management.Automation.PowerShell]::Create()
+            $this.PowerShell.RunspacePool = $pool
+            $this.PowerShell.AddCommand($scriptPath) | Out-Null
+
+            foreach ($key in $arguments.Keys) {
+                $this.PowerShell.AddParameter($key, $arguments[$key]) | Out-Null
+            }
+
+            $this.Status = 'Running'
+            $this.AsyncResult = $this.PowerShell.BeginInvoke()
+            $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job.")
+        }
+        catch {
+            $this.Status = 'Failed'
+            $this.Logger.LogException("[$($this.HostName)] Failed to start $($this.JobType) job", $_)
+            $this.Logs.Enqueue("Exception: $_")
+        }
     }
 
     [void] Poll() {
@@ -41,16 +65,21 @@ class AsyncJob {
             try {
                 $this.Result = $this.PowerShell.EndInvoke($this.AsyncResult)
                 $this.Status = if ($this.PowerShell.HadErrors) { 'Failed' } else { 'Completed' }
-                
+
                 if ($this.PowerShell.HadErrors) {
                     foreach ($err in $this.PowerShell.Streams.Error) {
                         $this.Logs.Enqueue("Error: $err")
+                        $this.Logger.LogError("[$($this.HostName)] $($this.JobType) error: $err")
                     }
+                }
+                else {
+                    $this.Logger.LogDebug("[$($this.HostName)] $($this.JobType) job completed.")
                 }
             }
             catch {
                 $this.Status = 'Failed'
                 $this.Logs.Enqueue("Exception: $_")
+                $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
         }
 
@@ -67,7 +96,7 @@ class AsyncJob {
             $this.Logs.Enqueue($item.ToString())
         }
     }
-    
+
     [void] Cleanup() {
         if ($this.PowerShell) { $this.PowerShell.Dispose() }
         if ($this.TempConfigPath -and (Test-Path $this.TempConfigPath)) {
