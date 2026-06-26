@@ -20,7 +20,8 @@
         <!-- Main window border and content -->
         <Border CornerRadius="10"
                 BorderThickness="1"
-                Background="Transparent">
+                Background="Transparent"
+                x:Name="rootBorder">
             <Border.BorderBrush>
                 <LinearGradientBrush StartPoint="0,0"
                                      EndPoint="1,1">
@@ -34,13 +35,16 @@
             </Border.BorderBrush>
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <!-- Sidebar -->
-                    <ColumnDefinition Width="250" />
+                    <!-- Sidebar (Auto so it follows the animated rail width) -->
+                    <ColumnDefinition Width="Auto" />
                     <!-- Main Section -->
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <!-- Sidebar -->
-                <Border CornerRadius="10,0,0,10"
+                <Border x:Name="sidebar"
+                        CornerRadius="10,0,0,10"
+                        Width="250"
+                        ClipToBounds="True"
                         Grid.Column="0">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="1,0.75"
@@ -55,6 +59,54 @@
                         <StackPanel x:Name="SidebarPanel"
                                     Background="Transparent"
                                     HorizontalAlignment="Center">
+                            <!-- Rail collapse / expand toggle -->
+                            <Button x:Name="btnRailToggle"
+                                    Width="40"
+                                    Height="40"
+                                    Margin="14,12,0,0"
+                                    HorizontalAlignment="Left"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip="Collapse / expand sidebar">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="8">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver"
+                                                     Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource PanelBackgroundHover}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <StackPanel VerticalAlignment="Center"
+                                            HorizontalAlignment="Center">
+                                    <Rectangle Width="18"
+                                               Height="2"
+                                               Margin="0,2"
+                                               RadiusX="1"
+                                               RadiusY="1"
+                                               Fill="{DynamicResource TitleTextTertiary}" />
+                                    <Rectangle Width="18"
+                                               Height="2"
+                                               Margin="0,2"
+                                               RadiusX="1"
+                                               RadiusY="1"
+                                               Fill="{DynamicResource TitleTextTertiary}" />
+                                    <Rectangle Width="18"
+                                               Height="2"
+                                               Margin="0,2"
+                                               RadiusX="1"
+                                               RadiusY="1"
+                                               Fill="{DynamicResource TitleTextTertiary}" />
+                                </StackPanel>
+                            </Button>
                             <!-- Title -->
                             <StackPanel Orientation="Horizontal"
                                         Height="100"
@@ -76,7 +128,8 @@
                                             HorizontalAlignment="Left">
                                     <Path Style="{DynamicResource menuButtonIcon}"
                                           Data="{DynamicResource Home}" />
-                                    <TextBlock Text="Home"
+                                    <TextBlock x:Name="lblHome"
+                                               Text="Home"
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
@@ -87,7 +140,8 @@
                                             HorizontalAlignment="Left">
                                     <Path Style="{DynamicResource menuButtonIcon}"
                                           Data="{DynamicResource Config}" />
-                                    <TextBlock Text="Config"
+                                    <TextBlock x:Name="lblConfig"
+                                               Text="Config"
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
@@ -98,7 +152,8 @@
                                             HorizontalAlignment="Left">
                                     <Path Style="{DynamicResource menuButtonIcon}"
                                           Data="{DynamicResource Logs}" />
-                                    <TextBlock Text="Logs"
+                                    <TextBlock x:Name="lblLogs"
+                                               Text="Logs"
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
@@ -109,7 +164,8 @@
                                             HorizontalAlignment="Left">
                                     <Path Style="{DynamicResource menuButtonIcon}"
                                           Data="{DynamicResource Battery}" />
-                                    <TextBlock Text="Battery"
+                                    <TextBlock x:Name="lblBattery"
+                                               Text="Battery"
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
@@ -244,5 +300,15 @@
                 </Border>
             </Grid>
         </Border>
+        <!-- Toast overlay: non-modal notifications stack here, top-right, above
+             everything else. The host itself is click-through; only the toast
+             cards inside it are hit-testable. -->
+        <ItemsControl x:Name="toastHost"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Top"
+                      Margin="0,44,18,0"
+                      Width="340"
+                      Background="Transparent"
+                      IsHitTestVisible="True" />
     </Grid>
 </Window>
