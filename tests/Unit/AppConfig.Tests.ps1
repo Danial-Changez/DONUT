@@ -396,4 +396,42 @@ Describe "AppConfig" {
             $config.Settings.commands.scan.args.ContainsKey('report') | Should -Be $true
         }
     }
+
+    Context "Merge isolation (regression)" {
+        It "Should not throw when rebuilt from an already-merged config (worker round-trip)" {
+            # The worker reconstructs AppConfig from the UI's live (already-merged)
+            # Settings. This used to throw 'Collection was modified' because the
+            # shallow clone made source and target args the same object.
+            $first = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ activeCommand = 'applyUpdates' })
+
+            { [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $first.Settings) } | Should -Not -Throw
+
+            $second = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $first.Settings)
+            $second.GetActiveCommand() | Should -Be 'applyUpdates'
+            $second.Settings.commands.scan.args.ContainsKey('report') | Should -Be $true
+        }
+
+        It "Should not mutate the static Defaults when merging user args" {
+            $before = [AppConfig]::Defaults.commands.scan.args.silent
+
+            [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                commands = @{ scan = @{ args = @{ silent = (-not $before) } } }
+            }) | Out-Null
+
+            # The shared static must be untouched by an instance merge.
+            [AppConfig]::Defaults.commands.scan.args.silent | Should -Be $before
+        }
+
+        It "Should give separate instances independent command args" {
+            $a = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                commands = @{ scan = @{ args = @{ catalogLocation = 'A' } } }
+            })
+            $b = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                commands = @{ scan = @{ args = @{ catalogLocation = 'B' } } }
+            })
+
+            $a.Settings.commands.scan.args.catalogLocation | Should -Be 'A'
+            $b.Settings.commands.scan.args.catalogLocation | Should -Be 'B'
+        }
+    }
 }

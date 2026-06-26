@@ -45,20 +45,31 @@ class AppConfig {
     }
 
     hidden [hashtable] MergeWithDefaults([hashtable]$userSettings) {
-        if ($null -eq $userSettings) { return [AppConfig]::Defaults.Clone() }
-        
-        $merged = [AppConfig]::Defaults.Clone()
-        foreach ($key in $userSettings.Keys) {
+        # Deep clone so we never mutate the shared static Defaults, and so the
+        # merged result never aliases the caller's hashtables. The latter also
+        # makes the merge safe to run on an already-merged config (e.g. the
+        # worker rebuilding AppConfig from the UI's live Settings): source and
+        # target args are guaranteed to be different objects.
+        $merged = [AppConfig]::DeepClone([AppConfig]::Defaults)
+        if ($null -eq $userSettings) { return $merged }
+
+        foreach ($key in @($userSettings.Keys)) {
             if ($key -eq 'commands' -and $userSettings[$key] -is [hashtable]) {
                 # Deep merge commands
                 if (-not $merged.ContainsKey('commands')) { $merged['commands'] = @{} }
-                foreach ($cmd in $userSettings[$key].Keys) {
+                foreach ($cmd in @($userSettings[$key].Keys)) {
+                    $userCmd = $userSettings[$key][$cmd]
                     if (-not $merged['commands'].ContainsKey($cmd)) {
-                        $merged['commands'][$cmd] = $userSettings[$key][$cmd]
-                    } elseif ($userSettings[$key][$cmd] -is [hashtable] -and $userSettings[$key][$cmd].ContainsKey('args')) {
-                        # Merge args
-                        foreach ($argKey in $userSettings[$key][$cmd]['args'].Keys) {
-                            $merged['commands'][$cmd]['args'][$argKey] = $userSettings[$key][$cmd]['args'][$argKey]
+                        if ($userCmd -is [hashtable]) {
+                            $merged['commands'][$cmd] = [AppConfig]::DeepClone($userCmd)
+                        } else {
+                            $merged['commands'][$cmd] = $userCmd
+                        }
+                    } elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and $userCmd['args'] -is [hashtable]) {
+                        # Merge args (snapshot the keys so we never enumerate a
+                        # collection we're writing into)
+                        foreach ($argKey in @($userCmd['args'].Keys)) {
+                            $merged['commands'][$cmd]['args'][$argKey] = $userCmd['args'][$argKey]
                         }
                     }
                 }
@@ -67,6 +78,21 @@ class AppConfig {
             }
         }
         return $merged
+    }
+
+    # Recursively clones a hashtable, copying nested hashtables by value so the
+    # result shares no mutable structure with the source.
+    hidden static [hashtable] DeepClone([hashtable]$source) {
+        $copy = @{}
+        foreach ($k in @($source.Keys)) {
+            $v = $source[$k]
+            if ($v -is [hashtable]) {
+                $copy[$k] = [AppConfig]::DeepClone($v)
+            } else {
+                $copy[$k] = $v
+            }
+        }
+        return $copy
     }
 
     [object] GetSetting([string]$key, [object]$defaultValue) {
