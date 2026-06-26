@@ -7,6 +7,7 @@ using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\BatteryPresenter.psm1"
+using module ".\ToastService.psm1"
 
 class MainPresenter {
     [AppConfig] $Config
@@ -21,6 +22,12 @@ class MainPresenter {
     [BatteryPresenter] $BatteryPresenter
     [NetworkProbe] $NetworkProbe
     [ResourceService] $Resources
+    [ToastService] $ToastService
+    [bool] $RailCollapsed
+
+    # Rail (sidebar) widths for the collapse/expand animation.
+    hidden static [double] $RailExpandedWidth = 250
+    hidden static [double] $RailCollapsedWidth = 72
 
     MainPresenter([AppConfig] $config, [ConfigManager] $configManager, [NetworkProbe] $networkProbe, [ResourceService] $resources) {
         $this.Config = $config
@@ -79,6 +86,22 @@ class MainPresenter {
         $this.Controls['btnConfig'] = $this.Window.FindName("btnConfig")
         $this.Controls['btnLogs'] = $this.Window.FindName("btnLogs")
         $this.Controls['btnBattery'] = $this.Window.FindName("btnBattery")
+
+        # Collapsible rail
+        $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
+        $this.Controls['btnRailToggle'] = $this.Window.FindName("btnRailToggle")
+        $this.Controls['railLabels'] = @(
+            $this.Window.FindName("lblHome"),
+            $this.Window.FindName("lblConfig"),
+            $this.Window.FindName("lblLogs"),
+            $this.Window.FindName("lblBattery")
+        ) | Where-Object { $_ }
+
+        # Toast overlay service (shared with sub-presenters that need notifications)
+        $toastHost = $this.Window.FindName("toastHost")
+        if ($toastHost) {
+            $this.ToastService = [ToastService]::new($toastHost)
+        }
         
         # Headers
         $this.Headers = @{}
@@ -94,7 +117,7 @@ class MainPresenter {
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
-            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources)
+            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService)
         }
         
         # Config View & Presenter
@@ -125,6 +148,11 @@ class MainPresenter {
         $this.Controls['btnLogs'].Add_Click({ $presenter.NavigateTo('Logs') }.GetNewClosure())
         if ($this.Controls['btnBattery']) {
             $this.Controls['btnBattery'].Add_Click({ $presenter.NavigateTo('Battery') }.GetNewClosure())
+        }
+
+        # Rail collapse / expand
+        if ($this.Controls['btnRailToggle']) {
+            $this.Controls['btnRailToggle'].Add_Click({ $presenter.ToggleRail() }.GetNewClosure())
         }
         
         # Window Control Events
@@ -192,7 +220,14 @@ class MainPresenter {
         # Set main content
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) {
             $this.Controls['contentMain'].Content = $this.Views[$viewName]
-            
+
+            # Gentle fade-in transition on view switch.
+            $content = $this.Controls['contentMain']
+            if ($content) {
+                $fade = [System.Windows.Media.Animation.DoubleAnimation]::new(0, 1, [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180)))
+                $content.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
+            }
+
             # Refresh presenter state when navigating
             if ($viewName -eq 'Home' -and $this.HomePresenter) {
                 $this.HomePresenter.UpdateSearchButtonLabel()
@@ -204,6 +239,42 @@ class MainPresenter {
             if ($this.Headers[$headerKey]) {
                 $this.Headers[$headerKey].Visibility = if ($headerKey -eq $viewName) { 'Visible' } else { 'Collapsed' }
             }
+        }
+    }
+
+    # Collapses the sidebar to an icon-only rail (or expands it back), animating
+    # the width and fading the text labels so only the icons remain when narrow.
+    [void] ToggleRail() {
+        $sidebar = $this.Controls['sidebar']
+        if (-not $sidebar) { return }
+
+        $this.RailCollapsed = -not $this.RailCollapsed
+
+        $targetWidth = if ($this.RailCollapsed) {
+            [MainPresenter]::RailCollapsedWidth
+        } else {
+            [MainPresenter]::RailExpandedWidth
+        }
+        $targetOpacity = if ($this.RailCollapsed) { 0.0 } else { 1.0 }
+
+        $duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180))
+        $ease = [System.Windows.Media.Animation.QuadraticEase]::new()
+        $ease.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseInOut
+
+        # Animate the rail width.
+        $widthAnim = [System.Windows.Media.Animation.DoubleAnimation]::new()
+        $widthAnim.To = $targetWidth
+        $widthAnim.Duration = $duration
+        $widthAnim.EasingFunction = $ease
+        $sidebar.BeginAnimation([System.Windows.FrameworkElement]::WidthProperty, $widthAnim)
+
+        # Fade the text labels. Labels collapse out faster than they fade in so
+        # they don't appear before the rail has room for them.
+        foreach ($label in $this.Controls['railLabels']) {
+            $fade = [System.Windows.Media.Animation.DoubleAnimation]::new()
+            $fade.To = $targetOpacity
+            $fade.Duration = $duration
+            $label.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
         }
     }
 

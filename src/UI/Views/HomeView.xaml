@@ -104,15 +104,39 @@
           <RowDefinition Height="*" />
           <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TabControl
-          x:Name="TerminalTabs"
-          Style="{DynamicResource TerminalTabControlStyle}"
-          Margin="10"
+        <!-- Fleet status cards: one per host in the current run -->
+        <ScrollViewer
           Grid.Row="0"
-        />
+          Margin="6"
+          VerticalScrollBarVisibility="Auto"
+          HorizontalScrollBarVisibility="Disabled"
+        >
+          <Grid>
+            <!-- Empty-state hint shown when no hosts are running -->
+            <TextBlock
+              x:Name="FleetEmptyHint"
+              Text="No active hosts. Enter computer names above and run a scan or update."
+              Foreground="{DynamicResource BodyTextTertiary}"
+              FontFamily="Montserrat"
+              FontSize="14"
+              TextWrapping="Wrap"
+              TextAlignment="Center"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Margin="40"
+            />
+            <ItemsControl x:Name="FleetCards">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </Grid>
+        </ScrollViewer>
         <Button
           x:Name="btnClearTabs"
-          Content="Clear Completed Tabs"
+          Content="Clear Completed"
           Style="{DynamicResource ModernButton}"
           VerticalAlignment="Bottom"
           HorizontalAlignment="Center"

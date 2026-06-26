@@ -17,6 +17,10 @@ Screenshots/*
 .config
 *.log
 
+# Test artifacts
+testResults.xml
+CoverageReport/
+
 # Claude Code (personal, machine-specific)
 .claude/settings.local.json
 

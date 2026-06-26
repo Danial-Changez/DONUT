@@ -9,16 +9,19 @@ param(
     [string]$SourceRoot,
     [string]$LogsDir,
     [string]$ReportsDir,
+    [hashtable]$Settings,
     [string]$ConfigPath
 )
 
 $ErrorActionPreference = 'Stop'
 
 try {
-    # Load config from the canonical %LOCALAPPDATA% location, or use defaults.
-    # ConfigManager derives its own config path, so $ConfigPath only gates whether
-    # a persisted config exists to load.
-    $config = if ($ConfigPath -and (Test-Path $ConfigPath)) {
+    # Prefer the live config object sent from the UI so the run reflects exactly
+    # what the user configured. config.json is only persistence: fall back to it
+    # (or to defaults) when no Settings were supplied.
+    $config = if ($Settings) {
+        [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, $Settings)
+    } elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
         $mgr = [ConfigManager]::new($SourceRoot)
         $mgr.LoadConfig()
     } else {

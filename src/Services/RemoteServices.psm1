@@ -64,6 +64,9 @@ class RemoteJobService {
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
+                # Send the live in-memory config to the worker so the run uses
+                # exactly what the UI holds, not whatever config.json contains.
+                Settings   = $this.Config.Settings
             }
         }
     }

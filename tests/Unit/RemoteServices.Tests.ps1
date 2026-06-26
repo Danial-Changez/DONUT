@@ -237,9 +237,35 @@ Describe "RemoteServices" {
             $service = [ScanService]::new($config, $probe)
 
             $result = $service.PrepareScan("TestHost")
-            
+
             $result.Arguments.LogsDir | Should -Be $config.LogsPath
             $result.Arguments.ReportsDir | Should -Be $config.ReportsPath
+        }
+
+        It "Should send the live config Settings so the worker need not re-read config.json" {
+            $probe = [MockNetworkProbe]::new()
+            $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
+                activeCommand = "applyUpdates"
+            })
+            $service = [ScanService]::new($cfg, $probe)
+
+            $result = $service.PrepareScan("TestHost")
+
+            $result.Arguments.Settings | Should -Be $cfg.Settings
+            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+        }
+
+        It "Should carry Settings on apply-phase arguments too" {
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
+                activeCommand = "applyUpdates"
+            })
+            $service = [RemoteUpdateService]::new($cfg, $probe, $matcher)
+
+            $result = $service.PrepareApplyUpdates("TestHost", @{})
+
+            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
         }
     }
 }

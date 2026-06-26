@@ -62,6 +62,7 @@ class DialogPresenter {
             $this.Window.Close() 
         })
         
+        $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
         return $this.Result
     }
@@ -78,6 +79,7 @@ class DialogPresenter {
         $this.ConfigureButton("btnPrimary", "OK", { $this.Window.Close() })
         $this.HideControl("btnSecondary")
         
+        $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
     }
 
@@ -104,8 +106,30 @@ class DialogPresenter {
             $this.Window.Close() 
         })
         
+        $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
         return $this.Result
+    }
+
+    # Parents the dialog to the main window (or, if there isn't one yet, makes it
+    # topmost) so it reliably appears in front and grabs focus instead of opening
+    # behind the main window. Must be called before ShowDialog().
+    hidden [void] PrepareToShow() {
+        if ($null -eq $this.Window) { return }
+
+        $main = $null
+        if ([System.Windows.Application]::Current) {
+            $main = [System.Windows.Application]::Current.MainWindow
+        }
+
+        if ($null -ne $main -and $main -ne $this.Window -and $main.IsLoaded) {
+            $this.Window.Owner = $main
+            $this.Window.WindowStartupLocation = 'CenterOwner'
+        }
+        else {
+            # No usable owner (e.g. the startup update prompt) - force it forward.
+            $this.Window.Topmost = $true
+        }
     }
 
     hidden [void] SetText([string]$controlName, [string]$text) {
