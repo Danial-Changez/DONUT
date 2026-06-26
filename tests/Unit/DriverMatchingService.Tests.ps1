@@ -1,4 +1,6 @@
 using module "..\..\src\Services\DriverMatchingService.psm1"
+using module "..\..\src\Core\LogService.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 
 Describe "DriverMatchingService" {
     Context "Initialization" {
@@ -12,6 +14,19 @@ Describe "DriverMatchingService" {
             $service = [DriverMatchingService]::new()
             $service.CategoryPatterns.Count | Should -BeGreaterThan 0
             $service.CategoryPatterns["BIOS"] | Should -Contain "BIOS"
+        }
+
+        It "Should default to a no-op logger when constructed without one" {
+            $service = [DriverMatchingService]::new()
+            $service.Logger | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should accept an injected logger and still initialize patterns" {
+            $logger = [CapturingLogService]::new()
+            $service = [DriverMatchingService]::new($logger)
+
+            $service.Logger | Should -Be $logger
+            $service.BrandPatterns.Count | Should -BeGreaterThan 0
         }
     }
 

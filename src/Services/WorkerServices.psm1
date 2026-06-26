@@ -1,4 +1,4 @@
-using module ".\LogService.psm1"
+using module "..\Core\LogService.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module ".\DriverMatchingService.psm1"
 using module "..\Models\DeviceContext.psm1"
@@ -40,10 +40,10 @@ class ExecutionService {
         [string]$LogsDir,
         [string]$ReportsDir
     ) {
-        # Init Services
+        # Init Services (share one logger across the worker's collaborators)
         $localLogger = [LogService]::new($LogsDir)
-        $localProbe = [NetworkProbe]::new()
-        $localMatcher = [DriverMatchingService]::new()
+        $localProbe = [NetworkProbe]::new($localLogger)
+        $localMatcher = [DriverMatchingService]::new($localLogger)
         $service = [ExecutionService]::new($localLogger, $localProbe, $localMatcher, $Config, $SourceRoot, $LogsDir, $ReportsDir)
 
         # Create Device Context
@@ -180,7 +180,10 @@ class ExecutionService {
 
         # Resolve IP (should be done, but verify)
         $ip = $this.Probe.ResolveHost($computer)
-        if (-not $ip) { throw "Could not resolve IP for $computer" }
+        if (-not $ip) {
+            $this.Logger.LogError("[$computer] Could not resolve IP; aborting PsExec.")
+            throw "Could not resolve IP for $computer"
+        }
 
         # Find DCU Path
         $dcuPath = $this.FindDcuCli($ip)
@@ -247,12 +250,21 @@ class ExecutionService {
 
     [void] AssertReachable([DeviceContext] $device) {
         if (-not $this.Probe.IsOnline($device.HostName)) {
+            $this.Logger.LogError("[$($device.HostName)] Host is offline or unreachable.")
             throw "Host '$($device.HostName)' is offline or unreachable."
         }
         $ip = $this.Probe.ResolveHost($device.HostName)
-        
-        if ($ip) { $device.IPAddress = $ip.ToString() }
+
+        if ($ip) {
+            $device.IPAddress = $ip.ToString()
+        }
+        else {
+            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP address.")
+            throw "Could not resolve IP for '$($device.HostName)'."
+        }
+
         if (-not $this.Probe.IsRpcAvailable($device.HostName)) {
+            $this.Logger.LogError("[$($device.HostName)] RPC (Port 135) is unavailable.")
             throw "RPC is unavailable on '$($device.HostName)'."
         }
     }

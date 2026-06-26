@@ -34,9 +34,12 @@ class HomePresenter {
         $this.ViewContent = $view
         
         $this.NetworkProbe = $networkProbe
-        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe)
-        $this.DriverMatcher = [DriverMatchingService]::new()
-        $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher)
+        # Reuse the shared app logger that travels with the probe so scan/update
+        # services log into the same sink as the rest of the app.
+        $logger = $this.NetworkProbe.Logger
+        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $logger)
+        $this.DriverMatcher = [DriverMatchingService]::new($logger)
+        $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
         
         $this.ActiveJobs = [List[AsyncJob]]::new()

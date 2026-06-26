@@ -1,4 +1,4 @@
-using module "..\..\src\Services\LogService.psm1"
+using module "..\..\src\Core\LogService.psm1"
 
 Describe "LogService" {
 
@@ -207,16 +207,99 @@ Describe "LogService" {
     Context "Log Levels" {
         It "Should support all standard log levels" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.LogInfo("Info test")
             $logger.LogWarning("Warning test")
             $logger.LogError("Error test")
-            
+            $logger.LogDebug("Debug test")
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
-            
+
             $content | Should -BeLike "*[INFO]*Info test*"
             $content | Should -BeLike "*[WARN]*Warning test*"
             $content | Should -BeLike "*[ERROR]*Error test*"
+            $content | Should -BeLike "*[DEBUG]*Debug test*"
+        }
+    }
+
+    Context "LogDebug" {
+        It "Should write DEBUG level log entry" {
+            $logger = [LogService]::new($script:testLogDir)
+
+            $logger.LogDebug("Test debug message")
+
+            $content = Get-Content -Path $logger.LogFilePath -Raw
+            $content | Should -BeLike "*[DEBUG]*"
+            $content | Should -BeLike "*Test debug message*"
+        }
+    }
+
+    Context "LogException" {
+        It "Should log ERROR with the exception type and message" {
+            $logger = [LogService]::new($script:testLogDir)
+
+            try { throw [System.InvalidOperationException]::new("boom") }
+            catch { $logger.LogException("While doing work", $_) }
+
+            $content = Get-Content -Path $logger.LogFilePath -Raw
+            $content | Should -BeLike "*[ERROR]*"
+            $content | Should -BeLike "*While doing work*"
+            $content | Should -BeLike "*InvalidOperationException*"
+            $content | Should -BeLike "*boom*"
+        }
+
+        It "Should not throw when given a null error record" {
+            $logger = [LogService]::new($script:testLogDir)
+
+            { $logger.LogException("No error attached", $null) } | Should -Not -Throw
+
+            $content = Get-Content -Path $logger.LogFilePath -Raw
+            $content | Should -BeLike "*[ERROR]*No error attached*"
+            $content | Should -BeLike "*<no exception detail>*"
+        }
+    }
+
+    Context "LogStructured" {
+        It "Should emit a pipe-delimited event with sorted key=value fields" {
+            $logger = [LogService]::new($script:testLogDir)
+
+            $logger.LogStructured("INFO", "RESOLVE", @{ host = "PC-01"; server = "DC-02"; result = "OK" })
+
+            $line = Get-Content -Path $logger.LogFilePath -Tail 1
+            $line | Should -Match "\[INFO\] RESOLVE\|host=PC-01\|result=OK\|server=DC-02$"
+        }
+
+        It "Should emit just the event name when fields are null" {
+            $logger = [LogService]::new($script:testLogDir)
+
+            $logger.LogStructured("WARN", "NO_FIELDS", $null)
+
+            $line = Get-Content -Path $logger.LogFilePath -Tail 1
+            $line | Should -Match "\[WARN\] NO_FIELDS$"
+        }
+    }
+
+    Context "NullLogService" {
+        It "Should be assignable to a LogService dependency" {
+            $logger = [NullLogService]::new()
+
+            ($logger -is [LogService]) | Should -Be $true
+        }
+
+        It "Should make all log writes no-ops without touching the file system" {
+            $logger = [NullLogService]::new()
+
+            { $logger.LogInfo("ignored") } | Should -Not -Throw
+            { $logger.LogError("ignored") } | Should -Not -Throw
+            { $logger.LogException("ignored", $null) } | Should -Not -Throw
+
+            $logger.LogFilePath | Should -BeNullOrEmpty
+        }
+
+        It "Should return an empty array from GetRecentLogs" {
+            $logger = [NullLogService]::new()
+
+            $logger.GetRecentLogs(10).Count | Should -Be 0
         }
     }
 }

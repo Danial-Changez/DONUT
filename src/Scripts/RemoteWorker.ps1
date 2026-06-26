@@ -15,9 +15,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 try {
-    # Load config from path or use defaults
+    # Load config from the canonical %LOCALAPPDATA% location, or use defaults.
+    # ConfigManager derives its own config path, so $ConfigPath only gates whether
+    # a persisted config exists to load.
     $config = if ($ConfigPath -and (Test-Path $ConfigPath)) {
-        $mgr = [ConfigManager]::new($ConfigPath, $SourceRoot)
+        $mgr = [ConfigManager]::new($SourceRoot)
         $mgr.LoadConfig()
     } else {
         # Use default config with provided paths

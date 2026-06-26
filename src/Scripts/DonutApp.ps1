@@ -5,7 +5,7 @@ using module "..\Core\AsyncJob.psm1"
 using module "..\Core\ConfigManager.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\RunspaceManager.psm1"
-using module "..\Services\LogService.psm1"
+using module "..\Core\LogService.psm1"
 using module "..\Services\DriverMatchingService.psm1"
 using module "..\Services\RemoteServices.psm1"
 using module "..\Services\SelfUpdateService.psm1"
@@ -33,16 +33,22 @@ try {
         $path = Join-Path (Split-Path $configManager.ConfigPath -Parent) $folder
         if (-not (Test-Path $path)) { New-Item -Path $path -ItemType Directory -Force | Out-Null }
     }
-    
+
+    # Central logger (logs directory is guaranteed by ConfigManager). Injected
+    # into the collaborators that support it so runtime errors are recorded.
+    $logger = [LogService]::new($configManager.LogsPath)
+    $logger.LogInfo("DONUT starting up.")
+    [RunspaceManager]::SetLogger($logger)
+
     # Initialize RunspaceManager with ThrottleLimit from config
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     Write-Host "Initializing RunspaceManager with ThrottleLimit: $throttleLimit"
     [RunspaceManager]::Initialize(1, $throttleLimit)
-    
+
     # Initialize Resources
     Write-Host "Loading Resources..."
-    $resourceService = [ResourceService]::new($srcRoot)
+    $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
 
     # Check for App Updates
@@ -57,7 +63,7 @@ try {
 
     # Launch Main Window
     Write-Host "Initializing MainPresenter..."
-    $networkProbe = [NetworkProbe]::new()
+    $networkProbe = [NetworkProbe]::new($logger)
     $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
     
     $presenter.Show()

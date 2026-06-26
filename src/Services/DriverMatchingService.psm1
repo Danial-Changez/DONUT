@@ -1,11 +1,29 @@
+using module "..\Core\LogService.psm1"
+
 class DriverMatchingService {
     [hashtable] $BrandPatterns
     [hashtable] $CategoryPatterns
     [hashtable] $CategoryBrands
     [hashtable] $CategoryMappings
     [hashtable] $DeviceClassMappings
+    [LogService] $Logger
 
     DriverMatchingService() {
+        $this.Logger = [NullLogService]::new()
+        $this.InitializePatterns()
+    }
+
+    DriverMatchingService([LogService]$logger) {
+        if ($null -eq $logger) {
+            $this.Logger = [NullLogService]::new()
+        }
+        else {
+            $this.Logger = $logger
+        }
+        $this.InitializePatterns()
+    }
+
+    hidden [void] InitializePatterns() {
         # Brand patterns for manufacturer detection (OEM/Component makers)
         $this.BrandPatterns = @{
             "Dell"      = @("Dell Inc.", "Dell", "DELL")
@@ -290,8 +308,9 @@ class DriverMatchingService {
         }
         catch {
             $result.ParseError = $true
+            $this.Logger.LogDebug("Version comparison failed for '$installedVersion' vs '$updateVersion': $($_.Exception.Message)")
         }
-        
+
         return $result
     }
 

@@ -1,10 +1,13 @@
 using module "..\..\src\Core\RunspaceManager.psm1"
+using module "..\..\src\Core\LogService.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 
 Describe "RunspaceManager" {
 
     AfterEach {
         # Clean up after each test to ensure isolation
         [RunspaceManager]::Close()
+        [RunspaceManager]::SetLogger($null)
     }
 
     Context "Initialize" {
@@ -62,15 +65,34 @@ Describe "RunspaceManager" {
         It "Should close and dispose the RunspacePool" {
             [RunspaceManager]::Initialize(1, 5)
             [RunspaceManager]::Close()
-            
+
             [RunspaceManager]::RunspacePool | Should -BeNullOrEmpty
         }
 
         It "Should handle being called when pool is already null" {
             [RunspaceManager]::Close()  # First close
-            
+
             # Should not throw
             { [RunspaceManager]::Close() } | Should -Not -Throw
+        }
+    }
+
+    Context "Logging" {
+        It "Should log pool open and close through the attached logger" {
+            $logger = [CapturingLogService]::new()
+            [RunspaceManager]::SetLogger($logger)
+
+            [RunspaceManager]::Initialize(1, 5)
+            [RunspaceManager]::Close()
+
+            $logger.HasLevel("INFO") | Should -Be $true
+            ($logger.Contains("opened") -and $logger.Contains("closed")) | Should -Be $true
+        }
+
+        It "Should not throw when no logger is attached" {
+            [RunspaceManager]::SetLogger($null)
+
+            { [RunspaceManager]::Initialize(1, 5); [RunspaceManager]::Close() } | Should -Not -Throw
         }
     }
 }

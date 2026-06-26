@@ -1,10 +1,23 @@
 using namespace System.Windows
+using module "..\Core\LogService.psm1"
 
 class ResourceService {
     [string]$SourceRoot
+    [LogService]$Logger
 
     ResourceService([string]$sourceRoot) {
         $this.SourceRoot = $sourceRoot
+        $this.Logger = [NullLogService]::new()
+    }
+
+    ResourceService([string]$sourceRoot, [LogService]$logger) {
+        $this.SourceRoot = $sourceRoot
+        if ($null -eq $logger) {
+            $this.Logger = [NullLogService]::new()
+        }
+        else {
+            $this.Logger = $logger
+        }
     }
 
     # Loads all styles into the global Application scope
@@ -14,26 +27,28 @@ class ResourceService {
                 # Use New-Object with ErrorAction Stop to ensure it's catchable
                 $app = New-Object System.Windows.Application -ErrorAction Stop
                 $app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
-                Write-Host "Created Application. ShutdownMode: $($app.ShutdownMode)"
+                $this.Logger.LogDebug("Created WPF Application. ShutdownMode: $($app.ShutdownMode)")
             }
             catch {
-                Write-Warning "Unable to create WPF Application object (one may already exist in this AppDomain on another thread): $_"
+                $this.Logger.LogWarning("Unable to create WPF Application object (one may already exist in this AppDomain on another thread): $($_.Exception.Message)")
             }
         }
         
         if ([System.Windows.Application]::Current) {
             if ([System.Windows.Application]::Current.ShutdownMode -ne [System.Windows.ShutdownMode]::OnExplicitShutdown) {
                 [System.Windows.Application]::Current.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
-                Write-Host "Updated ShutdownMode to: $([System.Windows.Application]::Current.ShutdownMode)"
+                $this.Logger.LogDebug("Updated ShutdownMode to: $([System.Windows.Application]::Current.ShutdownMode)")
             }
             $this.LoadStylesInto([System.Windows.Application]::Current.Resources)
-            Write-Host "App.Current Resources MergedDictionaries Count: $([System.Windows.Application]::Current.Resources.MergedDictionaries.Count)"
-            if ([System.Windows.Application]::Current.Resources.MergedDictionaries.Count -eq 0) {
-                 [System.Windows.Forms.MessageBox]::Show("Warning: No resources loaded into App.Current", "Debug")
+            $dictCount = [System.Windows.Application]::Current.Resources.MergedDictionaries.Count
+            $this.Logger.LogDebug("App.Current Resources MergedDictionaries Count: $dictCount")
+            if ($dictCount -eq 0) {
+                $this.Logger.LogWarning("No resources loaded into App.Current.")
+                [System.Windows.Forms.MessageBox]::Show("Warning: No resources loaded into App.Current", "Debug")
             }
         }
         else {
-            Write-Warning "Skipping global resource loading because Application.Current is not accessible."
+            $this.Logger.LogWarning("Skipping global resource loading because Application.Current is not accessible.")
         }
     }
 
@@ -55,7 +70,7 @@ class ResourceService {
         $stylesPath = Join-Path $this.SourceRoot 'UI\Styles'
         
         if (-not (Test-Path $stylesPath)) {
-            Write-Warning "Styles folder not found at $stylesPath"
+            $this.Logger.LogWarning("Styles folder not found at $stylesPath")
             return
         }
 
@@ -71,8 +86,8 @@ class ResourceService {
                 $targetDictionary.MergedDictionaries.Add($dict)
             }
             catch {
-                Write-Warning "Failed to load style: $($_.Name) - $_"
-                [System.Windows.Forms.MessageBox]::Show("Failed to load style: $($_.Name)`n$_", "Resource Error")
+                $this.Logger.LogException("Failed to load style dictionary", $_)
+                [System.Windows.Forms.MessageBox]::Show("Failed to load style:`n$_", "Resource Error")
             }
         }
     }

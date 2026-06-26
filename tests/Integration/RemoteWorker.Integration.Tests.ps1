@@ -41,8 +41,9 @@ Describe "RemoteWorker Integration" {
         $logFile = Join-Path $logsDir "Donut.log"
         Test-Path $logFile | Should -Be $true
 
-        # Assert log contains the hostname (proof that ExecutionService started and logged)
+        # Assert log contains at least one host-tagged line (proof that
+        # ExecutionService started and logged the attempt for this host).
         $content = Get-Content $logFile
-        $content | Should -Match "\[$hostName\]"
+        ($content | Where-Object { $_ -match "\[$hostName\]" }) | Should -Not -BeNullOrEmpty
     }
 }

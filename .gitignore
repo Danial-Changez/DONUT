@@ -17,5 +17,8 @@ Screenshots/*
 .config
 *.log
 
+# Claude Code (personal, machine-specific)
+.claude/settings.local.json
+
 # Legacy
 MainWindow-*
