@@ -44,7 +44,6 @@ class ResourceService {
             $this.Logger.LogDebug("App.Current Resources MergedDictionaries Count: $dictCount")
             if ($dictCount -eq 0) {
                 $this.Logger.LogWarning("No resources loaded into App.Current.")
-                [System.Windows.Forms.MessageBox]::Show("Warning: No resources loaded into App.Current", "Debug")
             }
         }
         else {
@@ -87,7 +86,6 @@ class ResourceService {
             }
             catch {
                 $this.Logger.LogException("Failed to load style dictionary", $_)
-                [System.Windows.Forms.MessageBox]::Show("Failed to load style:`n$_", "Resource Error")
             }
         }
     }
