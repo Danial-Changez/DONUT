@@ -11,35 +11,35 @@ using module "..\..\Core\TimeFormat.psm1"
 #
 # A full-width row in the Home machine list (TeamViewer-style). One row per
 # machine; it serves double duty as both a persisted "recent connection" (idle
-# state, via SetIdleFrom) and a live run (SetStatus/SetPercent/AppendLog while a
-# job is in flight). Built in code, consistent with the passive-view pattern.
+# state, via SetIdleFrom) and a live run (SetStatus/SetPercent while a job is in
+# flight). Built in code, consistent with the passive-view pattern.
 #
 # Interaction:
-#   - clicking the row body invokes RunAction(hostname) (presenter runs the
-#     active config, confirming first when the mode is destructive)
-#   - the chevron toggles an inline terminal showing live DCU/PsExec output
+#   - single-clicking the row body selects it (SelectAction) -> the presenter
+#     opens the detail panel for that host
+#   - the Run button (or a double-click on the row) invokes RunAction(hostname)
+#     to execute the active config (confirmed first when the mode is destructive)
 #
+# The live job log/output now lives in the detail panel, not in the row.
 # Pure status semantics (label/colour/busy) come from [FleetStatus].
 
 class ConnectionRow {
     [string]      $HostName
     [Border]      $Root          # element added to the machine list
-    [scriptblock] $RunAction     # set by presenter; called with hostname on click
+    [scriptblock] $RunAction     # set by presenter; runs the active config
+    [scriptblock] $SelectAction  # set by presenter; opens the detail panel
 
     hidden [Ellipse]     $Dot
     hidden [TextBlock]   $Subtitle
     hidden [Border]      $ChipBg
     hidden [TextBlock]   $ChipText
     hidden [ProgressBar] $Progress
-    hidden [Button]      $Chevron
-    hidden [Border]      $DetailHost
-    hidden [TextBox]     $Log
-    hidden [bool]        $Expanded
+    hidden [Button]      $RunButton
+    hidden [bool]        $Selected
     hidden [double]      $LastPercent = -1   # last % parsed from DCU output (-1 = unknown)
 
     ConnectionRow([string]$hostName) {
         $this.HostName = $hostName
-        $this.Expanded = $false
         $this.Build()
     }
 
@@ -52,15 +52,12 @@ class ConnectionRow {
         $this.Root.BorderBrush = $this.Brush('PanelBorder', [Color]::FromArgb(255, 0x27, 0x27, 0x2A))
         $this.Root.HorizontalAlignment = [HorizontalAlignment]::Stretch
 
-        $outer = [StackPanel]::new()
-        $this.Root.Child = $outer
-
-        # ---- Header (clickable body: runs the active config) ----
+        # ---- Header (clickable body: selects the host) ----
         $header = [Border]::new()
         $header.Background = [Brushes]::Transparent
         $header.Padding = [Thickness]::new(14, 10, 8, 10)
         $header.Cursor = [System.Windows.Input.Cursors]::Hand
-        $outer.Children.Add($header)
+        $this.Root.Child = $header
 
         $grid = [Grid]::new()
         foreach ($w in @(
@@ -68,7 +65,7 @@ class ConnectionRow {
             [GridLength]::new(1, [GridUnitType]::Star),   # name + subtitle
             [GridLength]::new(0, [GridUnitType]::Auto),   # progress
             [GridLength]::new(0, [GridUnitType]::Auto),   # chip
-            [GridLength]::new(0, [GridUnitType]::Auto)    # chevron
+            [GridLength]::new(0, [GridUnitType]::Auto)    # run button
         )) {
             $col = [ColumnDefinition]::new(); $col.Width = $w
             $grid.ColumnDefinitions.Add($col)
@@ -126,7 +123,7 @@ class ConnectionRow {
         $this.ChipBg.CornerRadius = [CornerRadius]::new(8)
         $this.ChipBg.Padding = [Thickness]::new(10, 3, 10, 3)
         $this.ChipBg.VerticalAlignment = [VerticalAlignment]::Center
-        $this.ChipBg.Margin = [Thickness]::new(0, 0, 4, 0)
+        $this.ChipBg.Margin = [Thickness]::new(0, 0, 8, 0)
         [Grid]::SetColumn($this.ChipBg, 3)
         $grid.Children.Add($this.ChipBg)
 
@@ -136,56 +133,57 @@ class ConnectionRow {
         $this.ChipText.FontSize = 11
         $this.ChipBg.Child = $this.ChipText
 
-        # Chevron (expand log)
-        $this.Chevron = [Button]::new()
-        $this.Chevron.Width = 32
-        $this.Chevron.Height = 32
-        $this.Chevron.Background = [Brushes]::Transparent
-        $this.Chevron.BorderThickness = [Thickness]::new(0)
-        $this.Chevron.Cursor = [System.Windows.Input.Cursors]::Hand
-        $this.Chevron.Foreground = $this.Brush('BodyTextTertiary', [Colors]::Gray)
-        $this.Chevron.Content = [char]0x2304   # downwards chevron-ish glyph
-        $this.Chevron.FontSize = 14
-        $this.Chevron.ToolTip = 'Show / hide log'
-        $this.Chevron.Template = $this.MakeFlatButtonTemplate()
-        [Grid]::SetColumn($this.Chevron, 4)
-        $grid.Children.Add($this.Chevron)
-
-        # ---- Collapsible log detail ----
-        $this.DetailHost = [Border]::new()
-        $this.DetailHost.Visibility = [Visibility]::Collapsed
-        $this.DetailHost.Margin = [Thickness]::new(14, 0, 14, 12)
-        $this.DetailHost.CornerRadius = [CornerRadius]::new(6)
-        $this.DetailHost.Background = [SolidColorBrush]::new([Color]::FromArgb(235, 0x09, 0x09, 0x0B))
-        $outer.Children.Add($this.DetailHost)
-
-        $this.Log = [TextBox]::new()
-        $this.Log.IsReadOnly = $true
-        $this.Log.MaxHeight = 200
-        $this.Log.Margin = [Thickness]::new(2)
-        $this.Log.BorderThickness = [Thickness]::new(0)
-        $this.Log.Background = [Brushes]::Transparent
-        $this.Log.Foreground = [SolidColorBrush]::new([Color]::FromRgb(0xD4, 0xD4, 0xD8))
-        $this.Log.FontFamily = [FontFamily]::new('Consolas')
-        $this.Log.FontSize = 12
-        $this.Log.TextWrapping = [TextWrapping]::NoWrap
-        $this.Log.VerticalScrollBarVisibility = [ScrollBarVisibility]::Auto
-        $this.Log.HorizontalScrollBarVisibility = [ScrollBarVisibility]::Auto
-        $this.DetailHost.Child = $this.Log
+        # Run button (executes the active config for this host)
+        $this.RunButton = [Button]::new()
+        $this.RunButton.Content = 'Run'
+        $this.RunButton.FontFamily = [FontFamily]::new('Montserrat')
+        $this.RunButton.FontWeight = [FontWeights]::SemiBold
+        $this.RunButton.FontSize = 11.5
+        $this.RunButton.Foreground = [Brushes]::White
+        $this.RunButton.Background = $this.Brush('AccentPurple', [Color]::FromRgb(0x8B, 0x5C, 0xF6))
+        $this.RunButton.Padding = [Thickness]::new(14, 4, 14, 4)
+        $this.RunButton.Height = 28
+        $this.RunButton.VerticalAlignment = [VerticalAlignment]::Center
+        $this.RunButton.Cursor = [System.Windows.Input.Cursors]::Hand
+        $this.RunButton.BorderThickness = [Thickness]::new(0)
+        $this.RunButton.ToolTip = 'Run the active command on this machine'
+        $this.RunButton.Template = $this.MakeFlatButtonTemplate()
+        [Grid]::SetColumn($this.RunButton, 4)
+        $grid.Children.Add($this.RunButton)
 
         $row = $this
-        # Row body click -> run the active config. The chevron is a Button, which
-        # swallows its own click, so it won't trigger a run.
-        $header.Add_MouseLeftButtonUp({
+        # Single click selects (opens detail); double click runs. The Run button
+        # is a Button, which swallows its own click, so it won't also select.
+        $header.Add_MouseLeftButtonDown({
+            if ($_.ClickCount -eq 2) {
+                if ($null -ne $row.RunAction) { & $row.RunAction $row.HostName }
+            }
+            else {
+                if ($null -ne $row.SelectAction) { & $row.SelectAction $row.HostName }
+            }
+        }.GetNewClosure())
+
+        $this.RunButton.Add_Click({
             if ($null -ne $row.RunAction) { & $row.RunAction $row.HostName }
         }.GetNewClosure())
-        $this.Chevron.Add_Click({ $row.ToggleExpand() }.GetNewClosure())
 
-        # Hover highlight on the row.
+        # Hover highlight on the row (background only; selection uses the border).
         $hoverBrush = $this.Brush('PanelBackgroundHover', [Color]::FromRgb(0x23, 0x23, 0x27))
         $baseBrush = $this.Root.Background
         $header.Add_MouseEnter({ $row.Root.Background = $hoverBrush }.GetNewClosure())
         $header.Add_MouseLeave({ $row.Root.Background = $baseBrush }.GetNewClosure())
+    }
+
+    # Highlights (or clears) the row to mark the selected machine.
+    [void] SetSelected([bool]$selected) {
+        $this.Selected = $selected
+        if ($selected) {
+            $this.Root.BorderBrush = $this.Brush('AccentPurple', [Color]::FromRgb(0x8B, 0x5C, 0xF6))
+            $this.Root.BorderThickness = [Thickness]::new(1.5)
+        } else {
+            $this.Root.BorderBrush = $this.Brush('PanelBorder', [Color]::FromArgb(255, 0x27, 0x27, 0x2A))
+            $this.Root.BorderThickness = [Thickness]::new(1)
+        }
     }
 
     # Renders the persisted/idle state from a stored RecentConnection record.
@@ -266,21 +264,6 @@ class ConnectionRow {
         $transform.BeginAnimation([TranslateTransform]::YProperty, $rise)
     }
 
-    [void] AppendLog([string]$text) {
-        $this.Log.AppendText("$text`n")
-        $this.Log.ScrollToEnd()
-    }
-
-    [void] ToggleExpand() {
-        $this.Expanded = -not $this.Expanded
-        $this.DetailHost.Visibility = if ($this.Expanded) { [Visibility]::Visible } else { [Visibility]::Collapsed }
-        if ($this.Expanded) {
-            $fade = [DoubleAnimation]::new(0, 1, [Duration]::new([TimeSpan]::FromMilliseconds(160)))
-            $this.DetailHost.BeginAnimation([UIElement]::OpacityProperty, $fade)
-            $this.Log.ScrollToEnd()
-        }
-    }
-
     # --- Pure status mapping for idle rows -------------------------------------------
 
     static [string] IdleColorKey([string]$lastStatus) {
@@ -318,12 +301,12 @@ class ConnectionRow {
         return $brush
     }
 
-    # Flat, borderless template for the chevron button (no default chrome).
+    # Flat, borderless template (rounded, background-bound) for the row buttons.
     hidden [System.Windows.Controls.ControlTemplate] MakeFlatButtonTemplate() {
         $xaml = @'
 <ControlTemplate TargetType="Button" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
     <Border Background="{TemplateBinding Background}" CornerRadius="6">
-        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
     </Border>
 </ControlTemplate>
 '@
