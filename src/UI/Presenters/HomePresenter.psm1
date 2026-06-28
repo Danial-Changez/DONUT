@@ -34,6 +34,7 @@ class HomePresenter : AsyncJobPresenter {
     [ItemsControl] $MachineList
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
+    [Button] $ModeButton
     [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
@@ -125,6 +126,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.MachineList = $this.ViewContent.FindName('MachineList')
         $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
         $this.ModePill = $this.ViewContent.FindName('txtMode')
+        $this.ModeButton = $this.ViewContent.FindName('btnMode')
 
         $this.TileCtrlHost = $this.ViewContent.FindName('txtCtrlHost')
         $this.TileCtrlIp = $this.ViewContent.FindName('txtCtrlIp')
@@ -156,6 +158,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
         if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
         if ($this.RefreshButton) { $this.RefreshButton.Add_Click({ $presenter.RefreshAll() }.GetNewClosure()) }
+        if ($this.ModeButton) { $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure()) }
         if ($this.DetailRefreshButton) { $this.DetailRefreshButton.Add_Click({ $presenter.RefreshInventory($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.DetailRunButton) { $this.DetailRunButton.Add_Click({ $presenter.RunHost($presenter.SelectedHost) }.GetNewClosure()) }
 
@@ -173,7 +176,16 @@ class HomePresenter : AsyncJobPresenter {
         $command = $this.Config.GetActiveCommand()
         $label = if ($command -eq 'applyUpdates') { "Apply Updates" } else { "Scan" }
         if ($this.SearchButton) { $this.SearchButton.Content = $label }
-        if ($this.ModePill) { $this.ModePill.Text = "Mode: $label" }
+        if ($this.ModePill) { $this.ModePill.Text = $label }
+    }
+
+    # Quick config pick: cycle the active command (Scan <-> Apply Updates) using
+    # each command's configured defaults, persist it, and refresh the labels.
+    [void] CycleMode() {
+        $next = if ($this.Config.GetActiveCommand() -eq 'scan') { 'applyUpdates' } else { 'scan' }
+        $this.Config.SetActiveCommand($next)
+        if ($null -ne $this.ConfigManager) { $this.ConfigManager.SaveConfig($this.Config) }
+        $this.UpdateModePill()
     }
 
     # Backwards-compatible name used by MainPresenter on navigation.
