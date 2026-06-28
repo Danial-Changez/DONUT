@@ -2,10 +2,12 @@ using namespace System.Windows
 using namespace System.Windows.Controls
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
+using module "..\..\Core\LogService.psm1"
 
 class ConfigPresenter {
     [AppConfig] $Config
     [ConfigManager] $ConfigManager
+    [LogService] $Logger
     [FrameworkElement] $ViewContent
     [ComboBox] $MainCommandComboBox
     [ContentControl] $ConfigOptionsContent
@@ -16,6 +18,7 @@ class ConfigPresenter {
     ConfigPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view) {
         $this.Config = $config
         $this.ConfigManager = $configManager
+        $this.Logger = $configManager.Logger
         $this.ViewContent = $view
         $this.Initialize()
     }
@@ -86,7 +89,7 @@ class ConfigPresenter {
                 # Populate fields
                 $this.PopulateFields()
             } catch {
-                Write-Error "Failed to load option view $fileName : $_"
+                $this.Logger.LogException("Failed to load option view $fileName", $_)
             }
         }
     }

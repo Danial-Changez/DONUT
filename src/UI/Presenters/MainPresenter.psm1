@@ -2,6 +2,7 @@ using namespace System.Windows
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
+using module "..\..\Core\LogService.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
@@ -21,6 +22,7 @@ class MainPresenter {
     [HomePresenter] $HomePresenter
     [BatteryPresenter] $BatteryPresenter
     [NetworkProbe] $NetworkProbe
+    [LogService] $Logger
     [ResourceService] $Resources
     [ToastService] $ToastService
     [bool] $RailCollapsed
@@ -34,6 +36,7 @@ class MainPresenter {
         $this.ConfigManager = $configManager
         $this.NetworkProbe = $networkProbe
         $this.Resources = $resources
+        $this.Logger = $networkProbe.Logger
         $this.Initialize()
     }
 
@@ -69,9 +72,9 @@ class MainPresenter {
 
         # Load Resources (Styles)
         $this.Resources.ApplyResourcesToWindow($this.Window)
-        Write-Host "MainWindow Resources MergedDictionaries Count: $($this.Window.Resources.MergedDictionaries.Count)"
+        $this.Logger.LogDebug("MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
         if ($this.Window.Resources.MergedDictionaries.Count -eq 0) {
-             [System.Windows.Forms.MessageBox]::Show("Warning: No resources merged into MainWindow", "Debug")
+            $this.Logger.LogWarning("No resources merged into MainWindow.")
         }
 
         # Find Controls
@@ -210,7 +213,7 @@ class MainPresenter {
                 $reader = [System.Xml.XmlReader]::Create($path)
                 return [System.Windows.Markup.XamlReader]::Load($reader)
             } catch {
-                Write-Error "Failed to load view $fileName : $_"
+                $this.Logger.LogException("Failed to load view $fileName", $_)
             }
         }
         return $null
@@ -287,14 +290,14 @@ class MainPresenter {
                     $this.Window.ShowDialog() | Out-Null
                 }
             } catch {
-                Write-Error "Show failed: $_"
+                $this.Logger.LogException("Show failed", $_)
                 if ($_.Exception.InnerException) {
-                    Write-Error "Inner Exception: $($_.Exception.InnerException.Message)"
+                    $this.Logger.LogError("Inner Exception: $($_.Exception.InnerException.Message)")
                 }
                 throw
             }
         } else {
-            Write-Error "MainWindow is null!"
+            $this.Logger.LogError("MainWindow is null.")
         }
     }
 }

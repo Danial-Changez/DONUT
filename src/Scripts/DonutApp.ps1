@@ -43,27 +43,27 @@ try {
     # Initialize RunspaceManager with ThrottleLimit from config
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
-    Write-Host "Initializing RunspaceManager with ThrottleLimit: $throttleLimit"
+    $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     [RunspaceManager]::Initialize(1, $throttleLimit)
 
     # Initialize Resources
-    Write-Host "Loading Resources..."
+    $logger.LogInfo("Loading resources.")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
 
     # Check for App Updates
-    Write-Host "Checking for updates..."
+    $logger.LogInfo("Checking for updates.")
     try {
         $selfUpdateService = [SelfUpdateService]::new($logger)
         $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
         $updatePresenter.CheckAndPrompt()
     }
     catch {
-        Write-Warning "Update check failed: $_"
+        $logger.LogException("Update check failed", $_)
     }
 
     # Launch Main Window
-    Write-Host "Initializing MainPresenter..."
+    $logger.LogInfo("Initializing MainPresenter.")
     $networkProbe = [NetworkProbe]::new($logger)
     $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
     
@@ -71,6 +71,6 @@ try {
     
 }
 catch {
-    Write-Error "Error starting Donut: $_"
+    if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
     [System.Windows.Forms.MessageBox]::Show("Error starting Donut: $_", "Error")
 }
