@@ -27,6 +27,20 @@ package "Donut.Models" {
         +IsOnline: bool
         +StatusMessage: string
     }
+
+    enum JobStatus {
+        Created
+        Running
+        Completed
+        Failed
+    }
+
+    enum JobKind {
+        Scan
+        UpdateScan
+        UpdateApply
+        BatteryReport
+    }
 }
 
 package "Donut.Core" {
@@ -49,8 +63,8 @@ package "Donut.Core" {
 
     class AsyncJob {
         +HostName: string
-        +JobType: string
-        +Status: string
+        +JobType: JobKind
+        +Status: JobStatus
         +Logs: ConcurrentQueue<string>
         +Result: object
         +TempConfigPath: string
@@ -58,7 +72,7 @@ package "Donut.Core" {
         -AsyncResult: IAsyncResult
         +Start(scriptPath: string, arguments: Hashtable, tempConfigPath: string): void
         +Poll(): void
-        +Dispose(): void
+        +Cleanup(): void
     }
 
     class RunspaceManager {
@@ -67,15 +81,28 @@ package "Donut.Core" {
         +{static} GetPool(): RunspacePool
         +{static} Close(): void
     }
+
+    class HostListSource {
+        +SourceRoot: string
+        +ReadHosts(): string[]
+        +CandidatePaths(): string[]
+        +ResolvePath(): string
+        #PathExists(path: string): bool
+        #ReadLines(path: string): string[]
+    }
 }
 
 package "Donut.Services" {
     class LogService {
         +LogFilePath: string
         -SyncRoot: object
+        +{static} Coalesce(logger: LogService): LogService
         +LogInfo(message: string): void
         +LogError(message: string): void
         +LogWarning(message: string): void
+        +LogDebug(message: string): void
+        +LogException(message: string, errorRecord: ErrorRecord): void
+        +LogStructured(level: string, eventName: string, fields: Hashtable): void
         +WriteLog(level: string, message: string): void
         +GetRecentLogs(count: int): string[]
     }
@@ -110,7 +137,6 @@ package "Donut.Services" {
         +{static} StartWorker(HostName: string, JobType: string, Options: Hashtable, Config: AppConfig, ...): Hashtable
         +RunScanPhase(device: DeviceContext): Hashtable
         +RunApplyPhase(device: DeviceContext, options: Hashtable): Hashtable
-        +ExecuteTask(device: DeviceContext, options: Hashtable): Hashtable
         +CopyRemoteArtifacts(hostName: string, ip: string): Hashtable
         -AssertReachable(device: DeviceContext): void
         -InvokePsExec(params: Hashtable): void
@@ -120,15 +146,17 @@ package "Donut.Services" {
     class DriverMatchingService {
         +BrandPatterns: Hashtable
         +CategoryPatterns: Hashtable
-        +CategoryBrands: Hashtable
         +CategoryMappings: Hashtable
         +DeviceClassMappings: Hashtable
         +DetectBrand(manufacturer: string): string
+        +DetectBrandFromName(name: string): string
         +DetectCategory(name: string): string
-        +FindBestDriverMatch(updates: array, installedDrivers: array): array
-        -MatchByCategory(update: object, drivers: array): object
-        -ExtractBrandFromName(name: string, category: string): string
-        -CompareVersions(v1: string, v2: string): int
+        +MapReportCategory(reportCategory: string): string
+        +MapDeviceClass(deviceClass: string): string
+        +FindBestDriverMatch(updateName: string, installedDrivers: array): object
+        +CompareVersions(installedVersion: string, updateVersion: string): Hashtable
+        +NormalizeAppName(name: string): string
+        +FormatMatchResult(match: object, updateName: string, updateVersion: string): string
     }
 
     class SelfUpdateService {
@@ -158,6 +186,14 @@ package "Donut.Services" {
 }
 
 package "Donut.UI.Presenters" {
+    class AsyncJobPresenter {
+        #ActiveJobs: List<AsyncJob>
+        +PumpJobs(): void
+        #OnJobPolled(job: AsyncJob): void
+        #OnJobCompleted(job: AsyncJob): void
+        #AfterPump(): void
+    }
+
     class MainPresenter {
         -Config: AppConfig
         -ConfigManager: ConfigManager
@@ -174,11 +210,11 @@ package "Donut.UI.Presenters" {
         +ToggleHeaderVisibility(): void
     }
 
-    class HomePresenter {
+    class HomePresenter extends AsyncJobPresenter {
         -ScanService: ScanService
         -UpdateService: RemoteUpdateService
         -DialogPresenter: DialogPresenter
-        -ActiveJobs: List<AsyncJob>
+        -HostListSource: HostListSource
         -ManualRebootQueue: List<string>
         +OnSearch(): void
         +StartProcess(host: string): void
@@ -207,10 +243,10 @@ package "Donut.UI.Presenters" {
         +ClearLogs(): void
     }
 
-    class BatteryPresenter {
+    class BatteryPresenter extends AsyncJobPresenter {
         -NetworkProbe: NetworkProbe
-        -ActiveJobs: List<AsyncJob>
-        +OnSearch(): void
+        -HostListSource: HostListSource
+        +OnRunReport(): void
         +StartBatteryReport(hostName: string): void
         +OnTimerTick(): void
     }
@@ -274,6 +310,11 @@ ConfigManager ..> AppConfig
 ExecutionService ..> DeviceContext
 
 AsyncJob --> RunspaceManager
+AsyncJob ..> JobStatus
+AsyncJob ..> JobKind
+
+HomePresenter --> HostListSource
+BatteryPresenter --> HostListSource
 
 UpdatePresenter --> SelfUpdateService
 UpdatePresenter --> DialogPresenter
