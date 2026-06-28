@@ -68,7 +68,10 @@ Describe "SelfUpdateService" {
                 }
 
                 $result = $service.PollForToken("code123")
-                $result.access_token | Should -Be "ghp_new_token"
+                $result.Status | Should -Be "authorized"
+                $result.AccessToken | Should -Be "ghp_new_token"
+                $result.TokenData.access_token | Should -Be "ghp_new_token"
+                $result.Error | Should -BeNullOrEmpty
             }
         }
 
@@ -278,7 +281,7 @@ Describe "SelfUpdateService" {
     }
 
     Context "PollForToken Error Handling" {
-        It "Returns null when API returns error" {
+        It "Returns pending status when authorization is still pending" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
 
@@ -289,18 +292,55 @@ Describe "SelfUpdateService" {
                 }
 
                 $result = $service.PollForToken("pending_code")
-                $result | Should -BeNullOrEmpty
+                $result.Status | Should -Be "pending"
+                $result.AccessToken | Should -BeNullOrEmpty
+                $result.Error | Should -BeNullOrEmpty
             }
         }
 
-        It "Returns null when API call throws" {
+        It "Returns slow_down status when GitHub asks to back off" {
+            InModuleScope "SelfUpdateService" {
+                $service = [SelfUpdateService]::new()
+
+                Mock Invoke-RestMethod {
+                    return [PSCustomObject]@{
+                        error = "slow_down"
+                    }
+                }
+
+                $result = $service.PollForToken("slow_code")
+                $result.Status | Should -Be "slow_down"
+                $result.AccessToken | Should -BeNullOrEmpty
+                $result.Error | Should -BeNullOrEmpty
+            }
+        }
+
+        It "Returns error status with the error code on a terminal error" {
+            InModuleScope "SelfUpdateService" {
+                $service = [SelfUpdateService]::new()
+
+                Mock Invoke-RestMethod {
+                    return [PSCustomObject]@{
+                        error = "access_denied"
+                    }
+                }
+
+                $result = $service.PollForToken("denied_code")
+                $result.Status | Should -Be "error"
+                $result.Error | Should -Be "access_denied"
+                $result.AccessToken | Should -BeNullOrEmpty
+            }
+        }
+
+        It "Returns pending status when the API call throws (transient, will retry)" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
 
                 Mock Invoke-RestMethod { throw "Network error" }
 
                 $result = $service.PollForToken("error_code")
-                $result | Should -BeNullOrEmpty
+                $result.Status | Should -Be "pending"
+                $result.Error | Should -BeNullOrEmpty
             }
         }
     }

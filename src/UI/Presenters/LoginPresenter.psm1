@@ -75,21 +75,22 @@ class LoginPresenter {
 
     [void] StartAuthFlow() {
         try {
-            $response = $this.Service.StartDeviceFlow()
+            $response = $this.Service.InitiateDeviceFlow()
             $this.DeviceCode = $response.device_code
             $this.Interval = $response.interval
-            
+
             $output = $this.LoginWindow.FindName('Output')
             if ($output) {
                 $output.Text = "Please visit:`n$($response.verification_uri)`n`nAnd enter code:`n$($response.user_code)"
             }
-            
+
             Start-Process $response.verification_uri
 
             # Start Polling Timer
+            $presenter = $this
             $this.PollTimer = [DispatcherTimer]::new()
             $this.PollTimer.Interval = [TimeSpan]::FromSeconds($this.Interval)
-            $this.PollTimer.Add_Tick({ $this.PollToken() })
+            $this.PollTimer.Add_Tick({ $presenter.PollToken() }.GetNewClosure())
             $this.PollTimer.Start()
         }
         catch {
@@ -99,24 +100,26 @@ class LoginPresenter {
     }
 
     [void] PollToken() {
-        $result = $this.Service.PollForToken($this.DeviceCode, $this.Interval)
-        
-        if ($result.access_token) {
-            $this.Service.SaveToken($result)
-            $this.PollTimer.Stop()
-            $this.LoginSuccess = $true
-            $this.LoginWindow.Close()
-        }
-        elseif ($result.Error -eq 'authorization_pending') {
-            # Continue polling
-        }
-        elseif ($result.Error -eq 'slow_down') {
-            $this.PollTimer.Interval = $this.PollTimer.Interval.Add([TimeSpan]::FromSeconds(5))
-        }
-        else {
-            $output = $this.LoginWindow.FindName('Output')
-            if ($output) { $output.Text = "Error: $($result.Error)" }
-            $this.PollTimer.Stop()
+        $result = $this.Service.PollForToken($this.DeviceCode)
+
+        switch ($result.Status) {
+            'authorized' {
+                $this.Service.SaveToken($result.TokenData)
+                $this.PollTimer.Stop()
+                $this.LoginSuccess = $true
+                $this.LoginWindow.Close()
+            }
+            'pending' {
+                # Keep polling at the current interval.
+            }
+            'slow_down' {
+                $this.PollTimer.Interval = $this.PollTimer.Interval.Add([TimeSpan]::FromSeconds(5))
+            }
+            default {
+                $output = $this.LoginWindow.FindName('Output')
+                if ($output) { $output.Text = "Error: $($result.Error)" }
+                $this.PollTimer.Stop()
+            }
         }
     }
 
