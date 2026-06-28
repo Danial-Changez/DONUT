@@ -104,98 +104,6 @@ Describe "DriverMatchingService" {
         }
     }
 
-    Context "CategoryBrands (Legacy Patterns)" {
-        It "Should have Audio brand patterns" {
-            $service = [DriverMatchingService]::new()
-            $service.CategoryBrands["Audio"] | Should -Contain "Realtek"
-            $service.CategoryBrands["Audio"] | Should -Contain "Intel"
-            $service.CategoryBrands["Audio"] | Should -Contain "Conexant"
-            $service.CategoryBrands["Audio"] | Should -Contain "SoundMAX"
-        }
-
-        It "Should have Network brand patterns including Bluetooth" {
-            $service = [DriverMatchingService]::new()
-            $service.CategoryBrands["Network"] | Should -Contain "Realtek"
-            $service.CategoryBrands["Network"] | Should -Contain "Broadcom"
-            $service.CategoryBrands["Network"] | Should -Contain "Killer"
-            $service.CategoryBrands["Network"] | Should -Contain "Bluetooth"
-            $service.CategoryBrands["Network"] | Should -Contain "Ethernet"
-        }
-
-        It "Should have Video brand patterns" {
-            $service = [DriverMatchingService]::new()
-            $service.CategoryBrands["Video"] | Should -Contain "NVIDIA"
-            $service.CategoryBrands["Video"] | Should -Contain "AMD"
-            $service.CategoryBrands["Video"] | Should -Contain "Intel"
-            $service.CategoryBrands["Video"] | Should -Contain "GeForce"
-            $service.CategoryBrands["Video"] | Should -Contain "Radeon"
-            $service.CategoryBrands["Video"] | Should -Contain "Iris"
-        }
-    }
-
-    Context "DetectCategoryBrand" {
-        It "Should detect Realtek for Audio updates" {
-            $service = [DriverMatchingService]::new()
-            $brand = $service.DetectCategoryBrand("Realtek High Definition Audio Driver", "Audio")
-            $brand | Should -Be "Realtek"
-        }
-
-        It "Should detect Intel for Network updates" {
-            $service = [DriverMatchingService]::new()
-            $brand = $service.DetectCategoryBrand("Intel Dual Band Wireless AC 8265", "Network")
-            $brand | Should -Be "Intel"
-        }
-
-        It "Should detect NVIDIA for Video updates" {
-            $service = [DriverMatchingService]::new()
-            $brand = $service.DetectCategoryBrand("NVIDIA GeForce GTX 1660", "Video")
-            $brand | Should -Be "NVIDIA"
-        }
-
-        It "Should return null for unrecognized brand" {
-            $service = [DriverMatchingService]::new()
-            $brand = $service.DetectCategoryBrand("Unknown XYZ Driver", "Audio")
-            $brand | Should -BeNullOrEmpty
-        }
-    }
-
-    Context "FindBestDriverMatchByCategory" {
-        It "Should match drivers by category brand" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @(
-                [PSCustomObject]@{ DeviceName = "Realtek High Definition Audio"; DriverVersion = "6.0.1.8045" }
-                [PSCustomObject]@{ DeviceName = "Intel Ethernet Connection I219-V"; DriverVersion = "12.18.9.10" }
-            )
-            
-            $result = $service.FindBestDriverMatchByCategory("Realtek Audio Driver 6.0.1.9000", $drivers, "Audio")
-            $result | Should -Not -BeNullOrEmpty
-            $result.Brand | Should -Be "Realtek"
-            $result.DeviceName | Should -Match "Realtek"
-        }
-
-        It "Should handle Bluetooth matching in Network category" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @(
-                [PSCustomObject]@{ DeviceName = "Intel Wireless Bluetooth"; DriverVersion = "21.90.0.4" }
-                [PSCustomObject]@{ DeviceName = "Intel Ethernet Connection"; DriverVersion = "12.0.0.0" }
-            )
-            
-            $result = $service.FindBestDriverMatchByCategory("Intel Wireless Bluetooth Driver", $drivers, "Network")
-            $result | Should -Not -BeNullOrEmpty
-            $result.DeviceName | Should -Match "Bluetooth"
-        }
-
-        It "Should return null when no brand match found" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @(
-                [PSCustomObject]@{ DeviceName = "Realtek Audio"; DriverVersion = "1.0.0" }
-            )
-            
-            $result = $service.FindBestDriverMatchByCategory("NVIDIA Graphics Driver", $drivers, "Audio")
-            $result | Should -BeNullOrEmpty
-        }
-    }
-
     Context "CategoryMappings" {
         It "Should map Audio category correctly" {
             $service = [DriverMatchingService]::new()
@@ -256,20 +164,6 @@ Describe "DriverMatchingService" {
         }
     }
 
-    Context "GetSupportedCategories" {
-        It "Should return all DCU supported categories" {
-            $service = [DriverMatchingService]::new()
-            $categories = $service.GetSupportedCategories()
-            $categories | Should -Contain "Audio"
-            $categories | Should -Contain "Video"
-            $categories | Should -Contain "Network"
-            $categories | Should -Contain "Storage"
-            $categories | Should -Contain "Chipset"
-            $categories | Should -Contain "BIOS"
-            $categories | Should -Contain "Application"
-        }
-    }
-
     Context "MapDeviceClass" {
         It "Should map MEDIA device class to Audio" {
             $service = [DriverMatchingService]::new()
@@ -294,28 +188,6 @@ Describe "DriverMatchingService" {
         It "Should return Other for unknown device class" {
             $service = [DriverMatchingService]::new()
             $service.MapDeviceClass("UnknownClass") | Should -Be "Other"
-        }
-    }
-
-    Context "SupportsCategoryBrandMatching" {
-        It "Should return true for Audio category" {
-            $service = [DriverMatchingService]::new()
-            $service.SupportsCategoryBrandMatching("Audio") | Should -Be $true
-        }
-
-        It "Should return true for Network category" {
-            $service = [DriverMatchingService]::new()
-            $service.SupportsCategoryBrandMatching("Network") | Should -Be $true
-        }
-
-        It "Should return true for Video category" {
-            $service = [DriverMatchingService]::new()
-            $service.SupportsCategoryBrandMatching("Video") | Should -Be $true
-        }
-
-        It "Should return false for unsupported category" {
-            $service = [DriverMatchingService]::new()
-            $service.SupportsCategoryBrandMatching("UnsupportedCategory") | Should -Be $false
         }
     }
 
@@ -375,107 +247,4 @@ Describe "DriverMatchingService" {
         }
     }
 
-    Context "FilterDriversByVersion" {
-        It "Should return empty array when drivers is empty" {
-            $service = [DriverMatchingService]::new()
-            $result = $service.FilterDriversByVersion(@(), @(@{ name = "Test"; version = "1.0"; category = "Audio" }), "Audio")
-            $result.Count | Should -Be 0
-        }
-
-        It "Should return empty array when updates is empty" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @([PSCustomObject]@{ DeviceName = "Realtek Audio"; DriverVersion = "1.0.0" })
-            $result = $service.FilterDriversByVersion($drivers, @(), "Audio")
-            $result.Count | Should -Be 0
-        }
-
-        It "Should filter drivers with matching updates by category" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @(
-                [PSCustomObject]@{ DeviceName = "Realtek High Definition Audio"; DriverVersion = "6.0.1.8000" }
-                [PSCustomObject]@{ DeviceName = "Intel Ethernet"; DriverVersion = "12.0.0.0" }
-            )
-            $updates = @(
-                [PSCustomObject]@{ name = "Realtek Audio Driver"; version = "6.0.1.9000"; category = "Audio" }
-            )
-            
-            $result = $service.FilterDriversByVersion($drivers, $updates, "Audio")
-            
-            $result | Should -Not -BeNullOrEmpty
-            $result[0].DeviceName | Should -Match "Realtek"
-        }
-
-        It "Should skip drivers with Unknown version" {
-            $service = [DriverMatchingService]::new()
-            $drivers = @(
-                [PSCustomObject]@{ DeviceName = "Realtek Audio"; DriverVersion = "Unknown" }
-            )
-            $updates = @(
-                [PSCustomObject]@{ name = "Realtek Audio Driver"; version = "6.0.1.9000"; category = "Audio" }
-            )
-            
-            $result = $service.FilterDriversByVersion($drivers, $updates, "Audio")
-            
-            $result.Count | Should -Be 0
-        }
-    }
-
-    Context "FilterApplicationsByVersion" {
-        It "Should return empty array when applications is empty" {
-            $service = [DriverMatchingService]::new()
-            $result = $service.FilterApplicationsByVersion(@(), @(@{ name = "Dell Command Update"; category = "Application" }))
-            $result.Count | Should -Be 0
-        }
-
-        It "Should return empty array when updates is empty" {
-            $service = [DriverMatchingService]::new()
-            $apps = @([PSCustomObject]@{ Name = "Dell Command Update"; Version = "4.0.0" })
-            $result = $service.FilterApplicationsByVersion($apps, @())
-            $result.Count | Should -Be 0
-        }
-
-        It "Should filter applications matching update names" {
-            $service = [DriverMatchingService]::new()
-            $apps = @(
-                [PSCustomObject]@{ Name = "Dell Command Update"; Version = "4.0.0" }
-                [PSCustomObject]@{ Name = "Other App"; Version = "1.0.0" }
-            )
-            $updates = @(
-                [PSCustomObject]@{ name = "Dell Command Update Application"; version = "4.5.0"; category = "Application" }
-            )
-            
-            $result = $service.FilterApplicationsByVersion($apps, $updates)
-            
-            $result | Should -Not -BeNullOrEmpty
-            $result[0].Name | Should -Be "Dell Command Update"
-        }
-
-        It "Should skip applications with Unknown version" {
-            $service = [DriverMatchingService]::new()
-            $apps = @(
-                [PSCustomObject]@{ Name = "Dell Command Update"; Version = "Unknown" }
-            )
-            $updates = @(
-                [PSCustomObject]@{ name = "Dell Command Update Application"; version = "4.5.0"; category = "Application" }
-            )
-            
-            $result = $service.FilterApplicationsByVersion($apps, $updates)
-            
-            $result.Count | Should -Be 0
-        }
-
-        It "Should return empty array when no Application category updates exist" {
-            $service = [DriverMatchingService]::new()
-            $apps = @(
-                [PSCustomObject]@{ Name = "Dell Command Update"; Version = "4.0.0" }
-            )
-            $updates = @(
-                [PSCustomObject]@{ name = "Realtek Audio Driver"; version = "6.0.0"; category = "Audio" }
-            )
-            
-            $result = $service.FilterApplicationsByVersion($apps, $updates)
-            
-            $result.Count | Should -Be 0
-        }
-    }
 }

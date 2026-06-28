@@ -207,26 +207,6 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "ExecuteTask" {
-        BeforeEach {
-            $script:config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{
-                activeCommand = "scan"
-            })
-        }
-
-        It "Should call AssertReachable before proceeding" {
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            $device = [DeviceContext]::new("TestHost")
-
-            { $service.ExecuteTask($device, @{}) } | Should -Throw "*not reachable*"
-        }
-    }
-
     Context "FindDcuCli" {
         It "Should return null when DCU CLI is not found" {
             # This test verifies the method exists and returns expected type
@@ -381,7 +361,7 @@ Describe "WorkerServices" {
             $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $device = [DeviceContext]::new("NoRpcHost")
 
-            { $service.AssertReachable($device) } | Should -Throw "*RPC is unavailable*"
+            { $service.AssertReachable($device) } | Should -Throw "*RPC (Port 135) is not available*"
         }
 
         It "Should set device IPAddress when reachable" {

@@ -27,23 +27,33 @@ class RemoteJobService {
     }
 
     hidden [void] ValidateHostConnectivity([string]$hostName) {
-        if (-not $this.Probe.IsOnline($hostName)) {
-            $this.Logger.LogError("Connectivity check failed: host '$hostName' is offline or unreachable.")
+        [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $hostName)
+    }
+
+    # Shared connectivity policy: IsOnline -> ResolveHost -> IsRpcAvailable,
+    # logging and throwing on the first failure. Returns the resolved IP (as a
+    # string) so callers can record it. Static so collaborators that hold a
+    # NetworkProbe + LogService (ExecutionService) can reuse the exact policy
+    # without duplicating it.
+    static [string] AssertHostReachable([NetworkProbe]$probe, [LogService]$logger, [string]$hostName) {
+        if (-not $probe.IsOnline($hostName)) {
+            $logger.LogError("Connectivity check failed: host '$hostName' is offline or unreachable.")
             throw "Host '$hostName' is offline or unreachable."
         }
 
-        $ip = $this.Probe.ResolveHost($hostName)
+        $ip = $probe.ResolveHost($hostName)
         if (-not $ip) {
-            $this.Logger.LogError("Connectivity check failed: could not resolve IP for '$hostName'.")
+            $logger.LogError("Connectivity check failed: could not resolve IP for '$hostName'.")
             throw "Could not resolve IP for '$hostName'."
         }
 
-        if (-not $this.Probe.IsRpcAvailable($hostName)) {
-            $this.Logger.LogError("Connectivity check failed: RPC (Port 135) not available on '$hostName'.")
+        if (-not $probe.IsRpcAvailable($hostName)) {
+            $logger.LogError("Connectivity check failed: RPC (Port 135) not available on '$hostName'.")
             throw "RPC (Port 135) is not available on '$hostName'. Check firewall rules."
         }
 
-        $this.Logger.LogDebug("Host '$hostName' passed connectivity checks ($ip).")
+        $logger.LogDebug("Host '$hostName' passed connectivity checks ($ip).")
+        return $ip.ToString()
     }
 
     hidden [hashtable] BuildWorkerArgs([string]$hostName, [string]$jobType, [hashtable]$options) {
