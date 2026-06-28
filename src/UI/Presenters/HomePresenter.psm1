@@ -87,6 +87,8 @@ class HomePresenter : AsyncJobPresenter {
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
     [bool]            $SuppressSearch = $false
+    [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
+    [DispatcherTimer] $UnlockPollTimer
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
@@ -136,6 +138,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.SearchPollTimer = [DispatcherTimer]::new()
         $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
         $this.SearchPollTimer.Add_Tick({ $presenter.PollSearch() }.GetNewClosure())
+        $this.UnlockJobs = [List[hashtable]]::new()
+        $this.UnlockPollTimer = [DispatcherTimer]::new()
+        $this.UnlockPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
+        $this.UnlockPollTimer.Add_Tick({ $presenter.PollUnlock() }.GetNewClosure())
 
         $this.Initialize()
     }
@@ -444,18 +450,41 @@ class HomePresenter : AsyncJobPresenter {
         )
         if (-not $confirmed) { return }
 
-        $user = [AdSearchResult]::new()
-        $user.Kind = 'User'
-        $user.SamAccountName = [string]$r.SamAccountName
-        $user.Domain = [string]$r.Domain
-        $user.UserPrincipalName = [string]$r.UserPrincipalName
+        # Run the unlock OFF the UI thread (Unlock-ADAccount can take a moment);
+        # toast the result when the pool job completes.
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdUnlockWorker.ps1'
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            $ps.RunspacePool = [RunspaceManager]::GetPool()
+            $ps.AddCommand($worker) | Out-Null
+            $ps.AddParameter('Sam', [string]$r.SamAccountName) | Out-Null
+            $ps.AddParameter('Domain', [string]$r.Domain) | Out-Null
+            $handle = $ps.BeginInvoke()
+            $this.UnlockJobs.Add(@{ Ps = $ps; Handle = $handle; Upn = $upn })
+            $this.UnlockPollTimer.Start()
+            if ($this.Toasts) { $this.Toasts.ShowInfo("Unlocking...", $upn) }
+        }
+        catch {
+            $this.Logger.LogException("Unlock could not start for $upn", $_)
+            if ($this.Toasts) { $this.Toasts.ShowError("Unlock failed", "Could not start unlock for $upn.") }
+        }
+    }
 
-        if ($this.AdService.UnlockUser($user)) {
-            if ($this.Toasts) { $this.Toasts.ShowSuccess("Account unlocked", $upn) }
+    # Poll in-flight unlocks; toast success/failure on completion.
+    [void] PollUnlock() {
+        foreach ($job in @($this.UnlockJobs)) {
+            if (-not $job.Handle.IsCompleted) { continue }
+            $ok = $false
+            try { $res = @($job.Ps.EndInvoke($job.Handle)); $ok = [bool]($res | Select-Object -Last 1) }
+            catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
+            try { $job.Ps.Dispose() } catch { }
+            [void]$this.UnlockJobs.Remove($job)
+            if ($this.Toasts) {
+                if ($ok) { $this.Toasts.ShowSuccess("Account unlocked", $job.Upn) }
+                else { $this.Toasts.ShowError("Unlock failed", "Could not unlock $($job.Upn) (check rights / connectivity).") }
+            }
         }
-        else {
-            if ($this.Toasts) { $this.Toasts.ShowError("Unlock failed", "Could not unlock $upn (check rights / connectivity).") }
-        }
+        if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
     }
 
     [void] CloseSearchPopup() {
