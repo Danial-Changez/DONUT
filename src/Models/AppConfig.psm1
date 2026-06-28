@@ -9,6 +9,9 @@ class AppConfig {
     static [hashtable] $Defaults = @{
         activeCommand = 'scan'
         throttleLimit = 5
+        # AD forests searched by the Home live-finder (separate forests; each is
+        # queried independently). Editable; these are the org defaults.
+        domains = @('prod.cgic.ca', 'clic.cooperators.ca', 'cumis.local', 'sgic.local')
         commands = @{
             scan = @{
                 args = @{
@@ -135,6 +138,17 @@ class AppConfig {
         if (-not $this.Settings['commands'].ContainsKey($command)) { $this.Settings['commands'][$command] = @{ args = @{} } }
         if (-not $this.Settings['commands'][$command].ContainsKey('args')) { $this.Settings['commands'][$command]['args'] = @{} }
         $this.Settings['commands'][$command]['args'][$argName] = $value
+    }
+
+    # AD forests for the Home live-finder. Tolerates the JSON round-trip
+    # (Object[]/strings) and falls back to the org defaults when absent/blank.
+    [string[]] GetDomains() {
+        $val = $this.GetSetting('domains', $null)
+        if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
+            $list = @($val | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($list.Count -gt 0) { return $list }
+        }
+        return @('prod.cgic.ca', 'clic.cooperators.ca', 'cumis.local', 'sgic.local')
     }
 
     [int] GetThrottleLimit() {
