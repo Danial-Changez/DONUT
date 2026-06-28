@@ -57,6 +57,9 @@ class ExecutionService {
         elseif ($JobType -eq 'Apply') {
             return $service.RunApplyPhase($device, $Options)
         }
+        elseif ($JobType -eq 'Inventory') {
+            return $service.RunInventoryPhase($device, $Options)
+        }
         else {
             throw "Unknown JobType: $JobType"
         }
@@ -118,6 +121,66 @@ class ExecutionService {
         $this.InvokePsExec($params)
         $artifact = $this.CopyRemoteArtifacts($device.HostName)
         return $artifact
+    }
+
+    # Runs the inventory probe script on the remote and copies its JSON back.
+    [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
+        $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
+
+        $ip = $this.Probe.ResolveHost($device.HostName)
+        if (-not $ip) {
+            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP; aborting inventory.")
+            throw "Could not resolve IP for $($device.HostName)"
+        }
+
+        $scriptText = if ($null -ne $options) { [string]$options.ScriptText } else { '' }
+        if ([string]::IsNullOrWhiteSpace($scriptText)) {
+            throw "No inventory script supplied for $($device.HostName)."
+        }
+
+        $this.InvokeRemotePwsh($ip, $scriptText)
+        $localPath = $this.CopyInventoryArtifact($device.HostName)
+        return @{ InventoryPath = $localPath }
+    }
+
+    # Runs an arbitrary pwsh script on the remote as SYSTEM. The script is passed
+    # base64-encoded (UTF-16LE) via -EncodedCommand, which removes all psexec
+    # command-line quoting hazards (unlike the dcu-cli '-c "..."' path).
+    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText) {
+        $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptText)
+        $encoded = [Convert]::ToBase64String($bytes)
+
+        $psexecArgs = @(
+            '-accepteula',
+            '-nobanner',
+            '-s',           # Run as SYSTEM
+            '-h',           # Elevated token
+            "\\$ip",
+            'pwsh',
+            '-NoProfile',
+            '-NonInteractive',
+            '-EncodedCommand',
+            $encoded
+        )
+
+        $this.Logger.LogInfo("Executing inventory probe on \\$ip")
+        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
+
+        if ($p.ExitCode -ne 0) {
+            throw "Remote inventory probe failed on $ip (exit code $($p.ExitCode))."
+        }
+    }
+
+    # Copies the inventory JSON the probe wrote on the remote back to the local
+    # reports dir; returns the local path. Mirrors CopyRemoteArtifacts.
+    [string] CopyInventoryArtifact([string] $hostName) {
+        $ip = $this.Probe.ResolveHost($hostName)
+        $remote = "\\$ip\C$\temp\DONUT\$hostName-inventory.json"
+        $local = Join-Path $this.LocalReportsDir "$hostName-inventory.json"
+        if (Test-Path $remote) {
+            Copy-Item -Path $remote -Destination $local -Force
+        }
+        return $local
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName) {

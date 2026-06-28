@@ -1,4 +1,5 @@
 using module ".\AppConfig.psm1"
+using module ".\MachineInventory.psm1"
 
 # RecentConnection / RecentConnectionsStore
 #
@@ -19,6 +20,7 @@ class RecentConnection {
     [string] $LastJobType
     [int]    $UpdateCount
     [bool]   $RebootRequired
+    [MachineInventory] $Inventory   # cached probe result, or $null when never probed
 
     static [RecentConnection] FromHashtable([hashtable]$h) {
         $rc = [RecentConnection]::new()
@@ -28,6 +30,9 @@ class RecentConnection {
         $rc.LastJobType    = [string]$h['lastJobType']
         $rc.UpdateCount    = if ($null -ne $h['updateCount']) { [int]$h['updateCount'] } else { 0 }
         $rc.RebootRequired = [bool]$h['rebootRequired']
+        if ($null -ne $h['inventory']) {
+            $rc.Inventory = [MachineInventory]::FromHashtable([hashtable]$h['inventory'])
+        }
         return $rc
     }
 }
@@ -67,6 +72,38 @@ class RecentConnectionsStore {
             updateCount    = [int]$updateCount
             rebootRequired = [bool]$rebootRequired
         }
+
+        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
+        $this.SetEntries(@($entry) + $kept)
+        $this.Save()
+    }
+
+    # Merges a fresh inventory probe onto the host's entry (creating one if the
+    # host isn't tracked yet) WITHOUT touching its scan/apply status fields.
+    # Stamps the cache with the controller's probe time for "last probed ...".
+    [void] UpsertInventory([string]$hostname, [MachineInventory]$inv) {
+        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
+        if ($null -eq $inv) { return }
+        $name = $hostname.Trim()
+
+        $entry = $null
+        foreach ($e in $this.Entries()) {
+            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
+        }
+        if ($null -eq $entry) {
+            $entry = @{
+                hostname       = $name
+                lastSeen       = ''
+                lastStatus     = ''
+                lastJobType    = ''
+                updateCount    = 0
+                rebootRequired = $false
+            }
+        }
+
+        $invHash = $inv.ToHashtable()
+        $invHash['probedAt'] = [datetime]::UtcNow.ToString('o')
+        $entry['inventory'] = $invHash
 
         $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
         $this.SetEntries(@($entry) + $kept)
