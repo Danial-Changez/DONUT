@@ -21,10 +21,6 @@ class RemoteJobService {
         $this.Logger = [LogService]::Coalesce($logger)
     }
 
-    hidden [void] ValidateHostConnectivity([string]$hostName) {
-        [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $hostName)
-    }
-
     # Shared connectivity policy: IsOnline -> ResolveHost -> IsRpcAvailable,
     # logging and throwing on the first failure. Returns the resolved IP (as a
     # string) so callers can record it. Static so collaborators that hold a
@@ -84,15 +80,10 @@ class ScanService : RemoteJobService {
 
     ScanService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
+    # Builds the worker args only (no network). Reachability + reverse-DNS are
+    # asserted by the worker on the runspace-pool thread (RunScanPhase), so the UI
+    # thread never blocks on an offline/slow host.
     [hashtable] PrepareScan([string]$hostName) {
-        $this.ValidateHostConnectivity($hostName)
-
-        # Check Reverse DNS (warning only)
-        $ip = $this.Probe.ResolveHost($hostName)
-        if (-not $this.Probe.CheckReverseDNS($ip, $hostName)) {
-            $this.Logger.LogWarning("Reverse DNS mismatch for '$hostName' ($ip). Proceeding anyway.")
-        }
-
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }
 }
@@ -110,7 +101,6 @@ class RemoteUpdateService : RemoteJobService {
     }
 
     [hashtable] PrepareScanForUpdates([string]$hostName) {
-        $this.ValidateHostConnectivity($hostName)
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }
 

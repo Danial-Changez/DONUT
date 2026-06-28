@@ -34,6 +34,16 @@ Describe "InventoryService" {
         Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    Context "BuildProbeScript" {
+        It "Reads WMI over a DCOM CIM session (the Get-WmiObject equivalent that works as SYSTEM)" {
+            $script = [InventoryService]::BuildProbeScript("TestHost")
+            $script | Should -Match 'New-CimSessionOption -Protocol Dcom'
+            # Every CIM query goes through the session splat, not the default path.
+            $script | Should -Not -Match 'Get-CimInstance -'
+            ([regex]::Matches($script, 'Get-CimInstance @cimArgs')).Count | Should -Be 8
+        }
+    }
+
     Context "PrepareInventory" {
         It "Returns worker args tagged Inventory with a probe script" {
             $service = [InventoryService]::new($script:config, [MockNetworkProbe]::new())
@@ -45,12 +55,14 @@ Describe "InventoryService" {
             $result.Arguments.Options.ScriptText | Should -Not -BeNullOrEmpty
         }
 
-        It "Throws when the host is offline" {
+        It "Does NOT probe connectivity on the UI thread (the worker asserts it)" {
+            # Selecting an offline machine must not block/throw in Prepare*; the
+            # worker checks reachability on the runspace-pool thread.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
             $service = [InventoryService]::new($script:config, $probe)
 
-            { $service.PrepareInventory("OfflineHost") } | Should -Throw "*offline or unreachable*"
+            { $service.PrepareInventory("OfflineHost") } | Should -Not -Throw
         }
     }
 

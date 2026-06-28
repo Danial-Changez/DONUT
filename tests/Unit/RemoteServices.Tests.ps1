@@ -45,24 +45,26 @@ Describe "RemoteServices" {
             $service | Should -Not -BeNullOrEmpty
         }
 
-        It "PrepareScan should return correct arguments when host is online" {
+        It "PrepareScan should return correct arguments (no network on the UI thread)" {
             $probe = [MockNetworkProbe]::new()
             $service = [ScanService]::new($config, $probe)
-            
+
             $result = $service.PrepareScan("TestHost")
-            
+
             # Pester 5 assertions
             $result.ScriptPath | Should -Match "Scripts\\RemoteWorker.ps1$"
             $result.Arguments.HostName | Should -Be "TestHost"
             $result.Arguments.JobType | Should -Be "Scan"
         }
 
-        It "PrepareScan should throw if host is offline" {
+        It "PrepareScan does NOT probe connectivity (that is the worker's job, off the UI thread)" {
+            # An offline host must not make the UI-thread Prepare* block or throw;
+            # reachability is asserted later by the worker on the runspace pool.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
             $service = [ScanService]::new($config, $probe)
 
-            { $service.PrepareScan("OfflineHost") } | Should -Throw "Host 'OfflineHost' is offline or unreachable."
+            { $service.PrepareScan("OfflineHost") } | Should -Not -Throw
         }
     }
 
@@ -193,46 +195,12 @@ Describe "RemoteServices" {
         }
     }
 
-    Context "ValidateHostConnectivity" {
-        It "Should throw when host cannot be resolved" {
-            $probe = [MockNetworkProbe]::new()
-            $probe.ResolveHostResult = $null
-            $service = [ScanService]::new($config, $probe)
-
-            { $service.PrepareScan("UnresolvableHost") } | Should -Throw "*Could not resolve IP*"
-        }
-
-        It "Should throw when RPC is not available" {
-            $probe = [MockNetworkProbe]::new()
-            $probe.IsRpcAvailableResult = $false
-            $service = [ScanService]::new($config, $probe)
-
-            { $service.PrepareScan("NoRpcHost") } | Should -Throw "*RPC (Port 135) is not available*"
-        }
-    }
+    # Connectivity assertion (offline / unresolvable / no-RPC / reverse-DNS) now
+    # lives in the worker on the runspace-pool thread, so it no longer runs in the
+    # UI-thread Prepare* methods. Those cases are covered by WorkerServices.Tests
+    # (ExecutionService.AssertReachable + the phase-level wiring).
 
     Context "Logging" {
-        It "Should log an error through the injected logger when the host is offline" {
-            $logger = [CapturingLogService]::new()
-            $probe = [MockNetworkProbe]::new()
-            $probe.IsOnlineResult = $false
-            $service = [ScanService]::new($config, $probe, $logger)
-
-            { $service.PrepareScan("OfflineHost") } | Should -Throw
-            $logger.HasLevel("ERROR") | Should -Be $true
-        }
-
-        It "Should log a warning on reverse DNS mismatch" {
-            $logger = [CapturingLogService]::new()
-            $probe = [MockNetworkProbe]::new()
-            $probe.ReverseDnsResult = $false
-            $service = [ScanService]::new($config, $probe, $logger)
-
-            $service.PrepareScan("TestHost") | Out-Null
-
-            $logger.HasLevel("WARN") | Should -Be $true
-        }
-
         It "Should default to a no-op logger when constructed without one" {
             $probe = [MockNetworkProbe]::new()
             $service = [ScanService]::new($config, $probe)

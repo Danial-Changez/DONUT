@@ -782,6 +782,7 @@ class HomePresenter : AsyncJobPresenter {
         $presenter = $this
         $row.RunAction = { param($h) $presenter.RunHost($h) }.GetNewClosure()
         $row.SelectAction = { param($h) $presenter.SelectHost($h) }.GetNewClosure()
+        $row.GatherAction = { param($h) $presenter.OnRowActivated($h) }.GetNewClosure()
         $this.Rows[$hostName] = $row
         if ($this.MachineList) {
             $this.MachineList.Items.Add($row.Root) | Out-Null
@@ -812,8 +813,10 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Opens the detail panel for a host: marks it selected, renders cached
-    # inventory instantly, replays its buffered log, then kicks a fresh probe.
+    # Opens the detail panel for a host (single click): marks it selected and
+    # renders cached inventory/folders instantly. Does NOT touch the network - a
+    # fresh probe is gathered on double-click (OnRowActivated) or the Refresh
+    # button, so selecting an offline machine can never block the UI thread.
     [void] SelectHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
 
@@ -840,6 +843,12 @@ class HomePresenter : AsyncJobPresenter {
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
         $this.RenderBigFolders($cachedDisk)
+    }
+
+    # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
+    # in the background. The probe runs on the runspace pool, never the UI thread.
+    [void] OnRowActivated([string]$hostName) {
+        $this.SelectHost($hostName)
         $this.StartInventory($hostName)
     }
 
@@ -1108,7 +1117,7 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($null -eq $inv) {
             if ($this.OvModel) { $this.OvModel.Text = $dash }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = 'gathering…' }
+            if ($this.OvModelSub) { $this.OvModelSub.Text = 'double-click to gather inventory' }
             if ($this.OvBattery) { $this.OvBattery.Text = $dash }
             if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
             if ($this.OvDisk) { $this.OvDisk.Text = $dash }

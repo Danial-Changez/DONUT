@@ -17,11 +17,11 @@ class InventoryService : RemoteJobService {
 
     InventoryService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Validates connectivity and returns worker args carrying the probe script.
-    # The worker dispatches on the "Inventory" token (a worker string, distinct
-    # from the [JobKind]::Inventory enum the UI tags the AsyncJob with).
+    # Returns worker args carrying the probe script (no network — the worker
+    # asserts reachability on the pool thread, so selecting an offline host never
+    # blocks the UI). The worker dispatches on the "Inventory" token (a worker
+    # string, distinct from the [JobKind]::Inventory enum the UI tags the job with).
     [hashtable] PrepareInventory([string]$hostName) {
-        $this.ValidateHostConnectivity($hostName)
         $script = [InventoryService]::BuildProbeScript($hostName)
         return $this.BuildWorkerArgs($hostName, "Inventory", @{ ScriptText = $script })
     }
@@ -71,30 +71,41 @@ $inv = [ordered]@{
     probedAt           = ([datetime]::UtcNow.ToString('o'))
 }
 
-try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $inv.model = $cs.Model } catch { }
+# Query WMI over DCOM (the same transport Get-WmiObject used). The default
+# Get-CimInstance path (WSMan/MI) intermittently fails for the root\wmi battery
+# classes when the probe runs as SYSTEM in session 0; a DCOM CIM session is the
+# pwsh-7 equivalent of Get-WmiObject and reads them reliably. Splatting an empty
+# hashtable if the session can't be created falls back to the default local path.
+$cimArgs = @{}
 try {
-    $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop
+    $cimSession = New-CimSession -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+    $cimArgs['CimSession'] = $cimSession
+} catch { }
+
+try { $cs = Get-CimInstance @cimArgs -ClassName Win32_ComputerSystem -ErrorAction Stop; $inv.model = $cs.Model } catch { }
+try {
+    $bios = Get-CimInstance @cimArgs -ClassName Win32_BIOS -ErrorAction Stop
     $inv.serviceTag = $bios.SerialNumber
     $inv.biosVersion = $bios.SMBIOSBIOSVersion
 } catch { }
 
 # Battery design/health live in root\wmi (not root\cimv2).
 try {
-    $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -ErrorAction Stop | Select-Object -First 1
+    $static = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryStaticData -ErrorAction Stop | Select-Object -First 1
     if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }
 } catch { }
 try {
-    $full = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1
+    $full = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($full) { $inv.fullChargeCapacity = [int64]$full.FullChargedCapacity }
 } catch { }
 try {
-    $cyc = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryCycleCount -ErrorAction Stop | Select-Object -First 1
+    $cyc = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryCycleCount -ErrorAction Stop | Select-Object -First 1
     if ($cyc -and $null -ne $cyc.CycleCount) { $inv.cycleCount = [int]$cyc.CycleCount }
 } catch { }
 
 # Presence + current charge from Win32_Battery (BatteryStatus 1 = discharging).
 try {
-    $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction Stop | Select-Object -First 1
+    $bat = Get-CimInstance @cimArgs -ClassName Win32_Battery -ErrorAction Stop | Select-Object -First 1
     if ($bat) {
         $inv.hasBattery = $true
         $inv.chargePercent = [int]$bat.EstimatedChargeRemaining
@@ -103,7 +114,7 @@ try {
 } catch { }
 
 try {
-    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop | Select-Object -First 1
+    $disk = Get-CimInstance @cimArgs -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop | Select-Object -First 1
     if ($disk) {
         $inv.freeSpaceBytes = [int64]$disk.FreeSpace
         $inv.totalSpaceBytes = [int64]$disk.Size
@@ -111,9 +122,11 @@ try {
 } catch { }
 
 try {
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+    $os = Get-CimInstance @cimArgs -ClassName Win32_OperatingSystem -ErrorAction Stop
     if ($os.LastBootUpTime) { $inv.lastBootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o') }
 } catch { }
+
+if ($cimArgs['CimSession']) { Remove-CimSession -CimSession $cimArgs['CimSession'] -ErrorAction SilentlyContinue }
 
 $inv | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $dir '__HOST__-inventory.json') -Encoding UTF8
 '@
