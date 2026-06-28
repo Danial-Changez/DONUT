@@ -16,20 +16,28 @@ class LogService {
         $this.SyncRoot = [System.Object]::new()
     }
 
+    # Returns the supplied logger, or a NullLogService no-op when it is $null.
+    # Collapses the repeated "logger or null-object" guard in collaborators'
+    # constructors to a single call.
+    static [LogService] Coalesce([LogService]$logger) {
+        if ($null -eq $logger) { return [NullLogService]::new() }
+        return $logger
+    }
+
     [void] LogInfo([string]$message) {
-        $this.WriteLog("INFO", $message)
+        $this.WriteLog("[INFO]", $message)
     }
 
     [void] LogWarning([string]$message) {
-        $this.WriteLog("WARN", $message)
+        $this.WriteLog("[WARN]", $message)
     }
 
     [void] LogError([string]$message) {
-        $this.WriteLog("ERROR", $message)
+        $this.WriteLog("[ERROR]", $message)
     }
 
     [void] LogDebug([string]$message) {
-        $this.WriteLog("DEBUG", $message)
+        $this.WriteLog("[DEBUG]", $message)
     }
 
     # Logs an ERROR with the originating exception's type and message appended.
@@ -39,7 +47,7 @@ class LogService {
         if ($null -ne $errorRecord -and $null -ne $errorRecord.Exception) {
             $detail = "$($errorRecord.Exception.GetType().Name): $($errorRecord.Exception.Message)"
         }
-        $this.WriteLog("ERROR", "$message | $detail")
+        $this.WriteLog("[ERROR]", "$message | $detail")
     }
 
     # Emits a structured, pipe-delimited entry: "<event>|key=value|key=value".

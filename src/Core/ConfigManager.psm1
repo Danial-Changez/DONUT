@@ -9,7 +9,7 @@ class ConfigManager {
     [LogService] $Logger
 
     ConfigManager([string]$sourceRoot) {
-        $this.Initialize($sourceRoot, [NullLogService]::new())
+        $this.Initialize($sourceRoot, $null)
     }
 
     ConfigManager([string]$sourceRoot, [LogService]$logger) {
@@ -19,12 +19,7 @@ class ConfigManager {
     # Shared constructor body (PowerShell classes cannot chain to a sibling
     # constructor, so the common setup lives here).
     hidden [void] Initialize([string]$sourceRoot, [LogService]$logger) {
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
         $this.SourceRoot = $sourceRoot
 
         $appDataRoot = Join-Path $env:LOCALAPPDATA "DONUT"
