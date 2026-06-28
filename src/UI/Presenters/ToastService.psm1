@@ -15,11 +15,11 @@ using namespace System.Windows.Threading
 # one dismisses it early.
 
 class ToastService {
-    hidden [ItemsControl] $Host
+    hidden [ItemsControl] $HostControl
     hidden [int] $DefaultDurationMs = 5000
 
     ToastService([ItemsControl] $toastHost) {
-        $this.Host = $toastHost
+        $this.HostControl = $toastHost
     }
 
     [void] ShowSuccess([string]$title, [string]$message) {
@@ -42,7 +42,7 @@ class ToastService {
     # Builds and presents a toast. colorKey is a UIColors resource key used for
     # the accent bar / title; durationMs is how long before auto-dismiss.
     [void] Show([string]$title, [string]$message, [string]$colorKey, [int]$durationMs) {
-        if ($null -eq $this.Host) { return }
+        if ($null -eq $this.HostControl) { return }
 
         $accent = $this.ResolveBrush($colorKey, [Colors]::White)
 
@@ -104,7 +104,7 @@ class ToastService {
         $card.RenderTransform = $transform
         $card.Opacity = 0
 
-        $this.Host.Items.Add($card) | Out-Null
+        $this.HostControl.Items.Add($card) | Out-Null
 
         # Animate in.
         $easeOut = [QuadraticEase]::new(); $easeOut.EasingMode = [EasingMode]::EaseOut
@@ -130,12 +130,12 @@ class ToastService {
 
     # Animates a toast out and removes it from the host once finished.
     [void] Dismiss([Border]$card) {
-        if ($null -eq $card -or -not $this.Host.Items.Contains($card)) { return }
+        if ($null -eq $card -or -not $this.HostControl.Items.Contains($card)) { return }
 
         $transform = $card.RenderTransform
         $fadeOut = [DoubleAnimation]::new($card.Opacity, 0, [Duration]::new([TimeSpan]::FromMilliseconds(180)))
 
-        $panel = $this.Host
+        $panel = $this.HostControl
         $fadeOut.Add_Completed({
             if ($panel.Items.Contains($card)) { $panel.Items.Remove($card) }
         }.GetNewClosure())
@@ -151,7 +151,7 @@ class ToastService {
     # to a solid colour if the key is missing.
     hidden [Brush] ResolveBrush([string]$key, [Color]$fallback) {
         $res = $null
-        if ($this.Host) { $res = $this.Host.TryFindResource($key) }
+        if ($this.HostControl) { $res = $this.HostControl.TryFindResource($key) }
         if ($res -is [Brush]) { return $res }
         return [SolidColorBrush]::new($fallback)
     }

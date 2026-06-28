@@ -10,8 +10,8 @@ class UpdatePresenter {
     [ResourceService]$Resources
     [DialogPresenter]$Dialog
 
-    UpdatePresenter([ResourceService]$resources) {
-        $this.Service = [SelfUpdateService]::new()
+    UpdatePresenter([SelfUpdateService]$service, [ResourceService]$resources) {
+        $this.Service = $service
         $this.Resources = $resources
         $this.Dialog = [DialogPresenter]::new($resources)
     }
@@ -102,8 +102,4 @@ class UpdatePresenter {
             [System.Windows.MessageBox]::Show("Update Failed: $_", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
         }
     }
-
-    # -------------------------------------------------------------------------
-    # Helpers
-    # -------------------------------------------------------------------------
 }

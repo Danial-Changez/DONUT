@@ -54,7 +54,8 @@ try {
     # Check for App Updates
     Write-Host "Checking for updates..."
     try {
-        $updatePresenter = [UpdatePresenter]::new($resourceService)
+        $selfUpdateService = [SelfUpdateService]::new($logger)
+        $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
         $updatePresenter.CheckAndPrompt()
     }
     catch {
