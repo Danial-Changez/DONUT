@@ -4,6 +4,7 @@ using module ".\DriverMatchingService.psm1"
 using module ".\RemoteServices.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
+using module "..\Models\DiskUsage.psm1"
 
 class ExecutionService {
     [LogService] $Logger
@@ -203,8 +204,31 @@ class ExecutionService {
 
         $this.DeployWizTree($ip)
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand())
-        $localPath = $this.CopyDiskUsageArtifact($device.HostName)
-        return @{ FoldersPath = $localPath }
+        $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
+        $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
+        return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
+    }
+
+    # Parses the (potentially large) WizTree CSV here on the worker/pool thread and
+    # writes a compact top-N JSON, so the UI thread only ever reads a tiny file.
+    # (Parsing the raw CSV with ConvertFrom-Csv on the dispatcher thread froze the
+    # UI for ~1s; the heavy work belongs off the STA thread.)
+    [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [hashtable]$options) {
+        $topN = 12
+        if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
+
+        $jsonPath = Join-Path $this.LocalReportsDir "$hostName-folders.json"
+        if (-not (Test-Path $csvPath)) { return $jsonPath }
+
+        try {
+            $raw = Get-Content -Path $csvPath -Raw
+            $report = [WizTreeCsv]::ParseTopFolders($raw, $topN)
+            $report.ToHashtable() | ConvertTo-Json -Depth 5 | Set-Content -Path $jsonPath -Encoding UTF8
+        }
+        catch {
+            $this.Logger.LogException("[$hostName] Failed to parse WizTree CSV", $_)
+        }
+        return $jsonPath
     }
 
     # Copies wiztree64.exe to the target's working dir (only when not already

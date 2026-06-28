@@ -31,15 +31,17 @@ class DiskUsageService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "DiskScan", @{ TopN = [DiskUsageService]::TopN })
     }
 
-    # Reads the copied-back WizTree CSV into a ranked DiskUsageReport. Returns
-    # $null when the file is missing or unparseable (mirrors ParseInventory).
+    # Reads the compact top-N JSON the worker wrote (the heavy CSV parse already
+    # ran off the UI thread in ExecutionService.ParseAndCacheFolders, so this stays
+    # cheap on the dispatcher thread). Returns $null when missing/unparseable.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {
-        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-folders.csv"
+        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-folders.json"
         if (-not (Test-Path $reportPath)) { return $null }
 
         try {
             $raw = Get-Content -Path $reportPath -Raw
-            return [WizTreeCsv]::ParseTopFolders($raw, [DiskUsageService]::TopN)
+            $h = $raw | ConvertFrom-Json -AsHashtable
+            return [DiskUsageReport]::FromHashtable([hashtable]$h)
         }
         catch {
             $this.Logger.LogException("Failed to parse disk-usage report for $hostName", $_)
