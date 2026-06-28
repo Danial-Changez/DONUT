@@ -249,6 +249,7 @@
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
@@ -258,6 +259,7 @@
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
               <TextBlock x:Name="txtDetailHost" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
@@ -265,9 +267,11 @@
               <TextBlock x:Name="txtDetailProbed" Text="" FontFamily="Montserrat" FontSize="11"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
-            <Button x:Name="btnDetailRefresh" Grid.Column="1" Content="Refresh"
+            <Button x:Name="btnFindFolders" Grid.Column="1" Content="Find big folders"
+                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
+            <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh"
                     Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
-            <Button x:Name="btnDetailRun" Grid.Column="2" Content="Run"
+            <Button x:Name="btnDetailRun" Grid.Column="3" Content="Run"
                     Style="{DynamicResource ButtonPrimary}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
           </Grid>
 
@@ -308,8 +312,24 @@
             </Border>
           </Grid>
 
+          <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
+          <Border Grid.Row="2" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
+                  Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+            <StackPanel>
+              <TextBlock Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+              <TextBlock x:Name="DiskFoldersHint"
+                         Text="Click &quot;Find big folders&quot; to scan this machine's C: drive."
+                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
+                         TextWrapping="Wrap" />
+              <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="DiskFoldersList" />
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+
           <!-- Live job log -->
-          <Border Grid.Row="2" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+          <Border Grid.Row="3" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
