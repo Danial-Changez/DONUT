@@ -14,7 +14,7 @@ class AsyncJob {
     [LogService] $Logger
 
     AsyncJob([string]$hostName, [string]$type) {
-        $this.Initialize($hostName, $type, [NullLogService]::new())
+        $this.Initialize($hostName, $type, $null)
     }
 
     AsyncJob([string]$hostName, [string]$type, [LogService]$logger) {
@@ -22,12 +22,7 @@ class AsyncJob {
     }
 
     hidden [void] Initialize([string]$hostName, [string]$type, [LogService]$logger) {
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
         $this.HostName = $hostName
         $this.JobType = $type
         $this.Status = 'Created'

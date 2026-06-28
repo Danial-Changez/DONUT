@@ -12,12 +12,7 @@ class ResourceService {
 
     ResourceService([string]$sourceRoot, [LogService]$logger) {
         $this.SourceRoot = $sourceRoot
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
     }
 
     # Loads all styles into the global Application scope

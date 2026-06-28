@@ -19,12 +19,7 @@ class SelfUpdateService {
     }
 
     SelfUpdateService([LogService]$logger) {
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
         $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
     }
 

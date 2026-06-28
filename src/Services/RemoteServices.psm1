@@ -18,12 +18,7 @@ class RemoteJobService {
     RemoteJobService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) {
         $this.Config = $config
         $this.Probe = $probe
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
     }
 
     hidden [void] ValidateHostConnectivity([string]$hostName) {

@@ -13,12 +13,7 @@ class DriverMatchingService {
     }
 
     DriverMatchingService([LogService]$logger) {
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
         $this.InitializePatterns()
     }
 

@@ -28,12 +28,7 @@ class NetworkProbe {
     }
 
     NetworkProbe([LogService] $logger) {
-        if ($null -eq $logger) {
-            $this.Logger = [NullLogService]::new()
-        }
-        else {
-            $this.Logger = $logger
-        }
+        $this.Logger = [LogService]::Coalesce($logger)
     }
 
     # --- Domain controller discovery -------------------------------------------------

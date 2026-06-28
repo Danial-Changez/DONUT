@@ -30,7 +30,7 @@ class SystemInfoService {
 
     SystemInfoService([object]$probe, [LogService]$logger) {
         $this.Probe = $probe
-        $this.Logger = if ($null -ne $logger) { $logger } else { [NullLogService]::new() }
+        $this.Logger = [LogService]::Coalesce($logger)
     }
 
     [SystemInfo] Gather() {
