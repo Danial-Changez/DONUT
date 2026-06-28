@@ -40,6 +40,18 @@ class TestExecutionService : ExecutionService {
             throw "Device not reachable: $($device.HostName)"
         }
     }
+
+    [string] $LastInventoryScript = $null
+    [string] $LastRemotePwshIp = $null
+
+    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText) {
+        $this.LastRemotePwshIp = $ip
+        $this.LastInventoryScript = $scriptText
+    }
+
+    [string] CopyInventoryArtifact([string]$hostName) {
+        return "C:\Fake\$hostName-inventory.json"
+    }
 }
 
 Describe "WorkerServices" {
@@ -429,6 +441,35 @@ Describe "WorkerServices" {
             # Our mock returns fixed paths, but we validate the structure
             $result.ContainsKey('Report') | Should -Be $true
             $result.ContainsKey('Log') | Should -Be $true
+        }
+    }
+
+    Context "RunInventoryPhase" {
+        It "Runs the remote probe and returns the local inventory path" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $device = [DeviceContext]::new("InvHost")
+
+            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
+
+            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
+            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
+        }
+
+        It "Throws when no script text is supplied" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $device = [DeviceContext]::new("InvHost")
+
+            { $service.RunInventoryPhase($device, @{}) } | Should -Throw "*No inventory script*"
         }
     }
 }
