@@ -542,6 +542,10 @@ class HomePresenter : AsyncJobPresenter {
                 $this.ActiveJobs.Add($job)
                 $this.RefreshCardStatus($job)
                 $this.RefreshOverview()
+                # Warm this machine's inventory in parallel (separate pool thread)
+                # while the scan/update runs, so its details are cached and ready by
+                # the time you select it. Completion caches via UpsertInventory.
+                $this.StartInventory($hostName)
             }
         }
         catch {
