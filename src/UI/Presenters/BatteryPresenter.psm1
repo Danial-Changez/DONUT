@@ -4,6 +4,7 @@ using namespace System.Collections.Generic
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
+using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\AsyncJobPresenter.psm1"
@@ -17,6 +18,7 @@ class BatteryPresenter : AsyncJobPresenter {
     [Button] $ClearButton
     [TabControl] $ReportTabs
     [NetworkProbe] $NetworkProbe
+    [LogService] $Logger
     [DialogPresenter] $DialogPresenter
     [HostListSource] $HostListSource
 
@@ -27,6 +29,7 @@ class BatteryPresenter : AsyncJobPresenter {
         $this.Config = $config
         $this.ViewContent = $view
         $this.NetworkProbe = $networkProbe
+        $this.Logger = $networkProbe.Logger
         $this.DialogPresenter = [DialogPresenter]::new($resources)
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
@@ -121,7 +124,7 @@ class BatteryPresenter : AsyncJobPresenter {
             $this.PumpJobs()
         }
         catch {
-            Write-Error "Error in BatteryPresenter timer: $_"
+            $this.Logger.LogException("Error during battery job pump", $_)
         }
     }
 

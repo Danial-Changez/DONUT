@@ -2,10 +2,12 @@ using namespace System.Windows
 using namespace System.Windows.Threading
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
+using module '..\..\Core\LogService.psm1'
 
 class LoginPresenter {
     [SelfUpdateService]$Service
     [ResourceService]$Resources
+    [LogService]$Logger
     [Window]$LoginWindow
     [DispatcherTimer]$PollTimer
     [string]$DeviceCode
@@ -15,6 +17,7 @@ class LoginPresenter {
     LoginPresenter([SelfUpdateService]$service, [ResourceService]$resources) {
         $this.Service = $service
         $this.Resources = $resources
+        $this.Logger = $resources.Logger
     }
 
     [bool] ShowLogin() {
@@ -126,7 +129,7 @@ class LoginPresenter {
     [Window] LoadXaml([string]$FileName) {
         $xamlPath = Join-Path -Path $PSScriptRoot -ChildPath "..\Views\$FileName"
         if (-not (Test-Path $xamlPath)) {
-            Write-Error "XAML file not found: $xamlPath"
+            $this.Logger.LogError("XAML file not found: $xamlPath")
             return $null
         }
 
@@ -141,7 +144,7 @@ class LoginPresenter {
             return $window
         }
         catch {
-            Write-Error "Failed to load XAML $FileName : $_"
+            $this.Logger.LogException("Failed to load XAML $FileName", $_)
             return $null
         }
     }

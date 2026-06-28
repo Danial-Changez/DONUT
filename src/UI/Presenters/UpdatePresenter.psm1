@@ -2,6 +2,7 @@ using namespace System.Windows
 using namespace System.Windows.Threading
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
+using module '..\..\Core\LogService.psm1'
 using module '.\LoginPresenter.psm1'
 using module '.\DialogPresenter.psm1'
 
@@ -9,10 +10,12 @@ class UpdatePresenter {
     [SelfUpdateService]$Service
     [ResourceService]$Resources
     [DialogPresenter]$Dialog
+    [LogService]$Logger
 
     UpdatePresenter([SelfUpdateService]$service, [ResourceService]$resources) {
         $this.Service = $service
         $this.Resources = $resources
+        $this.Logger = $resources.Logger
         $this.Dialog = [DialogPresenter]::new($resources)
     }
 
@@ -28,7 +31,7 @@ class UpdatePresenter {
         if ([string]::IsNullOrEmpty($token)) {
             $loginPresenter = [LoginPresenter]::new($this.Service, $this.Resources)
             if (-not $loginPresenter.ShowLogin()) { 
-                Write-Host "Login cancelled or failed."
+                $this.Logger.LogInfo("Login cancelled or failed.")
                 return 
             }
             $token = $this.Service.GetStoredToken()
@@ -45,7 +48,7 @@ class UpdatePresenter {
             }
         }
         catch {
-            Write-Host "Update check failed: $_"
+            $this.Logger.LogException("Update check failed", $_)
         }
     }
 
@@ -86,7 +89,7 @@ class UpdatePresenter {
                     throw "SHA-256 hash mismatch. Update aborted."
                 }
             } else {
-                Write-Warning "No checksum file found. Skipping verification."
+                $this.Logger.LogWarning("No checksum file found. Skipping verification.")
             }
 
             $localVer = $this.Service.GetLocalVersion()

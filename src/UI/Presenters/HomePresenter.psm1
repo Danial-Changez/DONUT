@@ -8,6 +8,7 @@ using module "..\..\Models\DcuProgress.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
+using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
@@ -34,6 +35,7 @@ class HomePresenter : AsyncJobPresenter {
     [DialogPresenter] $DialogPresenter
     [ToastService] $Toasts
     [NetworkProbe] $NetworkProbe
+    [LogService] $Logger
     [DriverMatchingService] $DriverMatcher
     [SystemInfoService] $SysInfo
     [RecentConnectionsStore] $Store
@@ -66,12 +68,12 @@ class HomePresenter : AsyncJobPresenter {
         $this.Toasts = $toasts
 
         $this.NetworkProbe = $networkProbe
-        $logger = $this.NetworkProbe.Logger
-        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $logger)
-        $this.DriverMatcher = [DriverMatchingService]::new($logger)
-        $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $logger)
+        $this.Logger = $networkProbe.Logger
+        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $this.Logger)
+        $this.DriverMatcher = [DriverMatchingService]::new($this.Logger)
+        $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
-        $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $logger)
+        $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $this.Logger)
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
 
@@ -243,7 +245,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.PumpJobs()
         }
         catch {
-            Write-Error "Error in OnTimerTick: $_"
+            $this.Logger.LogException("Error during job pump", $_)
         }
     }
 
@@ -584,7 +586,7 @@ class HomePresenter : AsyncJobPresenter {
             Set-Clipboard -Value $clipboardText
         }
         catch {
-            Write-Warning "Failed to copy to clipboard: $($_.Exception.Message)"
+            $this.Logger.LogWarning("Failed to copy to clipboard: $($_.Exception.Message)")
         }
     }
 }
