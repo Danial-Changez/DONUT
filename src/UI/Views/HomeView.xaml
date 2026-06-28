@@ -23,6 +23,7 @@
 
     <!-- Add / run input (still accepts a pasted batch of WSIDs) -->
     <Border
+      x:Name="SearchBox"
       Grid.Column="0"
       Background="{DynamicResource PanelBackground}"
       BorderBrush="{DynamicResource PanelBorder}"
@@ -70,6 +71,28 @@
         />
       </Grid>
     </Border>
+
+    <!-- Live AD finder dropdown: computers (type-ahead for scan/run) + users (UPN, unlock when locked) -->
+    <Popup x:Name="SearchResultsPopup"
+           Grid.Column="0"
+           PlacementTarget="{Binding ElementName=SearchBox}"
+           Placement="Bottom"
+           AllowsTransparency="True"
+           StaysOpen="True"
+           PopupAnimation="Fade"
+           Width="{Binding ActualWidth, ElementName=SearchBox}">
+      <Border Background="{DynamicResource PanelBackground}"
+              BorderBrush="{DynamicResource PanelBorder}"
+              BorderThickness="1"
+              CornerRadius="10"
+              Margin="0,4,0,0"
+              Padding="6"
+              SnapsToDevicePixels="True">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="340">
+          <StackPanel x:Name="SearchResultsList" />
+        </ScrollViewer>
+      </Border>
+    </Popup>
 
     <!-- Quick mode cycle: click to switch the active command, using its defaults -->
     <Button
