@@ -59,11 +59,14 @@
                         <StackPanel x:Name="SidebarPanel"
                                     Background="Transparent"
                                     HorizontalAlignment="Center">
-                            <!-- Rail collapse / expand toggle -->
+                            <!-- Top: rail toggle + logo (logo fades out when the rail collapses) -->
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left"
+                                        Margin="14,12,8,8"
+                                        Background="Transparent">
                             <Button x:Name="btnRailToggle"
                                     Width="40"
                                     Height="40"
-                                    Margin="14,12,0,0"
                                     HorizontalAlignment="Left"
                                     Background="Transparent"
                                     BorderThickness="0"
@@ -107,18 +110,15 @@
                                                Fill="{DynamicResource TitleTextTertiary}" />
                                 </StackPanel>
                             </Button>
-                            <!-- Title -->
-                            <StackPanel Orientation="Horizontal"
-                                        Height="100"
-                                        Margin="15,15,15,15"
-                                        Background="Transparent">
-                                <Viewbox Stretch="Uniform"
-                                         MaxWidth="180"
-                                         MaxHeight="120"
-                                         VerticalAlignment="Center"
-                                         HorizontalAlignment="Center">
-                                    <Image x:Name="Logo" />
-                                </Viewbox>
+                            <Viewbox x:Name="logoBox"
+                                     Stretch="Uniform"
+                                     MaxHeight="40"
+                                     MaxWidth="150"
+                                     VerticalAlignment="Center"
+                                     HorizontalAlignment="Left"
+                                     Margin="10,0,0,0">
+                                <Image x:Name="Logo" />
+                            </Viewbox>
                             </StackPanel>
                             <!-- Menu Buttons -->
                             <RadioButton x:Name="btnHome"

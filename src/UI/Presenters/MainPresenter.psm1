@@ -97,7 +97,8 @@ class MainPresenter {
             $this.Window.FindName("lblHome"),
             $this.Window.FindName("lblConfig"),
             $this.Window.FindName("lblLogs"),
-            $this.Window.FindName("lblBattery")
+            $this.Window.FindName("lblBattery"),
+            $this.Window.FindName("logoBox")
         ) | Where-Object { $_ }
 
         # Toast overlay service (shared with sub-presenters that need notifications)

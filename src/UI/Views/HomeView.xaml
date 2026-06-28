@@ -94,26 +94,22 @@
       </Grid>
     </Border>
 
-    <!-- Active mode pill -->
-    <Border
+    <!-- Quick mode cycle: click to switch the active command, using its defaults -->
+    <Button
+      x:Name="btnMode"
       Grid.Column="1"
       VerticalAlignment="Center"
       Margin="12,0,0,0"
-      CornerRadius="8"
-      Padding="12,6"
-      Background="{DynamicResource PanelBackground}"
-      BorderBrush="{DynamicResource PanelBorder}"
-      BorderThickness="1"
+      Style="{DynamicResource GhostButton}"
+      ToolTip="Click to cycle the active command (Scan / Apply Updates) using its defaults"
     >
-      <TextBlock
-        x:Name="txtMode"
-        Text="Mode: Scan"
-        FontFamily="Montserrat"
-        FontSize="12"
-        FontWeight="SemiBold"
-        Foreground="{DynamicResource AccentPurpleLight}"
-      />
-    </Border>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="&#x27F3;" FontFamily="Segoe UI Symbol" FontSize="13"
+                   Foreground="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" Margin="0,0,7,0" />
+        <TextBlock x:Name="txtMode" Text="Scan" FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TitleTextPrimary}" VerticalAlignment="Center" />
+      </StackPanel>
+    </Button>
 
     <!-- Refresh -->
     <Button
