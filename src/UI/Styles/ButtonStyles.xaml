@@ -3,11 +3,16 @@
     <!-- Menu button -->
     <Style x:Key="menuButton"
            TargetType="RadioButton">
-        <!-- Normal button style -->
         <Setter Property="Height"
-                Value="50" />
+                Value="54" />
         <Setter Property="Margin"
-                Value="-5,0,0,5" />
+                Value="0,0,0,14" />
+        <Setter Property="HorizontalAlignment"
+                Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment"
+                Value="Stretch" />
+        <Setter Property="Cursor"
+                Value="Hand" />
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Foreground"
@@ -17,12 +22,20 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderThickness="4,0,0,0"
-                            BorderBrush="{TemplateBinding BorderBrush}">
-                        <ContentPresenter HorizontalAlignment="Left"
+                    <Grid>
+                        <!-- Hover / selection fill: rounded right edge, inset from the rail edge -->
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="0,8,8,0"
+                                Margin="0,0,10,0" />
+                        <!-- Left accent bar (only coloured when checked) -->
+                        <Rectangle Width="3"
+                                   RadiusX="1.5"
+                                   RadiusY="1.5"
+                                   HorizontalAlignment="Left"
+                                   Fill="{TemplateBinding BorderBrush}" />
+                        <ContentPresenter HorizontalAlignment="Stretch"
                                           VerticalAlignment="Center" />
-                    </Border>
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -30,20 +43,14 @@
             <!-- Button style when hovering -->
             <Trigger Property="IsMouseOver"
                      Value="True">
-                <Setter Property="Margin"
-                        Value="0,0,0,5" />
                 <Setter Property="Background"
                         Value="{DynamicResource PanelBackgroundHover}" />
                 <Setter Property="Foreground"
                         Value="{DynamicResource TitleTextTertiary}" />
-                <Setter Property="BorderBrush"
-                        Value="{Binding Path=Tag, RelativeSource={RelativeSource Self}}" />
             </Trigger>
             <!-- Button style when activated -->
             <Trigger Property="IsChecked"
                      Value="True">
-                <Setter Property="Margin"
-                        Value="0,0,0,5" />
                 <Setter Property="Background"
                         Value="{DynamicResource PanelBackgroundActive}" />
                 <Setter Property="Foreground"
@@ -57,13 +64,15 @@
     <Style x:Key="menuButtonIcon"
            TargetType="Path">
         <Setter Property="Width"
-                Value="22" />
+                Value="26" />
         <Setter Property="Height"
-                Value="22" />
+                Value="26" />
         <Setter Property="Stretch"
                 Value="Uniform" />
+        <!-- Centres the icon in the 72px rail column (left 23 + 26 wide -> centre 36;
+             right 23 starts the label exactly at the rail edge so it clips cleanly). -->
         <Setter Property="Margin"
-                Value="35,0,20,0" />
+                Value="23,0,23,0" />
         <Setter Property="Fill"
                 Value="{Binding Path=Tag, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
     </Style>
@@ -77,7 +86,7 @@
         <Setter Property="FontWeight"
                 Value="Medium" />
         <Setter Property="FontSize"
-                Value="13.5" />
+                Value="15" />
         <Setter Property="VerticalAlignment"
                 Value="Center" />
     </Style>
@@ -211,19 +220,93 @@
                         </Setter.Value>
                 </Setter>
         </Style>
-    <!-- Arcane-style secondary / "ghost" button: dark zinc surface, subtle
-         border, rounded, light text; hover lightens + accents the border. -->
-    <Style x:Key="GhostButton"
+    <!-- ============================================================
+         Arcane button system (shadcn variants, ported 1:1).
+         Shared: rounded-lg (radius 9.6 = 0.6rem), h-9 (36), px-4 (16),
+         text-sm (14), font-medium, disabled opacity 0.5. Violet is used
+         only by ButtonPrimary; everything else is neutral zinc.
+         ============================================================ -->
+    <!-- default: bg-primary text-primary-foreground hover:bg-primary/90 -->
+    <Style x:Key="ButtonPrimary"
            TargetType="Button">
-        <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+        <Setter Property="Background" Value="{DynamicResource Primary}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="9.6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- secondary: bg-secondary text-secondary-foreground hover:bg-secondary/80 -->
+    <Style x:Key="ButtonSecondary"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource Secondary}" />
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryForeground}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="9.6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource SecondaryHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- outline: bg-card/60 border hover:bg-card/90 hover:text-accent-foreground -->
+    <Style x:Key="ButtonOutline"
+           TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="16,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="Montserrat" />
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -231,7 +314,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8"
+                            CornerRadius="9.6"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -239,7 +322,115 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
-                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource AccentPurple}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- ghost: transparent hover:bg-card/60 hover:text-accent-foreground -->
+    <Style x:Key="ButtonGhost"
+           TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TitleTextTertiary}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="9.6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="cp"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
+                            <Setter TargetName="cp" Property="TextElement.Foreground" Value="{DynamicResource TitleTextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- destructive: bg-destructive text-white hover:bg-destructive/90 -->
+    <Style x:Key="ButtonDestructive"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource Destructive}" />
+        <Setter Property="Foreground" Value="{DynamicResource DestructiveForeground}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="9.6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource DestructiveHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- Arcane secondary "pill": filled zinc surface used for the Mode cycle
+         button. Same family as ButtonSecondary; kept as a distinct key because
+         existing views reference GhostButton. -->
+    <Style x:Key="GhostButton"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource Secondary}" />
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14,7" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="Montserrat" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="9.6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource SecondaryHover}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelBackgroundActive}" />

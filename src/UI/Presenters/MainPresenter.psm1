@@ -27,6 +27,10 @@ class MainPresenter {
     [ToastService] $ToastService
     [bool] $RailCollapsed
 
+    # Toggle-button graphics: full DONUT wordmark when expanded, donut icon when collapsed.
+    hidden [System.Windows.Media.Imaging.BitmapImage] $LogoImage
+    hidden [System.Windows.Media.Imaging.BitmapImage] $DonutIcon
+
     # Rail (sidebar) widths for the collapse/expand animation.
     hidden static [double] $RailExpandedWidth = 250
     hidden static [double] $RailCollapsedWidth = 72
@@ -47,12 +51,18 @@ class MainPresenter {
             throw "MainWindow.xaml not found at $xamlPath"
         }
 
-        # Load XAML
+        # Load XAML. Read through a stream we explicitly dispose so the view file
+        # isn't left locked for the app's lifetime (an XmlReader/XamlReader holds
+        # the handle otherwise, blocking edits to the .xaml on disk).
         try {
-            $reader = [System.Xml.XmlReader]::Create($xamlPath)
-            $this.Window = [System.Windows.Markup.XamlReader]::Load($reader)
-            $reader.Close()
-            
+            $stream = [System.IO.File]::OpenRead($xamlPath)
+            try {
+                $this.Window = [System.Windows.Markup.XamlReader]::Load($stream)
+            }
+            finally {
+                $stream.Dispose()
+            }
+
             # Set as Main Window
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.MainWindow = $this.Window
@@ -93,12 +103,13 @@ class MainPresenter {
         # Collapsible rail
         $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
         $this.Controls['btnRailToggle'] = $this.Window.FindName("btnRailToggle")
+        # The logo is now the toggle button itself (its image swaps on collapse),
+        # so it is NOT part of the fading label set.
         $this.Controls['railLabels'] = @(
             $this.Window.FindName("lblHome"),
             $this.Window.FindName("lblConfig"),
             $this.Window.FindName("lblLogs"),
-            $this.Window.FindName("lblBattery"),
-            $this.Window.FindName("logoBox")
+            $this.Window.FindName("lblBattery")
         ) | Where-Object { $_ }
 
         # Toast overlay service (shared with sub-presenters that need notifications)
@@ -196,23 +207,33 @@ class MainPresenter {
     [void] LoadImages() {
         $assetsPath = Join-Path (Split-Path $this.Config.SourceRoot -Parent) "assets\Images"
         $logoPath = Join-Path $assetsPath "logo yellow arrow.png"
-        
+        $iconPath = Join-Path $assetsPath "donut icon48x48.ico"
+
         if (Test-Path $logoPath) {
-            $logo = $this.Window.FindName("Logo")
-            if ($logo) {
-                $uri = [Uri]::new($logoPath)
-                $image = [System.Windows.Media.Imaging.BitmapImage]::new($uri)
-                $logo.Source = $image
-            }
+            $this.LogoImage = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]::new($logoPath))
         }
+        if (Test-Path $iconPath) {
+            $this.DonutIcon = [System.Windows.Media.Imaging.BitmapImage]::new([Uri]::new($iconPath))
+        }
+
+        # Starts expanded -> show the full wordmark on the toggle button.
+        $logo = $this.Window.FindName("Logo")
+        if ($logo -and $this.LogoImage) { $logo.Source = $this.LogoImage }
     }
 
     [object] LoadView([string]$fileName) {
         $path = Join-Path $this.Config.SourceRoot "UI\Views\$fileName"
         if (Test-Path $path) {
             try {
-                $reader = [System.Xml.XmlReader]::Create($path)
-                return [System.Windows.Markup.XamlReader]::Load($reader)
+                # Stream is disposed so the view file isn't left locked while the
+                # app runs (see Initialize).
+                $stream = [System.IO.File]::OpenRead($path)
+                try {
+                    return [System.Windows.Markup.XamlReader]::Load($stream)
+                }
+                finally {
+                    $stream.Dispose()
+                }
             } catch {
                 $this.Logger.LogException("Failed to load view $fileName", $_)
             }
@@ -253,6 +274,16 @@ class MainPresenter {
         if (-not $sidebar) { return }
 
         $this.RailCollapsed = -not $this.RailCollapsed
+
+        # Swap the toggle graphic: donut icon when collapsed, full wordmark when expanded.
+        $logo = $this.Window.FindName("Logo")
+        if ($logo) {
+            if ($this.RailCollapsed) {
+                if ($this.DonutIcon) { $logo.Source = $this.DonutIcon }
+            } elseif ($this.LogoImage) {
+                $logo.Source = $this.LogoImage
+            }
+        }
 
         $targetWidth = if ($this.RailCollapsed) {
             [MainPresenter]::RailCollapsedWidth

@@ -4,16 +4,17 @@
          Near-black zinc backgrounds, zinc-900 cards, violet primary accent,
          status colours kept for green/red/amber/sky. -->
     <!-- Primary/Secondary Background Colors -->
-    <Color x:Key="PrimaryBackgroundDarkColor"> #09090B</Color>
+    <!-- Arcane background = oklch(0.145 0 0) = #0A0A0A (true near-black) -->
+    <Color x:Key="PrimaryBackgroundDarkColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackgroundDark"
                      Color="{StaticResource PrimaryBackgroundDarkColor}" />
-    <Color x:Key="PrimaryBackgroundColor"> #121214</Color>
+    <Color x:Key="PrimaryBackgroundColor"> #0C0C0C</Color>
     <SolidColorBrush x:Key="PrimaryBackground"
                      Color="{StaticResource PrimaryBackgroundColor}" />
-    <Color x:Key="SecondaryBackgroundDarkColor"> #0E0E11</Color>
+    <Color x:Key="SecondaryBackgroundDarkColor"> #0D0D0D</Color>
     <SolidColorBrush x:Key="SecondaryBackgroundDark"
                      Color="{StaticResource SecondaryBackgroundDarkColor}" />
-    <Color x:Key="SecondaryBackgroundColor"> #0B0B0E</Color>
+    <Color x:Key="SecondaryBackgroundColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="SecondaryBackground"
                      Color="{StaticResource SecondaryBackgroundColor}" />
     <Color x:Key="LoginBackgroundDarkColor"> #09090B</Color>
@@ -76,39 +77,44 @@
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
-    <!-- Font Colors (zinc) -->
+    <!-- Font Colors (Arcane neutral: foreground #FAFAFA, muted-foreground #A1A1A1) -->
     <Color x:Key="TitleTextPrimaryColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="TitleTextPrimary"
                      Color="{StaticResource TitleTextPrimaryColor}" />
-    <Color x:Key="TitleTextSecondaryColor"> #E4E4E7</Color>
+    <Color x:Key="TitleTextSecondaryColor"> #E5E5E5</Color>
     <SolidColorBrush x:Key="TitleTextSecondary"
                      Color="{StaticResource TitleTextSecondaryColor}" />
-    <Color x:Key="TitleTextTertiaryColor"> #A1A1AA</Color>
+    <Color x:Key="TitleTextTertiaryColor"> #A1A1A1</Color>
     <SolidColorBrush x:Key="TitleTextTertiary"
                      Color="{StaticResource TitleTextTertiaryColor}" />
-    <Color x:Key="BodyTextPrimaryColor"> #A1A1AA</Color>
+    <Color x:Key="BodyTextPrimaryColor"> #A1A1A1</Color>
     <SolidColorBrush x:Key="BodyTextPrimary"
                      Color="{StaticResource BodyTextPrimaryColor}" />
-    <Color x:Key="BodyTextSecondaryColor"> #71717A</Color>
+    <Color x:Key="BodyTextSecondaryColor"> #737373</Color>
     <SolidColorBrush x:Key="BodyTextSecondary"
                      Color="{StaticResource BodyTextSecondaryColor}" />
-    <Color x:Key="BodyTextTertiaryColor"> #52525B</Color>
+    <Color x:Key="BodyTextTertiaryColor"> #525252</Color>
     <SolidColorBrush x:Key="BodyTextTertiary"
                      Color="{StaticResource BodyTextTertiaryColor}" />
-    <Color x:Key="TerminalTextColor"> #D4D4D8</Color>
+    <Color x:Key="TerminalTextColor"> #D4D4D4</Color>
     <SolidColorBrush x:Key="TerminalText"
                      Color="{StaticResource TerminalTextColor}" />
-    <!-- Panel Colors (zinc cards) -->
-    <Color x:Key="PanelBackgroundColor"> #18181B</Color>
+    <!-- Panel Colors. Arcane's base card token is oklch(0.205 0 0)=#171717, but its
+         rendered cards are translucent (72-80% over #0A0A0A), so a deep #141414
+         matches the screenshot's near-black, low-contrast cards (border defines edge). -->
+    <Color x:Key="PanelBackgroundColor"> #141414</Color>
     <SolidColorBrush x:Key="PanelBackground"
                      Color="{StaticResource PanelBackgroundColor}" />
-    <Color x:Key="PanelBackgroundHoverColor"> #232327</Color>
+    <!-- outline/ghost hover = card lightened (~card/90 over dark) -->
+    <Color x:Key="PanelBackgroundHoverColor"> #1F1F1F</Color>
     <SolidColorBrush x:Key="PanelBackgroundHover"
                      Color="{StaticResource PanelBackgroundHoverColor}" />
+    <!-- secondary oklch(0.274 0.006 286) = #27272A -->
     <Color x:Key="PanelBackgroundActiveColor"> #27272A</Color>
     <SolidColorBrush x:Key="PanelBackgroundActive"
                      Color="{StaticResource PanelBackgroundActiveColor}" />
-    <Color x:Key="PanelBorderColor"> #27272A</Color>
+    <!-- border oklch(1 0 0 / 10%) = translucent white (subtle Arcane edge) -->
+    <Color x:Key="PanelBorderColor"> #1AFFFFFF</Color>
     <SolidColorBrush x:Key="PanelBorder"
                      Color="{StaticResource PanelBorderColor}" />
     <!-- Misc Colors -->
@@ -121,4 +127,52 @@
     <Color x:Key="ThrottleLimitColor"> #EF4444</Color>
     <SolidColorBrush x:Key="ThrottleLimit"
                      Color="{StaticResource ThrottleLimitColor}" />
+    <!-- ============================================================
+         Arcane shadcn semantic tokens (dark theme, oklch -> sRGB).
+         Used by the button variant styles in ButtonStyles.xaml so the
+         button system matches Arcane exactly (primary = violet-600,
+         everything else neutral zinc/translucent). -->
+    <!-- primary oklch(0.541 0.281 293) = violet-600 #7C3AED,
+         hover = primary/90 ~= violet-700 #6D28D9 -->
+    <Color x:Key="PrimaryColor"> #7C3AED</Color>
+    <SolidColorBrush x:Key="Primary"
+                     Color="{StaticResource PrimaryColor}" />
+    <Color x:Key="PrimaryHoverColor"> #6D28D9</Color>
+    <SolidColorBrush x:Key="PrimaryHover"
+                     Color="{StaticResource PrimaryHoverColor}" />
+    <!-- primary-foreground oklch(0.969 0.016 293.756) = violet-50 #F5F3FF -->
+    <Color x:Key="PrimaryForegroundColor"> #F5F3FF</Color>
+    <SolidColorBrush x:Key="PrimaryForeground"
+                     Color="{StaticResource PrimaryForegroundColor}" />
+    <!-- secondary #27272A / secondary-foreground #FAFAFA, hover = secondary/80 -->
+    <Color x:Key="SecondaryColor"> #27272A</Color>
+    <SolidColorBrush x:Key="Secondary"
+                     Color="{StaticResource SecondaryColor}" />
+    <Color x:Key="SecondaryHoverColor"> #1F1F22</Color>
+    <SolidColorBrush x:Key="SecondaryHover"
+                     Color="{StaticResource SecondaryHoverColor}" />
+    <Color x:Key="SecondaryForegroundColor"> #FAFAFA</Color>
+    <SolidColorBrush x:Key="SecondaryForeground"
+                     Color="{StaticResource SecondaryForegroundColor}" />
+    <!-- muted / accent oklch(0.269 0 0) = #262626 (surface accent) -->
+    <Color x:Key="SurfaceMutedColor"> #262626</Color>
+    <SolidColorBrush x:Key="SurfaceMuted"
+                     Color="{StaticResource SurfaceMutedColor}" />
+    <Color x:Key="SurfaceMutedForegroundColor"> #A1A1A1</Color>
+    <SolidColorBrush x:Key="SurfaceMutedForeground"
+                     Color="{StaticResource SurfaceMutedForegroundColor}" />
+    <!-- destructive oklch(0.704 0.191 22.216) ~= #FF6467 -->
+    <Color x:Key="DestructiveColor"> #FF6467</Color>
+    <SolidColorBrush x:Key="Destructive"
+                     Color="{StaticResource DestructiveColor}" />
+    <Color x:Key="DestructiveHoverColor"> #F2484C</Color>
+    <SolidColorBrush x:Key="DestructiveHover"
+                     Color="{StaticResource DestructiveHoverColor}" />
+    <Color x:Key="DestructiveForegroundColor"> #FAFAFA</Color>
+    <SolidColorBrush x:Key="DestructiveForeground"
+                     Color="{StaticResource DestructiveForegroundColor}" />
+    <!-- input oklch(1 0 0 / 15%) = translucent white (slightly stronger than border) -->
+    <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
+    <SolidColorBrush x:Key="InputBorder"
+                     Color="{StaticResource InputBorderColor}" />
 </ResourceDictionary>
