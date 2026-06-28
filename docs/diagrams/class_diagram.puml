@@ -85,6 +85,20 @@ package "Donut.Models" {
         +{static} ParseSeen(value: string): datetime
         -Save(): void
     }
+
+    enum PollOutcome {
+        Authorized
+        KeepPolling
+        SlowDown
+        Failed
+    }
+
+    class DeviceFlowDecision {
+        +Outcome: PollOutcome
+        +TokenData: object
+        +Message: string
+        +{static} FromPollResult(result: object): DeviceFlowDecision
+    }
 }
 
 package "Donut.Core" {
@@ -434,5 +448,7 @@ UpdatePresenter --> SelfUpdateService
 UpdatePresenter --> DialogPresenter
 LoginPresenter --> SelfUpdateService
 LoginPresenter --> ResourceService
+LoginPresenter ..> DeviceFlowDecision
+DeviceFlowDecision ..> PollOutcome
 
 @enduml

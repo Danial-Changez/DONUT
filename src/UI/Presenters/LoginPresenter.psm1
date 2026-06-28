@@ -3,6 +3,7 @@ using namespace System.Windows.Threading
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\LogService.psm1'
+using module '..\..\Models\DeviceFlowDecision.psm1'
 
 class LoginPresenter {
     [SelfUpdateService]$Service
@@ -104,23 +105,24 @@ class LoginPresenter {
 
     [void] PollToken() {
         $result = $this.Service.PollForToken($this.DeviceCode)
+        $decision = [DeviceFlowDecision]::FromPollResult($result)
 
-        switch ($result.Status) {
-            'authorized' {
-                $this.Service.SaveToken($result.TokenData)
+        switch ($decision.Outcome) {
+            ([PollOutcome]::Authorized) {
+                $this.Service.SaveToken($decision.TokenData)
                 $this.PollTimer.Stop()
                 $this.LoginSuccess = $true
                 $this.LoginWindow.Close()
             }
-            'pending' {
+            ([PollOutcome]::KeepPolling) {
                 # Keep polling at the current interval.
             }
-            'slow_down' {
+            ([PollOutcome]::SlowDown) {
                 $this.PollTimer.Interval = $this.PollTimer.Interval.Add([TimeSpan]::FromSeconds(5))
             }
-            default {
+            ([PollOutcome]::Failed) {
                 $output = $this.LoginWindow.FindName('Output')
-                if ($output) { $output.Text = "Error: $($result.Error)" }
+                if ($output) { $output.Text = $decision.Message }
                 $this.PollTimer.Stop()
             }
         }
