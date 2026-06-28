@@ -309,7 +309,7 @@ class ConnectionRow {
         # hover = primary/90 (violet-700 #6D28D9), hardcoded since a parsed
         # template has no merged-dictionary context for DynamicResource.
         $xaml = @'
-<ControlTemplate TargetType="Button" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+<ControlTemplate TargetType="Button" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
     </Border>
