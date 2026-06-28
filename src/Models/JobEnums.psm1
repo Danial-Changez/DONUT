@@ -20,6 +20,5 @@ enum JobKind {
     Scan
     UpdateScan
     UpdateApply
-    BatteryReport
     Inventory
 }

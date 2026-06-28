@@ -131,18 +131,6 @@
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
-                            <RadioButton x:Name="btnBattery"
-                                         Style="{DynamicResource menuButton}"
-                                         Tag="{DynamicResource AccentGreen}">
-                                <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Left">
-                                    <Path Style="{DynamicResource menuButtonIcon}"
-                                          Data="{DynamicResource Battery}" />
-                                    <TextBlock x:Name="lblBattery"
-                                               Text="Battery"
-                                               Style="{DynamicResource menuButtonText}" />
-                                </StackPanel>
-                            </RadioButton>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -243,23 +231,6 @@
                                       Fill="{DynamicResource TitleTextSecondary}"
                                       Margin="35,0,10,0" />
                                 <TextBlock Text="Logs"
-                                           Foreground="{DynamicResource TitleTextSecondary}"
-                                           FontSize="20"
-                                           FontFamily="Montserrat"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                            <!-- Battery Header -->
-                            <StackPanel Orientation="Horizontal"
-                                        x:Name="headerBattery"
-                                        Visibility="Collapsed">
-                                <Path Data="{DynamicResource Battery}"
-                                      Height="24"
-                                      Width="24"
-                                      Stretch="Uniform"
-                                      Fill="{DynamicResource TitleTextSecondary}"
-                                      Margin="35,0,10,0" />
-                                <TextBlock Text="Battery Report"
                                            Foreground="{DynamicResource TitleTextSecondary}"
                                            FontSize="20"
                                            FontFamily="Montserrat"

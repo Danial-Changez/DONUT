@@ -7,7 +7,6 @@ using module "..\..\Services\ResourceService.psm1"
 using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
-using module ".\BatteryPresenter.psm1"
 using module ".\ToastService.psm1"
 
 class MainPresenter {
@@ -20,7 +19,6 @@ class MainPresenter {
     [ConfigPresenter] $ConfigPresenter
     [LogsPresenter] $LogsPresenter
     [HomePresenter] $HomePresenter
-    [BatteryPresenter] $BatteryPresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [ResourceService] $Resources
@@ -98,7 +96,6 @@ class MainPresenter {
         $this.Controls['btnHome'] = $this.Window.FindName("btnHome")
         $this.Controls['btnConfig'] = $this.Window.FindName("btnConfig")
         $this.Controls['btnLogs'] = $this.Window.FindName("btnLogs")
-        $this.Controls['btnBattery'] = $this.Window.FindName("btnBattery")
 
         # Collapsible rail
         $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
@@ -108,8 +105,7 @@ class MainPresenter {
         $this.Controls['railLabels'] = @(
             $this.Window.FindName("lblHome"),
             $this.Window.FindName("lblConfig"),
-            $this.Window.FindName("lblLogs"),
-            $this.Window.FindName("lblBattery")
+            $this.Window.FindName("lblLogs")
         ) | Where-Object { $_ }
 
         # Toast overlay service (shared with sub-presenters that need notifications)
@@ -123,7 +119,6 @@ class MainPresenter {
         $this.Headers['Home'] = $this.Window.FindName("headerHome")
         $this.Headers['Config'] = $this.Window.FindName("headerConfig")
         $this.Headers['Logs'] = $this.Window.FindName("headerLogs")
-        $this.Headers['Battery'] = $this.Window.FindName("headerBattery")
 
         # Load Sub-Views
         $this.Views = @{}
@@ -149,21 +144,11 @@ class MainPresenter {
             $this.LogsPresenter = [LogsPresenter]::new($this.Config, $logsView)
         }
 
-        # Battery View & Presenter
-        $batteryView = $this.LoadView("BatteryView.xaml")
-        $this.Views['Battery'] = $batteryView
-        if ($batteryView) {
-            $this.BatteryPresenter = [BatteryPresenter]::new($this.Config, $batteryView, $this.NetworkProbe, $this.Resources)
-        }
-
         # Bind Navigation Events
         $presenter = $this
         $this.Controls['btnHome'].Add_Click({ $presenter.NavigateTo('Home') }.GetNewClosure())
         $this.Controls['btnConfig'].Add_Click({ $presenter.NavigateTo('Config') }.GetNewClosure())
         $this.Controls['btnLogs'].Add_Click({ $presenter.NavigateTo('Logs') }.GetNewClosure())
-        if ($this.Controls['btnBattery']) {
-            $this.Controls['btnBattery'].Add_Click({ $presenter.NavigateTo('Battery') }.GetNewClosure())
-        }
 
         # Rail collapse / expand
         if ($this.Controls['btnRailToggle']) {
