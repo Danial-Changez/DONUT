@@ -16,9 +16,10 @@ using module "..\..\Core\TimeFormat.psm1"
 #
 # Interaction:
 #   - single-clicking the row body selects it (SelectAction) -> the presenter
-#     opens the detail panel for that host
-#   - the Run button (or a double-click on the row) invokes RunAction(hostname)
-#     to execute the active config (confirmed first when the mode is destructive)
+#     opens the detail panel for that host (shows cached info; no network)
+#   - double-clicking the row gathers fresh inventory (GatherAction) for that host
+#   - the Run button is the ONLY way to execute a scan/update (RunAction), so a
+#     stray click never kicks off a remote run
 #
 # The live job log/output now lives in the detail panel, not in the row.
 # Pure status semantics (label/colour/busy) come from [FleetStatus].
@@ -26,8 +27,9 @@ using module "..\..\Core\TimeFormat.psm1"
 class ConnectionRow {
     [string]      $HostName
     [Border]      $Root          # element added to the machine list
-    [scriptblock] $RunAction     # set by presenter; runs the active config
-    [scriptblock] $SelectAction  # set by presenter; opens the detail panel
+    [scriptblock] $RunAction     # set by presenter; runs the active config (Run button only)
+    [scriptblock] $SelectAction  # set by presenter; opens the detail panel (single click)
+    [scriptblock] $GatherAction  # set by presenter; gathers inventory (double click)
 
     hidden [Ellipse]     $Dot
     hidden [TextBlock]   $Subtitle
@@ -154,11 +156,12 @@ class ConnectionRow {
         $grid.Children.Add($this.RunButton)
 
         $row = $this
-        # Single click selects (opens detail); double click runs. The Run button
-        # is a Button, which swallows its own click, so it won't also select.
+        # Single click selects (opens detail, cached only); double click gathers
+        # fresh inventory. Running a scan/update is reserved for the Run button,
+        # which is a Button that swallows its own click (so it won't also select).
         $header.Add_MouseLeftButtonDown({
             if ($_.ClickCount -eq 2) {
-                if ($null -ne $row.RunAction) { & $row.RunAction $row.HostName }
+                if ($null -ne $row.GatherAction) { & $row.GatherAction $row.HostName }
             }
             else {
                 if ($null -ne $row.SelectAction) { & $row.SelectAction $row.HostName }

@@ -22,12 +22,11 @@ class DiskUsageService : RemoteJobService {
 
     DiskUsageService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Validates connectivity and returns worker args for the disk-usage scan. The
-    # worker resolves the bundled wiztree64.exe from SourceRoot, so Options only
-    # carries the row cap (the worker leaves trimming to the parser, but we pass it
-    # for symmetry / future use). Dispatches on the "DiskScan" worker token.
+    # Returns worker args for the disk-usage scan (no network — the worker asserts
+    # reachability on the pool thread). The worker resolves the bundled
+    # wiztree64.exe from SourceRoot, so Options only carries the row cap.
+    # Dispatches on the "DiskScan" worker token.
     [hashtable] PrepareDiskScan([string]$hostName) {
-        $this.ValidateHostConnectivity($hostName)
         return $this.BuildWorkerArgs($hostName, "DiskScan", @{ TopN = [DiskUsageService]::TopN })
     }
 
