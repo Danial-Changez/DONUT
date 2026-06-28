@@ -3,7 +3,6 @@ using module "..\Core\LogService.psm1"
 class DriverMatchingService {
     [hashtable] $BrandPatterns
     [hashtable] $CategoryPatterns
-    [hashtable] $CategoryBrands
     [hashtable] $CategoryMappings
     [hashtable] $DeviceClassMappings
     [LogService] $Logger
@@ -38,14 +37,6 @@ class DriverMatchingService {
             "AMD"       = @("AMD", "Advanced Micro Devices")
             "Nvidia"    = @("NVIDIA", "Nvidia Corporation")
             "Realtek"   = @("Realtek", "Realtek Semiconductor")
-        }
-        
-        # Legacy brand patterns by category (from main branch)
-        # Used for matching updates to installed drivers by component type
-        $this.CategoryBrands = @{
-            "Audio"   = @("Realtek", "Intel", "AMD", "NVIDIA", "Conexant", "IDT", "VIA", "Creative", "SoundMAX")
-            "Network" = @("Realtek", "Intel", "Broadcom", "Qualcomm", "Marvell", "Killer", "MediaTek", "Ralink", "Microsoft", "Bluetooth", "USB", "GbE", "Ethernet")
-            "Video"   = @("NVIDIA", "AMD", "Intel", "ATI", "Radeon", "GeForce", "UHD", "Iris", "Xe")
         }
         
         # Category patterns for detecting update/driver categories
@@ -128,79 +119,6 @@ class DriverMatchingService {
             return $this.DeviceClassMappings[$deviceClass]
         }
         return "Other"
-    }
-
-    # Detects brand from update name using category-specific brand patterns (legacy approach)
-    [string] DetectCategoryBrand([string]$updateName, [string]$category) {
-        if (-not $this.CategoryBrands.ContainsKey($category)) {
-            return $null
-        }
-        
-        foreach ($brand in $this.CategoryBrands[$category]) {
-            if ($updateName -match [regex]::Escape($brand)) {
-                return $brand
-            }
-        }
-        return $null
-    }
-
-    # Legacy-compatible driver matching by category and brand (from main branch)
-    # This is the preferred method when working with Dell Command Update scan results
-    [object] FindBestDriverMatchByCategory([string]$updateName, [array]$systemDrivers, [string]$category) {
-        if ($null -eq $systemDrivers -or $systemDrivers.Count -eq 0) {
-            return $null
-        }
-        
-        # Find update brand using category-specific brand patterns
-        $updateBrand = $this.DetectCategoryBrand($updateName, $category)
-        
-        if (-not $updateBrand) { return $null }
-        
-        # Pre-filter drivers by same brand
-        $matchingDrivers = $systemDrivers | Where-Object {
-            $_.DeviceName -match [regex]::Escape($updateBrand)
-        }
-        
-        if (-not $matchingDrivers -or $matchingDrivers.Count -eq 0) { return $null }
-        
-        # Score only the pre-filtered drivers
-        $bestMatch = $null
-        $highestScore = 0
-        
-        foreach ($driver in $matchingDrivers) {
-            $score = 10  # Base score for brand match
-            
-            # Bluetooth-specific scoring (important for Network category)
-            $isUpdateBluetooth = $updateName -match "Bluetooth"
-            $isDriverBluetooth = $driver.DeviceName -match "Bluetooth"
-            
-            if ($isUpdateBluetooth -and $isDriverBluetooth) {
-                $score += 20
-            }
-            elseif ($isUpdateBluetooth -xor $isDriverBluetooth) {
-                $score -= 5
-            }
-            
-            # Additional keyword matching
-            $updateWords = $updateName.ToLower() -split '\s+|[-_]'
-            $driverWords = $driver.DeviceName.ToLower() -split '\s+|[-_]'
-            $commonWords = $updateWords | Where-Object { $driverWords -contains $_ -and $_.Length -gt 2 }
-            $score += ($commonWords.Count * 3)
-            
-            if ($score -gt $highestScore) {
-                $highestScore = $score
-                $bestMatch = @{
-                    Driver = $driver
-                    Score = $score
-                    Category = $category
-                    Brand = $updateBrand
-                    DriverVersion = $driver.DriverVersion
-                    DeviceName = $driver.DeviceName
-                }
-            }
-        }
-        
-        return $bestMatch
     }
 
     # Generic driver matching (for non-categorized searches)
@@ -333,142 +251,11 @@ Match Score: $($match.Score)
 "@
     }
 
-    # Filter drivers by version compatibility with updates (from legacy main branch)
-    # Returns drivers that have matching updates and valid version info
-    [array] FilterDriversByVersion([array]$drivers, [array]$updates, [string]$category) {
-        if ($null -eq $drivers -or $drivers.Count -eq 0) { return @() }
-        if ($null -eq $updates -or $updates.Count -eq 0) { return @() }
-        
-        # Pre-filter updates by category first
-        $categoryUpdates = $updates | Where-Object {
-            $updateCategory = if ($_.category) { $_.category } else { "Unknown Category" }
-            $mappedCategories = $this.CategoryMappings[$category]
-            if ($mappedCategories) {
-                $updateCategory -in $mappedCategories
-            } else {
-                $false
-            }
-        }
-        
-        if (-not $categoryUpdates -or $categoryUpdates.Count -eq 0) { return @() }
-        
-        # Create lookup hash for faster brand matching
-        $updateBrandMap = @{}
-        foreach ($update in $categoryUpdates) {
-            $updateName = if ($update.name) { $update.name } else { "Unknown Name" }
-            $updateVersion = if ($update.version) { $update.version } else { "Unknown Version" }
-            
-            if ($this.CategoryBrands.ContainsKey($category)) {
-                foreach ($brand in $this.CategoryBrands[$category]) {
-                    if ($updateName -match $brand) {
-                        if (-not $updateBrandMap[$brand]) { $updateBrandMap[$brand] = @() }
-                        $updateBrandMap[$brand] += @{
-                            Name    = $updateName
-                            Version = $updateVersion
-                            Update  = $update
-                        }
-                        break
-                    }
-                }
-            }
-        }
-        
-        # Now filter drivers efficiently
-        $filteredDrivers = @()
-        foreach ($driver in $drivers) {
-            # Skip drivers with unknown version
-            if ($driver.DriverVersion -eq "Unknown") { continue }
-            
-            $hasValidUpdate = $false
-            
-            if ($this.CategoryBrands.ContainsKey($category)) {
-                foreach ($brand in $this.CategoryBrands[$category]) {
-                    if ($driver.DeviceName -match $brand -and $updateBrandMap[$brand]) {
-                        foreach ($updateInfo in $updateBrandMap[$brand]) {
-                            if ($updateInfo.Version -ne "Unknown Version") {
-                                try {
-                                    $currentVersionObj = [System.Version]$driver.DriverVersion
-                                    $xmlVersionObj = [System.Version]$updateInfo.Version
-                                    
-                                    if ($xmlVersionObj -ge $currentVersionObj) {
-                                        $hasValidUpdate = $true
-                                        break
-                                    }
-                                }
-                                catch {
-                                    # Version parse failed - include driver anyway
-                                    $hasValidUpdate = $true
-                                    break
-                                }
-                            }
-                        }
-                        if ($hasValidUpdate) { break }
-                    }
-                }
-            }
-            
-            if ($hasValidUpdate) {
-                $filteredDrivers += $driver
-            }
-        }
-        
-        return $filteredDrivers
-    }
-
-    # Filter applications by version compatibility with updates
-    [array] FilterApplicationsByVersion([array]$applications, [array]$updates) {
-        if ($null -eq $applications -or $applications.Count -eq 0) { return @() }
-        if ($null -eq $updates -or $updates.Count -eq 0) { return @() }
-        
-        # Pre-filter updates by Application category
-        $appUpdates = $updates | Where-Object {
-            $updateCategory = if ($_.category) { $_.category } else { "Unknown Category" }
-            $updateCategory -eq "Application"
-        }
-        
-        if (-not $appUpdates -or $appUpdates.Count -eq 0) { return @() }
-        
-        # Build update lookup by normalized name
-        $updateNameMap = @{}
-        foreach ($update in $appUpdates) {
-            $updateName = if ($update.name) { $update.name } else { "Unknown Name" }
-            $normalizedName = $this.NormalizeAppName($updateName)
-            $updateNameMap[$normalizedName] = @{
-                Name    = $updateName
-                Version = if ($update.version) { $update.version } else { "Unknown Version" }
-                Update  = $update
-            }
-        }
-        
-        # Filter applications
-        $filteredApps = @()
-        foreach ($app in $applications) {
-            if ($app.Version -eq "Unknown") { continue }
-            
-            $normalizedAppName = $this.NormalizeAppName($app.Name)
-            if ($updateNameMap.ContainsKey($normalizedAppName)) {
-                $filteredApps += $app
-            }
-        }
-        
-        return $filteredApps
-    }
-
     # Normalize application names for matching (strip trailing 'Application', remove spaces, lowercase)
     [string] NormalizeAppName([string]$name) {
         if ([string]::IsNullOrEmpty($name)) { return "" }
         $n = $name -replace '(?i)\s*Application$', ''
         $n = $n -replace '\s+', ''
         return $n.ToLowerInvariant()
-    }
-
-    # Get the list of supported DCU categories
-    [array] GetSupportedCategories() {
-        return @("Audio", "Video", "Network", "Storage", "Input", "Chipset", "BIOS", "Application", "Others")
-    }
-
-    # Check if a category is supported for brand-based matching
-    [bool] SupportsCategoryBrandMatching([string]$category) {
-        return $this.CategoryBrands.ContainsKey($category)
     }
 }

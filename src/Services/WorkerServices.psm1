@@ -1,6 +1,7 @@
 using module "..\Core\LogService.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module ".\DriverMatchingService.psm1"
+using module ".\RemoteServices.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 
@@ -61,27 +62,6 @@ class ExecutionService {
         }
     }
 
-    [hashtable] ExecuteTask([DeviceContext] $device, [hashtable] $options) {
-        $this.AssertReachable($device)
-        $scanResult = $this.RunScanPhase($device)
-
-        if (-not $scanResult.ContainsKey('Updates') -or $scanResult.Updates.Count -eq 0) {
-            $this.Logger.LogInfo("[$($device.HostName)] No updates found; skipping apply.")
-            return @{
-                Phase   = "ScanOnly"
-                Updates = @()
-            }
-        }
-
-        # Placeholder: caller should confirm before proceeding
-        $applyResult = $this.RunApplyPhase($device, $options)
-        return @{
-            Phase       = "Apply"
-            Updates     = $scanResult.Updates
-            ApplyResult = $applyResult
-        }
-    }
-
     [hashtable] RunScanPhase([DeviceContext] $device) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting preliminary scan.")
         
@@ -105,14 +85,11 @@ class ExecutionService {
 
         $this.InvokePsExec($params)
         $artifact = $this.CopyRemoteArtifacts($device.HostName)
-        
-        # Parse report (placeholder)
-        $updates = $this.Matcher.FindBestDriverMatch('report', @()) 
 
         return @{
             ReportPath = $artifact.Report
             LogPath    = $artifact.Log
-            Updates    = @($updates) | Where-Object { $_ }
+            Updates    = @()
         }
     }
 
@@ -169,9 +146,6 @@ class ExecutionService {
         
         return @{ Log = $localLog; Report = $localReport }
     }
-
-    # BuildTempConfig is deprecated/removed
-
 
     [void] InvokePsExec([hashtable] $parameters) {
         $computer = $parameters.ComputerName
@@ -249,23 +223,8 @@ class ExecutionService {
     }
 
     [void] AssertReachable([DeviceContext] $device) {
-        if (-not $this.Probe.IsOnline($device.HostName)) {
-            $this.Logger.LogError("[$($device.HostName)] Host is offline or unreachable.")
-            throw "Host '$($device.HostName)' is offline or unreachable."
-        }
-        $ip = $this.Probe.ResolveHost($device.HostName)
-
-        if ($ip) {
-            $device.IPAddress = $ip.ToString()
-        }
-        else {
-            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP address.")
-            throw "Could not resolve IP for '$($device.HostName)'."
-        }
-
-        if (-not $this.Probe.IsRpcAvailable($device.HostName)) {
-            $this.Logger.LogError("[$($device.HostName)] RPC (Port 135) is unavailable.")
-            throw "RPC is unavailable on '$($device.HostName)'."
-        }
+        # Reuse the shared connectivity policy (IsOnline -> ResolveHost ->
+        # IsRpcAvailable) and record the resolved IP on the device context.
+        $device.IPAddress = [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $device.HostName)
     }
 }
