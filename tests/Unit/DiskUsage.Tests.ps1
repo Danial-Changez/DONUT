@@ -78,6 +78,76 @@ Describe "DiskUsageFormat.SizeLabel" {
     }
 }
 
+Describe "DiskUsageTree.Build" {
+    BeforeAll {
+        # Helper to make a FolderUsage without depending on the CSV parser.
+        function New-Folder([string]$path, [long]$size) {
+            $f = [FolderUsage]::new(); $f.Path = $path; $f.SizeBytes = $size; $f
+        }
+    }
+
+    It "nests folders under the deepest listed ancestor, with depth + leaf labels" {
+        $folders = @(
+            (New-Folder 'C:\Users\' 180),
+            (New-Folder 'C:\Windows\' 100),
+            (New-Folder 'C:\Users\CE\' 40),
+            (New-Folder 'C:\Users\CE\OneDrive\' 36),
+            (New-Folder 'C:\Windows\Installer\' 30)
+        )
+        $tree = [DiskUsageTree]::Build($folders)
+
+        # DFS order: Users root, then its subtree, then Windows root, then its child.
+        ($tree | ForEach-Object { $_.Path }) | Should -Be @(
+            'C:\Users\', 'C:\Users\CE\', 'C:\Users\CE\OneDrive\', 'C:\Windows\', 'C:\Windows\Installer\'
+        )
+        ($tree | ForEach-Object { $_.Depth }) | Should -Be @(0, 1, 2, 0, 1)
+        ($tree | ForEach-Object { $_.Label }) | Should -Be @('C:\Users\', 'CE\', 'OneDrive\', 'C:\Windows\', 'Installer\')
+    }
+
+    It "orders siblings and roots by their incoming (size-ranked) order" {
+        $folders = @(
+            (New-Folder 'C:\Users\' 180),
+            (New-Folder 'C:\Users\Big\' 90),
+            (New-Folder 'C:\Users\Small\' 10)
+        )
+        $tree = [DiskUsageTree]::Build($folders)
+        ($tree | ForEach-Object { $_.Label }) | Should -Be @('C:\Users\', 'Big\', 'Small\')
+    }
+
+    It "treats a folder with no listed ancestor as a root showing its full path" {
+        $folders = @(
+            (New-Folder 'C:\Windows\' 100),
+            (New-Folder 'C:\Users\CE\Deep\' 50)   # parent C:\Users\ not in the list
+        )
+        $tree = [DiskUsageTree]::Build($folders)
+        $deep = $tree | Where-Object { $_.Path -eq 'C:\Users\CE\Deep\' }
+        $deep.Depth | Should -Be 0
+        $deep.Label | Should -Be 'C:\Users\CE\Deep\'
+    }
+
+    It "matches ancestors case-insensitively" {
+        $folders = @(
+            (New-Folder 'C:\Users\' 180),
+            (New-Folder 'c:\users\CE\' 40)
+        )
+        $tree = [DiskUsageTree]::Build($folders)
+        ($tree | Where-Object { $_.Path -eq 'c:\users\CE\' }).Depth | Should -Be 1
+    }
+
+    It "does not nest a sibling that merely shares a name prefix" {
+        $folders = @(
+            (New-Folder 'C:\Users\' 180),
+            (New-Folder 'C:\UsersData\' 40)   # not a child of C:\Users\
+        )
+        $tree = [DiskUsageTree]::Build($folders)
+        ($tree | ForEach-Object { $_.Depth }) | Should -Be @(0, 0)
+    }
+
+    It "returns empty for an empty list" {
+        ([DiskUsageTree]::Build(@())).Count | Should -Be 0
+    }
+}
+
 Describe "DiskUsageReport round-trip" {
     It "survives ToHashtable -> FromHashtable" {
         $r = [WizTreeCsv]::ParseTopFolders(@'

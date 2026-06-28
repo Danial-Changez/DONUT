@@ -249,7 +249,6 @@
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
@@ -275,45 +274,8 @@
                     Style="{DynamicResource ButtonPrimary}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
           </Grid>
 
-          <!-- Inventory cards -->
-          <Grid Grid.Row="1" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Margin="0,0,6,0" CornerRadius="10" Padding="14,12"
-                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-              <StackPanel>
-                <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock x:Name="txtInvModel" Text="—" FontFamily="Montserrat" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
-                <TextBlock x:Name="txtInvServiceTag" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
-              </StackPanel>
-            </Border>
-
-            <Border Grid.Column="1" Margin="6,0,6,0" CornerRadius="10" Padding="14,12"
-                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-              <StackPanel>
-                <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock x:Name="txtInvBatteryHealth" Text="—" FontFamily="Montserrat" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
-                <TextBlock x:Name="txtInvCharge" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
-              </StackPanel>
-            </Border>
-
-            <Border Grid.Column="2" Margin="6,0,0,0" CornerRadius="10" Padding="14,12"
-                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-              <StackPanel>
-                <TextBlock Text="SYSTEM" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock x:Name="txtInvDisk" Text="—" FontFamily="Montserrat" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
-                <TextBlock x:Name="txtInvUptime" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
-                <TextBlock x:Name="txtInvPending" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
-              </StackPanel>
-            </Border>
-          </Grid>
-
           <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
-          <Border Grid.Row="2" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
+          <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
                   Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <StackPanel>
               <TextBlock Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
@@ -329,7 +291,7 @@
           </Border>
 
           <!-- Live job log -->
-          <Border Grid.Row="3" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+          <Border Grid.Row="2" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

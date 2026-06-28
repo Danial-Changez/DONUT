@@ -117,6 +117,88 @@ class WizTreeCsv {
     }
 }
 
+# One node in the rendered folder tree: the original path + size, plus the
+# display label (segment relative to its shown parent) and indent depth.
+class FolderTreeNode {
+    [string] $Path = ''
+    [string] $Label = ''
+    [long]   $SizeBytes = 0
+    [int]    $Depth = 0
+}
+
+# Pure helper that arranges a flat, size-ranked folder list into a tree by path
+# containment: a folder nests under the deepest other listed folder that is a
+# prefix of it. Folders with no listed ancestor are roots. Within each level the
+# original (size-descending) order is preserved. Static, WPF-free, tested.
+class DiskUsageTree {
+    static [FolderTreeNode[]] Build([FolderUsage[]]$folders) {
+        $items = @($folders | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
+        if ($items.Count -eq 0) { return @() }
+
+        # parent[i] = index of the deepest other item whose path is a prefix of items[i].
+        $parent = @{}
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $best = -1; $bestLen = -1
+            for ($j = 0; $j -lt $items.Count; $j++) {
+                if ($i -eq $j) { continue }
+                $p = $items[$j].Path
+                if ($p.Length -lt $items[$i].Path.Length -and
+                    $items[$i].Path.StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase) -and
+                    $p.Length -gt $bestLen) {
+                    $best = $j; $bestLen = $p.Length
+                }
+            }
+            $parent[$i] = $best
+        }
+
+        # Precompute each item's depth (length of its ancestor chain) and display
+        # label (segment below its parent), so traversal only carries the index.
+        $depth = @{}; $label = @{}
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $d = 0; $cur = $parent[$i]
+            while ($cur -ge 0) { $d++; $cur = $parent[$cur] }
+            $depth[$i] = $d
+            $pIdx = $parent[$i]
+            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) } else { $items[$i].Path }
+            if ([string]::IsNullOrEmpty($lbl)) { $lbl = $items[$i].Path }
+            $label[$i] = $lbl
+        }
+
+        # children[parentIndex] = ordered child indices (-1 key holds the roots).
+        $children = @{}
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $k = $parent[$i]
+            if (-not $children.ContainsKey($k)) { $children[$k] = [System.Collections.Generic.List[int]]::new() }
+            $children[$k].Add($i)
+        }
+
+        # DFS from the roots, preserving input (size-ranked) order.
+        $out = [System.Collections.Generic.List[FolderTreeNode]]::new()
+        $stack = [System.Collections.Generic.Stack[int]]::new()
+        $roots = if ($children.ContainsKey(-1)) { $children[-1] } else { [System.Collections.Generic.List[int]]::new() }
+        for ($r = $roots.Count - 1; $r -ge 0; $r--) { $stack.Push($roots[$r]) }
+
+        while ($stack.Count -gt 0) {
+            $idx = $stack.Pop()
+            $item = $items[$idx]
+
+            $node = [FolderTreeNode]::new()
+            $node.Path = $item.Path
+            $node.SizeBytes = $item.SizeBytes
+            $node.Depth = $depth[$idx]
+            $node.Label = $label[$idx]
+            $out.Add($node)
+
+            if ($children.ContainsKey($idx)) {
+                $kids = $children[$idx]
+                for ($c = $kids.Count - 1; $c -ge 0; $c--) { $stack.Push($kids[$c]) }
+            }
+        }
+
+        return $out.ToArray()
+    }
+}
+
 # Pure formatting for the big-folders list rows. Static, WPF-free, tested.
 class DiskUsageFormat {
     # Human-readable size: GB at >= 1 GB, otherwise MB (1 decimal, InvariantCulture).

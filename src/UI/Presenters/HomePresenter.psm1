@@ -61,13 +61,6 @@ class HomePresenter : AsyncJobPresenter {
     [TextBlock] $DetailProbed
     [Button] $DetailRefreshButton
     [Button] $DetailRunButton
-    [TextBlock] $InvModel
-    [TextBlock] $InvServiceTag
-    [TextBlock] $InvBatteryHealth
-    [TextBlock] $InvCharge
-    [TextBlock] $InvDisk
-    [TextBlock] $InvUptime
-    [TextBlock] $InvPending
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
@@ -95,6 +88,7 @@ class HomePresenter : AsyncJobPresenter {
     [bool]            $SuppressSearch = $false
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
+    [System.Windows.Window] $HostWindow    # parent window; hooked so the popup tracks moves/resizes
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
@@ -181,13 +175,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.DetailProbed = $this.ViewContent.FindName('txtDetailProbed')
         $this.DetailRefreshButton = $this.ViewContent.FindName('btnDetailRefresh')
         $this.DetailRunButton = $this.ViewContent.FindName('btnDetailRun')
-        $this.InvModel = $this.ViewContent.FindName('txtInvModel')
-        $this.InvServiceTag = $this.ViewContent.FindName('txtInvServiceTag')
-        $this.InvBatteryHealth = $this.ViewContent.FindName('txtInvBatteryHealth')
-        $this.InvCharge = $this.ViewContent.FindName('txtInvCharge')
-        $this.InvDisk = $this.ViewContent.FindName('txtInvDisk')
-        $this.InvUptime = $this.ViewContent.FindName('txtInvUptime')
-        $this.InvPending = $this.ViewContent.FindName('txtInvPending')
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
         $this.FindFoldersButton = $this.ViewContent.FindName('btnFindFolders')
@@ -206,6 +193,11 @@ class HomePresenter : AsyncJobPresenter {
             $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
             $this.SearchBar.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() } }.GetNewClosure())
         }
+
+        # A WPF Popup is a separate top-level window that does NOT follow the parent
+        # when it moves/resizes. Hook the host window (once it's in the visual tree)
+        # so the search dropdown stays glued under the search box.
+        $this.ViewContent.Add_Loaded({ $presenter.HookHostWindow() }.GetNewClosure())
 
         # Seed recents from WSID.txt the first time, then build a row per recent.
         if ($this.Store.Count() -eq 0) {
@@ -500,6 +492,28 @@ class HomePresenter : AsyncJobPresenter {
 
     [void] CloseSearchPopup() {
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $false }
+    }
+
+    # Subscribes (once) to the parent window's move/resize so an open search popup
+    # is repositioned to stay under the search box. Fires from ViewContent.Loaded,
+    # when the view is finally attached to a window.
+    [void] HookHostWindow() {
+        if ($null -ne $this.HostWindow) { return }
+        $w = [System.Windows.Window]::GetWindow($this.ViewContent)
+        if ($null -eq $w) { return }
+        $this.HostWindow = $w
+        $presenter = $this
+        $w.Add_LocationChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
+        $w.Add_SizeChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
+    }
+
+    # Nudges the open popup's offset to force WPF to recompute its placement
+    # relative to the (now-moved) search box. No-op when the popup is closed.
+    [void] RepositionSearchPopup() {
+        if ($null -eq $this.SearchPopup -or -not $this.SearchPopup.IsOpen) { return }
+        $cur = $this.SearchPopup.HorizontalOffset
+        $this.SearchPopup.HorizontalOffset = $cur + 1
+        $this.SearchPopup.HorizontalOffset = $cur
     }
 
     # Runs a single host from a row click; confirms first when destructive.
@@ -969,13 +983,15 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Collapsed }
-        foreach ($f in $report.Folders) {
-            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderRow($f))
+        foreach ($node in [DiskUsageTree]::Build($report.Folders)) {
+            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderRow($node))
         }
     }
 
-    # Builds one folder row (imperative, like BuildSearchRow): path left, size right.
-    hidden [object] BuildFolderRow([FolderUsage]$f) {
+    # Builds one folder row (imperative, like BuildSearchRow): indented label on the
+    # left (nested under its parent folder), size on the right. Deeper nodes are
+    # dimmed slightly so the hierarchy reads at a glance.
+    hidden [object] BuildFolderRow([FolderTreeNode]$node) {
         $grid = [Grid]::new()
         $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 3)
         $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
@@ -983,18 +999,20 @@ class HomePresenter : AsyncJobPresenter {
         $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
 
         $path = [TextBlock]::new()
-        $path.Text = $f.Path
+        $path.Text = $node.Label
         $path.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
         $path.FontSize = 12
-        $path.Foreground = $this.ResBrush('TitleTextPrimary')
+        $path.Foreground = if ($node.Depth -eq 0) { $this.ResBrush('TitleTextPrimary') } else { $this.ResBrush('BodyTextSecondary') }
         $path.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
         $path.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $path.ToolTip = $f.Path
+        $path.ToolTip = $node.Path
+        # 14px of indent per tree level (children sit under their parent folder).
+        $path.Margin = [System.Windows.Thickness]::new(($node.Depth * 14), 0, 0, 0)
         [Grid]::SetColumn($path, 0)
         [void]$grid.Children.Add($path)
 
         $size = [TextBlock]::new()
-        $size.Text = [DiskUsageFormat]::SizeLabel($f.SizeBytes)
+        $size.Text = [DiskUsageFormat]::SizeLabel($node.SizeBytes)
         $size.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
         $size.FontSize = 12
         $size.FontWeight = [System.Windows.FontWeights]::SemiBold
@@ -1007,40 +1025,10 @@ class HomePresenter : AsyncJobPresenter {
         return $grid
     }
 
-    # Fills the detail cards from a MachineInventory (may be $null = no data yet)
-    # and the RecentConnection (pending-update count + last-probed time).
+    # Updates the detail header's "probed ..." stamp and refreshes the top overview
+    # strip (which mirrors the selected machine). The per-machine model/battery/disk
+    # facts live in that top strip; the detail pane shows host + folders + log.
     [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
-        $dash = '—'
-        if ($null -eq $inv) {
-            if ($this.InvModel) { $this.InvModel.Text = $dash }
-            if ($this.InvServiceTag) { $this.InvServiceTag.Text = 'gathering…' }
-            if ($this.InvBatteryHealth) { $this.InvBatteryHealth.Text = $dash }
-            if ($this.InvCharge) { $this.InvCharge.Text = '' }
-            if ($this.InvDisk) { $this.InvDisk.Text = $dash }
-            if ($this.InvUptime) { $this.InvUptime.Text = '' }
-        }
-        else {
-            if ($this.InvModel) { $this.InvModel.Text = if ($inv.Model) { $inv.Model } else { $dash } }
-            if ($this.InvServiceTag) { $this.InvServiceTag.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { '' } }
-
-            $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
-            if ($this.InvBatteryHealth) {
-                $this.InvBatteryHealth.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health, $inv.CycleCount)
-            }
-            if ($this.InvCharge) {
-                $this.InvCharge.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
-                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
-                    "$($inv.ChargePercent)% - $state"
-                } else { '' }
-            }
-
-            if ($this.InvDisk) { $this.InvDisk.Text = [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes) }
-            if ($this.InvUptime) { $this.InvUptime.Text = [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)) }
-        }
-
-        $pending = if ($null -ne $rc) { $rc.UpdateCount } else { 0 }
-        if ($this.InvPending) { $this.InvPending.Text = "$pending pending update(s)" }
-
         if ($this.DetailProbed) {
             $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
                          elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
