@@ -159,6 +159,40 @@ Describe "RemoteServices" {
         }
     }
 
+    Context "CountUpdates" {
+        It "Returns 0 for a null report" {
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+
+            $service.CountUpdates($null) | Should -Be 0
+        }
+
+        It "Counts //update nodes in a report" {
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+
+            [xml]$report = @"
+<updates>
+    <update name="BIOS" version="1.0"/>
+    <update name="Audio" version="2.0"/>
+    <update name="Video" version="3.0"/>
+</updates>
+"@
+            $service.CountUpdates($report) | Should -Be 3
+        }
+
+        It "Returns 0 when there are no update nodes" {
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+
+            [xml]$report = "<updates></updates>"
+            $service.CountUpdates($report) | Should -Be 0
+        }
+    }
+
     Context "ValidateHostConnectivity" {
         It "Should throw when host cannot be resolved" {
             $probe = [MockNetworkProbe]::new()

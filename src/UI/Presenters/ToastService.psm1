@@ -46,8 +46,8 @@ class ToastService {
 
         $accent = $this.ResolveBrush($colorKey, [Colors]::White)
 
-        # Card background: translucent deep-indigo for a subtle acrylic feel.
-        $bg = [SolidColorBrush]::new([Color]::FromArgb(235, 28, 14, 73))
+        # Card background: translucent zinc-900 for a subtle acrylic feel.
+        $bg = [SolidColorBrush]::new([Color]::FromArgb(235, 0x18, 0x18, 0x1B))
 
         $card = [Border]::new()
         $card.Background = $bg
