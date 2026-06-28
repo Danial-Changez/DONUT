@@ -21,6 +21,10 @@ Screenshots/*
 testResults.xml
 CoverageReport/
 
+# Vendored coverage tool (local-only; not committed. Fetch separately to
+# regenerate the JaCoCo HTML report via tests/Generate-CoverageReport.ps1)
+tools/JaCoCoToHtml/
+
 # Claude Code (personal, machine-specific)
 .claude/settings.local.json
 
