@@ -48,8 +48,9 @@ class ConnectionRow {
         $this.Root.Margin = [Thickness]::new(0, 0, 0, 8)
         $this.Root.CornerRadius = [CornerRadius]::new(10)
         $this.Root.BorderThickness = [Thickness]::new(1)
-        $this.Root.Background = [SolidColorBrush]::new([Color]::FromArgb(220, 0x18, 0x18, 0x1B))
-        $this.Root.BorderBrush = $this.Brush('PanelBorder', [Color]::FromArgb(255, 0x27, 0x27, 0x2A))
+        # subtly elevated above the #171717 card; neutral (Arcane) not zinc
+        $this.Root.Background = [SolidColorBrush]::new([Color]::FromRgb(0x1F, 0x1F, 0x1F))
+        $this.Root.BorderBrush = $this.Brush('PanelBorder', [Color]::FromArgb(0x1A, 0xFF, 0xFF, 0xFF))
         $this.Root.HorizontalAlignment = [HorizontalAlignment]::Stretch
 
         # ---- Header (clickable body: selects the host) ----
@@ -137,10 +138,11 @@ class ConnectionRow {
         $this.RunButton = [Button]::new()
         $this.RunButton.Content = 'Run'
         $this.RunButton.FontFamily = [FontFamily]::new('Montserrat')
-        $this.RunButton.FontWeight = [FontWeights]::SemiBold
+        $this.RunButton.FontWeight = [FontWeights]::Medium
         $this.RunButton.FontSize = 11.5
-        $this.RunButton.Foreground = [Brushes]::White
-        $this.RunButton.Background = $this.Brush('AccentPurple', [Color]::FromRgb(0x8B, 0x5C, 0xF6))
+        $this.RunButton.Foreground = $this.Brush('PrimaryForeground', [Color]::FromRgb(0xF5, 0xF3, 0xFF))
+        # Arcane "default" (primary) = violet-600, matching ButtonPrimary in ButtonStyles.xaml
+        $this.RunButton.Background = $this.Brush('Primary', [Color]::FromRgb(0x7C, 0x3A, 0xED))
         $this.RunButton.Padding = [Thickness]::new(14, 4, 14, 4)
         $this.RunButton.Height = 28
         $this.RunButton.VerticalAlignment = [VerticalAlignment]::Center
@@ -168,7 +170,8 @@ class ConnectionRow {
         }.GetNewClosure())
 
         # Hover highlight on the row (background only; selection uses the border).
-        $hoverBrush = $this.Brush('PanelBackgroundHover', [Color]::FromRgb(0x23, 0x23, 0x27))
+        # One step above the #1F1F1F base so the lift is visible.
+        $hoverBrush = $this.Brush('PanelBackgroundActive', [Color]::FromRgb(0x27, 0x27, 0x2A))
         $baseBrush = $this.Root.Background
         $header.Add_MouseEnter({ $row.Root.Background = $hoverBrush }.GetNewClosure())
         $header.Add_MouseLeave({ $row.Root.Background = $baseBrush }.GetNewClosure())
@@ -303,11 +306,18 @@ class ConnectionRow {
 
     # Flat, borderless template (rounded, background-bound) for the row buttons.
     hidden [System.Windows.Controls.ControlTemplate] MakeFlatButtonTemplate() {
+        # hover = primary/90 (violet-700 #6D28D9), hardcoded since a parsed
+        # template has no merged-dictionary context for DynamicResource.
         $xaml = @'
 <ControlTemplate TargetType="Button" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-    <Border Background="{TemplateBinding Background}" CornerRadius="6">
+    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
     </Border>
+    <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="bd" Property="Background" Value="#6D28D9" />
+        </Trigger>
+    </ControlTemplate.Triggers>
 </ControlTemplate>
 '@
         return [System.Windows.Markup.XamlReader]::Parse($xaml)

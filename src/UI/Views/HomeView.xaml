@@ -61,36 +61,13 @@
           x:Name="btnSearch"
           Grid.Column="2"
           Content="Scan"
-          FontSize="12"
-          FontFamily="Montserrat"
-          Cursor="Hand"
-          BorderThickness="0"
-          Foreground="White"
+          Style="{DynamicResource ButtonPrimary}"
+          FontSize="12.5"
           Height="32"
           MinWidth="120"
           Margin="6,0,0,0"
           VerticalAlignment="Center"
-        >
-          <Button.Style>
-            <Style TargetType="Button">
-              <Setter Property="Background" Value="{DynamicResource AccentPurple}" />
-              <Setter Property="Template">
-                <Setter.Value>
-                  <ControlTemplate TargetType="Button">
-                    <Border Height="32" CornerRadius="8" Background="{TemplateBinding Background}">
-                      <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
-                    </Border>
-                  </ControlTemplate>
-                </Setter.Value>
-              </Setter>
-              <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                  <Setter Property="Background" Value="{DynamicResource AccentPurpleHover}" />
-                </Trigger>
-              </Style.Triggers>
-            </Style>
-          </Button.Style>
-        </Button>
+        />
       </Grid>
     </Border>
 
@@ -111,19 +88,19 @@
       </StackPanel>
     </Button>
 
-    <!-- Refresh -->
+    <!-- Refresh (neutral secondary, like Arcane's dashboard Refresh) -->
     <Button
       x:Name="btnRefresh"
       Grid.Column="2"
       Content="Refresh"
-      Style="{DynamicResource ModernButton}"
+      Style="{DynamicResource ButtonOutline}"
       Width="100"
-      Height="40"
+      Height="36"
       Margin="12,0,0,0"
     />
   </Grid>
 
-  <!-- ============================ Overview strip ============================ -->
+  <!-- ============= Overview strip: mirrors the SELECTED remote machine ============= -->
   <Grid Grid.Row="1" Margin="0,0,0,18">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="*" />
@@ -132,58 +109,54 @@
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
 
-    <!-- Controller -->
+    <!-- Machine (model + service tag) -->
     <Border Grid.Column="0" Margin="0,0,6,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="CONTROLLER" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+        <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtCtrlHost" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+        <TextBlock x:Name="txtOvModel" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtCtrlIp" Text="" FontFamily="Montserrat" FontSize="11.5"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+        <TextBlock x:Name="txtOvModelSub" Text="no machine selected" FontFamily="Montserrat" FontSize="11.5"
+                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
       </StackPanel>
     </Border>
 
-    <!-- Domain / DC -->
+    <!-- Battery health -->
     <Border Grid.Column="1" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="DOMAIN / DC" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+        <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtDc" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+        <TextBlock x:Name="txtOvBattery" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-          <Ellipse x:Name="dotDc" Width="8" Height="8" VerticalAlignment="Center"
-                   Fill="{DynamicResource BodyTextTertiary}" Margin="0,0,6,0" />
-          <TextBlock x:Name="txtDcSub" Text="" FontFamily="Montserrat" FontSize="11.5"
-                     Foreground="{DynamicResource BodyTextTertiary}" />
-        </StackPanel>
-      </StackPanel>
-    </Border>
-
-    <!-- Battery -->
-    <Border Grid.Column="2" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
-            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-      <StackPanel>
-        <TextBlock Text="BATTERY" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtBattery" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBlock Text="this machine" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvBatterySub" Text="" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
 
-    <!-- Fleet -->
+    <!-- Disk free -->
+    <Border Grid.Column="2" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
+            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+      <StackPanel>
+        <TextBlock Text="DISK" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+                   Foreground="{DynamicResource BodyTextTertiary}" />
+        <TextBlock x:Name="txtOvDisk" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="txtOvDiskSub" Text="" FontFamily="Montserrat" FontSize="11.5"
+                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+      </StackPanel>
+    </Border>
+
+    <!-- Updates pending -->
     <Border Grid.Column="3" Margin="6,0,0,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="FLEET" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+        <TextBlock Text="UPDATES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtFleet" Text="0" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+        <TextBlock x:Name="txtOvUpdates" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBlock x:Name="txtFleetSub" Text="0 active" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvUpdatesSub" Text="" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -210,8 +183,8 @@
       <Grid Grid.Row="0" Margin="14,12,14,8">
         <TextBlock Text="MACHINES" FontFamily="Montserrat" FontSize="11" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" />
-        <Button x:Name="btnClearTabs" Content="Clear completed" Style="{DynamicResource ModernButton}"
-                Width="150" Height="32" HorizontalAlignment="Right" />
+        <Button x:Name="btnClearTabs" Content="Clear completed" Style="{DynamicResource ButtonGhost}"
+                FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
       </Grid>
 
       <!-- Rows -->
@@ -270,9 +243,9 @@
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnDetailRefresh" Grid.Column="1" Content="Refresh"
-                    Style="{DynamicResource ModernButton}" Width="90" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
             <Button x:Name="btnDetailRun" Grid.Column="2" Content="Run"
-                    Style="{DynamicResource ModernButton}" Width="90" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonPrimary}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
           </Grid>
 
           <!-- Inventory cards -->

@@ -427,46 +427,56 @@
         <Setter Property="Margin"
                 Value="0,12,0,4" />
     </Style>
-    <!-- Modern Button Style (like searchBtn) -->
+    <!-- Modern Button = Arcane "default" (primary) button: violet-600 fill,
+         rounded-lg (9.6), font-medium, h-36, hover = primary/90. Was a bold
+         fully-rounded violet pill; now matches shadcn's default variant so
+         primary CTAs across every view read like Arcane. -->
     <Style x:Key="ModernButton"
            TargetType="Button">
         <Setter Property="Background"
-                Value="{DynamicResource AccentPurple}" />
+                Value="{DynamicResource Primary}" />
         <Setter Property="Foreground"
-                Value="White" />
+                Value="{DynamicResource PrimaryForeground}" />
         <Setter Property="FontFamily"
                 Value="Montserrat" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="FontWeight"
-                Value="Bold" />
+                Value="Medium" />
         <Setter Property="BorderThickness"
                 Value="0" />
         <Setter Property="Cursor"
                 Value="Hand" />
         <Setter Property="Height"
-                Value="38" />
+                Value="36" />
         <Setter Property="Width"
                 Value="180" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Height="38"
-                            CornerRadius="19"
+                    <Border x:Name="bd"
+                            CornerRadius="9.6"
                             Background="{TemplateBinding Background}">
                         <ContentPresenter VerticalAlignment="Center"
                                           HorizontalAlignment="Center" />
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter TargetName="bd"
+                                    Property="Background"
+                                    Value="{DynamicResource PrimaryHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled"
+                                 Value="False">
+                            <Setter TargetName="bd"
+                                    Property="Opacity"
+                                    Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver"
-                     Value="True">
-                <Setter Property="Background"
-                        Value="{DynamicResource AccentPurpleHover}" />
-            </Trigger>
-        </Style.Triggers>
     </Style>
     <!-- Scrollbar Styles moved from ButtonStyles.xaml -->
     <Style x:Key="ScrollBarTrackThumb"

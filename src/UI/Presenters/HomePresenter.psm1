@@ -42,7 +42,6 @@ class HomePresenter : AsyncJobPresenter {
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [DriverMatchingService] $DriverMatcher
-    [SystemInfoService] $SysInfo
     [RecentConnectionsStore] $Store
     [HostListSource] $HostListSource
     [InventoryService] $InventoryService
@@ -66,15 +65,15 @@ class HomePresenter : AsyncJobPresenter {
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
 
-    # Overview tile controls
-    [TextBlock] $TileCtrlHost
-    [TextBlock] $TileCtrlIp
-    [TextBlock] $TileDc
-    [TextBlock] $TileDcSub
-    [Ellipse]   $TileDcDot
-    [TextBlock] $TileBattery
-    [TextBlock] $TileFleet
-    [TextBlock] $TileFleetSub
+    # Overview tile controls (mirror the selected remote machine)
+    [TextBlock] $OvModel
+    [TextBlock] $OvModelSub
+    [TextBlock] $OvBattery
+    [TextBlock] $OvBatterySub
+    [TextBlock] $OvDisk
+    [TextBlock] $OvDiskSub
+    [TextBlock] $OvUpdates
+    [TextBlock] $OvUpdatesSub
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
@@ -98,7 +97,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.DriverMatcher = [DriverMatchingService]::new($this.Logger)
         $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
-        $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $this.Logger)
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
@@ -128,14 +126,14 @@ class HomePresenter : AsyncJobPresenter {
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
 
-        $this.TileCtrlHost = $this.ViewContent.FindName('txtCtrlHost')
-        $this.TileCtrlIp = $this.ViewContent.FindName('txtCtrlIp')
-        $this.TileDc = $this.ViewContent.FindName('txtDc')
-        $this.TileDcSub = $this.ViewContent.FindName('txtDcSub')
-        $this.TileDcDot = $this.ViewContent.FindName('dotDc')
-        $this.TileBattery = $this.ViewContent.FindName('txtBattery')
-        $this.TileFleet = $this.ViewContent.FindName('txtFleet')
-        $this.TileFleetSub = $this.ViewContent.FindName('txtFleetSub')
+        $this.OvModel = $this.ViewContent.FindName('txtOvModel')
+        $this.OvModelSub = $this.ViewContent.FindName('txtOvModelSub')
+        $this.OvBattery = $this.ViewContent.FindName('txtOvBattery')
+        $this.OvBatterySub = $this.ViewContent.FindName('txtOvBatterySub')
+        $this.OvDisk = $this.ViewContent.FindName('txtOvDisk')
+        $this.OvDiskSub = $this.ViewContent.FindName('txtOvDiskSub')
+        $this.OvUpdates = $this.ViewContent.FindName('txtOvUpdates')
+        $this.OvUpdatesSub = $this.ViewContent.FindName('txtOvUpdatesSub')
 
         # Detail panel
         $this.DetailEmptyHint = $this.ViewContent.FindName('DetailEmptyHint')
@@ -562,6 +560,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.SelectedHost = $null
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Visible }
+        $this.UpdateOverviewTiles()
     }
 
     # Queues a background inventory probe for the host (no-op if one is in flight).
@@ -665,6 +664,9 @@ class HomePresenter : AsyncJobPresenter {
                 "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
             }
         }
+
+        # The top overview strip mirrors the selected machine.
+        $this.UpdateOverviewTiles()
     }
 
     # Removes idle (not currently running) machines from the list and recents.
@@ -692,10 +694,11 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Refreshes overview tiles (system info) and the fleet counts.
+    # Re-renders the overview strip + idle row timestamps; re-probes the selected
+    # machine if one is open (this is what the top Refresh button now does).
     [void] RefreshAll() {
-        $this.GatherSystemInfo()
-        $this.RefreshOverview()
+        if ($this.SelectedHost) { $this.RefreshInventory($this.SelectedHost) }
+        $this.UpdateOverviewTiles()
         # Re-render idle rows so their relative times stay current.
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {
@@ -705,38 +708,59 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    [void] GatherSystemInfo() {
-        $info = $this.SysInfo.Gather()
-
-        if ($this.TileCtrlHost) { $this.TileCtrlHost.Text = if ($info.Hostname) { $info.Hostname } else { '—' } }
-        if ($this.TileCtrlIp) { $this.TileCtrlIp.Text = $info.IPv4 }
-
-        if ($this.TileDc) {
-            $this.TileDc.Text = if ($info.DomainController) { $info.DomainController } elseif ($info.Domain) { $info.Domain } else { '—' }
-        }
-        if ($this.TileDcSub) {
-            $this.TileDcSub.Text = if ($info.DcReachable) { 'reachable' } elseif ($info.DomainJoined) { 'DC unreachable' } else { 'not domain-joined' }
-        }
-        if ($this.TileDcDot) {
-            $key = if ($info.DcReachable) { 'AccentGreen' } elseif ($info.DomainJoined) { 'AccentRed' } else { 'BodyTextTertiary' }
-            $this.TileDcDot.Fill = $this.ResBrush($key)
-        }
-        if ($this.TileBattery) {
-            $this.TileBattery.Text = [SystemInfoService]::BatteryLabel($info.HasBattery, $info.BatteryPercent, $info.Charging)
-        }
+    # Re-render the overview strip (e.g. after a job changes pending-update counts).
+    [void] RefreshOverview() {
+        $this.UpdateOverviewTiles()
     }
 
-    [void] RefreshOverview() {
-        $recents = @($this.Store.GetAll())
-        $active = @($this.ActiveJobs | ForEach-Object { $_.HostName } | Select-Object -Unique)
-        $attention = @($recents | Where-Object { $_.LastStatus -eq 'Failed' -or $_.LastStatus -eq 'RebootRequired' })
-
-        if ($this.TileFleet) { $this.TileFleet.Text = "$($recents.Count)" }
-        if ($this.TileFleetSub) {
-            $sub = "$($active.Count) active"
-            if ($attention.Count -gt 0) { $sub += " · $($attention.Count) need attention" }
-            $this.TileFleetSub.Text = $sub
+    # Populates the 4 overview tiles from the SELECTED machine's cached inventory
+    # (mirrors the detail cards); shows placeholders when nothing is selected.
+    [void] UpdateOverviewTiles() {
+        $dash = '—'
+        $hostName = $this.SelectedHost
+        if ([string]::IsNullOrWhiteSpace($hostName)) {
+            if ($this.OvModel) { $this.OvModel.Text = $dash }
+            if ($this.OvModelSub) { $this.OvModelSub.Text = 'no machine selected' }
+            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
+            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
+            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
+            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
+            if ($this.OvUpdates) { $this.OvUpdates.Text = $dash }
+            if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = '' }
+            return
         }
+
+        $rc = $this.GetRecord($hostName)
+        $inv = if ($null -ne $rc) { $rc.Inventory } else { $null }
+
+        if ($null -eq $inv) {
+            if ($this.OvModel) { $this.OvModel.Text = $dash }
+            if ($this.OvModelSub) { $this.OvModelSub.Text = 'gathering…' }
+            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
+            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
+            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
+            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
+        }
+        else {
+            if ($this.OvModel) { $this.OvModel.Text = if ($inv.Model) { $inv.Model } else { $dash } }
+            if ($this.OvModelSub) { $this.OvModelSub.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $hostName } }
+
+            $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
+            if ($this.OvBattery) { $this.OvBattery.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health, $inv.CycleCount) }
+            if ($this.OvBatterySub) {
+                $this.OvBatterySub.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
+                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
+                    "$($inv.ChargePercent)% - $state"
+                } else { '' }
+            }
+
+            if ($this.OvDisk) { $this.OvDisk.Text = [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes) }
+            if ($this.OvDiskSub) { $this.OvDiskSub.Text = [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)) }
+        }
+
+        $pending = if ($null -ne $rc) { $rc.UpdateCount } else { 0 }
+        if ($this.OvUpdates) { $this.OvUpdates.Text = "$pending" }
+        if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = 'pending update(s)' }
     }
 
     [System.Windows.Media.Brush] ResBrush([string]$key) {
