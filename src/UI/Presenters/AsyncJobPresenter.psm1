@@ -1,5 +1,6 @@
 using namespace System.Collections.Generic
 using module "..\..\Core\AsyncJob.psm1"
+using module "..\..\Models\JobEnums.psm1"
 
 # AsyncJobPresenter
 #
@@ -44,7 +45,7 @@ class AsyncJobPresenter {
             $job.Poll()
             $this.OnJobPolled($job)
 
-            if ($job.Status -in @('Completed', 'Failed')) {
+            if ($job.Status -in @([JobStatus]::Completed, [JobStatus]::Failed)) {
                 $this.OnJobCompleted($job)
                 $job.Cleanup()
                 # Re-fetch the index: OnJobCompleted may append jobs (e.g. an

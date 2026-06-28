@@ -1,31 +1,32 @@
 using namespace System.Collections.Concurrent
 using module '.\RunspaceManager.psm1'
 using module '.\LogService.psm1'
+using module '..\Models\JobEnums.psm1'
 
 class AsyncJob {
     [System.Management.Automation.PowerShell] $PowerShell
     [string] $HostName
-    [string] $JobType      # 'Scan', 'UpdateScan', 'UpdateApply'
-    [string] $Status       # 'Created', 'Running', 'Completed', 'Failed'
+    [JobKind]   $JobType
+    [JobStatus] $Status
     [ConcurrentQueue[string]] $Logs
     [object] $Result
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
 
-    AsyncJob([string]$hostName, [string]$type) {
+    AsyncJob([string]$hostName, [JobKind]$type) {
         $this.Initialize($hostName, $type, $null)
     }
 
-    AsyncJob([string]$hostName, [string]$type, [LogService]$logger) {
+    AsyncJob([string]$hostName, [JobKind]$type, [LogService]$logger) {
         $this.Initialize($hostName, $type, $logger)
     }
 
-    hidden [void] Initialize([string]$hostName, [string]$type, [LogService]$logger) {
+    hidden [void] Initialize([string]$hostName, [JobKind]$type, [LogService]$logger) {
         $this.Logger = [LogService]::Coalesce($logger)
         $this.HostName = $hostName
         $this.JobType = $type
-        $this.Status = 'Created'
+        $this.Status = [JobStatus]::Created
         $this.Logs = [ConcurrentQueue[string]]::new()
     }
 
@@ -42,24 +43,24 @@ class AsyncJob {
                 $this.PowerShell.AddParameter($key, $arguments[$key]) | Out-Null
             }
 
-            $this.Status = 'Running'
+            $this.Status = [JobStatus]::Running
             $this.AsyncResult = $this.PowerShell.BeginInvoke()
             $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job.")
         }
         catch {
-            $this.Status = 'Failed'
+            $this.Status = [JobStatus]::Failed
             $this.Logger.LogException("[$($this.HostName)] Failed to start $($this.JobType) job", $_)
             $this.Logs.Enqueue("Exception: $_")
         }
     }
 
     [void] Poll() {
-        if ($this.Status -ne 'Running') { return }
+        if ($this.Status -ne [JobStatus]::Running) { return }
 
         if ($this.AsyncResult.IsCompleted) {
             try {
                 $this.Result = $this.PowerShell.EndInvoke($this.AsyncResult)
-                $this.Status = if ($this.PowerShell.HadErrors) { 'Failed' } else { 'Completed' }
+                $this.Status = if ($this.PowerShell.HadErrors) { [JobStatus]::Failed } else { [JobStatus]::Completed }
 
                 if ($this.PowerShell.HadErrors) {
                     foreach ($err in $this.PowerShell.Streams.Error) {
@@ -72,7 +73,7 @@ class AsyncJob {
                 }
             }
             catch {
-                $this.Status = 'Failed'
+                $this.Status = [JobStatus]::Failed
                 $this.Logs.Enqueue("Exception: $_")
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
