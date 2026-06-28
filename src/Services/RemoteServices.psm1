@@ -125,4 +125,13 @@ class RemoteUpdateService : RemoteJobService {
     [hashtable] PrepareApplyUpdates([string]$hostName, [hashtable]$selectedUpdates) {
         return $this.BuildWorkerArgs($hostName, "Apply", $selectedUpdates)
     }
+
+    # Counts the available updates in a parsed report (0 when null/empty).
+    # Used to record how many updates a scan found on a host.
+    [int] CountUpdates([xml]$report) {
+        if ($null -eq $report) { return 0 }
+        $nodes = $report.SelectNodes("//update")
+        if ($null -eq $nodes) { return 0 }
+        return $nodes.Count
+    }
 }

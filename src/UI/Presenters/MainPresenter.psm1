@@ -117,7 +117,7 @@ class MainPresenter {
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
-            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService)
+            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
         }
         
         # Config View & Presenter

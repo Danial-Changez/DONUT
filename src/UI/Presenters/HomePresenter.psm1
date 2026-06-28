@@ -1,64 +1,82 @@
 using namespace System.Windows.Controls
+using namespace System.Windows.Shapes
 using namespace System.Windows.Threading
 using namespace System.Collections.Generic
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
+using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
+using module "..\..\Services\SystemInfoService.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
-using module ".\FleetCard.psm1"
+using module ".\ConnectionRow.psm1"
 using module "..\..\Services\ResourceService.psm1"
 
 class HomePresenter {
     [AppConfig] $Config
+    [object] $ConfigManager           # duck-typed; used to persist recents
     [System.Windows.FrameworkElement] $ViewContent
     [TextBox] $SearchBar
     [Button] $SearchButton
-    [ItemsControl] $FleetCards
-    [System.Windows.UIElement] $FleetEmptyHint
     [Button] $ClearButton
+    [Button] $RefreshButton
+    [ItemsControl] $MachineList
+    [System.Windows.UIElement] $EmptyHint
+    [TextBlock] $ModePill
     [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
     [ToastService] $Toasts
     [NetworkProbe] $NetworkProbe
     [DriverMatchingService] $DriverMatcher
+    [SystemInfoService] $SysInfo
+    [RecentConnectionsStore] $Store
 
-    # Async State
+    # Overview tile controls
+    [TextBlock] $TileCtrlHost
+    [TextBlock] $TileCtrlIp
+    [TextBlock] $TileDc
+    [TextBlock] $TileDcSub
+    [Ellipse]   $TileDcDot
+    [TextBlock] $TileBattery
+    [TextBlock] $TileFleet
+    [TextBlock] $TileFleetSub
+
+    # Async state
     [System.Collections.Generic.List[AsyncJob]] $ActiveJobs
     [DispatcherTimer] $Timer
 
-    # Host name -> FleetCard
-    [hashtable] $Cards
+    # Host name -> ConnectionRow
+    [hashtable] $Rows
 
-    # Manual Reboot Queue - hosts that require manual reboot after update
+    # Manual reboot queue - hosts that require manual reboot after update
     [System.Collections.Generic.List[string]] $ManualRebootQueue
     [int] $TotalJobsInBatch
 
-    HomePresenter([AppConfig] $config, [System.Windows.FrameworkElement] $view, [NetworkProbe] $networkProbe, [ResourceService] $resources, [ToastService] $toasts) {
+    HomePresenter([AppConfig] $config, [System.Windows.FrameworkElement] $view, [NetworkProbe] $networkProbe, [ResourceService] $resources, [ToastService] $toasts, [object] $configManager) {
         $this.Config = $config
+        $this.ConfigManager = $configManager
         $this.ViewContent = $view
         $this.Toasts = $toasts
 
         $this.NetworkProbe = $networkProbe
-        # Reuse the shared app logger that travels with the probe so scan/update
-        # services log into the same sink as the rest of the app.
         $logger = $this.NetworkProbe.Logger
         $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $logger)
         $this.DriverMatcher = [DriverMatchingService]::new($logger)
         $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
+        $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $logger)
+        $this.Store = [RecentConnectionsStore]::new($config, $configManager)
 
         $this.ActiveJobs = [List[AsyncJob]]::new()
-        $this.Cards = @{}
+        $this.Rows = @{}
         $this.ManualRebootQueue = [List[string]]::new()
         $this.TotalJobsInBatch = 0
 
-        # Initialize Timer
         $presenter = $this
         $this.Timer = [DispatcherTimer]::new()
         $this.Timer.Interval = [TimeSpan]::FromMilliseconds(200)
@@ -71,47 +89,70 @@ class HomePresenter {
     [void] Initialize() {
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
         $this.SearchButton = $this.ViewContent.FindName('btnSearch')
-        $this.FleetCards = $this.ViewContent.FindName('FleetCards')
-        $this.FleetEmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
         $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
+        $this.RefreshButton = $this.ViewContent.FindName('btnRefresh')
+        $this.MachineList = $this.ViewContent.FindName('MachineList')
+        $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
+        $this.ModePill = $this.ViewContent.FindName('txtMode')
+
+        $this.TileCtrlHost = $this.ViewContent.FindName('txtCtrlHost')
+        $this.TileCtrlIp = $this.ViewContent.FindName('txtCtrlIp')
+        $this.TileDc = $this.ViewContent.FindName('txtDc')
+        $this.TileDcSub = $this.ViewContent.FindName('txtDcSub')
+        $this.TileDcDot = $this.ViewContent.FindName('dotDc')
+        $this.TileBattery = $this.ViewContent.FindName('txtBattery')
+        $this.TileFleet = $this.ViewContent.FindName('txtFleet')
+        $this.TileFleetSub = $this.ViewContent.FindName('txtFleetSub')
 
         $presenter = $this
-        if ($this.SearchButton) {
-            $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure())
-        }
-        if ($this.ClearButton) {
-            $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure())
-        }
+        if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
+        if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
+        if ($this.RefreshButton) { $this.RefreshButton.Add_Click({ $presenter.RefreshAll() }.GetNewClosure()) }
 
-        $this.LoadHostList()
-        $this.UpdateSearchButtonLabel()
-        $this.UpdateEmptyHint()
+        # Seed recents from WSID.txt the first time, then build a row per recent.
+        if ($this.Store.Count() -eq 0) {
+            $this.Store.SeedFrom($this.ReadWsidHosts())
+        }
+        $this.BuildRows()
+
+        $this.UpdateModePill()
+        $this.RefreshAll()
     }
 
-    [void] UpdateSearchButtonLabel() {
-        if (-not $this.SearchButton) { return }
-
+    [void] UpdateModePill() {
         $command = $this.Config.GetActiveCommand()
-        $this.SearchButton.Content = if ($command -eq 'applyUpdates') { "Apply Updates" } else { "Scan" }
+        $label = if ($command -eq 'applyUpdates') { "Apply Updates" } else { "Scan" }
+        if ($this.SearchButton) { $this.SearchButton.Content = $label }
+        if ($this.ModePill) { $this.ModePill.Text = "Mode: $label" }
     }
 
-    [void] LoadHostList() {
-        if (-not $this.SearchBar) { return }
+    # Backwards-compatible name used by MainPresenter on navigation.
+    [void] UpdateSearchButtonLabel() {
+        $this.UpdateModePill()
+    }
 
+    [string[]] ReadWsidHosts() {
         $wsidPaths = @(
             (Join-Path $env:LOCALAPPDATA "DONUT\config\WSID.txt"),
             (Join-Path (Split-Path $this.Config.SourceRoot -Parent) "res\WSID.txt")
         )
-
         $path = $wsidPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $path) { return }
-
+        if (-not $path) { return @() }
         try {
-            $lines = Get-Content -Path $path | Where-Object { $_ }
-            if ($lines) { $this.SearchBar.Text = $lines -join "`r`n" }
+            return @(Get-Content -Path $path | Where-Object { $_ } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         } catch {
             Write-Warning "Failed to load WSID.txt: $_"
+            return @()
         }
+    }
+
+    # Builds an idle row for every persisted recent connection (newest first).
+    [void] BuildRows() {
+        foreach ($rc in $this.Store.GetAll()) {
+            $row = $this.EnsureRow($rc.Hostname)
+            $row.SetIdleFrom($rc)
+        }
+        $this.UpdateEmptyHint()
     }
 
     [void] OnSearch() {
@@ -124,7 +165,7 @@ class HomePresenter {
 
         if ($targetHosts.Count -eq 0) { return }
 
-        # Safety confirmation when applying updates to multiple hosts
+        # One confirmation for a destructive batch; single rows confirm in RunHost.
         $command = $this.Config.GetActiveCommand()
         if ($command -eq 'applyUpdates' -and $targetHosts.Count -gt 1) {
             $confirmed = $this.DialogPresenter.ShowConfirmation(
@@ -135,7 +176,6 @@ class HomePresenter {
             if (-not $confirmed) { return }
         }
 
-        # Reset batch tracking
         $this.ManualRebootQueue.Clear()
         $this.TotalJobsInBatch = $targetHosts.Count
 
@@ -146,11 +186,34 @@ class HomePresenter {
         $this.SearchBar.Text = ""
     }
 
+    # Runs a single host from a row click; confirms first when destructive.
+    [void] RunHost([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        if ($this.IsRunning($hostName)) { return }
+
+        if ($this.Config.GetActiveCommand() -eq 'applyUpdates') {
+            $confirmed = $this.DialogPresenter.ShowConfirmation(
+                "Confirm Apply Updates",
+                "Apply updates to $hostName now?",
+                @($hostName)
+            )
+            if (-not $confirmed) { return }
+        }
+        $this.StartProcess($hostName)
+    }
+
+    [bool] IsRunning([string]$hostName) {
+        foreach ($job in $this.ActiveJobs) {
+            if ($job -and $job.HostName -eq $hostName) { return $true }
+        }
+        return $false
+    }
+
     [void] StartProcess([string]$hostName) {
-        $card = $this.AddCard($hostName)
+        $row = $this.EnsureRow($hostName)
 
         $command = $this.Config.GetActiveCommand()
-        $card.AppendLog("Starting $command for $hostName...")
+        $row.AppendLog("Starting $command for $hostName...")
 
         try {
             $jobParams = switch ($command) {
@@ -158,11 +221,11 @@ class HomePresenter {
                     @{ Type = 'Scan'; Prep = $this.ScanService.PrepareScan($hostName) }
                 }
                 'applyUpdates' {
-                    $card.AppendLog("Phase 1: Scanning for updates...")
+                    $row.AppendLog("Phase 1: Scanning for updates...")
                     @{ Type = 'UpdateScan'; Prep = $this.UpdateService.PrepareScanForUpdates($hostName) }
                 }
                 default {
-                    $card.AppendLog("Command '$command' not implemented yet.")
+                    $row.AppendLog("Command '$command' not implemented yet.")
                     $null
                 }
             }
@@ -172,11 +235,12 @@ class HomePresenter {
                 $job.Start($jobParams.Prep.ScriptPath, $jobParams.Prep.Arguments, $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
                 $this.RefreshCardStatus($job)
+                $this.RefreshOverview()
             }
         }
         catch {
-            $card.AppendLog("Error starting process: $_")
-            $card.SetStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
+            $row.AppendLog("Error starting process: $_")
+            $row.SetStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
     }
@@ -185,41 +249,36 @@ class HomePresenter {
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
 
         try {
-            # Iterate backwards to safely remove completed jobs
             for ($i = $this.ActiveJobs.Count - 1; $i -ge 0; $i--) {
                 $job = $this.ActiveJobs[$i]
                 if (-not $job) { continue }
 
-                $card = $this.GetCard($job.HostName)
+                $row = $this.GetRow($job.HostName)
                 $job.Poll()
 
-                # Flush log queue to the card terminal, picking up the latest
-                # DCU download/install percentage as we go.
                 $logEntry = $null
                 $latestPct = -1
                 while ($job.Logs.TryDequeue([ref]$logEntry)) {
-                    if ($card) { $card.AppendLog($logEntry) }
+                    if ($row) { $row.AppendLog($logEntry) }
                     $pct = [DcuProgress]::ParsePercent($logEntry)
                     if ($pct -ge 0) { $latestPct = $pct }
                 }
-                if ($card -and $latestPct -ge 0) { $card.SetPercent($latestPct) }
+                if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
 
-                # Keep the chip in sync with the running job
                 $this.RefreshCardStatus($job)
 
-                # Handle job completion
                 if ($job.Status -in @('Completed', 'Failed')) {
-                    if ($card) {
-                        $card.AppendLog("Job $($job.JobType) finished: $($job.Status)")
-                        $this.AppendHostLogs($job.HostName, $card)
+                    if ($row) {
+                        $row.AppendLog("Job $($job.JobType) finished: $($job.Status)")
+                        $this.AppendHostLogs($job.HostName, $row)
                     }
 
-                    # Transition to apply phase after successful scan
+                    # Transition to apply phase after a successful update scan.
+                    $transitioned = $false
                     if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
-                        $this.HandleUpdateScanCompletion($job, $card)
+                        $transitioned = $this.HandleUpdateScanCompletion($job, $row)
                     }
 
-                    # Check if host needs manual reboot after UpdateApply
                     if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
                         $this.CheckForManualReboot($job)
                         if ($this.Toasts) {
@@ -232,17 +291,18 @@ class HomePresenter {
                     }
 
                     if ($job.Status -eq 'Failed' -and $this.Toasts) {
-                        $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Expand the card for details.")
+                        $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
                     }
 
-                    # Settle the card's final status before dropping the job
-                    $this.RefreshCardStatus($job)
+                    # Persist + settle the row unless we just kicked off an apply.
+                    if (-not $transitioned) {
+                        $this.SettleHost($job)
+                    }
 
-                    # Cleanup and Remove
                     $job.Cleanup()
                     $this.ActiveJobs.RemoveAt($i)
+                    $this.RefreshOverview()
 
-                    # Check if all jobs in batch are complete - notify reboot queue
                     if ($this.ActiveJobs.Count -eq 0 -and $this.ManualRebootQueue.Count -gt 0) {
                         $this.ShowManualRebootNotice()
                     }
@@ -254,31 +314,61 @@ class HomePresenter {
         }
     }
 
-    # Recomputes a host card's chip/progress from its job's current coordinates.
-    [void] RefreshCardStatus([AsyncJob]$job) {
-        $card = $this.GetCard($job.HostName)
-        if (-not $card) { return }
-        $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
-        $card.SetStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+    # Records the host's final state into the recent store and renders the row idle.
+    [void] SettleHost([AsyncJob]$job) {
+        $reboot = $this.ManualRebootQueue.Contains($job.HostName)
+        $status = if ($job.Status -eq 'Failed') {
+            'Failed'
+        } elseif ($reboot) {
+            'RebootRequired'
+        } else {
+            'Completed'
+        }
+
+        $report = $this.UpdateService.ParseUpdateReport($job.HostName)
+        $updateCount = $this.UpdateService.CountUpdates($report)
+
+        $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
+
+        $row = $this.GetRow($job.HostName)
+        if ($row) {
+            $rc = $this.GetRecord($job.HostName)
+            if ($rc) { $row.SetIdleFrom($rc) }
+        }
     }
 
-    [void] HandleUpdateScanCompletion([AsyncJob]$job, [FleetCard]$card) {
+    [RecentConnection] GetRecord([string]$hostName) {
+        foreach ($rc in $this.Store.GetAll()) {
+            if ($rc.Hostname -eq $hostName) { return $rc }
+        }
+        return $null
+    }
+
+    [void] RefreshCardStatus([AsyncJob]$job) {
+        $row = $this.GetRow($job.HostName)
+        if (-not $row) { return }
+        $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
+        $row.SetStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+    }
+
+    # Returns $true when an apply job was started (so the caller defers settling).
+    [bool] HandleUpdateScanCompletion([AsyncJob]$job, [ConnectionRow]$row) {
         $hostName = $job.HostName
         $report = $this.UpdateService.ParseUpdateReport($hostName)
 
         if (-not $report) {
-            $card.AppendLog("No report generated or scan failed.")
-            return
+            if ($row) { $row.AppendLog("No report generated or scan failed.") }
+            return $false
         }
 
         $updateNodes = $report.SelectNodes("//update")
         if ($updateNodes.Count -eq 0) {
-            $card.AppendLog("No updates found.")
+            if ($row) { $row.AppendLog("No updates found.") }
             if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "No updates found.") }
-            return
+            return $false
         }
 
-        $card.AppendLog("Found $($updateNodes.Count) updates. Analyzing driver matches...")
+        if ($row) { $row.AppendLog("Found $($updateNodes.Count) updates. Analyzing driver matches...") }
 
         $installedDrivers = $this.GetInstalledDriversFromReport($report)
         $displayList = @()
@@ -306,17 +396,17 @@ class HomePresenter {
             }
         }
 
-        $card.AppendLog("Driver analysis complete. Waiting for confirmation...")
+        if ($row) { $row.AppendLog("Driver analysis complete. Waiting for confirmation...") }
         $confirmed = $this.DialogPresenter.ShowConfirmation("Updates Available", "Updates found for $hostName", $displayList)
 
         if (-not $confirmed) {
-            $card.AppendLog("Cancelled by user.")
-            return
+            if ($row) { $row.AppendLog("Cancelled by user.") }
+            return $false
         }
 
-        $card.AppendLog("Confirmed. Phase 2: Applying updates...")
+        if ($row) { $row.AppendLog("Confirmed. Phase 2: Applying updates...") }
         $this.CopyUpdatesToClipboard($hostName, $clipboardList)
-        $card.AppendLog("Updates list copied to clipboard.")
+        if ($row) { $row.AppendLog("Updates list copied to clipboard.") }
 
         try {
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
@@ -324,68 +414,125 @@ class HomePresenter {
             $applyJob.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.ActiveJobs.Add($applyJob)
             $this.RefreshCardStatus($applyJob)
+            return $true
         }
         catch {
-            $card.AppendLog("Error starting apply phase: $_")
+            if ($row) { $row.AppendLog("Error starting apply phase: $_") }
+            return $false
         }
     }
 
-    # Returns the existing card for a host, or builds and inserts a new one.
-    [FleetCard] AddCard([string]$hostName) {
-        if ($this.Cards.ContainsKey($hostName)) {
-            return $this.Cards[$hostName]
+    # Returns the existing row for a host, or builds and inserts a new one.
+    [ConnectionRow] EnsureRow([string]$hostName) {
+        if ($this.Rows.ContainsKey($hostName)) {
+            return $this.Rows[$hostName]
         }
 
-        $card = [FleetCard]::new($hostName)
-        $this.Cards[$hostName] = $card
-        if ($this.FleetCards) {
-            $this.FleetCards.Items.Add($card.Root) | Out-Null
-            $card.AnimateIn()
+        $row = [ConnectionRow]::new($hostName)
+        $presenter = $this
+        $row.RunAction = { param($h) $presenter.RunHost($h) }.GetNewClosure()
+        $this.Rows[$hostName] = $row
+        if ($this.MachineList) {
+            $this.MachineList.Items.Add($row.Root) | Out-Null
+            $row.AnimateIn()
         }
         $this.UpdateEmptyHint()
-        return $card
+        return $row
     }
 
-    [FleetCard] GetCard([string]$hostName) {
-        if ($this.Cards.ContainsKey($hostName)) { return $this.Cards[$hostName] }
+    [ConnectionRow] GetRow([string]$hostName) {
+        if ($this.Rows.ContainsKey($hostName)) { return $this.Rows[$hostName] }
         return $null
     }
 
-    # Removes cards for hosts that are no longer running.
+    # Removes idle (not currently running) machines from the list and recents.
     [void] ClearCompleted() {
-        $activeHosts = $this.ActiveJobs | ForEach-Object { $_.HostName }
-        $toRemove = @($this.Cards.Keys | Where-Object { $_ -notin $activeHosts })
+        $toRemove = @($this.Rows.Keys | Where-Object { -not $this.IsRunning($_) })
 
         foreach ($hostName in $toRemove) {
-            $card = $this.Cards[$hostName]
-            if ($this.FleetCards -and $card) { $this.FleetCards.Items.Remove($card.Root) }
-            $this.Cards.Remove($hostName)
+            $row = $this.Rows[$hostName]
+            if ($this.MachineList -and $row) { $this.MachineList.Items.Remove($row.Root) }
+            $this.Rows.Remove($hostName)
+            $this.Store.Remove($hostName)
         }
         $this.UpdateEmptyHint()
+        $this.RefreshOverview()
     }
 
-    # Shows the empty-state hint only when there are no cards.
     [void] UpdateEmptyHint() {
-        if (-not $this.FleetEmptyHint) { return }
-        $this.FleetEmptyHint.Visibility = if ($this.Cards.Count -eq 0) {
+        if (-not $this.EmptyHint) { return }
+        $this.EmptyHint.Visibility = if ($this.Rows.Count -eq 0) {
             [System.Windows.Visibility]::Visible
         } else {
             [System.Windows.Visibility]::Collapsed
         }
     }
 
-    [void] AppendHostLogs([string]$hostName, [FleetCard]$card) {
+    # Refreshes overview tiles (system info) and the fleet counts.
+    [void] RefreshAll() {
+        $this.GatherSystemInfo()
+        $this.RefreshOverview()
+        # Re-render idle rows so their relative times stay current.
+        foreach ($rc in $this.Store.GetAll()) {
+            if (-not $this.IsRunning($rc.Hostname)) {
+                $row = $this.GetRow($rc.Hostname)
+                if ($row) { $row.SetIdleFrom($rc) }
+            }
+        }
+    }
+
+    [void] GatherSystemInfo() {
+        $info = $this.SysInfo.Gather()
+
+        if ($this.TileCtrlHost) { $this.TileCtrlHost.Text = if ($info.Hostname) { $info.Hostname } else { '—' } }
+        if ($this.TileCtrlIp) { $this.TileCtrlIp.Text = $info.IPv4 }
+
+        if ($this.TileDc) {
+            $this.TileDc.Text = if ($info.DomainController) { $info.DomainController } elseif ($info.Domain) { $info.Domain } else { '—' }
+        }
+        if ($this.TileDcSub) {
+            $this.TileDcSub.Text = if ($info.DcReachable) { 'reachable' } elseif ($info.DomainJoined) { 'DC unreachable' } else { 'not domain-joined' }
+        }
+        if ($this.TileDcDot) {
+            $key = if ($info.DcReachable) { 'AccentGreen' } elseif ($info.DomainJoined) { 'AccentRed' } else { 'BodyTextTertiary' }
+            $this.TileDcDot.Fill = $this.ResBrush($key)
+        }
+        if ($this.TileBattery) {
+            $this.TileBattery.Text = [SystemInfoService]::BatteryLabel($info.HasBattery, $info.BatteryPercent, $info.Charging)
+        }
+    }
+
+    [void] RefreshOverview() {
+        $recents = @($this.Store.GetAll())
+        $active = @($this.ActiveJobs | ForEach-Object { $_.HostName } | Select-Object -Unique)
+        $attention = @($recents | Where-Object { $_.LastStatus -eq 'Failed' -or $_.LastStatus -eq 'RebootRequired' })
+
+        if ($this.TileFleet) { $this.TileFleet.Text = "$($recents.Count)" }
+        if ($this.TileFleetSub) {
+            $sub = "$($active.Count) active"
+            if ($attention.Count -gt 0) { $sub += " · $($attention.Count) need attention" }
+            $this.TileFleetSub.Text = $sub
+        }
+    }
+
+    [System.Windows.Media.Brush] ResBrush([string]$key) {
+        $res = $null
+        if ($this.MachineList) { $res = $this.MachineList.TryFindResource($key) }
+        if ($res -is [System.Windows.Media.Brush]) { return $res }
+        return [System.Windows.Media.Brushes]::Gray
+    }
+
+    [void] AppendHostLogs([string]$hostName, [ConnectionRow]$row) {
         $logsDir = Join-Path $env:LOCALAPPDATA "DONUT\logs"
         $logFiles = @(
             (Join-Path $logsDir "$hostName.log"),
             (Join-Path $logsDir "default.log")
         )
-
         foreach ($logPath in $logFiles) {
             if (Test-Path $logPath) {
                 try {
                     Get-Content -Path $logPath -ErrorAction Stop | ForEach-Object {
-                        $card.AppendLog($_)
+                        $row.AppendLog($_)
                     }
                 } catch { }
             }
@@ -393,8 +540,6 @@ class HomePresenter {
     }
 
     [void] CheckForManualReboot([AsyncJob]$job) {
-        # Check the job result for manual reboot flag
-        # The remote worker should write a flag file or return data indicating reboot required
         $appData = Join-Path $env:LOCALAPPDATA "DONUT"
         $rebootFlagPath = Join-Path $appData "reports\$($job.HostName)-reboot-required.flag"
 
@@ -402,11 +547,9 @@ class HomePresenter {
             if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
                 $this.ManualRebootQueue.Add($job.HostName)
             }
-            # Clean up the flag file
             Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue
         }
 
-        # Also check job output/result for reboot indicators
         if ($job.Result -and $job.Result -match 'reboot\s*required|needs\s*reboot|pending\s*reboot') {
             if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
                 $this.ManualRebootQueue.Add($job.HostName)
@@ -414,10 +557,8 @@ class HomePresenter {
         }
     }
 
-    # Surfaces the batch reboot summary as a toast (was a modal alert).
     [void] ShowManualRebootNotice() {
         if ($this.ManualRebootQueue.Count -eq 0) { return }
-
         $hostList = $this.ManualRebootQueue.ToArray() -join ", "
         if ($this.Toasts) {
             $this.Toasts.ShowWarning(
@@ -425,15 +566,12 @@ class HomePresenter {
                 "These machines need a manual reboot to finish updating: $hostList"
             )
         }
-
-        # Clear the queue after showing
         $this.ManualRebootQueue.Clear()
     }
 
     [array] GetInstalledDriversFromReport([xml]$report) {
         $driverNodes = $report.SelectNodes("//drivers/driver")
         if (-not $driverNodes) { return @() }
-
         return $driverNodes | ForEach-Object {
             @{
                 DriverName    = $_.GetAttribute("name")
