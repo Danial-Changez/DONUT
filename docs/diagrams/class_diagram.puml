@@ -41,6 +41,50 @@ package "Donut.Models" {
         UpdateApply
         BatteryReport
     }
+
+    enum FleetState {
+        Queued
+        Scanning
+        Updating
+        Completed
+        RebootRequired
+        Failed
+    }
+
+    class FleetStatus {
+        +State: FleetState
+        +Label: string
+        +ColorKey: string
+        +IsBusy: bool
+        +{static} FromJob(jobType: string, status: string, rebootRequired: bool): FleetStatus
+    }
+
+    class DcuProgress {
+        +{static} ParsePercent(line: string): double
+    }
+
+    class RecentConnection {
+        +Hostname: string
+        +LastSeen: string
+        +LastStatus: string
+        +LastJobType: string
+        +UpdateCount: int
+        +RebootRequired: bool
+        +{static} FromHashtable(h: Hashtable): RecentConnection
+    }
+
+    class RecentConnectionsStore {
+        -Config: AppConfig
+        -ConfigManager: object
+        +{static} Cap: int
+        +Upsert(hostname: string, status: string, jobType: string, updateCount: int, rebootRequired: bool): void
+        +Remove(hostname: string): void
+        +SeedFrom(hosts: string[]): void
+        +GetAll(): RecentConnection[]
+        +Count(): int
+        +{static} ParseSeen(value: string): datetime
+        -Save(): void
+    }
 }
 
 package "Donut.Core" {
@@ -89,6 +133,10 @@ package "Donut.Core" {
         +ResolvePath(): string
         #PathExists(path: string): bool
         #ReadLines(path: string): string[]
+    }
+
+    class TimeFormat {
+        +{static} Relative(when: datetime): string
     }
 }
 
@@ -182,6 +230,29 @@ package "Donut.Services" {
         +LoadGlobalResources(): ResourceDictionary
         +ApplyResourcesToWindow(window: Window): void
         -LoadStylesInto(targetDictionary: ResourceDictionary): void
+    }
+
+    class SystemInfo {
+        +Hostname: string
+        +IPv4: string
+        +Domain: string
+        +DomainJoined: bool
+        +DomainController: string
+        +DcReachable: bool
+        +HasBattery: bool
+        +BatteryPercent: int
+        +Charging: bool
+    }
+
+    class SystemInfoService {
+        -Probe: NetworkProbe
+        -Logger: LogService
+        +Gather(): SystemInfo
+        +{static} BatteryLabel(hasBattery: bool, percent: int, charging: bool): string
+        #GetHostname(): string
+        #GetPrimaryIPv4(): string
+        #GetDomainInfo(): Hashtable
+        #GetBatteryRaw(): Hashtable
     }
 }
 
@@ -282,6 +353,31 @@ package "Donut.UI.Presenters" {
         +CheckAndPrompt(): void
         -ShowUpdateWindow(release: PSCustomObject, localVer: version, remoteVer: version): void
     }
+
+    class ConnectionRow {
+        +HostName: string
+        +Root: Border
+        +RunAction: ScriptBlock
+        +SetIdleFrom(rc: RecentConnection): void
+        +SetStatus(status: FleetStatus): void
+        +SetPercent(percent: double): void
+        +AppendLog(text: string): void
+        +ToggleExpand(): void
+        +AnimateIn(): void
+        +{static} IdleColorKey(lastStatus: string): string
+        +{static} HumanStatus(lastStatus: string): string
+    }
+
+    class ToastService {
+        -HostControl: ItemsControl
+        -DefaultDurationMs: int
+        +ShowSuccess(title: string, message: string): void
+        +ShowInfo(title: string, message: string): void
+        +ShowWarning(title: string, message: string): void
+        +ShowError(title: string, message: string): void
+        +Show(title: string, message: string, colorKey: string, durationMs: int): void
+        +Dismiss(card: Border): void
+    }
 }
 
 MainPresenter --> HomePresenter
@@ -315,6 +411,24 @@ AsyncJob ..> JobKind
 
 HomePresenter --> HostListSource
 BatteryPresenter --> HostListSource
+
+FleetStatus ..> FleetState
+RecentConnectionsStore --> RecentConnection
+RecentConnectionsStore ..> AppConfig
+SystemInfoService --> NetworkProbe
+SystemInfoService ..> SystemInfo
+
+ConnectionRow ..> FleetStatus
+ConnectionRow ..> RecentConnection
+ConnectionRow ..> TimeFormat
+
+HomePresenter --> ConnectionRow
+HomePresenter --> ToastService
+HomePresenter --> SystemInfoService
+HomePresenter --> RecentConnectionsStore
+HomePresenter ..> FleetStatus
+HomePresenter ..> DcuProgress
+MainPresenter --> ToastService
 
 UpdatePresenter --> SelfUpdateService
 UpdatePresenter --> DialogPresenter
