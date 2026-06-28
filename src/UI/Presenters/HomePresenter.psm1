@@ -18,6 +18,10 @@ using module ".\ToastService.psm1"
 using module ".\ConnectionRow.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
+using module "..\..\Services\InventoryService.psm1"
+using module "..\..\Models\MachineInventory.psm1"
+using module "..\..\Models\JobEnums.psm1"
+using module "..\..\Core\TimeFormat.psm1"
 
 class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
@@ -40,6 +44,26 @@ class HomePresenter : AsyncJobPresenter {
     [SystemInfoService] $SysInfo
     [RecentConnectionsStore] $Store
     [HostListSource] $HostListSource
+    [InventoryService] $InventoryService
+    [string] $SelectedHost
+    [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
+
+    # Detail-panel controls
+    [System.Windows.UIElement] $DetailEmptyHint
+    [System.Windows.UIElement] $DetailContent
+    [TextBlock] $DetailHostText
+    [TextBlock] $DetailProbed
+    [Button] $DetailRefreshButton
+    [Button] $DetailRunButton
+    [TextBlock] $InvModel
+    [TextBlock] $InvServiceTag
+    [TextBlock] $InvBatteryHealth
+    [TextBlock] $InvCharge
+    [TextBlock] $InvDisk
+    [TextBlock] $InvUptime
+    [TextBlock] $InvPending
+    [TextBox] $DetailLog
+    [ProgressBar] $DetailProgress
 
     # Overview tile controls
     [TextBlock] $TileCtrlHost
@@ -76,9 +100,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $this.Logger)
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
+        $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
 
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
+        $this.LogBuffers = @{}
         $this.ManualRebootQueue = [List[string]]::new()
         $this.TotalJobsInBatch = 0
 
@@ -109,10 +135,29 @@ class HomePresenter : AsyncJobPresenter {
         $this.TileFleet = $this.ViewContent.FindName('txtFleet')
         $this.TileFleetSub = $this.ViewContent.FindName('txtFleetSub')
 
+        # Detail panel
+        $this.DetailEmptyHint = $this.ViewContent.FindName('DetailEmptyHint')
+        $this.DetailContent = $this.ViewContent.FindName('DetailContent')
+        $this.DetailHostText = $this.ViewContent.FindName('txtDetailHost')
+        $this.DetailProbed = $this.ViewContent.FindName('txtDetailProbed')
+        $this.DetailRefreshButton = $this.ViewContent.FindName('btnDetailRefresh')
+        $this.DetailRunButton = $this.ViewContent.FindName('btnDetailRun')
+        $this.InvModel = $this.ViewContent.FindName('txtInvModel')
+        $this.InvServiceTag = $this.ViewContent.FindName('txtInvServiceTag')
+        $this.InvBatteryHealth = $this.ViewContent.FindName('txtInvBatteryHealth')
+        $this.InvCharge = $this.ViewContent.FindName('txtInvCharge')
+        $this.InvDisk = $this.ViewContent.FindName('txtInvDisk')
+        $this.InvUptime = $this.ViewContent.FindName('txtInvUptime')
+        $this.InvPending = $this.ViewContent.FindName('txtInvPending')
+        $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
+        $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
+
         $presenter = $this
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
         if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
         if ($this.RefreshButton) { $this.RefreshButton.Add_Click({ $presenter.RefreshAll() }.GetNewClosure()) }
+        if ($this.DetailRefreshButton) { $this.DetailRefreshButton.Add_Click({ $presenter.RefreshInventory($presenter.SelectedHost) }.GetNewClosure()) }
+        if ($this.DetailRunButton) { $this.DetailRunButton.Add_Click({ $presenter.RunHost($presenter.SelectedHost) }.GetNewClosure()) }
 
         # Seed recents from WSID.txt the first time, then build a row per recent.
         if ($this.Store.Count() -eq 0) {
@@ -198,7 +243,8 @@ class HomePresenter : AsyncJobPresenter {
 
     [bool] IsRunning([string]$hostName) {
         foreach ($job in $this.ActiveJobs) {
-            if ($job -and $job.HostName -eq $hostName) { return $true }
+            # Inventory probes are background work, not a "run".
+            if ($job -and $job.HostName -eq $hostName -and $job.JobType -ne [JobKind]::Inventory) { return $true }
         }
         return $false
     }
@@ -207,7 +253,7 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.EnsureRow($hostName)
 
         $command = $this.Config.GetActiveCommand()
-        $row.AppendLog("Starting $command for $hostName...")
+        $this.AppendLog($hostName, "Starting $command for $hostName...")
 
         try {
             $jobParams = switch ($command) {
@@ -215,11 +261,11 @@ class HomePresenter : AsyncJobPresenter {
                     @{ Type = 'Scan'; Prep = $this.ScanService.PrepareScan($hostName) }
                 }
                 'applyUpdates' {
-                    $row.AppendLog("Phase 1: Scanning for updates...")
+                    $this.AppendLog($hostName, "Phase 1: Scanning for updates...")
                     @{ Type = 'UpdateScan'; Prep = $this.UpdateService.PrepareScanForUpdates($hostName) }
                 }
                 default {
-                    $row.AppendLog("Command '$command' not implemented yet.")
+                    $this.AppendLog($hostName, "Command '$command' not implemented yet.")
                     $null
                 }
             }
@@ -233,7 +279,7 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
         catch {
-            $row.AppendLog("Error starting process: $_")
+            $this.AppendLog($hostName, "Error starting process: $_")
             $row.SetStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
@@ -249,14 +295,21 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Per-tick: stream the job's queued output into its row and keep the card live.
+    # Per-tick: stream the job's queued output into the (selected host's) detail
+    # log and keep the row status/progress live. Inventory probes only stream.
     [void] OnJobPolled([AsyncJob]$job) {
+        if ($job.JobType -eq [JobKind]::Inventory) {
+            $line = $null
+            while ($job.Logs.TryDequeue([ref]$line)) { $this.AppendLog($job.HostName, $line) }
+            return
+        }
+
         $row = $this.GetRow($job.HostName)
 
         $logEntry = $null
         $latestPct = -1
         while ($job.Logs.TryDequeue([ref]$logEntry)) {
-            if ($row) { $row.AppendLog($logEntry) }
+            $this.AppendLog($job.HostName, $logEntry)
             $pct = [DcuProgress]::ParsePercent($logEntry)
             if ($pct -ge 0) { $latestPct = $pct }
         }
@@ -265,18 +318,21 @@ class HomePresenter : AsyncJobPresenter {
         $this.RefreshCardStatus($job)
     }
 
-    # Terminal: driver-match analysis / apply-phase transition / recents persistence.
+    # Terminal: inventory probes finish via CompleteInventory; scan/apply do
+    # driver-match analysis / apply-phase transition / recents persistence.
     [void] OnJobCompleted([AsyncJob]$job) {
-        $row = $this.GetRow($job.HostName)
-        if ($row) {
-            $row.AppendLog("Job $($job.JobType) finished: $($job.Status)")
-            $this.AppendHostLogs($job.HostName, $row)
+        if ($job.JobType -eq [JobKind]::Inventory) {
+            $this.CompleteInventory($job)
+            return
         }
+
+        $this.AppendLog($job.HostName, "Job $($job.JobType) finished: $($job.Status)")
+        $this.AppendHostLogs($job.HostName)
 
         # Transition to apply phase after a successful update scan.
         $transitioned = $false
         if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
-            $transitioned = $this.HandleUpdateScanCompletion($job, $row)
+            $transitioned = $this.HandleUpdateScanCompletion($job)
         }
 
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
@@ -347,23 +403,23 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     # Returns $true when an apply job was started (so the caller defers settling).
-    [bool] HandleUpdateScanCompletion([AsyncJob]$job, [ConnectionRow]$row) {
+    [bool] HandleUpdateScanCompletion([AsyncJob]$job) {
         $hostName = $job.HostName
         $report = $this.UpdateService.ParseUpdateReport($hostName)
 
         if (-not $report) {
-            if ($row) { $row.AppendLog("No report generated or scan failed.") }
+            $this.AppendLog($hostName, "No report generated or scan failed.")
             return $false
         }
 
         $updateNodes = $report.SelectNodes("//update")
         if ($updateNodes.Count -eq 0) {
-            if ($row) { $row.AppendLog("No updates found.") }
+            $this.AppendLog($hostName, "No updates found.")
             if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "No updates found.") }
             return $false
         }
 
-        if ($row) { $row.AppendLog("Found $($updateNodes.Count) updates. Analyzing driver matches...") }
+        $this.AppendLog($hostName, "Found $($updateNodes.Count) updates. Analyzing driver matches...")
 
         $installedDrivers = $this.GetInstalledDriversFromReport($report)
         $displayList = @()
@@ -391,17 +447,17 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
 
-        if ($row) { $row.AppendLog("Driver analysis complete. Waiting for confirmation...") }
+        $this.AppendLog($hostName, "Driver analysis complete. Waiting for confirmation...")
         $confirmed = $this.DialogPresenter.ShowConfirmation("Updates Available", "Updates found for $hostName", $displayList)
 
         if (-not $confirmed) {
-            if ($row) { $row.AppendLog("Cancelled by user.") }
+            $this.AppendLog($hostName, "Cancelled by user.")
             return $false
         }
 
-        if ($row) { $row.AppendLog("Confirmed. Phase 2: Applying updates...") }
+        $this.AppendLog($hostName, "Confirmed. Phase 2: Applying updates...")
         $this.CopyUpdatesToClipboard($hostName, $clipboardList)
-        if ($row) { $row.AppendLog("Updates list copied to clipboard.") }
+        $this.AppendLog($hostName, "Updates list copied to clipboard.")
 
         try {
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
@@ -412,7 +468,7 @@ class HomePresenter : AsyncJobPresenter {
             return $true
         }
         catch {
-            if ($row) { $row.AppendLog("Error starting apply phase: $_") }
+            $this.AppendLog($hostName, "Error starting apply phase: $_")
             return $false
         }
     }
@@ -426,6 +482,7 @@ class HomePresenter : AsyncJobPresenter {
         $row = [ConnectionRow]::new($hostName)
         $presenter = $this
         $row.RunAction = { param($h) $presenter.RunHost($h) }.GetNewClosure()
+        $row.SelectAction = { param($h) $presenter.SelectHost($h) }.GetNewClosure()
         $this.Rows[$hostName] = $row
         if ($this.MachineList) {
             $this.MachineList.Items.Add($row.Root) | Out-Null
@@ -440,6 +497,164 @@ class HomePresenter : AsyncJobPresenter {
         return $null
     }
 
+    # --- Detail panel + inventory probe ----------------------------------------------
+
+    # Appends a job-output line to the host's buffer and, when it's the selected
+    # host, to the live detail log. (Replaces the old per-row inline log.)
+    [void] AppendLog([string]$hostName, [string]$text) {
+        if (-not $this.LogBuffers.ContainsKey($hostName)) {
+            $this.LogBuffers[$hostName] = [System.Collections.Generic.List[string]]::new()
+        }
+        $this.LogBuffers[$hostName].Add($text)
+
+        if ($hostName -eq $this.SelectedHost -and $this.DetailLog) {
+            $this.DetailLog.AppendText("$text`n")
+            $this.DetailLog.ScrollToEnd()
+        }
+    }
+
+    # Opens the detail panel for a host: marks it selected, renders cached
+    # inventory instantly, replays its buffered log, then kicks a fresh probe.
+    [void] SelectHost([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+
+        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
+            $this.Rows[$this.SelectedHost].SetSelected($false)
+        }
+        $this.SelectedHost = $hostName
+        if ($this.Rows.ContainsKey($hostName)) { $this.Rows[$hostName].SetSelected($true) }
+
+        if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Collapsed }
+        if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Visible }
+        if ($this.DetailHostText) { $this.DetailHostText.Text = $hostName }
+
+        if ($this.DetailLog) {
+            $this.DetailLog.Clear()
+            if ($this.LogBuffers.ContainsKey($hostName)) {
+                $this.DetailLog.Text = (($this.LogBuffers[$hostName]) -join "`n") + "`n"
+            }
+            $this.DetailLog.ScrollToEnd()
+        }
+
+        $rc = $this.GetRecord($hostName)
+        $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
+        $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        $this.StartInventory($hostName)
+    }
+
+    # Clears the current selection and returns the detail pane to its empty state.
+    [void] ClearSelection() {
+        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
+            $this.Rows[$this.SelectedHost].SetSelected($false)
+        }
+        $this.SelectedHost = $null
+        if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Collapsed }
+        if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Visible }
+    }
+
+    # Queues a background inventory probe for the host (no-op if one is in flight).
+    [void] StartInventory([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        foreach ($j in $this.ActiveJobs) {
+            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::Inventory) { return }
+        }
+        try {
+            $this.AppendLog($hostName, "Gathering inventory...")
+            if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+                $this.DetailProgress.IsIndeterminate = $true
+                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
+            }
+            $prep = $this.InventoryService.PrepareInventory($hostName)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Inventory)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.AppendLog($hostName, "Inventory probe could not start: $_")
+            if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
+            }
+        }
+    }
+
+    # Forces a re-probe of the selected host.
+    [void] RefreshInventory([string]$hostName) {
+        $this.StartInventory($hostName)
+    }
+
+    # Inventory job finished: parse + cache + repopulate the detail cards.
+    [void] CompleteInventory([AsyncJob]$job) {
+        $hostName = $job.HostName
+        if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+            $this.DetailProgress.IsIndeterminate = $false
+            $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
+        }
+
+        if ($job.Status -eq 'Failed') {
+            $this.AppendLog($hostName, "Inventory probe failed.")
+            return
+        }
+
+        $inv = $this.InventoryService.ParseInventory($hostName)
+        if ($null -eq $inv) {
+            $this.AppendLog($hostName, "Inventory probe returned no data.")
+            return
+        }
+
+        $this.Store.UpsertInventory($hostName, $inv)
+        $this.AppendLog($hostName, "Inventory updated.")
+
+        if ($hostName -eq $this.SelectedHost) {
+            $rc = $this.GetRecord($hostName)
+            $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
+            $this.PopulateDetailCards($hostName, $cached, $rc)
+        }
+    }
+
+    # Fills the detail cards from a MachineInventory (may be $null = no data yet)
+    # and the RecentConnection (pending-update count + last-probed time).
+    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
+        $dash = '—'
+        if ($null -eq $inv) {
+            if ($this.InvModel) { $this.InvModel.Text = $dash }
+            if ($this.InvServiceTag) { $this.InvServiceTag.Text = 'gathering…' }
+            if ($this.InvBatteryHealth) { $this.InvBatteryHealth.Text = $dash }
+            if ($this.InvCharge) { $this.InvCharge.Text = '' }
+            if ($this.InvDisk) { $this.InvDisk.Text = $dash }
+            if ($this.InvUptime) { $this.InvUptime.Text = '' }
+        }
+        else {
+            if ($this.InvModel) { $this.InvModel.Text = if ($inv.Model) { $inv.Model } else { $dash } }
+            if ($this.InvServiceTag) { $this.InvServiceTag.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { '' } }
+
+            $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
+            if ($this.InvBatteryHealth) {
+                $this.InvBatteryHealth.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health, $inv.CycleCount)
+            }
+            if ($this.InvCharge) {
+                $this.InvCharge.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
+                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
+                    "$($inv.ChargePercent)% - $state"
+                } else { '' }
+            }
+
+            if ($this.InvDisk) { $this.InvDisk.Text = [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes) }
+            if ($this.InvUptime) { $this.InvUptime.Text = [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)) }
+        }
+
+        $pending = if ($null -ne $rc) { $rc.UpdateCount } else { 0 }
+        if ($this.InvPending) { $this.InvPending.Text = "$pending pending update(s)" }
+
+        if ($this.DetailProbed) {
+            $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
+                         elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
+                         else { '' }
+            $this.DetailProbed.Text = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
+                "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
+            }
+        }
+    }
+
     # Removes idle (not currently running) machines from the list and recents.
     [void] ClearCompleted() {
         $toRemove = @($this.Rows.Keys | Where-Object { -not $this.IsRunning($_) })
@@ -449,6 +664,8 @@ class HomePresenter : AsyncJobPresenter {
             if ($this.MachineList -and $row) { $this.MachineList.Items.Remove($row.Root) }
             $this.Rows.Remove($hostName)
             $this.Store.Remove($hostName)
+            $this.LogBuffers.Remove($hostName)
+            if ($hostName -eq $this.SelectedHost) { $this.ClearSelection() }
         }
         $this.UpdateEmptyHint()
         $this.RefreshOverview()
@@ -517,7 +734,7 @@ class HomePresenter : AsyncJobPresenter {
         return [System.Windows.Media.Brushes]::Gray
     }
 
-    [void] AppendHostLogs([string]$hostName, [ConnectionRow]$row) {
+    [void] AppendHostLogs([string]$hostName) {
         $logsDir = Join-Path $env:LOCALAPPDATA "DONUT\logs"
         $logFiles = @(
             (Join-Path $logsDir "$hostName.log"),
@@ -527,7 +744,7 @@ class HomePresenter : AsyncJobPresenter {
             if (Test-Path $logPath) {
                 try {
                     Get-Content -Path $logPath -ErrorAction Stop | ForEach-Object {
-                        $row.AppendLog($_)
+                        $this.AppendLog($hostName, $_)
                     }
                 } catch { }
             }

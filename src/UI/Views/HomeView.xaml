@@ -193,8 +193,16 @@
     </Border>
   </Grid>
 
-  <!-- ============================ Machine list ============================ -->
-  <Border Grid.Row="2" CornerRadius="10" Padding="2"
+  <!-- ==================== Machine list (left) + detail pane (right) ==================== -->
+  <Grid Grid.Row="2">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="2*" MinWidth="300" />
+      <ColumnDefinition Width="6" />
+      <ColumnDefinition Width="3*" MinWidth="320" />
+    </Grid.ColumnDefinitions>
+
+  <!-- Machine list -->
+  <Border Grid.Column="0" CornerRadius="10" Padding="2"
           Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
@@ -230,4 +238,100 @@
       </ScrollViewer>
     </Grid>
   </Border>
+
+    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"
+                  Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" />
+
+    <!-- ============================ Detail pane ============================ -->
+    <Border x:Name="DetailPane" Grid.Column="2" CornerRadius="10" Padding="2"
+            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+      <Grid Margin="14,12,14,12">
+        <!-- Empty state -->
+        <TextBlock x:Name="DetailEmptyHint"
+                   Text="Select a machine to view its details."
+                   Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="14"
+                   TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40" />
+
+        <!-- Content (shown once a machine is selected) -->
+        <Grid x:Name="DetailContent" Visibility="Collapsed">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+
+          <!-- Header: host + actions -->
+          <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+              <TextBlock x:Name="txtDetailHost" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+                         Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+              <TextBlock x:Name="txtDetailProbed" Text="" FontFamily="Montserrat" FontSize="11"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+            </StackPanel>
+            <Button x:Name="btnDetailRefresh" Grid.Column="1" Content="Refresh"
+                    Style="{DynamicResource ModernButton}" Width="90" Height="32" Margin="6,0,0,0" />
+            <Button x:Name="btnDetailRun" Grid.Column="2" Content="Run"
+                    Style="{DynamicResource ModernButton}" Width="90" Height="32" Margin="6,0,0,0" />
+          </Grid>
+
+          <!-- Inventory cards -->
+          <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Margin="0,0,6,0" CornerRadius="10" Padding="14,12"
+                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock x:Name="txtInvModel" Text="—" FontFamily="Montserrat" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                <TextBlock x:Name="txtInvServiceTag" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
+              </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Margin="6,0,6,0" CornerRadius="10" Padding="14,12"
+                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock x:Name="txtInvBatteryHealth" Text="—" FontFamily="Montserrat" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                <TextBlock x:Name="txtInvCharge" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
+              </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Margin="6,0,0,0" CornerRadius="10" Padding="14,12"
+                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="SYSTEM" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock x:Name="txtInvDisk" Text="—" FontFamily="Montserrat" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                <TextBlock x:Name="txtInvUptime" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
+                <TextBlock x:Name="txtInvPending" Text="" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+              </StackPanel>
+            </Border>
+          </Grid>
+
+          <!-- Live job log -->
+          <Border Grid.Row="2" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <ProgressBar x:Name="DetailProgress" Grid.Row="0" Height="3" Minimum="0" Maximum="100"
+                           Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource AccentPurple}" />
+              <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" Background="Transparent" BorderThickness="0"
+                       Foreground="#D4D4D8" FontFamily="Consolas" FontSize="12"
+                       TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="6" />
+            </Grid>
+          </Border>
+        </Grid>
+      </Grid>
+    </Border>
+  </Grid>
 </Grid>
