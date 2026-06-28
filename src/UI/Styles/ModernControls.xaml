@@ -27,8 +27,6 @@
                 Value="0,0,0,0" />
         <Setter Property="MinWidth"
                 Value="200" />
-        <Setter Property="MaxWidth"
-                Value="800" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
