@@ -21,4 +21,5 @@ enum JobKind {
     UpdateScan
     UpdateApply
     Inventory
+    DiskScan
 }

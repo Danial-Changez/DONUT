@@ -19,7 +19,9 @@ using module ".\ConnectionRow.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
+using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Models\MachineInventory.psm1"
+using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
@@ -48,6 +50,7 @@ class HomePresenter : AsyncJobPresenter {
     [RecentConnectionsStore] $Store
     [HostListSource] $HostListSource
     [InventoryService] $InventoryService
+    [DiskUsageService] $DiskUsageService
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
 
@@ -67,6 +70,9 @@ class HomePresenter : AsyncJobPresenter {
     [TextBlock] $InvPending
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
+    [Button] $FindFoldersButton
+    [ItemsControl] $DiskFoldersList
+    [System.Windows.UIElement] $DiskFoldersHint
 
     # Overview tile controls (mirror the selected remote machine)
     [TextBlock] $OvModel
@@ -115,6 +121,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
+        $this.DiskUsageService = [DiskUsageService]::new($config, $this.NetworkProbe, $this.Logger)
 
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
@@ -183,6 +190,9 @@ class HomePresenter : AsyncJobPresenter {
         $this.InvPending = $this.ViewContent.FindName('txtInvPending')
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
+        $this.FindFoldersButton = $this.ViewContent.FindName('btnFindFolders')
+        $this.DiskFoldersList = $this.ViewContent.FindName('DiskFoldersList')
+        $this.DiskFoldersHint = $this.ViewContent.FindName('DiskFoldersHint')
 
         $presenter = $this
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
@@ -191,6 +201,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ModeButton) { $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure()) }
         if ($this.DetailRefreshButton) { $this.DetailRefreshButton.Add_Click({ $presenter.RefreshInventory($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.DetailRunButton) { $this.DetailRunButton.Add_Click({ $presenter.RunHost($presenter.SelectedHost) }.GetNewClosure()) }
+        if ($this.FindFoldersButton) { $this.FindFoldersButton.Add_Click({ $presenter.FindBigFolders($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.SearchBar) {
             $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
             $this.SearchBar.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() } }.GetNewClosure())
@@ -568,7 +579,7 @@ class HomePresenter : AsyncJobPresenter {
     # Per-tick: stream the job's queued output into the (selected host's) detail
     # log and keep the row status/progress live. Inventory probes only stream.
     [void] OnJobPolled([AsyncJob]$job) {
-        if ($job.JobType -eq [JobKind]::Inventory) {
+        if ($job.JobType -eq [JobKind]::Inventory -or $job.JobType -eq [JobKind]::DiskScan) {
             $line = $null
             while ($job.Logs.TryDequeue([ref]$line)) { $this.AppendLog($job.HostName, $line) }
             return
@@ -593,6 +604,10 @@ class HomePresenter : AsyncJobPresenter {
     [void] OnJobCompleted([AsyncJob]$job) {
         if ($job.JobType -eq [JobKind]::Inventory) {
             $this.CompleteInventory($job)
+            return
+        }
+        if ($job.JobType -eq [JobKind]::DiskScan) {
+            $this.CompleteDiskScan($job)
             return
         }
 
@@ -809,6 +824,8 @@ class HomePresenter : AsyncJobPresenter {
         $rc = $this.GetRecord($hostName)
         $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
+        $this.RenderBigFolders($cachedDisk)
         $this.StartInventory($hostName)
     }
 
@@ -880,6 +897,114 @@ class HomePresenter : AsyncJobPresenter {
             $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
             $this.PopulateDetailCards($hostName, $cached, $rc)
         }
+    }
+
+    # Queues an on-demand "biggest folders on C:" scan for the host (no-op if one
+    # is already in flight). Heavier than the inventory probe (deploys + runs a
+    # WizTree MFT scan), so it only runs when the operator clicks the button.
+    [void] FindBigFolders([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        foreach ($j in $this.ActiveJobs) {
+            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) { return }
+        }
+        try {
+            $this.AppendLog($hostName, "Scanning C: for largest folders...")
+            if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+                $this.DetailProgress.IsIndeterminate = $true
+                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
+            }
+            $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
+            $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.AppendLog($hostName, "Disk scan could not start: $_")
+            $this.Logger.LogException("Disk scan failed to start for $hostName", $_)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start disk scan.") }
+            if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
+            }
+        }
+    }
+
+    # Disk-scan job finished: parse the WizTree CSV + cache + render the folder list.
+    [void] CompleteDiskScan([AsyncJob]$job) {
+        $hostName = $job.HostName
+        if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
+            $this.DetailProgress.IsIndeterminate = $false
+            $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
+        }
+
+        if ($job.Status -eq 'Failed') {
+            $this.AppendLog($hostName, "Disk scan failed.")
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Disk scan failed. Open the log for details.") }
+            return
+        }
+
+        $report = $this.DiskUsageService.ParseDiskUsage($hostName)
+        if ($null -eq $report -or $report.Folders.Count -eq 0) {
+            $this.AppendLog($hostName, "Disk scan returned no folders.")
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Disk scan returned no data.") }
+            return
+        }
+
+        $this.Store.UpsertDiskUsage($hostName, $report)
+        $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
+
+        if ($hostName -eq $this.SelectedHost) {
+            $this.RenderBigFolders($report)
+        }
+    }
+
+    # Renders the largest-folders list (or the empty-state hint when there's none).
+    [void] RenderBigFolders([DiskUsageReport]$report) {
+        if (-not $this.DiskFoldersList) { return }
+        $this.DiskFoldersList.Items.Clear()
+
+        if ($null -eq $report -or $report.Folders.Count -eq 0) {
+            if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Visible }
+            return
+        }
+
+        if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Collapsed }
+        foreach ($f in $report.Folders) {
+            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderRow($f))
+        }
+    }
+
+    # Builds one folder row (imperative, like BuildSearchRow): path left, size right.
+    hidden [object] BuildFolderRow([FolderUsage]$f) {
+        $grid = [Grid]::new()
+        $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 3)
+        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
+        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
+
+        $path = [TextBlock]::new()
+        $path.Text = $f.Path
+        $path.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
+        $path.FontSize = 12
+        $path.Foreground = $this.ResBrush('TitleTextPrimary')
+        $path.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+        $path.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        $path.ToolTip = $f.Path
+        [Grid]::SetColumn($path, 0)
+        [void]$grid.Children.Add($path)
+
+        $size = [TextBlock]::new()
+        $size.Text = [DiskUsageFormat]::SizeLabel($f.SizeBytes)
+        $size.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
+        $size.FontSize = 12
+        $size.FontWeight = [System.Windows.FontWeights]::SemiBold
+        $size.Foreground = $this.ResBrush('BodyTextSecondary')
+        $size.Margin = [System.Windows.Thickness]::new(10, 0, 0, 0)
+        $size.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        [Grid]::SetColumn($size, 1)
+        [void]$grid.Children.Add($size)
+
+        return $grid
     }
 
     # Fills the detail cards from a MachineInventory (may be $null = no data yet)

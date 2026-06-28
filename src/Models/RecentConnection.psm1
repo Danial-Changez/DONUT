@@ -1,5 +1,6 @@
 using module ".\AppConfig.psm1"
 using module ".\MachineInventory.psm1"
+using module ".\DiskUsage.psm1"
 
 # RecentConnection / RecentConnectionsStore
 #
@@ -21,6 +22,7 @@ class RecentConnection {
     [int]    $UpdateCount
     [bool]   $RebootRequired
     [MachineInventory] $Inventory   # cached probe result, or $null when never probed
+    [DiskUsageReport]  $DiskUsage   # cached "biggest folders" scan, or $null when never run
 
     static [RecentConnection] FromHashtable([hashtable]$h) {
         $rc = [RecentConnection]::new()
@@ -32,6 +34,9 @@ class RecentConnection {
         $rc.RebootRequired = [bool]$h['rebootRequired']
         if ($null -ne $h['inventory']) {
             $rc.Inventory = [MachineInventory]::FromHashtable([hashtable]$h['inventory'])
+        }
+        if ($null -ne $h['diskUsage']) {
+            $rc.DiskUsage = [DiskUsageReport]::FromHashtable([hashtable]$h['diskUsage'])
         }
         return $rc
     }
@@ -104,6 +109,36 @@ class RecentConnectionsStore {
         $invHash = $inv.ToHashtable()
         $invHash['probedAt'] = [datetime]::UtcNow.ToString('o')
         $entry['inventory'] = $invHash
+
+        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
+        $this.SetEntries(@($entry) + $kept)
+        $this.Save()
+    }
+
+    # Merges a fresh "biggest folders" scan onto the host's entry (creating one if
+    # the host isn't tracked yet) WITHOUT touching its scan/apply status fields.
+    # Mirrors UpsertInventory.
+    [void] UpsertDiskUsage([string]$hostname, [DiskUsageReport]$report) {
+        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
+        if ($null -eq $report) { return }
+        $name = $hostname.Trim()
+
+        $entry = $null
+        foreach ($e in $this.Entries()) {
+            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
+        }
+        if ($null -eq $entry) {
+            $entry = @{
+                hostname       = $name
+                lastSeen       = ''
+                lastStatus     = ''
+                lastJobType    = ''
+                updateCount    = 0
+                rebootRequired = $false
+            }
+        }
+
+        $entry['diskUsage'] = $report.ToHashtable()
 
         $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
         $this.SetEntries(@($entry) + $kept)

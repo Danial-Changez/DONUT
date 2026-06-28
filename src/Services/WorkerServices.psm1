@@ -11,6 +11,7 @@ class ExecutionService {
     [DriverMatchingService] $Matcher
     [AppConfig] $Config
     [string] $RemoteScriptPath
+    [string] $ToolsDir
     [string] $LocalLogsDir
     [string] $LocalReportsDir
 
@@ -28,6 +29,7 @@ class ExecutionService {
         $this.Matcher = $matcher
         $this.Config = $config
         $this.RemoteScriptPath = Join-Path $sourceRoot "Scripts\RemoteWorker.ps1"
+        $this.ToolsDir = Join-Path $sourceRoot "Tools"
         $this.LocalLogsDir = $logsDir
         $this.LocalReportsDir = $reportsDir
     }
@@ -59,6 +61,9 @@ class ExecutionService {
         }
         elseif ($JobType -eq 'Inventory') {
             return $service.RunInventoryPhase($device, $Options)
+        }
+        elseif ($JobType -eq 'DiskScan') {
+            return $service.RunDiskScanPhase($device, $Options)
         }
         else {
             throw "Unknown JobType: $JobType"
@@ -177,6 +182,67 @@ class ExecutionService {
         $ip = $this.Probe.ResolveHost($hostName)
         $remote = "\\$ip\C$\temp\DONUT\$hostName-inventory.json"
         $local = Join-Path $this.LocalReportsDir "$hostName-inventory.json"
+        if (Test-Path $remote) {
+            Copy-Item -Path $remote -Destination $local -Force
+        }
+        return $local
+    }
+
+    # Deploys the bundled WizTree binary to the target, runs a fast MFT folder
+    # scan as SYSTEM (exporting a size-sorted CSV), and copies the CSV back. This
+    # is the only place DONUT pushes a file TO the target (every other probe only
+    # copies artifacts back); the exe is left in C:\temp\DONUT for reuse.
+    [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
+        $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
+
+        $ip = $this.Probe.ResolveHost($device.HostName)
+        if (-not $ip) {
+            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP; aborting disk scan.")
+            throw "Could not resolve IP for $($device.HostName)"
+        }
+
+        $this.DeployWizTree($ip)
+        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand())
+        $localPath = $this.CopyDiskUsageArtifact($device.HostName)
+        return @{ FoldersPath = $localPath }
+    }
+
+    # Copies wiztree64.exe to the target's working dir (only when not already
+    # present, so repeat scans skip the ~2 MB transfer).
+    [void] DeployWizTree([string]$ip) {
+        $localExe = Join-Path $this.ToolsDir 'wiztree64.exe'
+        if (-not (Test-Path $localExe)) {
+            throw "Bundled wiztree64.exe not found at $localExe. Drop the binary into src\Tools\."
+        }
+
+        $remoteDir = "\\$ip\C$\temp\DONUT"
+        if (-not (Test-Path $remoteDir)) {
+            New-Item -Path $remoteDir -ItemType Directory -Force | Out-Null
+        }
+
+        $remoteExe = Join-Path $remoteDir 'wiztree64.exe'
+        if (-not (Test-Path $remoteExe)) {
+            $this.Logger.LogInfo("Deploying wiztree64.exe to \\$ip")
+            Copy-Item -Path $localExe -Destination $remoteExe -Force
+        }
+    }
+
+    # The remote command that runs WizTree headlessly: a fast MFT scan of C:,
+    # folders only, sorted by size, exported to CSV. Isolated in one place so a
+    # pure-PowerShell fallback (if session-0 GUI invocation proves unreliable) is
+    # a single-method swap with no change to the parser/cache/UI.
+    static [string] BuildScanCommand() {
+        return @'
+& 'C:\temp\DONUT\wiztree64.exe' "C:" /export="C:\temp\DONUT\folders.csv" /admin=1 /exportfolders=1 /exportfiles=0 /sortby=1 /exportmaxdepth=4 | Out-Null
+'@
+    }
+
+    # Copies the WizTree CSV the scan wrote on the remote back to the local
+    # reports dir; returns the local path. Mirrors CopyInventoryArtifact.
+    [string] CopyDiskUsageArtifact([string] $hostName) {
+        $ip = $this.Probe.ResolveHost($hostName)
+        $remote = "\\$ip\C$\temp\DONUT\folders.csv"
+        $local = Join-Path $this.LocalReportsDir "$hostName-folders.csv"
         if (Test-Path $remote) {
             Copy-Item -Path $remote -Destination $local -Force
         }
