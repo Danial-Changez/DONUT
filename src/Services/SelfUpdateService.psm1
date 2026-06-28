@@ -77,6 +77,12 @@ class SelfUpdateService {
         return $response
     }
 
+    # Polls GitHub's device-flow token endpoint once and returns a discriminated
+    # result describing what the caller should do next:
+    #   Status = 'authorized' -> AccessToken/TokenData populated, stop polling
+    #   Status = 'pending'    -> keep polling at the current interval
+    #   Status = 'slow_down'  -> back off (increase interval) and keep polling
+    #   Status = 'error'      -> Error populated, stop polling
     [PSCustomObject] PollForToken([string]$DeviceCode) {
         $body = @{
             client_id   = $this.ClientId
@@ -85,12 +91,25 @@ class SelfUpdateService {
         }
         try {
             $response = Invoke-RestMethod -Uri "https://github.com/login/oauth/access_token" -Method Post -Body $body -Headers @{ Accept = "application/json" }
-            if ($response.error) { return $null }
-            return $response
+
+            if ($response.error) {
+                switch ($response.error) {
+                    'authorization_pending' { return [PSCustomObject]@{ Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null } }
+                    'slow_down'             { return [PSCustomObject]@{ Status = 'slow_down'; AccessToken = $null; TokenData = $null; Error = $null } }
+                    default                 { return [PSCustomObject]@{ Status = 'error'; AccessToken = $null; TokenData = $null; Error = $response.error } }
+                }
+            }
+
+            return [PSCustomObject]@{
+                Status      = 'authorized'
+                AccessToken = $response.access_token
+                TokenData   = $response
+                Error       = $null
+            }
         }
         catch {
             $this.Logger.LogDebug("Device-flow token poll failed (will retry): $($_.Exception.Message)")
-            return $null
+            return [PSCustomObject]@{ Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null }
         }
     }
 
