@@ -4,10 +4,12 @@ using namespace System.Collections.Generic
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
+using module "..\..\Core\HostListSource.psm1"
 using module ".\DialogPresenter.psm1"
+using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 
-class BatteryPresenter {
+class BatteryPresenter : AsyncJobPresenter {
     [AppConfig] $Config
     [System.Windows.FrameworkElement] $ViewContent
     [TextBox] $SearchBar
@@ -16,9 +18,9 @@ class BatteryPresenter {
     [TabControl] $ReportTabs
     [NetworkProbe] $NetworkProbe
     [DialogPresenter] $DialogPresenter
-    
-    # Async State
-    [System.Collections.Generic.List[AsyncJob]] $ActiveJobs
+    [HostListSource] $HostListSource
+
+    # Async State ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
 
     BatteryPresenter([AppConfig] $config, [System.Windows.FrameworkElement] $view, [NetworkProbe] $networkProbe, [ResourceService] $resources) {
@@ -26,8 +28,9 @@ class BatteryPresenter {
         $this.ViewContent = $view
         $this.NetworkProbe = $networkProbe
         $this.DialogPresenter = [DialogPresenter]::new($resources)
-        $this.ActiveJobs = [List[AsyncJob]]::new()
-        
+        $this.HostListSource = [HostListSource]::new($config.SourceRoot)
+        # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
+
         # Initialize Timer for async polling
         $presenter = $this
         $this.Timer = [DispatcherTimer]::new()
@@ -58,21 +61,9 @@ class BatteryPresenter {
 
     [void] LoadHostList() {
         if (-not $this.SearchBar) { return }
-        
-        $wsidPaths = @(
-            (Join-Path $env:LOCALAPPDATA "DONUT\config\WSID.txt"),
-            (Join-Path (Split-Path $this.Config.SourceRoot -Parent) "res\WSID.txt")
-        )
-        
-        $path = $wsidPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $path) { return }
-        
-        try {
-            $lines = Get-Content -Path $path | Where-Object { $_ }
-            if ($lines) { $this.SearchBar.Text = $lines -join "`r`n" }
-        } catch {
-            Write-Warning "Failed to load WSID.txt: $_"
-        }
+
+        $hosts = $this.HostListSource.ReadHosts()
+        if ($hosts.Count -gt 0) { $this.SearchBar.Text = $hosts -join "`r`n" }
     }
 
     [void] OnRunReport() {
@@ -124,26 +115,19 @@ class BatteryPresenter {
         }
     }
 
+    # Timer Tick handler: drive the shared job-polling lifecycle (AsyncJobPresenter).
     [void] OnTimerTick($sender, $e) {
-        if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
-        
         try {
-            for ($i = $this.ActiveJobs.Count - 1; $i -ge 0; $i--) {
-                $job = $this.ActiveJobs[$i]
-                if (-not $job) { continue }
-
-                $job.Poll()
-
-                if ($job.Status -in @('Completed', 'Failed')) {
-                    $this.HandleBatteryReportCompletion($job)
-                    $job.Cleanup()
-                    $this.ActiveJobs.RemoveAt($i)
-                }
-            }
+            $this.PumpJobs()
         }
         catch {
             Write-Error "Error in BatteryPresenter timer: $_"
         }
+    }
+
+    # Terminal hook: render the finished report (WebBrowser navigation).
+    [void] OnJobCompleted([AsyncJob]$job) {
+        $this.HandleBatteryReportCompletion($job)
     }
 
     [void] HandleBatteryReportCompletion([AsyncJob]$job) {

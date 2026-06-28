@@ -8,15 +8,17 @@ using module "..\..\Models\DcuProgress.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
+using module "..\..\Core\HostListSource.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
 using module "..\..\Services\SystemInfoService.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module ".\ConnectionRow.psm1"
+using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 
-class HomePresenter {
+class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
     [object] $ConfigManager           # duck-typed; used to persist recents
     [System.Windows.FrameworkElement] $ViewContent
@@ -35,6 +37,7 @@ class HomePresenter {
     [DriverMatchingService] $DriverMatcher
     [SystemInfoService] $SysInfo
     [RecentConnectionsStore] $Store
+    [HostListSource] $HostListSource
 
     # Overview tile controls
     [TextBlock] $TileCtrlHost
@@ -46,8 +49,7 @@ class HomePresenter {
     [TextBlock] $TileFleet
     [TextBlock] $TileFleetSub
 
-    # Async state
-    [System.Collections.Generic.List[AsyncJob]] $ActiveJobs
+    # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
 
     # Host name -> ConnectionRow
@@ -71,8 +73,9 @@ class HomePresenter {
         $this.DialogPresenter = [DialogPresenter]::new($resources)
         $this.SysInfo = [SystemInfoService]::new($this.NetworkProbe, $logger)
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
+        $this.HostListSource = [HostListSource]::new($config.SourceRoot)
 
-        $this.ActiveJobs = [List[AsyncJob]]::new()
+        # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
         $this.ManualRebootQueue = [List[string]]::new()
         $this.TotalJobsInBatch = 0
@@ -132,18 +135,7 @@ class HomePresenter {
     }
 
     [string[]] ReadWsidHosts() {
-        $wsidPaths = @(
-            (Join-Path $env:LOCALAPPDATA "DONUT\config\WSID.txt"),
-            (Join-Path (Split-Path $this.Config.SourceRoot -Parent) "res\WSID.txt")
-        )
-        $path = $wsidPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $path) { return @() }
-        try {
-            return @(Get-Content -Path $path | Where-Object { $_ } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-        } catch {
-            Write-Warning "Failed to load WSID.txt: $_"
-            return @()
-        }
+        return $this.HostListSource.ReadHosts()
     }
 
     # Builds an idle row for every persisted recent connection (newest first).
@@ -245,72 +237,73 @@ class HomePresenter {
         }
     }
 
+    # Timer Tick handler: drive the shared job-polling lifecycle (AsyncJobPresenter).
     [void] OnTimerTick($sender, $e) {
-        if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
-
         try {
-            for ($i = $this.ActiveJobs.Count - 1; $i -ge 0; $i--) {
-                $job = $this.ActiveJobs[$i]
-                if (-not $job) { continue }
-
-                $row = $this.GetRow($job.HostName)
-                $job.Poll()
-
-                $logEntry = $null
-                $latestPct = -1
-                while ($job.Logs.TryDequeue([ref]$logEntry)) {
-                    if ($row) { $row.AppendLog($logEntry) }
-                    $pct = [DcuProgress]::ParsePercent($logEntry)
-                    if ($pct -ge 0) { $latestPct = $pct }
-                }
-                if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
-
-                $this.RefreshCardStatus($job)
-
-                if ($job.Status -in @('Completed', 'Failed')) {
-                    if ($row) {
-                        $row.AppendLog("Job $($job.JobType) finished: $($job.Status)")
-                        $this.AppendHostLogs($job.HostName, $row)
-                    }
-
-                    # Transition to apply phase after a successful update scan.
-                    $transitioned = $false
-                    if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
-                        $transitioned = $this.HandleUpdateScanCompletion($job, $row)
-                    }
-
-                    if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
-                        $this.CheckForManualReboot($job)
-                        if ($this.Toasts) {
-                            if ($this.ManualRebootQueue.Contains($job.HostName)) {
-                                $this.Toasts.ShowWarning($job.HostName, "Updates applied - manual reboot required.")
-                            } else {
-                                $this.Toasts.ShowSuccess($job.HostName, "Updates applied successfully.")
-                            }
-                        }
-                    }
-
-                    if ($job.Status -eq 'Failed' -and $this.Toasts) {
-                        $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
-                    }
-
-                    # Persist + settle the row unless we just kicked off an apply.
-                    if (-not $transitioned) {
-                        $this.SettleHost($job)
-                    }
-
-                    $job.Cleanup()
-                    $this.ActiveJobs.RemoveAt($i)
-                    $this.RefreshOverview()
-
-                    if ($this.ActiveJobs.Count -eq 0 -and $this.ManualRebootQueue.Count -gt 0) {
-                        $this.ShowManualRebootNotice()
-                    }
-                }
-            }
+            $this.PumpJobs()
         }
         catch {
             Write-Error "Error in OnTimerTick: $_"
+        }
+    }
+
+    # Per-tick: stream the job's queued output into its row and keep the card live.
+    [void] OnJobPolled([AsyncJob]$job) {
+        $row = $this.GetRow($job.HostName)
+
+        $logEntry = $null
+        $latestPct = -1
+        while ($job.Logs.TryDequeue([ref]$logEntry)) {
+            if ($row) { $row.AppendLog($logEntry) }
+            $pct = [DcuProgress]::ParsePercent($logEntry)
+            if ($pct -ge 0) { $latestPct = $pct }
+        }
+        if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
+
+        $this.RefreshCardStatus($job)
+    }
+
+    # Terminal: driver-match analysis / apply-phase transition / recents persistence.
+    [void] OnJobCompleted([AsyncJob]$job) {
+        $row = $this.GetRow($job.HostName)
+        if ($row) {
+            $row.AppendLog("Job $($job.JobType) finished: $($job.Status)")
+            $this.AppendHostLogs($job.HostName, $row)
+        }
+
+        # Transition to apply phase after a successful update scan.
+        $transitioned = $false
+        if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
+            $transitioned = $this.HandleUpdateScanCompletion($job, $row)
+        }
+
+        if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
+            $this.CheckForManualReboot($job)
+            if ($this.Toasts) {
+                if ($this.ManualRebootQueue.Contains($job.HostName)) {
+                    $this.Toasts.ShowWarning($job.HostName, "Updates applied - manual reboot required.")
+                } else {
+                    $this.Toasts.ShowSuccess($job.HostName, "Updates applied successfully.")
+                }
+            }
+        }
+
+        if ($job.Status -eq 'Failed' -and $this.Toasts) {
+            $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
+        }
+
+        # Persist + settle the row unless we just kicked off an apply.
+        if (-not $transitioned) {
+            $this.SettleHost($job)
+        }
+    }
+
+    # End of tick: refresh fleet counts and, once the batch is fully drained,
+    # surface any pending manual-reboot notice.
+    [void] AfterPump() {
+        $this.RefreshOverview()
+        if ($this.ActiveJobs.Count -eq 0 -and $this.ManualRebootQueue.Count -gt 0) {
+            $this.ShowManualRebootNotice()
         }
     }
 
