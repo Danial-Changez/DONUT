@@ -22,6 +22,9 @@ using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Core\TimeFormat.psm1"
+using module "..\..\Core\RunspaceManager.psm1"
+using module "..\..\Services\ActiveDirectoryService.psm1"
+using module "..\..\Models\AdSearchResult.psm1"
 
 class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
@@ -75,6 +78,16 @@ class HomePresenter : AsyncJobPresenter {
     [TextBlock] $OvUpdates
     [TextBlock] $OvUpdatesSub
 
+    # AD live-search (search-bar dropdown: computers + locked-out users)
+    [ActiveDirectoryService] $AdService
+    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup
+    [object]          $SearchList         # StackPanel inside the popup
+    [DispatcherTimer] $SearchDebounce
+    [DispatcherTimer] $SearchPollTimer
+    [int]             $SearchToken = 0
+    [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
+    [bool]            $SuppressSearch = $false
+
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
 
@@ -113,6 +126,17 @@ class HomePresenter : AsyncJobPresenter {
         $this.Timer.Add_Tick({ $presenter.OnTimerTick($this, $null) }.GetNewClosure())
         $this.Timer.Start()
 
+        # AD live-finder: debounce typing, run the search on the runspace pool,
+        # poll for completion (newest result wins).
+        $this.AdService = [ActiveDirectoryService]::new($this.Config.GetDomains(), $this.Logger)
+        $this.SearchJobs = [List[hashtable]]::new()
+        $this.SearchDebounce = [DispatcherTimer]::new()
+        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(350)
+        $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
+        $this.SearchPollTimer = [DispatcherTimer]::new()
+        $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
+        $this.SearchPollTimer.Add_Tick({ $presenter.PollSearch() }.GetNewClosure())
+
         $this.Initialize()
     }
 
@@ -125,6 +149,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
+        $this.SearchPopup = $this.ViewContent.FindName('SearchResultsPopup')
+        $this.SearchList = $this.ViewContent.FindName('SearchResultsList')
 
         $this.OvModel = $this.ViewContent.FindName('txtOvModel')
         $this.OvModelSub = $this.ViewContent.FindName('txtOvModelSub')
@@ -159,6 +185,10 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ModeButton) { $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure()) }
         if ($this.DetailRefreshButton) { $this.DetailRefreshButton.Add_Click({ $presenter.RefreshInventory($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.DetailRunButton) { $this.DetailRunButton.Add_Click({ $presenter.RunHost($presenter.SelectedHost) }.GetNewClosure()) }
+        if ($this.SearchBar) {
+            $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
+            $this.SearchBar.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() } }.GetNewClosure())
+        }
 
         # Seed recents from WSID.txt the first time, then build a row per recent.
         if ($this.Store.Count() -eq 0) {
@@ -233,6 +263,203 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $this.SearchBar.Text = ""
+    }
+
+    # ===================== AD live search (search-bar dropdown) =====================
+
+    # Restart the debounce window on each keystroke; close the dropdown when the
+    # prefix is too short to search.
+    [void] OnSearchTextChanged() {
+        if ($this.SuppressSearch) { return }
+        $text = if ($this.SearchBar) { $this.SearchBar.Text } else { '' }
+        if ([string]::IsNullOrWhiteSpace($text) -or $text.Trim().Length -lt $this.AdService.MinPrefix) {
+            $this.SearchDebounce.Stop()
+            $this.CloseSearchPopup()
+            return
+        }
+        $this.SearchDebounce.Stop()
+        $this.SearchDebounce.Start()
+    }
+
+    # Debounce elapsed: kick a background search on the runspace pool.
+    [void] RunAdSearch() {
+        $this.SearchDebounce.Stop()
+        $prefix = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
+        if ($prefix.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
+
+        $this.SearchToken++
+        $token = $this.SearchToken
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            $ps.RunspacePool = [RunspaceManager]::GetPool()
+            $ps.AddCommand($worker) | Out-Null
+            $ps.AddParameter('Domains', $this.AdService.Domains) | Out-Null
+            $ps.AddParameter('Prefix', $prefix) | Out-Null
+            $handle = $ps.BeginInvoke()
+            $this.SearchJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
+            $this.SearchPollTimer.Start()
+        }
+        catch {
+            $this.Logger.LogException("AD search could not start", $_)
+            $this.CloseSearchPopup()
+        }
+    }
+
+    # Poll in-flight searches; render only the newest, discard stale, dispose all.
+    [void] PollSearch() {
+        foreach ($job in @($this.SearchJobs)) {
+            if (-not $job.Handle.IsCompleted) { continue }
+            $results = @()
+            try { $results = @($job.Ps.EndInvoke($job.Handle)) }
+            catch { $this.Logger.LogException("AD search failed", $_) }
+            try { $job.Ps.Dispose() } catch { }
+            [void]$this.SearchJobs.Remove($job)
+            if ($job.Token -eq $this.SearchToken) { $this.RenderAdResults($results) }
+        }
+        if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
+    }
+
+    [void] RenderAdResults([object[]]$results) {
+        if (-not $this.SearchList) { return }
+        $this.SearchList.Children.Clear()
+        if ($null -eq $results -or $results.Count -eq 0) { $this.CloseSearchPopup(); return }
+
+        $computers = @($results | Where-Object { $_.Kind -eq 'Computer' })
+        $users = @($results | Where-Object { $_.Kind -eq 'User' })
+
+        if ($computers.Count -gt 0) {
+            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('COMPUTERS'))
+            foreach ($c in $computers) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($c)) }
+        }
+        if ($users.Count -gt 0) {
+            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('USERS'))
+            foreach ($u in $users) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($u)) }
+        }
+        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
+    }
+
+    hidden [object] BuildSectionHeader([string]$text) {
+        $tb = [TextBlock]::new()
+        $tb.Text = $text
+        $tb.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
+        $tb.FontSize = 10
+        $tb.FontWeight = [System.Windows.FontWeights]::SemiBold
+        $tb.Foreground = $this.ResBrush('BodyTextTertiary')
+        $tb.Margin = [System.Windows.Thickness]::new(6, 6, 0, 4)
+        return $tb
+    }
+
+    # Builds one dropdown row (imperative, like ConnectionRow). Computers pick into
+    # the search bar; locked users get an inline Unlock button.
+    hidden [object] BuildSearchRow([object]$r) {
+        $presenter = $this
+        $border = [Border]::new()
+        $border.CornerRadius = [System.Windows.CornerRadius]::new(7)
+        $border.Padding = [System.Windows.Thickness]::new(10, 6, 8, 6)
+        $border.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
+        $border.Background = [System.Windows.Media.Brushes]::Transparent
+        $hover = $this.ResBrush('PanelBackgroundHover')
+        $border.Add_MouseEnter({ $border.Background = $hover }.GetNewClosure())
+        $border.Add_MouseLeave({ $border.Background = [System.Windows.Media.Brushes]::Transparent }.GetNewClosure())
+
+        $grid = [Grid]::new()
+        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
+        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
+
+        $stack = [StackPanel]::new()
+        $stack.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        $primary = [TextBlock]::new()
+        $primary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
+        $primary.FontSize = 13
+        $primary.Foreground = $this.ResBrush('TitleTextPrimary')
+        $primary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+        $secondary = [TextBlock]::new()
+        $secondary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
+        $secondary.FontSize = 11
+        $secondary.Foreground = $this.ResBrush('BodyTextTertiary')
+        $secondary.Margin = [System.Windows.Thickness]::new(0, 1, 0, 0)
+        $secondary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+
+        if ($r.Kind -eq 'User') {
+            $label = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
+            if ($r.LockedOut) { $label = $label + " `u{1F512}" }
+            $primary.Text = $label
+            $sub = @([string]$r.DisplayName, [string]$r.Domain) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            $secondary.Text = ($sub -join '  -  ')
+        }
+        else {
+            $primary.Text = [string]$r.Name
+            $secondary.Text = "$([string]$r.Domain)  -  computer"
+            $cap = [string]$r.Name
+            $border.Cursor = [System.Windows.Input.Cursors]::Hand
+            $border.Add_MouseLeftButtonUp({ $presenter.OnPickComputer($cap) }.GetNewClosure())
+        }
+        [void]$stack.Children.Add($primary)
+        [void]$stack.Children.Add($secondary)
+        [Grid]::SetColumn($stack, 0)
+        [void]$grid.Children.Add($stack)
+
+        if ($r.Kind -eq 'User' -and $r.LockedOut) {
+            $btn = [Button]::new()
+            $btn.Content = 'Unlock'
+            $btn.Height = 28
+            $btn.FontSize = 11
+            $btn.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+            if ($this.MachineList) {
+                $style = $this.MachineList.TryFindResource('ButtonOutline')
+                if ($style) { $btn.Style = $style }
+            }
+            $u = $r
+            $btn.Add_Click({ $presenter.OnUnlockUser($u) }.GetNewClosure())
+            [Grid]::SetColumn($btn, 1)
+            [void]$grid.Children.Add($btn)
+        }
+
+        $border.Child = $grid
+        return $border
+    }
+
+    # Computer chosen: drop it into the bar so the operator can run the active
+    # command (suppressing the re-search the programmatic edit would trigger).
+    [void] OnPickComputer([string]$name) {
+        if ([string]::IsNullOrWhiteSpace($name)) { return }
+        $this.CloseSearchPopup()
+        $this.SuppressSearch = $true
+        if ($this.SearchBar) { $this.SearchBar.Text = $name; $this.SearchBar.CaretIndex = $name.Length }
+        $this.SuppressSearch = $false
+    }
+
+    # Locked user chosen: confirm, unlock against its home domain, toast the result.
+    [void] OnUnlockUser([object]$r) {
+        $this.CloseSearchPopup()
+        if ($null -eq $r) { return }
+        $upn = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
+
+        $confirmed = $this.DialogPresenter.ShowConfirmation(
+            "Unlock account",
+            "Unlock the locked-out account '$upn'?",
+            @("$([string]$r.SamAccountName)  @  $([string]$r.Domain)")
+        )
+        if (-not $confirmed) { return }
+
+        $user = [AdSearchResult]::new()
+        $user.Kind = 'User'
+        $user.SamAccountName = [string]$r.SamAccountName
+        $user.Domain = [string]$r.Domain
+        $user.UserPrincipalName = [string]$r.UserPrincipalName
+
+        if ($this.AdService.UnlockUser($user)) {
+            if ($this.Toasts) { $this.Toasts.ShowSuccess("Account unlocked", $upn) }
+        }
+        else {
+            if ($this.Toasts) { $this.Toasts.ShowError("Unlock failed", "Could not unlock $upn (check rights / connectivity).") }
+        }
+    }
+
+    [void] CloseSearchPopup() {
+        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $false }
     }
 
     # Runs a single host from a row click; confirms first when destructive.
