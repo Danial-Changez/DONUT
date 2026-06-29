@@ -8,7 +8,7 @@ class AppConfig {
     # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
     static [hashtable] $Defaults = @{
         activeCommand = 'scan'
-        throttleLimit = 5
+        throttleLimit = 8
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
         domains = @('prod.cgic.ca', 'clic.cooperators.ca', 'cumis.local', 'sgic.local')
@@ -157,7 +157,7 @@ class AppConfig {
             if ($val -is [int]) { return $val }
             if ($val -is [string] -and $val -match '^\d+$') { return [int]$val }
         }
-        return 5
+        return 8
     }
 
     [void] SetThrottleLimit([int]$limit) {
