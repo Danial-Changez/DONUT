@@ -414,7 +414,9 @@ class ExecutionService {
         # DCU 4.x+ usually creates "Report.xml" inside the folder.
         
         $localLog = Join-Path $this.LocalLogsDir "$hostName.log"
-        $localReport = Join-Path $this.LocalReportsDir "$hostName.xml"
+        # Must match RemoteUpdateService.ParseUpdateReport's "<host>-Updates.xml", or the
+        # scan's report is never read and the pending-updates count stays 0.
+        $localReport = Join-Path $this.LocalReportsDir "$hostName-Updates.xml"
         
         if (Test-Path $remoteLog) {
             Copy-Item -Path $remoteLog -Destination $localLog -Force
