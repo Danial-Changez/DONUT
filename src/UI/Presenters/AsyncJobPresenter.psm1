@@ -27,35 +27,52 @@ using module "..\..\Models\JobEnums.psm1"
 
 class AsyncJobPresenter {
     [System.Collections.Generic.List[AsyncJob]] $ActiveJobs
+    hidden [bool] $IsPumping = $false   # re-entrancy guard (see PumpJobs)
 
     AsyncJobPresenter() {
         $this.ActiveJobs = [List[AsyncJob]]::new()
     }
 
     # Drives one polling pass over all active jobs. Safe to call when idle.
+    #
+    # OnJobCompleted/AfterPump may show a blocking modal (ShowDialog - the
+    # apply-updates confirmation, the manual-reboot notice). ShowDialog runs a
+    # nested message loop that keeps the free-running 200ms job timer ticking, so
+    # the tick re-enters PumpJobs WHILE we're still inside OnJobCompleted - before
+    # the finished job has been RemoveAt'd. Without a guard that re-entrant pass
+    # re-processes the same completed job and stacks another dialog every tick (the
+    # "UI freeze whenever a popup is involved"). The guard makes re-entrant calls
+    # no-op; the in-flight pass finishes and removes the job once the dialog closes.
     [void] PumpJobs() {
+        if ($this.IsPumping) { return }
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
 
-        $processedAny = $false
-        for ($i = $this.ActiveJobs.Count - 1; $i -ge 0; $i--) {
-            $job = $this.ActiveJobs[$i]
-            if (-not $job) { continue }
-            $processedAny = $true
+        $this.IsPumping = $true
+        try {
+            $processedAny = $false
+            for ($i = $this.ActiveJobs.Count - 1; $i -ge 0; $i--) {
+                $job = $this.ActiveJobs[$i]
+                if (-not $job) { continue }
+                $processedAny = $true
 
-            $job.Poll()
-            $this.OnJobPolled($job)
+                $job.Poll()
+                $this.OnJobPolled($job)
 
-            if ($job.Status -in @([JobStatus]::Completed, [JobStatus]::Failed)) {
-                $this.OnJobCompleted($job)
-                $job.Cleanup()
-                # Re-fetch the index: OnJobCompleted may append jobs (e.g. an
-                # apply phase), but never reorders/removes earlier entries, so
-                # the original index still points at this finished job.
-                $this.ActiveJobs.RemoveAt($i)
+                if ($job.Status -in @([JobStatus]::Completed, [JobStatus]::Failed)) {
+                    $this.OnJobCompleted($job)
+                    $job.Cleanup()
+                    # Re-fetch the index: OnJobCompleted may append jobs (e.g. an
+                    # apply phase), but never reorders/removes earlier entries, so
+                    # the original index still points at this finished job.
+                    $this.ActiveJobs.RemoveAt($i)
+                }
             }
-        }
 
-        if ($processedAny) { $this.AfterPump() }
+            if ($processedAny) { $this.AfterPump() }
+        }
+        finally {
+            $this.IsPumping = $false
+        }
     }
 
     # --- Overridable hooks (no-op by default) ----------------------------------------
