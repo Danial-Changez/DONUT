@@ -900,8 +900,14 @@ class HomePresenter : AsyncJobPresenter {
             'Completed'
         }
 
-        $report = $this.UpdateService.ParseUpdateReport($job.HostName)
-        $updateCount = $this.UpdateService.CountUpdates($report)
+        # A successful apply installs the scanned updates, but applyUpdates doesn't
+        # regenerate the scan report - so re-parsing it would keep showing the old
+        # count. Treat the host as 0 pending (a needed reboot is flagged separately).
+        $updateCount = if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
+            0
+        } else {
+            $this.UpdateService.CountUpdates($this.UpdateService.ParseUpdateReport($job.HostName))
+        }
 
         $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
 
