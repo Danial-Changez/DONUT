@@ -229,6 +229,16 @@ Describe "WorkerServices" {
             $result.Online   | Should -BeTrue
         }
 
+        It "WarmRunspace mode is a no-op (just loads the module graph into the runspace)" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $probe = [MockNetworkProbeWorker]::new()
+            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'WarmRunspace' })
+
+            $result.Mode | Should -Be 'WarmRunspace'
+        }
+
         It "Name mode returns the actual computer name at the IP" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
