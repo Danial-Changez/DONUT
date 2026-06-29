@@ -12,12 +12,14 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsRpcAvailableResult = $true
     [string] $ResolveHostResult = "127.0.0.1"
     [string] $ActiveDcResult = "DC1.contoso.local"
+    [string[]] $DcListResult = @("DC1.contoso.local", "DC2.contoso.local")
     [string] $ResolveWithResult = "10.0.0.7"
     MockNetworkProbeWorker() {}
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
     [string] GetActiveDomainController() { return $this.ActiveDcResult }
+    [string[]] GetDomainControllers() { return $this.DcListResult }
     [IPAddress] ResolveWith([string]$hostName, [string]$dc) { return [IPAddress]::Parse($this.ResolveWithResult) }
 }
 
@@ -196,18 +198,19 @@ Describe "WorkerServices" {
     # never probed on the UI thread (Prepare* builds args only).
 
     Context "RunResolvePhase" {
-        It "Warm mode returns the active domain controller" {
+        It "Warm mode returns the active DC and the DC list" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
             $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
             $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'Warm' })
 
-            $result.Mode     | Should -Be 'Warm'
-            $result.ActiveDc | Should -Be 'DC1.contoso.local'
+            $result.Mode                  | Should -Be 'Warm'
+            $result.ActiveDc              | Should -Be 'DC1.contoso.local'
+            $result.DomainControllers.Count | Should -Be 2
         }
 
-        It "Host mode resolves the host against the supplied DC" {
+        It "Host mode returns a verdict (fresh IP + online) against the supplied DC" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
             $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
@@ -217,6 +220,19 @@ Describe "WorkerServices" {
             $result.Mode     | Should -Be 'Host'
             $result.HostName | Should -Be 'PC-1'
             $result.Ip       | Should -Be '10.0.0.7'
+            $result.Online   | Should -BeTrue
+        }
+
+        It "Host mode reports offline when RPC is unreachable" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $probe = [MockNetworkProbeWorker]::new()
+            $probe.IsRpcAvailableResult = $false
+            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $result = $service.RunResolvePhase([DeviceContext]::new("PC-1"), @{ Mode = 'Host'; Dc = 'DC1' })
+
+            $result.Ip     | Should -Be '10.0.0.7'
+            $result.Online | Should -BeFalse
         }
     }
 

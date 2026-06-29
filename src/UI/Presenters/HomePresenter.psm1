@@ -211,8 +211,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateModePill()
         $this.RefreshAll()
 
-        # Start-early: warm a live domain controller in the background so that, by
-        # the time a machine is selected, resolving its IP is a single fast lookup.
+        # Start-early: seed the domain controller saved from a prior run so the very
+        # first selects can resolve immediately (no cold-start wait), then refresh it
+        # in the background. A stale saved DC just falls back until the warm lands.
+        $savedDc = [string]$this.Config.Settings['activeDomainController']
+        if (-not [string]::IsNullOrWhiteSpace($savedDc)) { $this.Resolver.SetActiveDc($savedDc) }
         $this.StartWarm()
     }
 
@@ -247,7 +250,15 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Resolve job finished: pull the DC / IP off the job result and cache it.
+    # A job failed: the cached IP may be dead/stale, so drop it and re-resolve the
+    # current IP in the background, ready for a retry.
+    [void] InvalidateResolved([string]$hostName) {
+        $this.Resolver.Invalidate($hostName)
+        $this.PrefetchIp($hostName)
+    }
+
+    # Resolve job finished: cache the DC (warm) or the per-host verdict (fresh IP +
+    # online), detect an IP change, persist the DC, and refresh the offline indicator.
     [void] CompleteResolve([AsyncJob]$job) {
         if ($job.Status -eq 'Failed') { return }
         foreach ($item in @($job.Result)) {
@@ -255,11 +266,56 @@ class HomePresenter : AsyncJobPresenter {
             $mode = [string]$item.Mode
             if ($mode -eq 'Warm') {
                 $dc = [string]$item.ActiveDc
-                if (-not [string]::IsNullOrWhiteSpace($dc)) { $this.Resolver.SetActiveDc($dc) }
+                if (-not [string]::IsNullOrWhiteSpace($dc)) {
+                    $this.Resolver.SetActiveDc($dc)
+                    $this.PersistDomainController($dc, @($item.DomainControllers))
+                }
             }
             elseif ($mode -eq 'Host') {
-                $this.Resolver.CacheIp([string]$item.HostName, [string]$item.Ip)
+                $hn = [string]$item.HostName
+                $newIp = [string]$item.Ip
+                $online = [bool]$item.Online
+                $oldIp = $this.Resolver.GetCachedIp($hn)
+                if (-not [string]::IsNullOrWhiteSpace($oldIp) -and -not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
+                    $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp")
+                }
+                $this.Resolver.CacheVerdict($hn, $newIp, $online)
+                $this.RenderReachability($hn)
             }
+        }
+    }
+
+    # Persists the active DC (and list) so the next launch can resolve immediately,
+    # without waiting on AD discovery. Only writes when something changed.
+    hidden [void] PersistDomainController([string]$dc, [string[]]$list) {
+        if ($null -eq $this.ConfigManager) { return }
+        $changed = $false
+        if ([string]$this.Config.Settings['activeDomainController'] -ne $dc) {
+            $this.Config.Settings['activeDomainController'] = $dc
+            $changed = $true
+        }
+        if ($null -ne $list -and $list.Count -gt 0) {
+            $existing = @($this.Config.Settings['domainControllers'])
+            if (($existing -join '|') -ne ($list -join '|')) {
+                $this.Config.Settings['domainControllers'] = @($list)
+                $changed = $true
+            }
+        }
+        if ($changed) {
+            try { $this.ConfigManager.SaveConfig($this.Config) }
+            catch { $this.Logger.LogException("Could not persist domain controller", $_) }
+        }
+    }
+
+    # Reflects a host's cached online/offline verdict on its idle row and, when it's
+    # the selected host, in the detail header. No row update while a job is running
+    # on that host (live status owns the dot/subtitle then).
+    [void] RenderReachability([string]$hostName) {
+        $state = $this.Resolver.IsHostOnline($hostName)
+        $row = $this.GetRow($hostName)
+        if ($row -and -not $this.IsRunning($hostName)) { $row.SetReachability($state) }
+        if ($hostName -eq $this.SelectedHost -and $this.DetailHostText) {
+            $this.DetailHostText.Text = if ($state -eq 'Offline') { "$hostName  -  offline" } else { $hostName }
         }
     }
 
@@ -717,8 +773,9 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
 
-        if ($job.Status -eq 'Failed' -and $this.Toasts) {
-            $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
+        if ($job.Status -eq 'Failed') {
+            $this.InvalidateResolved($job.HostName)
+            if ($this.Toasts) { $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.") }
         }
 
         # Persist + settle the row unless we just kicked off an apply.
@@ -920,6 +977,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
         $this.RenderBigFolders($cachedDisk)
+
+        # Reflect any already-known reachability verdict immediately (a fresh
+        # PrefetchIp above will update it when it lands).
+        $this.RenderReachability($hostName)
     }
 
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
@@ -981,6 +1042,7 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Inventory probe failed.")
+            $this.InvalidateResolved($hostName)
             return
         }
 
@@ -1040,6 +1102,7 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Disk scan failed.")
+            $this.InvalidateResolved($hostName)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Disk scan failed. Open the log for details.") }
             return
         }

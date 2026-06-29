@@ -19,8 +19,12 @@ using module ".\RemoteServices.psm1"
 # call ValidateHostConnectivity, so nothing here touches the network/UI thread).
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
-    hidden [hashtable] $IpCache  = @{}   # host -> ip string (case-insensitive keys)
+    hidden [hashtable] $IpCache  = @{}   # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys)
     hidden [hashtable] $InFlight = @{}   # host -> $true while a resolve job is queued
+
+    # How long a cached verdict is trusted before a re-validate is allowed. A
+    # DHCP IP can move, so we re-resolve on the next select once an entry is stale.
+    [timespan] $Ttl = [timespan]::FromMinutes(5)
 
     HostResolver([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
 
@@ -36,19 +40,33 @@ class HostResolver : RemoteJobService {
         return -not [string]::IsNullOrWhiteSpace($this.ActiveDc)
     }
 
-    [void] CacheIp([string]$hostName, [string]$ip) {
+    [string] GetActiveDc() {
+        return $this.ActiveDc
+    }
+
+    # Stores a verdict (fresh IP + reachability) and stamps it for the TTL.
+    [void] CacheVerdict([string]$hostName, [string]$ip, [bool]$online) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $name = $hostName.Trim()
         $this.InFlight.Remove($name)
-        if (-not [string]::IsNullOrWhiteSpace($ip)) { $this.IpCache[$name] = $ip.Trim() }
+        if ([string]::IsNullOrWhiteSpace($ip)) { return }
+        $this.IpCache[$name] = @{ Ip = $ip.Trim(); Online = $online; CheckedAt = [datetime]::UtcNow }
     }
 
     # Cached IP for a host, or $null when not resolved yet.
     [string] GetCachedIp([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $null }
         $name = $hostName.Trim()
-        if ($this.IpCache.ContainsKey($name)) { return [string]$this.IpCache[$name] }
+        if ($this.IpCache.ContainsKey($name)) { return [string]$this.IpCache[$name]['Ip'] }
         return $null
+    }
+
+    # Tri-state reachability for the UI: 'Online' / 'Offline' / 'Unknown'.
+    [string] IsHostOnline([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return 'Unknown' }
+        $name = $hostName.Trim()
+        if (-not $this.IpCache.ContainsKey($name)) { return 'Unknown' }
+        return $(if ([bool]$this.IpCache[$name]['Online']) { 'Online' } else { 'Offline' })
     }
 
     [void] MarkInFlight([string]$hostName) {
@@ -56,15 +74,24 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
-    # True only when we can and should resolve now: a DC is known, the host isn't
-    # cached, and no resolve for it is already queued (single-flight per host).
+    # Drops a host's cached verdict so the next attempt re-resolves (e.g. after a
+    # job fails - the cached IP may be dead/stale).
+    [void] Invalidate([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.IpCache.Remove($hostName.Trim())
+    }
+
+    # True when we can and should (re)resolve now: a DC is known, no resolve is in
+    # flight (single-flight), and the host is either uncached or its verdict has
+    # aged past the TTL.
     [bool] NeedsResolve([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
         if (-not $this.HasActiveDc()) { return $false }
         $name = $hostName.Trim()
-        if ($this.IpCache.ContainsKey($name)) { return $false }
         if ($this.InFlight.ContainsKey($name)) { return $false }
-        return $true
+        if (-not $this.IpCache.ContainsKey($name)) { return $true }
+        $age = [datetime]::UtcNow - [datetime]$this.IpCache[$name]['CheckedAt']
+        return ($age -gt $this.Ttl)
     }
 
     # --- Worker-arg builders (run the actual resolution on the pool) -------------------

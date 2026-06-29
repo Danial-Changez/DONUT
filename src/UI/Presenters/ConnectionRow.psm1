@@ -39,6 +39,8 @@ class ConnectionRow {
     hidden [Button]      $RunButton
     hidden [bool]        $Selected
     hidden [double]      $LastPercent = -1   # last % parsed from DCU output (-1 = unknown)
+    hidden [string]      $BaseSubtitle = ''  # idle subtitle before the reachability suffix
+    hidden [string]      $Reachability = 'Unknown'  # 'Online' | 'Offline' | 'Unknown'
 
     ConnectionRow([string]$hostName) {
         $this.HostName = $hostName
@@ -216,13 +218,33 @@ class ConnectionRow {
             [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
         }
         $detail = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
-        $this.Subtitle.Text = $detail
+        $this.BaseSubtitle = $detail
+        $this.ApplySubtitle()
+    }
+
+    # Reflects the background reachability verdict on an idle row: an offline host
+    # gets an "offline" subtitle tag and a dimmed dot. Online/Unknown clears it.
+    # (The presenter only calls this when no job is running on the host.)
+    [void] SetReachability([string]$state) {
+        $this.Reachability = $state
+        $this.Dot.Opacity = $(if ($state -eq 'Offline') { 0.4 } else { 1.0 })
+        $this.ApplySubtitle()
+    }
+
+    # Composes the idle subtitle from its base text plus the reachability tag.
+    hidden [void] ApplySubtitle() {
+        if ($this.Reachability -eq 'Offline') {
+            $this.Subtitle.Text = if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' } else { "$($this.BaseSubtitle)  ·  offline" }
+        } else {
+            $this.Subtitle.Text = $this.BaseSubtitle
+        }
     }
 
     # Applies a live job status: recolours the dot/chip and drives the bar.
     [void] SetStatus([FleetStatus]$status) {
         $accent = $this.Brush($status.ColorKey, [Colors]::Gray)
 
+        $this.Dot.Opacity = 1.0   # clear any offline dimming while a job runs
         $this.Dot.Fill = $accent
         $this.ChipBg.Visibility = [Visibility]::Visible
         $this.ChipText.Text = $status.Label
