@@ -121,7 +121,7 @@ Describe "RecentConnectionsStore" {
             $script:inv.HasBattery = $true
             $script:inv.DesignCapacity = 50000
             $script:inv.FullChargeCapacity = 45000
-            $script:inv.CycleCount = 120
+            $script:inv.ChargePercent = 67
         }
 
         It "Caches inventory on a tracked host without clobbering its status" {
@@ -160,7 +160,7 @@ Describe "RecentConnectionsStore" {
             $rc.Inventory                    | Should -Not -BeNullOrEmpty
             $rc.Inventory.ServiceTag         | Should -Be 'ABC1234'
             $rc.Inventory.FullChargeCapacity | Should -Be 45000
-            $rc.Inventory.CycleCount         | Should -Be 120
+            $rc.Inventory.ChargePercent      | Should -Be 67
             $rc.LastStatus                   | Should -Be "Completed"
         }
     }

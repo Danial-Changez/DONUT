@@ -1126,7 +1126,7 @@ class HomePresenter : AsyncJobPresenter {
             if ($this.OvModelSub) { $this.OvModelSub.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $hostName } }
 
             $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
-            if ($this.OvBattery) { $this.OvBattery.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health, $inv.CycleCount) }
+            if ($this.OvBattery) { $this.OvBattery.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health) }
             if ($this.OvBatterySub) {
                 $this.OvBatterySub.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
                     $state = if ($inv.Charging) { 'charging' } else { 'on battery' }

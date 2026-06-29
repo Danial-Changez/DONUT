@@ -62,7 +62,6 @@ $inv = [ordered]@{
     hasBattery         = $false
     designCapacity     = $null
     fullChargeCapacity = $null
-    cycleCount         = $null
     chargePercent      = $null
     charging           = $false
     freeSpaceBytes     = $null
@@ -71,17 +70,19 @@ $inv = [ordered]@{
     probedAt           = ([datetime]::UtcNow.ToString('o'))
 }
 
-try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $inv.model = $cs.Model } catch { }
+# Every query projects only the fields we use (-Property): less to serialize and
+# transfer, and it sidesteps the BatteryStaticData crash (see below).
+try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -Property Model -ErrorAction Stop; $inv.model = $cs.Model } catch { }
 try {
-    $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop
+    $bios = Get-CimInstance -ClassName Win32_BIOS -Property SerialNumber, SMBIOSBIOSVersion -ErrorAction Stop
     $inv.serviceTag = $bios.SerialNumber
     $inv.biosVersion = $bios.SMBIOSBIOSVersion
 } catch { }
 
 # Battery design/health live in root\wmi (not root\cimv2). Get-CimInstance crashes
 # when it serializes ALL properties of BatteryStaticData (a corrupt datetime
-# field), so we request ONLY the numeric capacity/cycle property via -Property,
-# which bypasses the bug and reads reliably as SYSTEM in session 0.
+# field), so we request ONLY the numeric capacity property via -Property, which
+# bypasses the bug and reads reliably as SYSTEM in session 0.
 try {
     $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }
@@ -90,14 +91,10 @@ try {
     $full = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -Property FullChargedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($full) { $inv.fullChargeCapacity = [int64]$full.FullChargedCapacity }
 } catch { }
-try {
-    $cyc = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryCycleCount -Property CycleCount -ErrorAction Stop | Select-Object -First 1
-    if ($cyc -and $null -ne $cyc.CycleCount) { $inv.cycleCount = [int]$cyc.CycleCount }
-} catch { }
 
 # Presence + current charge from Win32_Battery (BatteryStatus 1 = discharging).
 try {
-    $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction Stop | Select-Object -First 1
+    $bat = Get-CimInstance -ClassName Win32_Battery -Property EstimatedChargeRemaining, BatteryStatus -ErrorAction Stop | Select-Object -First 1
     if ($bat) {
         $inv.hasBattery = $true
         $inv.chargePercent = [int]$bat.EstimatedChargeRemaining
@@ -106,7 +103,7 @@ try {
 } catch { }
 
 try {
-    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop | Select-Object -First 1
+    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -Property FreeSpace, Size -ErrorAction Stop | Select-Object -First 1
     if ($disk) {
         $inv.freeSpaceBytes = [int64]$disk.FreeSpace
         $inv.totalSpaceBytes = [int64]$disk.Size
@@ -114,7 +111,7 @@ try {
 } catch { }
 
 try {
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -Property LastBootUpTime -ErrorAction Stop
     if ($os.LastBootUpTime) { $inv.lastBootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o') }
 } catch { }
 

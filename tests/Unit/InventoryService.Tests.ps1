@@ -41,7 +41,6 @@ Describe "InventoryService" {
             # corrupt datetime field, which crashes a full Get-CimInstance pull.
             $script | Should -BeLike "*BatteryStaticData -Property DesignedCapacity*"
             $script | Should -BeLike "*BatteryFullChargedCapacity -Property FullChargedCapacity*"
-            $script | Should -BeLike "*BatteryCycleCount -Property CycleCount*"
             # Stays on the modern CIM cmdlet, not the removed Get-WmiObject.
             $script | Should -Not -BeLike '*Get-WmiObject*'
         }
@@ -76,7 +75,7 @@ Describe "InventoryService" {
             $json = @{
                 model = 'Latitude 5340'; serviceTag = 'ABC1234'
                 hasBattery = $true; designCapacity = 50000; fullChargeCapacity = 45000
-                cycleCount = 88; chargePercent = 72; charging = $true
+                chargePercent = 72; charging = $true
                 freeSpaceBytes = 42949672960; totalSpaceBytes = 274877906944
                 lastBootTime = '2026-06-25T08:00:00Z'; probedAt = '2026-06-27T12:00:00Z'
             } | ConvertTo-Json
@@ -88,7 +87,7 @@ Describe "InventoryService" {
             $inv.Model              | Should -Be 'Latitude 5340'
             $inv.ServiceTag         | Should -Be 'ABC1234'
             $inv.FullChargeCapacity | Should -Be 45000
-            $inv.CycleCount         | Should -Be 88
+            $inv.ChargePercent      | Should -Be 72
             $inv.FreeSpaceBytes     | Should -Be 42949672960
         }
 
