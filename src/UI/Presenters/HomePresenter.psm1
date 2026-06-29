@@ -276,8 +276,10 @@ class HomePresenter : AsyncJobPresenter {
                 $newIp = [string]$item.Ip
                 $online = [bool]$item.Online
                 $oldIp = $this.Resolver.GetCachedIp($hn)
-                if (-not [string]::IsNullOrWhiteSpace($oldIp) -and -not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
-                    $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp")
+                # Log only a first find or an actual change - never a same-IP TTL refresh.
+                if (-not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
+                    if ([string]::IsNullOrWhiteSpace($oldIp)) { $this.Logger.LogInfo("[$hn] resolved IP $newIp") }
+                    else { $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp") }
                 }
                 $this.Resolver.CacheVerdict($hn, $newIp, $online)
                 $this.RenderReachability($hn)
