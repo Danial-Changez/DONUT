@@ -18,16 +18,13 @@ Describe "InventoryFormat" {
 
     Context "BatteryHealthLabel" {
         It "Reports no battery for desktops" {
-            [InventoryFormat]::BatteryHealthLabel($false, -1, -1) | Should -BeLike '*No battery*'
+            [InventoryFormat]::BatteryHealthLabel($false, -1) | Should -BeLike '*No battery*'
         }
         It "Reports no-data when health is unknown" {
-            [InventoryFormat]::BatteryHealthLabel($true, -1, -1) | Should -BeLike '*no battery data*'
+            [InventoryFormat]::BatteryHealthLabel($true, -1) | Should -BeLike '*no battery data*'
         }
-        It "Includes cycles when available" {
-            [InventoryFormat]::BatteryHealthLabel($true, 88, 412) | Should -Be '88% health · 412 cycles'
-        }
-        It "Omits cycles when unavailable (-1)" {
-            [InventoryFormat]::BatteryHealthLabel($true, 88, -1) | Should -Be '88% health'
+        It "Reports the health percentage" {
+            [InventoryFormat]::BatteryHealthLabel($true, 88) | Should -Be '88% health'
         }
     }
 
@@ -59,7 +56,7 @@ Describe "MachineInventory" {
             $h = @{
                 model = 'Latitude 5340'; serviceTag = 'ABC1234'; biosVersion = '1.18.0'
                 hasBattery = $true; designCapacity = 50000; fullChargeCapacity = 45000
-                cycleCount = 120; chargePercent = 67; charging = $false
+                chargePercent = 67; charging = $false
                 freeSpaceBytes = 42949672960; totalSpaceBytes = 274877906944
                 lastBootTime = '2026-06-25T08:00:00Z'; probedAt = '2026-06-27T12:00:00Z'
             }
@@ -69,20 +66,19 @@ Describe "MachineInventory" {
             $mi.HasBattery         | Should -Be $true
             $mi.DesignCapacity     | Should -Be 50000
             $mi.FullChargeCapacity | Should -Be 45000
-            $mi.CycleCount         | Should -Be 120
             $mi.ChargePercent      | Should -Be 67
             $mi.FreeSpaceBytes     | Should -Be 42949672960
         }
-        It "Defaults cycle count to -1 when absent (desktop)" {
+        It "Defaults charge percent to -1 when absent (desktop)" {
             $mi = [MachineInventory]::FromHashtable(@{ model = 'OptiPlex 7010'; hasBattery = $false })
-            $mi.CycleCount | Should -Be -1
-            $mi.HasBattery | Should -Be $false
-            $mi.Model      | Should -Be 'OptiPlex 7010'
+            $mi.ChargePercent | Should -Be -1
+            $mi.HasBattery    | Should -Be $false
+            $mi.Model         | Should -Be 'OptiPlex 7010'
         }
         It "Returns an empty inventory for a null hashtable" {
             $mi = [MachineInventory]::FromHashtable($null)
-            $mi.Model      | Should -Be ''
-            $mi.CycleCount | Should -Be -1
+            $mi.Model         | Should -Be ''
+            $mi.ChargePercent | Should -Be -1
         }
     }
 }

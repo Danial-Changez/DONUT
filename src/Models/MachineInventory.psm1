@@ -12,7 +12,6 @@ class MachineInventory {
     [bool]   $HasBattery = $false
     [long]   $DesignCapacity = 0
     [long]   $FullChargeCapacity = 0
-    [int]    $CycleCount = -1            # -1 = unavailable (common on OEM batteries)
     [int]    $ChargePercent = -1
     [bool]   $Charging = $false
     [long]   $FreeSpaceBytes = 0
@@ -31,7 +30,6 @@ class MachineInventory {
         $mi.HasBattery         = [bool]$h['hasBattery']
         $mi.DesignCapacity     = [MachineInventory]::AsLong($h['designCapacity'])
         $mi.FullChargeCapacity = [MachineInventory]::AsLong($h['fullChargeCapacity'])
-        $mi.CycleCount         = [MachineInventory]::AsInt($h['cycleCount'], -1)
         $mi.ChargePercent      = [MachineInventory]::AsInt($h['chargePercent'], -1)
         $mi.Charging           = [bool]$h['charging']
         $mi.FreeSpaceBytes     = [MachineInventory]::AsLong($h['freeSpaceBytes'])
@@ -51,7 +49,6 @@ class MachineInventory {
             hasBattery         = $this.HasBattery
             designCapacity     = $this.DesignCapacity
             fullChargeCapacity = $this.FullChargeCapacity
-            cycleCount         = $this.CycleCount
             chargePercent      = $this.ChargePercent
             charging           = $this.Charging
             freeSpaceBytes     = $this.FreeSpaceBytes
@@ -90,12 +87,10 @@ class InventoryFormat {
     }
 
     # One-line battery-health summary for the card.
-    static [string] BatteryHealthLabel([bool]$hasBattery, [int]$healthPct, [int]$cycleCount) {
+    static [string] BatteryHealthLabel([bool]$hasBattery, [int]$healthPct) {
         if (-not $hasBattery) { return 'No battery (desktop / AC)' }
         if ($healthPct -lt 0) { return '— (no battery data)' }
-        $label = "$healthPct% health"
-        if ($cycleCount -ge 0) { $label += " · $cycleCount cycles" }
-        return $label
+        return "$healthPct% health"
     }
 
     # Free / total disk on C: as GB. '—' when total is unknown.
