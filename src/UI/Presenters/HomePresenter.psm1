@@ -465,11 +465,24 @@ class HomePresenter : AsyncJobPresenter {
         $text = if ($this.SearchBar) { $this.SearchBar.Text } else { '' }
         if ([string]::IsNullOrWhiteSpace($text) -or $text.Trim().Length -lt $this.AdService.MinPrefix) {
             $this.SearchDebounce.Stop()
+            $this.AbortSearch()
             $this.CloseSearchPopup()
             return
         }
         $this.SearchDebounce.Stop()
         $this.SearchDebounce.Start()
+    }
+
+    # Cancels the in-flight fan-out: stales the token so any late forest result is
+    # discarded (otherwise it would re-open the dropdown after the box was cleared),
+    # disposes the jobs, and stops polling.
+    [void] AbortSearch() {
+        $this.SearchToken++
+        foreach ($job in @($this.SearchJobs)) { try { $job.Ps.Dispose() } catch { } }
+        $this.SearchJobs.Clear()
+        $this.SearchResults.Clear()
+        $this.SearchSeen.Clear()
+        $this.SearchPollTimer.Stop()
     }
 
     # Debounce elapsed: kick a background search on the runspace pool.
@@ -481,10 +494,7 @@ class HomePresenter : AsyncJobPresenter {
         # Drop any still-in-flight jobs from the previous keystroke so a new search
         # doesn't stack a fresh fan-out behind stale ones (best-effort, non-blocking;
         # the token guard already discards their late results).
-        foreach ($job in @($this.SearchJobs)) { try { $job.Ps.Dispose() } catch { } }
-        $this.SearchJobs.Clear()
-        $this.SearchResults.Clear()
-        $this.SearchSeen.Clear()
+        $this.AbortSearch()
 
         $this.SearchToken++
         $token = $this.SearchToken
