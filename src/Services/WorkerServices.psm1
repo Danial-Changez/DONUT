@@ -15,6 +15,10 @@ class ExecutionService {
     [string] $ToolsDir
     [string] $LocalLogsDir
     [string] $LocalReportsDir
+    # Per-job resolved IP. Seeded from a pre-resolved IP (HostResolver) when one is
+    # supplied, else filled in by the first ResolvedIpFor() call - so a job resolves
+    # the host 0 or 1 times, never on the hot path when it was prefetched.
+    [string] $JobIp = ''
 
     ExecutionService(
         [LogService] $logger,
@@ -50,6 +54,12 @@ class ExecutionService {
         $localMatcher = [DriverMatchingService]::new($localLogger)
         $service = [ExecutionService]::new($localLogger, $localProbe, $localMatcher, $Config, $SourceRoot, $LogsDir, $ReportsDir)
 
+        # Use the pre-resolved IP (warmed in the background on selection) when the
+        # presenter threaded one through, so the worker skips DNS on the hot path.
+        if ($null -ne $Options -and $Options.ResolvedIp -and -not [string]::IsNullOrWhiteSpace([string]$Options.ResolvedIp)) {
+            $service.JobIp = [string]$Options.ResolvedIp
+        }
+
         # Create Device Context
         $device = [DeviceContext]::new($HostName)
 
@@ -66,9 +76,46 @@ class ExecutionService {
         elseif ($JobType -eq 'DiskScan') {
             return $service.RunDiskScanPhase($device, $Options)
         }
+        elseif ($JobType -eq 'Resolve') {
+            return $service.RunResolvePhase($device, $Options)
+        }
         else {
             throw "Unknown JobType: $JobType"
         }
+    }
+
+    # Background resolution run on the pool (not the UI thread). 'Warm' discovers a
+    # live domain controller once at startup; 'Host' resolves a single host against
+    # that already-known DC (cheap, no AD module). The result rides back on the
+    # AsyncJob's Result and is cached by HostResolver via the presenter.
+    [hashtable] RunResolvePhase([DeviceContext] $device, [hashtable] $options) {
+        $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
+
+        if ($mode -eq 'Warm') {
+            $dc = $this.Probe.GetActiveDomainController()
+            $this.Logger.LogInfo("Resolver warm-up: active domain controller = $dc")
+            return @{ Mode = 'Warm'; ActiveDc = [string]$dc }
+        }
+
+        $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
+        $ip = $this.Probe.ResolveWith($device.HostName, $dc)
+        $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
+        $this.Logger.LogInfo("[$($device.HostName)] Pre-resolved IP = '$ipStr' (via $dc)")
+        return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr }
+    }
+
+    # The job's target IP, resolved at most once: returns the pre-resolved/seeded IP
+    # if present, otherwise resolves via the AD-authoritative path and memoizes it.
+    hidden [string] ResolvedIpFor([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($this.JobIp)) {
+            $ip = $this.Probe.ResolveHost($hostName)
+            if (-not $ip) {
+                $this.Logger.LogError("[$hostName] Could not resolve IP.")
+                throw "Could not resolve IP for $hostName"
+            }
+            $this.JobIp = [string]$ip
+        }
+        return $this.JobIp
     }
 
     [hashtable] RunScanPhase([DeviceContext] $device) {
@@ -130,20 +177,16 @@ class ExecutionService {
     }
 
     # Runs the inventory probe script on the remote and copies its JSON back.
+    # Resolves the target at most once (ResolvedIpFor reuses the prefetched IP).
     [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
-
-        $ip = $this.Probe.ResolveHost($device.HostName)
-        if (-not $ip) {
-            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP; aborting inventory.")
-            throw "Could not resolve IP for $($device.HostName)"
-        }
 
         $scriptText = if ($null -ne $options) { [string]$options.ScriptText } else { '' }
         if ([string]::IsNullOrWhiteSpace($scriptText)) {
             throw "No inventory script supplied for $($device.HostName)."
         }
 
+        $ip = $this.ResolvedIpFor($device.HostName)
         $this.InvokeRemotePwsh($ip, $scriptText)
         $localPath = $this.CopyInventoryArtifact($device.HostName)
         return @{ InventoryPath = $localPath }
@@ -152,7 +195,8 @@ class ExecutionService {
     # Runs an arbitrary pwsh script on the remote as SYSTEM. The script is passed
     # base64-encoded (UTF-16LE) via -EncodedCommand, which removes all psexec
     # command-line quoting hazards (unlike the dcu-cli '-c "..."' path).
-    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText) {
+    # $target may be a host name or an IP - psexec accepts either.
+    [void] InvokeRemotePwsh([string]$target, [string]$scriptText) {
         $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptText)
         $encoded = [Convert]::ToBase64String($bytes)
 
@@ -161,7 +205,7 @@ class ExecutionService {
             '-nobanner',
             '-s',           # Run as SYSTEM
             '-h',           # Elevated token
-            "\\$ip",
+            "\\$target",
             'pwsh',
             '-NoProfile',
             '-NonInteractive',
@@ -169,18 +213,18 @@ class ExecutionService {
             $encoded
         )
 
-        $this.Logger.LogInfo("Executing inventory probe on \\$ip")
+        $this.Logger.LogInfo("Executing remote probe on \\$target")
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
 
         if ($p.ExitCode -ne 0) {
-            throw "Remote inventory probe failed on $ip (exit code $($p.ExitCode))."
+            throw "Remote probe failed on $target (exit code $($p.ExitCode))."
         }
     }
 
     # Copies the inventory JSON the probe wrote on the remote back to the local
-    # reports dir; returns the local path. Mirrors CopyRemoteArtifacts.
+    # reports dir; returns the local path. Reuses the job's already-resolved IP.
     [string] CopyInventoryArtifact([string] $hostName) {
-        $ip = $this.Probe.ResolveHost($hostName)
+        $ip = $this.ResolvedIpFor($hostName)
         $remote = "\\$ip\C$\temp\DONUT\$hostName-inventory.json"
         $local = Join-Path $this.LocalReportsDir "$hostName-inventory.json"
         if (Test-Path $remote) {
@@ -196,12 +240,7 @@ class ExecutionService {
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
 
-        $ip = $this.Probe.ResolveHost($device.HostName)
-        if (-not $ip) {
-            $this.Logger.LogError("[$($device.HostName)] Could not resolve IP; aborting disk scan.")
-            throw "Could not resolve IP for $($device.HostName)"
-        }
-
+        $ip = $this.ResolvedIpFor($device.HostName)
         $this.DeployWizTree($ip)
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand())
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
@@ -264,7 +303,7 @@ class ExecutionService {
     # Copies the WizTree CSV the scan wrote on the remote back to the local
     # reports dir; returns the local path. Mirrors CopyInventoryArtifact.
     [string] CopyDiskUsageArtifact([string] $hostName) {
-        $ip = $this.Probe.ResolveHost($hostName)
+        $ip = $this.ResolvedIpFor($hostName)
         $remote = "\\$ip\C$\temp\DONUT\folders.csv"
         $local = Join-Path $this.LocalReportsDir "$hostName-folders.csv"
         if (Test-Path $remote) {
@@ -274,8 +313,8 @@ class ExecutionService {
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName) {
-        $ip = $this.Probe.ResolveHost($hostName)
-        
+        $ip = $this.ResolvedIpFor($hostName)
+
         # Remote Paths (UNC)
         $remoteLog = "\\$ip\C$\temp\DONUT\scan.log"
         $remoteReport = "\\$ip\C$\temp\DONUT\Report.xml" # DCU default report name might vary, usually Report.xml in the folder
@@ -305,12 +344,8 @@ class ExecutionService {
         $command = $parameters.Command
         $argsString = $parameters.Arguments
 
-        # Resolve IP (should be done, but verify)
-        $ip = $this.Probe.ResolveHost($computer)
-        if (-not $ip) {
-            $this.Logger.LogError("[$computer] Could not resolve IP; aborting PsExec.")
-            throw "Could not resolve IP for $computer"
-        }
+        # Reuse the job's resolved/prefetched IP (resolves at most once).
+        $ip = $this.ResolvedIpFor($computer)
 
         # Find DCU Path
         $dcuPath = $this.FindDcuCli($ip)

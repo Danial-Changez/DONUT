@@ -1,0 +1,88 @@
+using module "..\..\src\Models\AppConfig.psm1"
+using module "..\..\src\Core\NetworkProbe.psm1"
+using module "..\..\src\Services\HostResolver.psm1"
+
+Describe "HostResolver" {
+    BeforeAll {
+        $script:tempDir = Join-Path $env:TEMP "DonutTests_Resolver_$(Get-Random)"
+        New-Item -Path (Join-Path $script:tempDir "Scripts") -ItemType Directory -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempDir "Scripts\RemoteWorker.ps1") -ItemType File -Force | Out-Null
+        $script:config = [AppConfig]::new($script:tempDir, (Join-Path $script:tempDir "Logs"), (Join-Path $script:tempDir "Reports"), @{})
+
+        function New-Resolver { [HostResolver]::new($script:config, [NetworkProbe]::new()) }
+    }
+
+    AfterAll {
+        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    Context "IP cache" {
+        It "returns a cached IP and null for an unknown host" {
+            $r = New-Resolver
+            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.GetCachedIp("PC-1") | Should -Be "10.0.0.5"
+            $r.GetCachedIp("pc-1") | Should -Be "10.0.0.5"   # case-insensitive
+            $r.GetCachedIp("PC-2") | Should -BeNullOrEmpty
+        }
+
+        It "ignores a blank IP" {
+            $r = New-Resolver
+            $r.CacheIp("PC-1", "")
+            $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "NeedsResolve" {
+        It "is false until a domain controller is warmed" {
+            $r = New-Resolver
+            $r.NeedsResolve("PC-1") | Should -BeFalse
+        }
+
+        It "is true for an unknown host once a DC is known" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.NeedsResolve("PC-1") | Should -BeTrue
+        }
+
+        It "is false for an already-cached host" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.NeedsResolve("PC-1") | Should -BeFalse
+        }
+
+        It "is false while a resolve is in flight (single-flight)" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.MarkInFlight("PC-1")
+            $r.NeedsResolve("PC-1") | Should -BeFalse
+        }
+
+        It "caching clears the in-flight flag" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.MarkInFlight("PC-1")
+            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.NeedsResolve("PC-1") | Should -BeFalse   # cached now
+        }
+    }
+
+    Context "worker-arg builders" {
+        It "PrepareWarm tags a Resolve job in Warm mode" {
+            $r = New-Resolver
+            $prep = $r.PrepareWarm()
+            $prep.Arguments.JobType      | Should -Be "Resolve"
+            $prep.Arguments.Options.Mode | Should -Be "Warm"
+        }
+
+        It "PrepareResolve carries the host + active DC in Host mode" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $prep = $r.PrepareResolve("PC-1")
+            $prep.Arguments.HostName     | Should -Be "PC-1"
+            $prep.Arguments.JobType      | Should -Be "Resolve"
+            $prep.Arguments.Options.Mode | Should -Be "Host"
+            $prep.Arguments.Options.Dc   | Should -Be "DC1"
+        }
+    }
+}

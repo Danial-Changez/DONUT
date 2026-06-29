@@ -102,6 +102,24 @@ class NetworkProbe {
         }
     }
 
+    # Resolves a host against an ALREADY-KNOWN domain controller, skipping DC
+    # discovery (no AD module, just one Resolve-DnsName). Used by the background
+    # pre-resolve path, which warms the active DC once at startup and then resolves
+    # individual hosts cheaply. Returns $null (logged) on any failure.
+    [IPAddress] ResolveWith([string]$hostName, [string]$dc) {
+        if ([string]::IsNullOrWhiteSpace($dc)) {
+            $this.Logger.LogError("ResolveWith for '$hostName': no domain controller supplied.")
+            return $null
+        }
+        try {
+            return $this.ResolveViaServer($hostName, $dc)
+        }
+        catch {
+            $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
+            return $null
+        }
+    }
+
     [bool] CheckReverseDNS([IPAddress]$ip, [string]$expectedHostName) {
         $server = $this.GetActiveDomainController()
         if ([string]::IsNullOrWhiteSpace($server)) {
