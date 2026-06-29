@@ -13,8 +13,8 @@ Describe "AppConfig" {
             [AppConfig]::Defaults.activeCommand | Should -Be 'scan'
         }
 
-        It "Should have default throttleLimit as 5" {
-            [AppConfig]::Defaults.throttleLimit | Should -Be 5
+        It "Should have default throttleLimit as 8" {
+            [AppConfig]::Defaults.throttleLimit | Should -Be 8
         }
 
         It "Should have 'scan' command with args" {
@@ -176,12 +176,12 @@ Describe "AppConfig" {
     }
 
     Context "GetThrottleLimit / SetThrottleLimit" {
-        It "Should return default 5 when not set" {
+        It "Should return default 8 when not set" {
             # Start fresh without the defaults being merged
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
             $config.Settings.Remove('throttleLimit')  # Remove to test default
-            
-            $config.GetThrottleLimit() | Should -Be 5
+
+            $config.GetThrottleLimit() | Should -Be 8
         }
 
         It "Should return configured throttle limit" {

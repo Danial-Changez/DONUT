@@ -89,6 +89,8 @@ class HomePresenter : AsyncJobPresenter {
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
+    [List[object]]    $SearchResults       # accumulated rows for the current token (forests stream in)
+    [HashSet[string]] $SearchSeen          # dedupe keys (Kind|Domain|Sam) for the current token
     [bool]            $SuppressSearch = $false
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
@@ -138,6 +140,8 @@ class HomePresenter : AsyncJobPresenter {
         # poll for completion (newest result wins).
         $this.AdService = [ActiveDirectoryService]::new($this.Config.GetDomains(), $this.Logger)
         $this.SearchJobs = [List[hashtable]]::new()
+        $this.SearchResults = [List[object]]::new()
+        $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $this.SearchDebounce = [DispatcherTimer]::new()
         $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(350)
         $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
@@ -474,26 +478,42 @@ class HomePresenter : AsyncJobPresenter {
         $prefix = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
         if ($prefix.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
 
+        # Drop any still-in-flight jobs from the previous keystroke so a new search
+        # doesn't stack a fresh fan-out behind stale ones (best-effort, non-blocking;
+        # the token guard already discards their late results).
+        foreach ($job in @($this.SearchJobs)) { try { $job.Ps.Dispose() } catch { } }
+        $this.SearchJobs.Clear()
+        $this.SearchResults.Clear()
+        $this.SearchSeen.Clear()
+
         $this.SearchToken++
         $token = $this.SearchToken
-        try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = [RunspaceManager]::GetPool()
-            $ps.AddCommand($worker) | Out-Null
-            $ps.AddParameter('Domains', $this.AdService.Domains) | Out-Null
-            $ps.AddParameter('Prefix', $prefix) | Out-Null
-            $handle = $ps.BeginInvoke()
-            $this.SearchJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
-            $this.SearchPollTimer.Start()
+
+        # Fan out one job per forest: each forest is independent, so query them
+        # concurrently on the pool and render hits as each lands (PollSearch), instead
+        # of waiting on the sum of all forests' LDAP round-trips.
+        $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
+        foreach ($domain in $this.AdService.Domains) {
+            try {
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = [RunspaceManager]::GetPool()
+                $ps.AddCommand($worker) | Out-Null
+                $ps.AddParameter('Domains', @($domain)) | Out-Null
+                $ps.AddParameter('Prefix', $prefix) | Out-Null
+                $handle = $ps.BeginInvoke()
+                $this.SearchJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
+            }
+            catch {
+                $this.Logger.LogException("AD search could not start for '$domain'", $_)
+            }
         }
-        catch {
-            $this.Logger.LogException("AD search could not start", $_)
-            $this.CloseSearchPopup()
-        }
+        if ($this.SearchJobs.Count -gt 0) { $this.SearchPollTimer.Start() }
+        else { $this.CloseSearchPopup() }
     }
 
-    # Poll in-flight searches; render only the newest, discard stale, dispose all.
+    # Poll the in-flight per-forest searches; as each forest lands, fold its hits into
+    # the current token's accumulator and re-render the growing union. Stale-token
+    # jobs are discarded + disposed.
     [void] PollSearch() {
         foreach ($job in @($this.SearchJobs)) {
             if (-not $job.Handle.IsCompleted) { continue }
@@ -502,7 +522,12 @@ class HomePresenter : AsyncJobPresenter {
             catch { $this.Logger.LogException("AD search failed", $_) }
             try { $job.Ps.Dispose() } catch { }
             [void]$this.SearchJobs.Remove($job)
-            if ($job.Token -eq $this.SearchToken) { $this.RenderAdResults($results) }
+            if ($job.Token -ne $this.SearchToken) { continue }
+            foreach ($row in $results) {
+                $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
+                if ($this.SearchSeen.Add($key)) { $this.SearchResults.Add($row) }
+            }
+            $this.RenderAdResults($this.SearchResults.ToArray())
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
