@@ -23,18 +23,22 @@ class DialogPresenter {
             # Apply Resources
             $this.Resources.ApplyResourcesToWindow($this.Window)
             
-            # Bind Standard Events
+            # Bind Standard Events. Capture $self: inside a WPF event handler $this
+            # is rebound to the sender (the button), NOT this DialogPresenter, so the
+            # handlers must close over $self or they silently no-op (dead buttons).
+            $self = $this
+
             $btnClose = $this.Window.FindName("btnClose")
-            if ($btnClose) { $btnClose.Add_Click({ $this.Window.Close() }) }
-            
+            if ($btnClose) { $btnClose.Add_Click({ $self.Window.Close() }.GetNewClosure()) }
+
             $btnMinimize = $this.Window.FindName("btnMinimize")
-            if ($btnMinimize) { $btnMinimize.Add_Click({ $this.Window.WindowState = 'Minimized' }) }
-            
+            if ($btnMinimize) { $btnMinimize.Add_Click({ $self.Window.WindowState = 'Minimized' }.GetNewClosure()) }
+
             $panelControlBar = $this.Window.FindName("panelControlBar")
-            if ($panelControlBar) { 
-                $panelControlBar.Add_MouseLeftButtonDown({ 
-                    if ($_.ButtonState -eq 'Pressed') { $this.Window.DragMove() } 
-                }.GetNewClosure()) 
+            if ($panelControlBar) {
+                $panelControlBar.Add_MouseLeftButtonDown({
+                    if ($_.ButtonState -eq 'Pressed') { $self.Window.DragMove() }
+                }.GetNewClosure())
             }
         }
         catch {
@@ -45,23 +49,24 @@ class DialogPresenter {
 
     [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems) {
         $this.Initialize()
-        
+        $self = $this
+
         # Configure UI
         $this.SetText("txtHeader", $title)
         $this.SetText("txtSubHeader", $message)
         $this.SetList($listItems)
-        
-        # Configure Buttons
-        $this.ConfigureButton("btnPrimary", "Confirm", { 
-            $this.Result = $true
-            $this.Window.Close() 
-        })
-        
-        $this.ConfigureButton("btnSecondary", "Cancel", { 
-            $this.Result = $false
-            $this.Window.Close() 
-        })
-        
+
+        # Configure Buttons (close over $self - $this is the sender inside the handler)
+        $this.ConfigureButton("btnPrimary", "Confirm", {
+            $self.Result = $true
+            $self.Window.Close()
+        }.GetNewClosure())
+
+        $this.ConfigureButton("btnSecondary", "Cancel", {
+            $self.Result = $false
+            $self.Window.Close()
+        }.GetNewClosure())
+
         $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
         return $this.Result
@@ -69,16 +74,17 @@ class DialogPresenter {
 
     [void] ShowAlert([string]$title, [string]$message, [string[]]$listItems) {
         $this.Initialize()
-        
+        $self = $this
+
         # Configure UI
         $this.SetText("txtHeader", $title)
         $this.SetText("txtSubHeader", $message)
         $this.SetList($listItems)
-        
-        # Configure Buttons
-        $this.ConfigureButton("btnPrimary", "OK", { $this.Window.Close() })
+
+        # Configure Buttons (close over $self - $this is the sender inside the handler)
+        $this.ConfigureButton("btnPrimary", "OK", { $self.Window.Close() }.GetNewClosure())
         $this.HideControl("btnSecondary")
-        
+
         $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
     }
@@ -92,20 +98,21 @@ class DialogPresenter {
             $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
         }
         
+        $self = $this
         $this.SetText("txtHeader", $title)
         $this.SetText("txtSubHeader", $msg)
         $this.HideControl("lstContent")
-        
-        $this.ConfigureButton("btnPrimary", "Update Now", { 
-            $this.Result = $true
-            $this.Window.Close() 
-        })
-        
-        $this.ConfigureButton("btnSecondary", "Later", { 
-            $this.Result = $false
-            $this.Window.Close() 
-        })
-        
+
+        $this.ConfigureButton("btnPrimary", "Update Now", {
+            $self.Result = $true
+            $self.Window.Close()
+        }.GetNewClosure())
+
+        $this.ConfigureButton("btnSecondary", "Later", {
+            $self.Result = $false
+            $self.Window.Close()
+        }.GetNewClosure())
+
         $this.PrepareToShow()
         $this.Window.ShowDialog() | Out-Null
         return $this.Result
@@ -156,13 +163,17 @@ class DialogPresenter {
         }
     }
 
+    # $action must already be a closure (built with .GetNewClosure() in the caller,
+    # where $self is in scope). We do NOT re-close it here: $this in this scope isn't
+    # the caller's $self, and the handler must not pick up $this (which becomes the
+    # sender at click time). Initialize creates a fresh window each time, so there are
+    # no stale handlers to remove.
     hidden [void] ConfigureButton([string]$btnName, [string]$text, [scriptblock]$action) {
         $btn = $this.Window.FindName($btnName)
         if ($btn) {
             $btn.Content = $text
             $btn.Visibility = 'Visible'
-            # Remove old events (not easily possible in PS without keeping track, but Initialize creates new window each time)
-            $btn.Add_Click($action.GetNewClosure())
+            $btn.Add_Click($action)
         }
     }
 
