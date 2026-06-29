@@ -100,6 +100,13 @@ class ExecutionService {
             return @{ Mode = 'Warm'; ActiveDc = [string]$dc; DomainControllers = @($this.Probe.GetDomainControllers()) }
         }
 
+        # No-op whose sole effect is that running this job forced RemoteWorker.ps1 to
+        # load the full worker module graph into its pool runspace - pre-warming it so
+        # a later concurrent scan/inventory never cold-loads (and freezes the UI).
+        if ($mode -eq 'WarmRunspace') {
+            return @{ Mode = 'WarmRunspace' }
+        }
+
         # Identity check: ask the box at $ip for its own name. Runs as its own pool
         # job (its own thread), in parallel with - and never touching - the dcu-cli
         # scan, so it adds no latency to the bottleneck.

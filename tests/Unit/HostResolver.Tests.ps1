@@ -111,6 +111,13 @@ Describe "HostResolver" {
             $prep.Arguments.Options.Dc   | Should -Be "DC1"
         }
 
+        It "PrepareWarmRunspace tags a no-op Resolve job in WarmRunspace mode" {
+            $r = New-Resolver
+            $prep = $r.PrepareWarmRunspace()
+            $prep.Arguments.JobType      | Should -Be "Resolve"
+            $prep.Arguments.Options.Mode | Should -Be "WarmRunspace"
+        }
+
         It "PrepareName carries the host's cached IP in Name mode" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")

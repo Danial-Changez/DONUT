@@ -102,6 +102,12 @@ class HostResolver : RemoteJobService {
         return $this.BuildWorkerArgs('', 'Resolve', @{ Mode = 'Warm' })
     }
 
+    # Runspace-warm job: a no-op whose only effect is loading the worker module graph
+    # into the pool runspace it lands on, so later concurrent jobs never cold-load.
+    [hashtable] PrepareWarmRunspace() {
+        return $this.BuildWorkerArgs('', 'Resolve', @{ Mode = 'WarmRunspace' })
+    }
+
     # Per-host job: resolve $hostName against the already-warmed active DC.
     [hashtable] PrepareResolve([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Host'; Dc = $this.ActiveDc })

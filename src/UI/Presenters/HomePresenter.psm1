@@ -53,6 +53,7 @@ class HomePresenter : AsyncJobPresenter {
     [InventoryService] $InventoryService
     [DiskUsageService] $DiskUsageService
     [HostResolver] $Resolver
+    [bool] $PoolWarmed = $false   # single-shot guard for WarmPool
     [timespan] $InventoryTtl = [timespan]::FromMinutes(3)   # select-prefetch skips inventory fresher than this
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
@@ -218,6 +219,14 @@ class HomePresenter : AsyncJobPresenter {
         $savedDc = [string]$this.Config.Settings['activeDomainController']
         if (-not [string]::IsNullOrWhiteSpace($savedDc)) { $this.Resolver.SetActiveDc($savedDc) }
         $this.StartWarm()
+
+        # Pre-warm the rest of the pool's runspaces once the UI goes idle (after first
+        # paint), so a later concurrent job never cold-loads the module graph and
+        # freezes the dispatcher. Deferred to idle so the warm-up itself can't freeze
+        # startup.
+        $this.ViewContent.Dispatcher.BeginInvoke(
+            [System.Windows.Threading.DispatcherPriority]::ApplicationIdle,
+            [System.Action]({ $presenter.WarmPool() }.GetNewClosure())) | Out-Null
     }
 
     # --- Start-early IP resolution (background, off the UI thread) --------------------
@@ -233,6 +242,29 @@ class HomePresenter : AsyncJobPresenter {
         catch {
             $this.Logger.LogException("Resolver warm-up could not start", $_)
         }
+    }
+
+    # Warms every pool runspace's module graph so concurrent jobs (e.g. inventory +
+    # scan, or a batch of scans) never cold-load on the hot path. Fires throttleLimit
+    # no-op jobs at once - they overlap, forcing the pool to create + warm each
+    # runspace (then free it, so capacity is unaffected). One-shot.
+    [void] WarmPool() {
+        if ($this.PoolWarmed) { return }
+        $this.PoolWarmed = $true
+        $n = $this.Config.GetThrottleLimit()
+        if ($n -lt 1) { $n = 1 }
+        for ($i = 0; $i -lt $n; $i++) {
+            try {
+                $prep = $this.Resolver.PrepareWarmRunspace()
+                $job = [AsyncJob]::new('', [JobKind]::Resolve)
+                $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+                $this.ActiveJobs.Add($job)
+            }
+            catch {
+                $this.Logger.LogException("Runspace warm-up could not start", $_)
+            }
+        }
+        $this.Logger.LogInfo("Pre-warming $n runspace(s).")
     }
 
     # Resolve a host's IP in the background (single-flight). No-op until a DC is
@@ -287,6 +319,9 @@ class HomePresenter : AsyncJobPresenter {
             }
             elseif ($mode -eq 'Name') {
                 $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
+            }
+            elseif ($mode -eq 'WarmRunspace') {
+                # No-op: the job's purpose was loading the module graph into its runspace.
             }
         }
     }
