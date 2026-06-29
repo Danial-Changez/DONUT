@@ -190,20 +190,89 @@ class ExecutionService {
         return $artifact
     }
 
-    # Runs the inventory probe script on the remote and copies its JSON back.
-    # Resolves the target at most once (ResolvedIpFor reuses the prefetched IP).
+    # Gathers a machine's inventory. Fast path: query WMI directly over a remote DCOM
+    # CIM session (no psexec deploy, no pwsh cold-start, no SMB copy) and write the
+    # JSON locally. If that can't connect, fall back to the proven psexec+pwsh probe.
     [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
+        $ip = $this.ResolvedIpFor($device.HostName)
 
+        $inv = $this.GatherRemoteInventory($ip)
+        if ($null -ne $inv) {
+            $local = Join-Path $this.LocalReportsDir "$($device.HostName)-inventory.json"
+            $inv | ConvertTo-Json -Depth 4 | Set-Content -Path $local -Encoding UTF8
+            return @{ InventoryPath = $local }
+        }
+
+        # Fallback: the original psexec probe (e.g. DCOM/WMI blocked on the target).
+        $this.Logger.LogWarning("[$($device.HostName)] Remote CIM unavailable; using psexec probe.")
         $scriptText = if ($null -ne $options) { [string]$options.ScriptText } else { '' }
         if ([string]::IsNullOrWhiteSpace($scriptText)) {
             throw "No inventory script supplied for $($device.HostName)."
         }
-
-        $ip = $this.ResolvedIpFor($device.HostName)
         $this.InvokeRemotePwsh($ip, $scriptText)
         $localPath = $this.CopyInventoryArtifact($device.HostName)
         return @{ InventoryPath = $localPath }
+    }
+
+    # Queries the host's WMI directly over a DCOM CIM session (same RPC transport
+    # psexec uses) and returns the inventory hashtable - mirrors the probe script's
+    # projected queries, including the battery -Property serialization bypass. Each
+    # query is guarded so one missing field never aborts; returns $null only when the
+    # session itself can't open (caller falls back). Overridable so tests fake it.
+    [hashtable] GatherRemoteInventory([string]$ip) {
+        if ([string]::IsNullOrWhiteSpace($ip)) { return $null }
+        $session = $null
+        try {
+            $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+        }
+        catch {
+            $this.Logger.LogException("[$ip] Could not open CIM session for inventory", $_)
+            return $null
+        }
+
+        $inv = @{
+            model = $null; serviceTag = $null; biosVersion = $null
+            hasBattery = $false; designCapacity = $null; fullChargeCapacity = $null
+            chargePercent = $null; charging = $false
+            freeSpaceBytes = $null; totalSpaceBytes = $null
+            lastBootTime = $null; probedAt = ([datetime]::UtcNow.ToString('o'))
+        }
+        try {
+            try { $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem -Property Model -ErrorAction Stop; $inv.model = $cs.Model } catch { }
+            try {
+                $bios = Get-CimInstance -CimSession $session -ClassName Win32_BIOS -Property SerialNumber, SMBIOSBIOSVersion -ErrorAction Stop
+                $inv.serviceTag = $bios.SerialNumber; $inv.biosVersion = $bios.SMBIOSBIOSVersion
+            } catch { }
+            try {
+                $static = Get-CimInstance -CimSession $session -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
+                if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }
+            } catch { }
+            try {
+                $full = Get-CimInstance -CimSession $session -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -Property FullChargedCapacity -ErrorAction Stop | Select-Object -First 1
+                if ($full) { $inv.fullChargeCapacity = [int64]$full.FullChargedCapacity }
+            } catch { }
+            try {
+                $bat = Get-CimInstance -CimSession $session -ClassName Win32_Battery -Property EstimatedChargeRemaining, BatteryStatus -ErrorAction Stop | Select-Object -First 1
+                if ($bat) {
+                    $inv.hasBattery = $true
+                    $inv.chargePercent = [int]$bat.EstimatedChargeRemaining
+                    $inv.charging = ([int]$bat.BatteryStatus -ne 1)
+                }
+            } catch { }
+            try {
+                $disk = Get-CimInstance -CimSession $session -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -Property FreeSpace, Size -ErrorAction Stop | Select-Object -First 1
+                if ($disk) { $inv.freeSpaceBytes = [int64]$disk.FreeSpace; $inv.totalSpaceBytes = [int64]$disk.Size }
+            } catch { }
+            try {
+                $os = Get-CimInstance -CimSession $session -ClassName Win32_OperatingSystem -Property LastBootUpTime -ErrorAction Stop
+                if ($os.LastBootUpTime) { $inv.lastBootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o') }
+            } catch { }
+        }
+        finally {
+            Remove-CimSession -CimSession $session -ErrorAction SilentlyContinue
+        }
+        return $inv
     }
 
     # Runs an arbitrary pwsh script on the remote as SYSTEM. The script is passed

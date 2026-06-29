@@ -60,6 +60,10 @@ class TestExecutionService : ExecutionService {
     [string] CopyInventoryArtifact([string]$hostName) {
         return "C:\Fake\$hostName-inventory.json"
     }
+
+    # $null => triggers the psexec fallback; a hashtable => the fast CIM path.
+    [hashtable] $GatherResult = $null
+    [hashtable] GatherRemoteInventory([string]$ip) { return $this.GatherResult }
 }
 
 Describe "WorkerServices" {
@@ -511,13 +515,33 @@ Describe "WorkerServices" {
     }
 
     Context "RunInventoryPhase" {
-        It "Runs the remote probe and returns the local inventory path" {
+        It "Fast path: writes the CIM-gathered inventory JSON locally (no psexec)" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.GatherResult = @{ model = 'Latitude 5340'; hasBattery = $true }
+            $device = [DeviceContext]::new("InvHost")
+
+            $result = $service.RunInventoryPhase($device, @{ ScriptText = "probe" })
+
+            $expected = Join-Path $script:reportsDir "InvHost-inventory.json"
+            $result.InventoryPath | Should -Be $expected
+            Test-Path $expected | Should -BeTrue
+            (Get-Content $expected -Raw | ConvertFrom-Json).model | Should -Be 'Latitude 5340'
+            $service.LastInventoryScript | Should -BeNullOrEmpty   # psexec probe not used
+        }
+
+        It "Fallback: when CIM is unavailable, runs the psexec probe and copies the JSON back" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.GatherResult = $null   # CIM session failed
             $device = [DeviceContext]::new("InvHost")
 
             $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
@@ -526,13 +550,14 @@ Describe "WorkerServices" {
             $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
         }
 
-        It "Throws when no script text is supplied" {
+        It "Fallback throws when no script text is supplied" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.GatherResult = $null
             $device = [DeviceContext]::new("InvHost")
 
             { $service.RunInventoryPhase($device, @{}) } | Should -Throw "*No inventory script*"
