@@ -11,10 +11,14 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [string] $ResolveHostResult = "127.0.0.1"
+    [string] $ActiveDcResult = "DC1.contoso.local"
+    [string] $ResolveWithResult = "10.0.0.7"
     MockNetworkProbeWorker() {}
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
+    [string] GetActiveDomainController() { return $this.ActiveDcResult }
+    [IPAddress] ResolveWith([string]$hostName, [string]$dc) { return [IPAddress]::Parse($this.ResolveWithResult) }
 }
 
 # Partial Mock of ExecutionService to avoid real PsExec calls
@@ -190,6 +194,31 @@ Describe "WorkerServices" {
     # ResolveHost) stalled the host process. The worker now resolves + runs psexec
     # directly and fails gracefully if the host is unreachable; connectivity is
     # never probed on the UI thread (Prepare* builds args only).
+
+    Context "RunResolvePhase" {
+        It "Warm mode returns the active domain controller" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $probe = [MockNetworkProbeWorker]::new()
+            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'Warm' })
+
+            $result.Mode     | Should -Be 'Warm'
+            $result.ActiveDc | Should -Be 'DC1.contoso.local'
+        }
+
+        It "Host mode resolves the host against the supplied DC" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $probe = [MockNetworkProbeWorker]::new()
+            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $result = $service.RunResolvePhase([DeviceContext]::new("PC-1"), @{ Mode = 'Host'; Dc = 'DC1' })
+
+            $result.Mode     | Should -Be 'Host'
+            $result.HostName | Should -Be 'PC-1'
+            $result.Ip       | Should -Be '10.0.0.7'
+        }
+    }
 
     Context "CopyRemoteArtifacts" {
         It "Should return Report and Log paths" {

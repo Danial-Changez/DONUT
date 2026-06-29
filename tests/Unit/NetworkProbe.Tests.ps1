@@ -144,6 +144,33 @@ Describe "NetworkProbe" {
         }
     }
 
+    Context "ResolveWith" {
+        It "Resolves against the supplied DC without discovering domain controllers" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.ForwardMap = @{ "PC-01" = "10.0.0.9" }
+
+            $ip = $probe.ResolveWith("PC-01", "DC1")
+
+            $ip.ToString() | Should -Be "10.0.0.9"
+            $probe.QueryCount | Should -Be 0   # no DC discovery on this path
+        }
+
+        It "Returns null and logs when no DC is supplied" {
+            $logger = [CapturingLogService]::new()
+            $probe = [FakeNetworkProbe]::new($logger)
+
+            $probe.ResolveWith("PC-01", "") | Should -BeNullOrEmpty
+            $logger.HasLevel("ERROR") | Should -Be $true
+        }
+
+        It "Returns null when the DC cannot resolve the host" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.ForwardMap = @{}
+
+            $probe.ResolveWith("Unknown-PC", "DC1") | Should -BeNullOrEmpty
+        }
+    }
+
     Context "CheckReverseDNS" {
         It "Should return true when the PTR record matches the expected host" {
             $probe = [FakeNetworkProbe]::new()

@@ -22,4 +22,5 @@ enum JobKind {
     UpdateApply
     Inventory
     DiskScan
+    Resolve
 }

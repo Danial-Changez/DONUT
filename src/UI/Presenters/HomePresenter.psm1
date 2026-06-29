@@ -20,6 +20,7 @@ using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
+using module "..\..\Services\HostResolver.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\JobEnums.psm1"
@@ -51,6 +52,7 @@ class HomePresenter : AsyncJobPresenter {
     [HostListSource] $HostListSource
     [InventoryService] $InventoryService
     [DiskUsageService] $DiskUsageService
+    [HostResolver] $Resolver
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
 
@@ -116,6 +118,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
         $this.DiskUsageService = [DiskUsageService]::new($config, $this.NetworkProbe, $this.Logger)
+        $this.Resolver = [HostResolver]::new($config, $this.NetworkProbe, $this.Logger)
 
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
@@ -207,6 +210,67 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.UpdateModePill()
         $this.RefreshAll()
+
+        # Start-early: warm a live domain controller in the background so that, by
+        # the time a machine is selected, resolving its IP is a single fast lookup.
+        $this.StartWarm()
+    }
+
+    # --- Start-early IP resolution (background, off the UI thread) --------------------
+
+    # One-time: discover + pick a live DC on the pool; cached when it completes.
+    [void] StartWarm() {
+        try {
+            $prep = $this.Resolver.PrepareWarm()
+            $job = [AsyncJob]::new('', [JobKind]::Resolve)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.Logger.LogException("Resolver warm-up could not start", $_)
+        }
+    }
+
+    # Resolve a host's IP in the background (single-flight). No-op until a DC is
+    # warmed or if the host is already cached / in flight.
+    [void] PrefetchIp([string]$hostName) {
+        if (-not $this.Resolver.NeedsResolve($hostName)) { return }
+        try {
+            $this.Resolver.MarkInFlight($hostName)
+            $prep = $this.Resolver.PrepareResolve($hostName)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
+        }
+    }
+
+    # Resolve job finished: pull the DC / IP off the job result and cache it.
+    [void] CompleteResolve([AsyncJob]$job) {
+        if ($job.Status -eq 'Failed') { return }
+        foreach ($item in @($job.Result)) {
+            if ($null -eq $item) { continue }
+            $mode = [string]$item.Mode
+            if ($mode -eq 'Warm') {
+                $dc = [string]$item.ActiveDc
+                if (-not [string]::IsNullOrWhiteSpace($dc)) { $this.Resolver.SetActiveDc($dc) }
+            }
+            elseif ($mode -eq 'Host') {
+                $this.Resolver.CacheIp([string]$item.HostName, [string]$item.Ip)
+            }
+        }
+    }
+
+    # Threads this host's prefetched IP into a worker-args bundle's Options, so the
+    # worker skips DNS on the hot path. No-op when the IP isn't cached yet.
+    hidden [void] AttachResolvedIp([hashtable]$prep, [string]$hostName) {
+        $ip = $this.Resolver.GetCachedIp($hostName)
+        if ([string]::IsNullOrWhiteSpace($ip)) { return }
+        if ($prep -and $prep.Arguments -and $prep.Arguments.Options) {
+            $prep.Arguments.Options.ResolvedIp = $ip
+        }
     }
 
     [void] UpdateModePill() {
@@ -438,6 +502,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.SuppressSearch = $true
         if ($this.SearchBar) { $this.SearchBar.Text = $name; $this.SearchBar.CaretIndex = $name.Length }
         $this.SuppressSearch = $false
+        # Start-early: a picked computer is about to be run - warm its IP now.
+        $this.PrefetchIp($name)
     }
 
     # Locked user chosen: confirm, unlock against its home domain, toast the result.
@@ -534,8 +600,9 @@ class HomePresenter : AsyncJobPresenter {
 
     [bool] IsRunning([string]$hostName) {
         foreach ($job in $this.ActiveJobs) {
-            # Inventory probes are background work, not a "run".
-            if ($job -and $job.HostName -eq $hostName -and $job.JobType -ne [JobKind]::Inventory) { return $true }
+            # Inventory probes and IP pre-resolves are background work, not a "run".
+            if ($job -and $job.HostName -eq $hostName -and
+                $job.JobType -ne [JobKind]::Inventory -and $job.JobType -ne [JobKind]::Resolve) { return $true }
         }
         return $false
     }
@@ -562,6 +629,7 @@ class HomePresenter : AsyncJobPresenter {
             }
 
             if ($jobParams) {
+                $this.AttachResolvedIp($jobParams.Prep, $hostName)
                 $job = [AsyncJob]::new($hostName, $jobParams.Type)
                 $job.Start($jobParams.Prep.ScriptPath, $jobParams.Prep.Arguments, $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
@@ -591,6 +659,8 @@ class HomePresenter : AsyncJobPresenter {
     # Per-tick: stream the job's queued output into the (selected host's) detail
     # log and keep the row status/progress live. Inventory probes only stream.
     [void] OnJobPolled([AsyncJob]$job) {
+        # Resolve jobs are pure background precompute - no row/progress/log UI.
+        if ($job.JobType -eq [JobKind]::Resolve) { return }
         if ($job.JobType -eq [JobKind]::Inventory -or $job.JobType -eq [JobKind]::DiskScan) {
             $line = $null
             while ($job.Logs.TryDequeue([ref]$line)) { $this.AppendLog($job.HostName, $line) }
@@ -614,6 +684,10 @@ class HomePresenter : AsyncJobPresenter {
     # Terminal: inventory probes finish via CompleteInventory; scan/apply do
     # driver-match analysis / apply-phase transition / recents persistence.
     [void] OnJobCompleted([AsyncJob]$job) {
+        if ($job.JobType -eq [JobKind]::Resolve) {
+            $this.CompleteResolve($job)
+            return
+        }
         if ($job.JobType -eq [JobKind]::Inventory) {
             $this.CompleteInventory($job)
             return
@@ -758,6 +832,7 @@ class HomePresenter : AsyncJobPresenter {
 
         try {
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
+            $this.AttachResolvedIp($prep, $hostName)
             $applyJob = [AsyncJob]::new($hostName, 'UpdateApply')
             $applyJob.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.ActiveJobs.Add($applyJob)
@@ -824,6 +899,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.SelectedHost = $hostName
         if ($this.Rows.ContainsKey($hostName)) { $this.Rows[$hostName].SetSelected($true) }
 
+        # Start-early: resolve this host's IP in the background now, so it's cached
+        # before the operator double-clicks to gather inventory or hits Run.
+        $this.PrefetchIp($hostName)
+
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Visible }
         if ($this.DetailHostText) { $this.DetailHostText.Text = $hostName }
@@ -874,6 +953,7 @@ class HomePresenter : AsyncJobPresenter {
                 $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
             }
             $prep = $this.InventoryService.PrepareInventory($hostName)
+            $this.AttachResolvedIp($prep, $hostName)
             $job = [AsyncJob]::new($hostName, [JobKind]::Inventory)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.ActiveJobs.Add($job)
@@ -935,6 +1015,7 @@ class HomePresenter : AsyncJobPresenter {
                 $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
             }
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
+            $this.AttachResolvedIp($prep, $hostName)
             $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.ActiveJobs.Add($job)
