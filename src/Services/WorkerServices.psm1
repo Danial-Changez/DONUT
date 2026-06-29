@@ -104,7 +104,8 @@ class ExecutionService {
         $ip = $this.Probe.ResolveWith($device.HostName, $dc)
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
         $online = if (-not [string]::IsNullOrWhiteSpace($ipStr)) { $this.Probe.IsRpcAvailable($ipStr) } else { $false }
-        $this.Logger.LogInfo("[$($device.HostName)] Resolved IP = '$ipStr' online=$online (via $dc)")
+        # No log here: routine TTL re-validations would spam it. The presenter logs
+        # only a first find or an actual IP change (CompleteResolve).
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
