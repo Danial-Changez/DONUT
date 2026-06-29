@@ -185,40 +185,11 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "Phases assert reachability (off the UI thread)" {
-        BeforeEach {
-            $script:rcConfig = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{
-                commands = @{
-                    scan         = @{ args = @{ silent = $true; report = $script:reportsDir } }
-                    applyUpdates = @{ args = @{ silent = $true } }
-                }
-            })
-        }
-
-        It "RunScanPhase throws when the host is unreachable" {
-            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), [MockNetworkProbeWorker]::new(), [DriverMatchingService]::new(), $script:rcConfig, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            { $service.RunScanPhase([DeviceContext]::new("OfflineHost")) } | Should -Throw "*not reachable*"
-        }
-
-        It "RunApplyPhase throws when the host is unreachable" {
-            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), [MockNetworkProbeWorker]::new(), [DriverMatchingService]::new(), $script:rcConfig, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            { $service.RunApplyPhase([DeviceContext]::new("OfflineHost"), @{}) } | Should -Throw "*not reachable*"
-        }
-
-        It "RunInventoryPhase throws when the host is unreachable" {
-            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), [MockNetworkProbeWorker]::new(), [DriverMatchingService]::new(), $script:rcConfig, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            { $service.RunInventoryPhase([DeviceContext]::new("OfflineHost"), @{ ScriptText = "x" }) } | Should -Throw "*not reachable*"
-        }
-
-        It "RunDiskScanPhase throws when the host is unreachable" {
-            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), [MockNetworkProbeWorker]::new(), [DriverMatchingService]::new(), $script:rcConfig, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            { $service.RunDiskScanPhase([DeviceContext]::new("OfflineHost"), @{ TopN = 12 }) } | Should -Throw "*not reachable*"
-        }
-    }
+    # NOTE: the per-phase reachability pre-check (AssertReachable) was removed -
+    # running it in the fresh worker runspace (Test-Connection / DC-backed
+    # ResolveHost) stalled the host process. The worker now resolves + runs psexec
+    # directly and fails gracefully if the host is unreachable; connectivity is
+    # never probed on the UI thread (Prepare* builds args only).
 
     Context "CopyRemoteArtifacts" {
         It "Should return Report and Log paths" {

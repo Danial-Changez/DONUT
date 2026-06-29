@@ -74,13 +74,6 @@ class ExecutionService {
     [hashtable] RunScanPhase([DeviceContext] $device) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting preliminary scan.")
 
-        # Reachability is asserted here on the runspace-pool thread (moved off the
-        # UI thread, which used to block when probing an offline host).
-        $this.AssertReachable($device)
-        if ($device.IPAddress -and -not $this.Probe.CheckReverseDNS($device.IPAddress, $device.HostName)) {
-            $this.Logger.LogWarning("Reverse DNS mismatch for '$($device.HostName)' ($($device.IPAddress)). Proceeding anyway.")
-        }
-
         # Build scan arguments from config with remote path overrides
         $remoteOverrides = @{
             report    = 'C:\temp\DONUT'
@@ -111,7 +104,6 @@ class ExecutionService {
 
     [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
-        $this.AssertReachable($device)
 
         # Build apply arguments from config with runtime overrides
         $remoteOverrides = @{
@@ -140,7 +132,6 @@ class ExecutionService {
     # Runs the inventory probe script on the remote and copies its JSON back.
     [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
-        $this.AssertReachable($device)
 
         $ip = $this.Probe.ResolveHost($device.HostName)
         if (-not $ip) {
@@ -204,7 +195,6 @@ class ExecutionService {
     # copies artifacts back); the exe is left in C:\temp\DONUT for reuse.
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
-        $this.AssertReachable($device)
 
         $ip = $this.Probe.ResolveHost($device.HostName)
         if (-not $ip) {
