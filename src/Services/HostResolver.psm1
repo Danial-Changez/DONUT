@@ -21,6 +21,7 @@ class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
     hidden [hashtable] $IpCache  = @{}   # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys)
     hidden [hashtable] $InFlight = @{}   # host -> $true while a resolve job is queued
+    hidden [hashtable] $VerifiedNames = @{}   # host -> name the box at its IP reported (identity check)
 
     # How long a cached verdict is trusted before a re-validate is allowed. A
     # DHCP IP can move, so we re-resolve on the next select once an entry is stale.
@@ -104,5 +105,41 @@ class HostResolver : RemoteJobService {
     # Per-host job: resolve $hostName against the already-warmed active DC.
     [hashtable] PrepareResolve([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Host'; Dc = $this.ActiveDc })
+    }
+
+    # Identity job: ask the box at the host's cached IP for its own name. Fired in
+    # parallel with the apply-scan; the verdict gates the destructive apply.
+    [hashtable] PrepareName([string]$hostName) {
+        return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Name'; Ip = $this.GetCachedIp($hostName) })
+    }
+
+    # --- Verified computer-name cache (identity check) --------------------------------
+
+    [void] CacheName([string]$hostName, [string]$actualName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.VerifiedNames[$hostName.Trim()] = [string]$actualName
+    }
+
+    # The name the box at the host's IP reported, or '' if not checked yet.
+    [string] GetVerifiedName([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return '' }
+        $name = $hostName.Trim()
+        if ($this.VerifiedNames.ContainsKey($name)) { return [string]$this.VerifiedNames[$name] }
+        return ''
+    }
+
+    [void] ClearVerifiedName([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.VerifiedNames.Remove($hostName.Trim())
+    }
+
+    # Compares the target name to what the machine reported. 'Match' / 'Mismatch' /
+    # 'Unknown' (not checked or query failed). Short-name, case-insensitive.
+    [string] IdentityVerdict([string]$hostName) {
+        $actual = $this.GetVerifiedName($hostName)
+        if ([string]::IsNullOrWhiteSpace($actual)) { return 'Unknown' }
+        $target = $hostName.Trim().Split('.')[0]
+        $reported = $actual.Trim().Split('.')[0]
+        return $(if ($target -ieq $reported) { 'Match' } else { 'Mismatch' })
     }
 }

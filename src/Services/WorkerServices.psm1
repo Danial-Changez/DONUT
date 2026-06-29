@@ -100,6 +100,15 @@ class ExecutionService {
             return @{ Mode = 'Warm'; ActiveDc = [string]$dc; DomainControllers = @($this.Probe.GetDomainControllers()) }
         }
 
+        # Identity check: ask the box at $ip for its own name. Runs as its own pool
+        # job (its own thread), in parallel with - and never touching - the dcu-cli
+        # scan, so it adds no latency to the bottleneck.
+        if ($mode -eq 'Name') {
+            $ip = if ($null -ne $options) { [string]$options.Ip } else { '' }
+            $actual = $this.Probe.ResolveComputerName($ip)
+            return @{ Mode = 'Name'; HostName = $device.HostName; ActualName = [string]$actual }
+        }
+
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
         $ip = $this.Probe.ResolveWith($device.HostName, $dc)
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }

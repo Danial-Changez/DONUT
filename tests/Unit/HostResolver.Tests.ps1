@@ -110,5 +110,37 @@ Describe "HostResolver" {
             $prep.Arguments.Options.Mode | Should -Be "Host"
             $prep.Arguments.Options.Dc   | Should -Be "DC1"
         }
+
+        It "PrepareName carries the host's cached IP in Name mode" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            $prep = $r.PrepareName("PC-1")
+            $prep.Arguments.Options.Mode | Should -Be "Name"
+            $prep.Arguments.Options.Ip   | Should -Be "10.0.0.5"
+        }
+    }
+
+    Context "identity verdict" {
+        It "is Unknown until the box reports its name" {
+            $r = New-Resolver
+            $r.IdentityVerdict("PC-1") | Should -Be 'Unknown'
+        }
+        It "Match when the reported name equals the target (case/short-name insensitive)" {
+            $r = New-Resolver
+            $r.CacheName("PC-1", "pc-1.contoso.local")
+            $r.IdentityVerdict("PC-1") | Should -Be 'Match'
+        }
+        It "Mismatch when a different machine answered" {
+            $r = New-Resolver
+            $r.CacheName("PC-1", "OTHER-PC")
+            $r.IdentityVerdict("PC-1") | Should -Be 'Mismatch'
+        }
+        It "ClearVerifiedName resets to Unknown" {
+            $r = New-Resolver
+            $r.CacheName("PC-1", "OTHER-PC")
+            $r.ClearVerifiedName("PC-1")
+            $r.IdentityVerdict("PC-1") | Should -Be 'Unknown'
+        }
     }
 }
