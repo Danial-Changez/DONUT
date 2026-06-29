@@ -14,6 +14,11 @@ class RecordingPresenter : AsyncJobPresenter {
     [AsyncJob] $JobToAppendOnComplete = $null
     [string] $AppendTrigger = $null
 
+    # When set, OnJobCompleted re-enters PumpJobs - modelling a blocking modal
+    # (ShowDialog) whose nested message loop lets the 200ms timer tick re-fire
+    # PumpJobs while we're still inside completion handling.
+    [bool] $ReenterOnComplete = $false
+
     RecordingPresenter() : base() {
         $this.Polled = [System.Collections.Generic.List[string]]::new()
         $this.Completed = [System.Collections.Generic.List[string]]::new()
@@ -25,6 +30,7 @@ class RecordingPresenter : AsyncJobPresenter {
 
     [void] OnJobCompleted([AsyncJob]$job) {
         $this.Completed.Add($job.HostName)
+        if ($this.ReenterOnComplete) { $this.PumpJobs() }
         if ($this.JobToAppendOnComplete -and $job.HostName -eq $this.AppendTrigger) {
             $this.ActiveJobs.Add($this.JobToAppendOnComplete)
             $this.JobToAppendOnComplete = $null
@@ -105,6 +111,19 @@ Describe "AsyncJobPresenter" {
             $script:p.Completed | Should -Be @("HOST")
             $script:p.ActiveJobs.Count | Should -Be 1
             $script:p.ActiveJobs[0] | Should -Be $apply
+        }
+
+        It "Does not re-process a completed job when PumpJobs re-enters (modal-dialog guard)" {
+            # A blocking modal in OnJobCompleted lets the timer re-enter PumpJobs
+            # before the finished job is removed. Without the guard this recurses
+            # into OnJobCompleted again (stacking dialogs); the guard no-ops it.
+            $script:p.ReenterOnComplete = $true
+            $script:p.ActiveJobs.Add((New-TerminalJob "HOST" "Completed"))
+
+            { $script:p.PumpJobs() } | Should -Not -Throw
+
+            $script:p.Completed | Should -Be @("HOST")   # exactly once, not re-stacked
+            $script:p.ActiveJobs.Count | Should -Be 0
         }
 
         It "Skips null entries without throwing" {
