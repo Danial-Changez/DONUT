@@ -35,12 +35,15 @@ Describe "InventoryService" {
     }
 
     Context "BuildProbeScript" {
-        It "Reads WMI over a DCOM CIM session (the Get-WmiObject equivalent that works as SYSTEM)" {
+        It "Targets only -Property on the battery classes (bypasses the CIM serialization crash)" {
             $script = [InventoryService]::BuildProbeScript("TestHost")
-            $script | Should -Match 'New-CimSessionOption -Protocol Dcom'
-            # Every CIM query goes through the session splat, not the default path.
-            $script | Should -Not -Match 'Get-CimInstance -'
-            ([regex]::Matches($script, 'Get-CimInstance @cimArgs')).Count | Should -Be 8
+            # Selecting a single property avoids serializing BatteryStaticData's
+            # corrupt datetime field, which crashes a full Get-CimInstance pull.
+            $script | Should -BeLike "*BatteryStaticData -Property DesignedCapacity*"
+            $script | Should -BeLike "*BatteryFullChargedCapacity -Property FullChargedCapacity*"
+            $script | Should -BeLike "*BatteryCycleCount -Property CycleCount*"
+            # Stays on the modern CIM cmdlet, not the removed Get-WmiObject.
+            $script | Should -Not -BeLike '*Get-WmiObject*'
         }
     }
 
