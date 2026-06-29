@@ -19,7 +19,7 @@ Describe "HostResolver" {
     Context "IP cache" {
         It "returns a cached IP and null for an unknown host" {
             $r = New-Resolver
-            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             $r.GetCachedIp("PC-1") | Should -Be "10.0.0.5"
             $r.GetCachedIp("pc-1") | Should -Be "10.0.0.5"   # case-insensitive
             $r.GetCachedIp("PC-2") | Should -BeNullOrEmpty
@@ -27,8 +27,17 @@ Describe "HostResolver" {
 
         It "ignores a blank IP" {
             $r = New-Resolver
-            $r.CacheIp("PC-1", "")
+            $r.CacheVerdict("PC-1", "", $true)
             $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty
+        }
+
+        It "tracks tri-state reachability" {
+            $r = New-Resolver
+            $r.IsHostOnline("PC-1") | Should -Be 'Unknown'
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            $r.IsHostOnline("PC-1") | Should -Be 'Online'
+            $r.CacheVerdict("PC-1", "10.0.0.5", $false)
+            $r.IsHostOnline("PC-1") | Should -Be 'Offline'
         }
     }
 
@@ -44,11 +53,28 @@ Describe "HostResolver" {
             $r.NeedsResolve("PC-1") | Should -BeTrue
         }
 
-        It "is false for an already-cached host" {
+        It "is false for a freshly-cached host" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
-            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             $r.NeedsResolve("PC-1") | Should -BeFalse
+        }
+
+        It "is true again once the cached verdict ages past the TTL" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.Ttl = [timespan]::FromMilliseconds(1)
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            Start-Sleep -Milliseconds 20
+            $r.NeedsResolve("PC-1") | Should -BeTrue   # stale -> re-validate
+        }
+
+        It "is true again after Invalidate" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            $r.Invalidate("PC-1")
+            $r.NeedsResolve("PC-1") | Should -BeTrue
         }
 
         It "is false while a resolve is in flight (single-flight)" {
@@ -62,7 +88,7 @@ Describe "HostResolver" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $r.MarkInFlight("PC-1")
-            $r.CacheIp("PC-1", "10.0.0.5")
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             $r.NeedsResolve("PC-1") | Should -BeFalse   # cached now
         }
     }

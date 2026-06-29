@@ -85,23 +85,27 @@ class ExecutionService {
     }
 
     # Background resolution run on the pool (not the UI thread). 'Warm' discovers a
-    # live domain controller once at startup; 'Host' resolves a single host against
-    # that already-known DC (cheap, no AD module). The result rides back on the
-    # AsyncJob's Result and is cached by HostResolver via the presenter.
+    # live domain controller (+ list) once at startup; 'Host' freshly resolves a
+    # single host against that already-known DC (cheap, no AD module) AND probes
+    # reachability, returning a verdict { Ip; Online }. A fresh forward-resolve is
+    # authoritative, so it self-heals a changed/reassigned IP; RPC (TCP 135) is
+    # exactly what psexec needs, so it doubles as the online check. The result
+    # rides back on the AsyncJob's Result and is cached by HostResolver.
     [hashtable] RunResolvePhase([DeviceContext] $device, [hashtable] $options) {
         $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
 
         if ($mode -eq 'Warm') {
             $dc = $this.Probe.GetActiveDomainController()
             $this.Logger.LogInfo("Resolver warm-up: active domain controller = $dc")
-            return @{ Mode = 'Warm'; ActiveDc = [string]$dc }
+            return @{ Mode = 'Warm'; ActiveDc = [string]$dc; DomainControllers = @($this.Probe.GetDomainControllers()) }
         }
 
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
         $ip = $this.Probe.ResolveWith($device.HostName, $dc)
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
-        $this.Logger.LogInfo("[$($device.HostName)] Pre-resolved IP = '$ipStr' (via $dc)")
-        return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr }
+        $online = if (-not [string]::IsNullOrWhiteSpace($ipStr)) { $this.Probe.IsRpcAvailable($ipStr) } else { $false }
+        $this.Logger.LogInfo("[$($device.HostName)] Resolved IP = '$ipStr' online=$online (via $dc)")
+        return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
     # The job's target IP, resolved at most once: returns the pre-resolved/seeded IP
