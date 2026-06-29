@@ -38,6 +38,14 @@ class FakeNetworkProbe : NetworkProbe {
         if ($this.PtrMap.ContainsKey($key)) { return $this.PtrMap[$key] }
         return $null
     }
+
+    [hashtable] $NameMap = @{}     # ip string -> computer name
+    [bool] $ThrowOnName = $false
+    hidden [string] QueryComputerName([string]$ip) {
+        if ($this.ThrowOnName) { throw "RPC unavailable" }
+        if ($this.NameMap.ContainsKey($ip)) { return $this.NameMap[$ip] }
+        return ''
+    }
 }
 
 Describe "NetworkProbe" {
@@ -168,6 +176,25 @@ Describe "NetworkProbe" {
             $probe.ForwardMap = @{}
 
             $probe.ResolveWith("Unknown-PC", "DC1") | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "ResolveComputerName" {
+        It "Returns the machine's own name at the given IP" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.NameMap = @{ "10.0.0.5" = "TPS5330AP" }
+            $probe.ResolveComputerName("10.0.0.5") | Should -Be "TPS5330AP"
+        }
+        It "Returns '' for a blank IP without querying" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.ResolveComputerName("") | Should -Be ''
+        }
+        It "Returns '' (logged) when the query throws" {
+            $logger = [CapturingLogService]::new()
+            $probe = [FakeNetworkProbe]::new($logger)
+            $probe.ThrowOnName = $true
+            $probe.ResolveComputerName("10.0.0.5") | Should -Be ''
+            $logger.HasLevel("ERROR") | Should -Be $true
         }
     }
 

@@ -21,6 +21,8 @@ class MockNetworkProbeWorker : NetworkProbe {
     [string] GetActiveDomainController() { return $this.ActiveDcResult }
     [string[]] GetDomainControllers() { return $this.DcListResult }
     [IPAddress] ResolveWith([string]$hostName, [string]$dc) { return [IPAddress]::Parse($this.ResolveWithResult) }
+    [string] $ComputerNameResult = "TPS5330AP"
+    [string] ResolveComputerName([string]$ip) { return $this.ComputerNameResult }
 }
 
 # Partial Mock of ExecutionService to avoid real PsExec calls
@@ -221,6 +223,19 @@ Describe "WorkerServices" {
             $result.HostName | Should -Be 'PC-1'
             $result.Ip       | Should -Be '10.0.0.7'
             $result.Online   | Should -BeTrue
+        }
+
+        It "Name mode returns the actual computer name at the IP" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $probe = [MockNetworkProbeWorker]::new()
+            $probe.ComputerNameResult = "OTHER-PC"
+            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $result = $service.RunResolvePhase([DeviceContext]::new("TPS5330AP"), @{ Mode = 'Name'; Ip = '10.0.0.7' })
+
+            $result.Mode       | Should -Be 'Name'
+            $result.HostName   | Should -Be 'TPS5330AP'
+            $result.ActualName | Should -Be 'OTHER-PC'
         }
 
         It "Host mode reports offline when RPC is unreachable" {

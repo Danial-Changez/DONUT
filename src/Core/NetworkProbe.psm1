@@ -174,11 +174,39 @@ class NetworkProbe {
         }
     }
 
+    # Asks the machine AT an IP for its own computer name (the identity check used
+    # before a destructive Apply). Queries WMI over DCOM - the same RPC transport
+    # psexec uses - so it works wherever a run would, and runs on its own thread,
+    # never the dcu-cli path. Returns '' (logged) if it can't be determined.
+    [string] ResolveComputerName([string]$ip) {
+        if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
+        try {
+            return $this.QueryComputerName($ip)
+        }
+        catch {
+            $this.Logger.LogException("Computer-name query for '$ip' failed", $_)
+            return ''
+        }
+    }
+
     # --- Overridable seams (raw side effects; faked in unit tests) --------------------
 
     # Queries Active Directory for all domain controllers and returns their host names.
     hidden [string[]] QueryDomainControllers() {
         return @(Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName)
+    }
+
+    # Reads Win32_ComputerSystem.Name from the host at $ip over a DCOM CIM session
+    # (root\cimv2, single property - none of the root\wmi serialization issues).
+    hidden [string] QueryComputerName([string]$ip) {
+        $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+        try {
+            $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem -Property Name -OperationTimeoutSec 10 -ErrorAction Stop
+            return [string]$cs.Name
+        }
+        finally {
+            Remove-CimSession -CimSession $session -ErrorAction SilentlyContinue
+        }
     }
 
     # Resolves a host's A record using the given DNS server. Returns $null if none.

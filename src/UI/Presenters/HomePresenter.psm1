@@ -284,6 +284,26 @@ class HomePresenter : AsyncJobPresenter {
                 $this.Resolver.CacheVerdict($hn, $newIp, $online)
                 $this.RenderReachability($hn)
             }
+            elseif ($mode -eq 'Name') {
+                $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
+            }
+        }
+    }
+
+    # Fires the identity check (what name does the box at this host's IP report?) as
+    # its own pool job, in parallel with the apply-scan. It never touches the dcu-cli
+    # thread, so it adds no latency; its verdict gates the destructive apply.
+    [void] StartVerifyName([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($this.Resolver.GetCachedIp($hostName))) { return }
+        $this.Resolver.ClearVerifiedName($hostName)
+        try {
+            $prep = $this.Resolver.PrepareName($hostName)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.Logger.LogException("[$hostName] identity check could not start", $_)
         }
     }
 
@@ -695,6 +715,9 @@ class HomePresenter : AsyncJobPresenter {
                 $this.RefreshOverview()
                 # Run starts the scan/update only - inventory is gathered explicitly
                 # on a double-click (OnRowActivated), never piggy-backed on a run.
+                # Apply is destructive: kick the identity check now (separate thread),
+                # in parallel with the scan, so its verdict can gate the apply.
+                if ($command -eq 'applyUpdates') { $this.StartVerifyName($hostName) }
             }
         }
         catch {
@@ -835,6 +858,18 @@ class HomePresenter : AsyncJobPresenter {
     # Returns $true when an apply job was started (so the caller defers settling).
     [bool] HandleUpdateScanCompletion([AsyncJob]$job) {
         $hostName = $job.HostName
+
+        # Identity gate: the parallel name-check (run with the scan) verifies the box
+        # we scanned is actually the target. On a confirmed mismatch the IP has moved
+        # to a different machine - abort before applying, drop the stale IP, re-resolve.
+        if ($this.Resolver.IdentityVerdict($hostName) -eq 'Mismatch') {
+            $actual = $this.Resolver.GetVerifiedName($hostName)
+            $this.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
+            $this.InvalidateResolved($hostName)
+            return $false
+        }
+
         $report = $this.UpdateService.ParseUpdateReport($hostName)
 
         if (-not $report) {
