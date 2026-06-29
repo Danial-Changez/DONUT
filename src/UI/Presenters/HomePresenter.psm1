@@ -53,6 +53,7 @@ class HomePresenter : AsyncJobPresenter {
     [InventoryService] $InventoryService
     [DiskUsageService] $DiskUsageService
     [HostResolver] $Resolver
+    [timespan] $InventoryTtl = [timespan]::FromMinutes(3)   # select-prefetch skips inventory fresher than this
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
 
@@ -1018,6 +1019,11 @@ class HomePresenter : AsyncJobPresenter {
         # Reflect any already-known reachability verdict immediately (a fresh
         # PrefetchIp above will update it when it lands).
         $this.RenderReachability($hostName)
+
+        # Start-early: prefetch this machine's inventory in the background (skipped
+        # when it's still fresh), so the detail panel fills itself without a
+        # double-click. Runs on the pool - never blocks the UI.
+        $this.StartInventory($hostName, $false)
     }
 
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
@@ -1038,12 +1044,20 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateOverviewTiles()
     }
 
-    # Queues a background inventory probe for the host (no-op if one is in flight).
+    # Explicit gather (double-click / Refresh): forces a fresh probe regardless of TTL.
     [void] StartInventory([string]$hostName) {
+        $this.StartInventory($hostName, $true)
+    }
+
+    # Queues a background inventory probe. Single-flight (no-op if one is in flight).
+    # When $force is false (select-time prefetch) it also skips a host whose cached
+    # inventory is still fresh, so repeated selects don't re-gather needlessly.
+    [void] StartInventory([string]$hostName, [bool]$force) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         foreach ($j in $this.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::Inventory) { return }
         }
+        if (-not $force -and -not $this.InventoryIsStale($hostName)) { return }
         try {
             $this.AppendLog($hostName, "Gathering inventory...")
             if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
@@ -1067,6 +1081,15 @@ class HomePresenter : AsyncJobPresenter {
     # Forces a re-probe of the selected host.
     [void] RefreshInventory([string]$hostName) {
         $this.StartInventory($hostName)
+    }
+
+    # True when a host has no cached inventory or its last probe is older than the TTL.
+    [bool] InventoryIsStale([string]$hostName) {
+        $rc = $this.GetRecord($hostName)
+        if ($null -eq $rc -or $null -eq $rc.Inventory) { return $true }
+        $probed = [RecentConnectionsStore]::ParseSeen($rc.Inventory.ProbedAt)
+        if ($probed -eq [datetime]::MinValue) { return $true }
+        return (([datetime]::UtcNow - $probed) -gt $this.InventoryTtl)
     }
 
     # Inventory job finished: parse + cache + repopulate the detail cards.
