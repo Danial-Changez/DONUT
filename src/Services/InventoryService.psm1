@@ -71,41 +71,33 @@ $inv = [ordered]@{
     probedAt           = ([datetime]::UtcNow.ToString('o'))
 }
 
-# Query WMI over DCOM (the same transport Get-WmiObject used). The default
-# Get-CimInstance path (WSMan/MI) intermittently fails for the root\wmi battery
-# classes when the probe runs as SYSTEM in session 0; a DCOM CIM session is the
-# pwsh-7 equivalent of Get-WmiObject and reads them reliably. Splatting an empty
-# hashtable if the session can't be created falls back to the default local path.
-$cimArgs = @{}
+try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; $inv.model = $cs.Model } catch { }
 try {
-    $cimSession = New-CimSession -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
-    $cimArgs['CimSession'] = $cimSession
-} catch { }
-
-try { $cs = Get-CimInstance @cimArgs -ClassName Win32_ComputerSystem -ErrorAction Stop; $inv.model = $cs.Model } catch { }
-try {
-    $bios = Get-CimInstance @cimArgs -ClassName Win32_BIOS -ErrorAction Stop
+    $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop
     $inv.serviceTag = $bios.SerialNumber
     $inv.biosVersion = $bios.SMBIOSBIOSVersion
 } catch { }
 
-# Battery design/health live in root\wmi (not root\cimv2).
+# Battery design/health live in root\wmi (not root\cimv2). Get-CimInstance crashes
+# when it serializes ALL properties of BatteryStaticData (a corrupt datetime
+# field), so we request ONLY the numeric capacity/cycle property via -Property,
+# which bypasses the bug and reads reliably as SYSTEM in session 0.
 try {
-    $static = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryStaticData -ErrorAction Stop | Select-Object -First 1
+    $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }
 } catch { }
 try {
-    $full = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1
+    $full = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -Property FullChargedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($full) { $inv.fullChargeCapacity = [int64]$full.FullChargedCapacity }
 } catch { }
 try {
-    $cyc = Get-CimInstance @cimArgs -Namespace 'root\wmi' -ClassName BatteryCycleCount -ErrorAction Stop | Select-Object -First 1
+    $cyc = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryCycleCount -Property CycleCount -ErrorAction Stop | Select-Object -First 1
     if ($cyc -and $null -ne $cyc.CycleCount) { $inv.cycleCount = [int]$cyc.CycleCount }
 } catch { }
 
 # Presence + current charge from Win32_Battery (BatteryStatus 1 = discharging).
 try {
-    $bat = Get-CimInstance @cimArgs -ClassName Win32_Battery -ErrorAction Stop | Select-Object -First 1
+    $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction Stop | Select-Object -First 1
     if ($bat) {
         $inv.hasBattery = $true
         $inv.chargePercent = [int]$bat.EstimatedChargeRemaining
@@ -114,7 +106,7 @@ try {
 } catch { }
 
 try {
-    $disk = Get-CimInstance @cimArgs -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop | Select-Object -First 1
+    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop | Select-Object -First 1
     if ($disk) {
         $inv.freeSpaceBytes = [int64]$disk.FreeSpace
         $inv.totalSpaceBytes = [int64]$disk.Size
@@ -122,11 +114,9 @@ try {
 } catch { }
 
 try {
-    $os = Get-CimInstance @cimArgs -ClassName Win32_OperatingSystem -ErrorAction Stop
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
     if ($os.LastBootUpTime) { $inv.lastBootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o') }
 } catch { }
-
-if ($cimArgs['CimSession']) { Remove-CimSession -CimSession $cimArgs['CimSession'] -ErrorAction SilentlyContinue }
 
 $inv | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $dir '__HOST__-inventory.json') -Encoding UTF8
 '@
