@@ -220,7 +220,15 @@ class ConnectionRow {
     # (The presenter only calls this when no job is running on the host.)
     [void] SetReachability([string]$state) {
         $this.Reachability = $state
-        $this.Dot.Opacity = $(if ($state -eq 'Offline') { 0.4 } else { 1.0 })
+        # The dot is a presence light: green = online, red = offline. 'Unknown' (not yet
+        # resolved) leaves the existing colour. A running job owns the dot, so the
+        # presenter only calls this on an idle row.
+        switch ($state) {
+            'Online'  { $this.Dot.Fill = $this.Brush('AccentGreen', [Colors]::Green) }
+            'Offline' { $this.Dot.Fill = $this.Brush('AccentRed', [Colors]::Red) }
+            default   { }
+        }
+        $this.Dot.Opacity = 1.0
         $this.ApplyChip()
         $this.ApplySubtitle()
     }
@@ -308,7 +316,7 @@ class ConnectionRow {
             'Completed'      { return 'AccentGreen' }
             'Failed'         { return 'AccentRed' }
             'RebootRequired' { return 'AccentYellow' }
-            'Offline'        { return 'BodyTextTertiary' }   # offline (host off) is grey, not error-red
+            'Offline'        { return 'AccentRed' }          # offline shows red (matches the dot)
             default          { return 'BodyTextTertiary' }
         }
         return 'BodyTextTertiary'

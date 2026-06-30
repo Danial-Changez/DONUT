@@ -18,6 +18,7 @@ class DialogPresenter {
     [ResourceService]$Resources
     [Window]$Window
     [bool]$Result
+    [bool]$IsShowing = $false   # true while a modal is up; the pump defers dialog-opening work
 
     DialogPresenter([ResourceService]$resources) {
         $this.Resources = $resources
@@ -80,7 +81,8 @@ class DialogPresenter {
         }.GetNewClosure())
 
         $this.PrepareToShow()
-        $this.Window.ShowDialog() | Out-Null
+        $this.IsShowing = $true
+        try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
         return $this.Result
     }
 
@@ -97,7 +99,8 @@ class DialogPresenter {
         $this.HideControl("btnSecondary")
 
         $this.PrepareToShow()
-        $this.Window.ShowDialog() | Out-Null
+        $this.IsShowing = $true
+        try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
     }
 
     [bool] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
@@ -125,7 +128,8 @@ class DialogPresenter {
         }.GetNewClosure())
 
         $this.PrepareToShow()
-        $this.Window.ShowDialog() | Out-Null
+        $this.IsShowing = $true
+        try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
         return $this.Result
     }
 
