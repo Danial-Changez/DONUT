@@ -20,6 +20,18 @@ Describe "RemoteError" {
             [string]$ex.Level  | Should -Be 'Error'
             [string]$ex.Reason | Should -Be 'RpcUnavailable'
         }
+        It "RemoteExecutionException carries the exit code (ExecutionFailed)" {
+            $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 500)
+            [string]$ex.Level  | Should -Be 'Error'
+            [string]$ex.Reason | Should -Be 'ExecutionFailed'
+            $ex.ExitCode       | Should -Be 500
+            $ex.Message        | Should -BeLike '*exit code 500*'
+        }
+        It "DcuNotInstalledException is an Error with the DcuMissing reason" {
+            $ex = [DcuNotInstalledException]::new('PC-5')
+            [string]$ex.Level  | Should -Be 'Error'
+            [string]$ex.Reason | Should -Be 'DcuMissing'
+        }
     }
 
     Context "RemoteFailure.ReasonFromMessage (re-derives reason across the runspace boundary)" {
@@ -27,6 +39,8 @@ Describe "RemoteError" {
             [string][RemoteFailure]::ReasonFromMessage(([HostOfflineException]::new('h')).Message)      | Should -Be 'Offline'
             [string][RemoteFailure]::ReasonFromMessage(([HostUnresolvableException]::new('h')).Message) | Should -Be 'Unresolvable'
             [string][RemoteFailure]::ReasonFromMessage(([RpcUnavailableException]::new('h')).Message)   | Should -Be 'RpcUnavailable'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h','DCU /scan',500)).Message) | Should -Be 'ExecutionFailed'
+            [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
             [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'
