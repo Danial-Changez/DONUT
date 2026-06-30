@@ -222,15 +222,27 @@ class ExecutionService {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
         $ip = $this.ResolvedIpFor($device.HostName)
 
-        $inv = $this.GatherRemoteInventory($ip)
-        if ($null -ne $inv) {
+        # Fast path: gather over a remote CIM/DCOM session. A null result (session
+        # wouldn't open), an all-null/unusable result (DCOM answered but WMI gave
+        # nothing), or a thrown error all count as failure and fall through to the
+        # psexec probe.
+        $inv = $null
+        try {
+            $inv = $this.GatherRemoteInventory($ip)
+        }
+        catch {
+            $this.Logger.LogException("[$($device.HostName)] CIM inventory threw; falling back to the psexec probe", $_)
+            $inv = $null
+        }
+
+        if ([ExecutionService]::IsUsableInventory($inv)) {
             $local = Join-Path $this.LocalReportsDir "$($device.HostName)-inventory.json"
             $inv | ConvertTo-Json -Depth 4 | Set-Content -Path $local -Encoding UTF8
             return @{ InventoryPath = $local }
         }
 
         # Fallback: the original psexec probe (e.g. DCOM/WMI blocked on the target).
-        $this.Logger.LogWarning("[$($device.HostName)] Remote CIM unavailable; using psexec probe.")
+        $this.Logger.LogWarning("[$($device.HostName)] Remote CIM unavailable or empty; using psexec probe.")
         $scriptText = if ($null -ne $options) { [string]$options.ScriptText } else { '' }
         if ([string]::IsNullOrWhiteSpace($scriptText)) {
             throw "No inventory script supplied for $($device.HostName)."
@@ -238,6 +250,21 @@ class ExecutionService {
         $this.InvokeRemotePwsh($ip, $scriptText)
         $localPath = $this.CopyInventoryArtifact($device.HostName)
         return @{ InventoryPath = $localPath }
+    }
+
+    # A CIM gather only "succeeded" if it produced at least one identifying fact.
+    # An all-null result means DCOM answered but WMI handed back nothing useful, so
+    # the caller should fall back to the psexec probe. Pure + static, so it is
+    # unit-tested without a live host.
+    static [bool] IsUsableInventory([hashtable]$inv) {
+        if ($null -eq $inv) { return $false }
+        foreach ($key in @('model', 'serviceTag', 'biosVersion', 'totalSpaceBytes', 'lastBootTime')) {
+            if ($inv.ContainsKey($key)) {
+                $v = $inv[$key]
+                if ($null -ne $v -and -not [string]::IsNullOrWhiteSpace([string]$v)) { return $true }
+            }
+        }
+        return $false
     }
 
     # Queries the host's WMI directly over a DCOM CIM session (same RPC transport

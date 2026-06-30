@@ -62,8 +62,13 @@ class TestExecutionService : ExecutionService {
     }
 
     # $null => triggers the psexec fallback; a hashtable => the fast CIM path.
+    # $ThrowOnGather => simulate the CIM gather blowing up.
     [hashtable] $GatherResult = $null
-    [hashtable] GatherRemoteInventory([string]$ip) { return $this.GatherResult }
+    [bool] $ThrowOnGather = $false
+    [hashtable] GatherRemoteInventory([string]$ip) {
+        if ($this.ThrowOnGather) { throw "Simulated CIM failure" }
+        return $this.GatherResult
+    }
 }
 
 Describe "WorkerServices" {
@@ -584,6 +589,52 @@ Describe "WorkerServices" {
             $device = [DeviceContext]::new("InvHost")
 
             { $service.RunInventoryPhase($device, @{}) } | Should -Throw "*No inventory script*"
+        }
+
+        It "Fallback: an all-null CIM result (DCOM up, WMI empty) uses the psexec probe" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.GatherResult = @{ model = $null; serviceTag = $null; biosVersion = $null; totalSpaceBytes = $null; lastBootTime = $null; probedAt = 'x' }
+            $device = [DeviceContext]::new("InvHost")
+
+            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
+
+            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
+            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
+        }
+
+        It "Fallback: a CIM exception falls back to the psexec probe" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.ThrowOnGather = $true
+            $device = [DeviceContext]::new("InvHost")
+
+            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
+
+            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
+            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
+        }
+    }
+
+    Context "IsUsableInventory" {
+        It "is false for a null result" {
+            [ExecutionService]::IsUsableInventory($null) | Should -BeFalse
+        }
+        It "is false when every identifying field is null" {
+            $inv = @{ model = $null; serviceTag = $null; biosVersion = $null; totalSpaceBytes = $null; lastBootTime = $null; hasBattery = $false }
+            [ExecutionService]::IsUsableInventory($inv) | Should -BeFalse
+        }
+        It "is true when any identifying field is populated" {
+            [ExecutionService]::IsUsableInventory(@{ model = 'Latitude 5440' }) | Should -BeTrue
+            [ExecutionService]::IsUsableInventory(@{ totalSpaceBytes = 512000000000 }) | Should -BeTrue
         }
     }
 }
