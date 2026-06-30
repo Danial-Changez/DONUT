@@ -10,6 +10,7 @@ using namespace System.Net
 class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
+    [bool] $IsSmbAvailableResult = $true
     [string] $ResolveHostResult = "127.0.0.1"
     [string] $ActiveDcResult = "DC1.contoso.local"
     [string[]] $DcListResult = @("DC1.contoso.local", "DC2.contoso.local")
@@ -17,6 +18,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     MockNetworkProbeWorker() {}
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
+    [bool] IsSmbAvailable([string]$hostName) { return $this.IsSmbAvailableResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
     [string] GetActiveDomainController() { return $this.ActiveDcResult }
     [string[]] GetDomainControllers() { return $this.DcListResult }
@@ -129,6 +131,22 @@ Describe "WorkerServices" {
             
             $service.LocalLogsDir | Should -Be $script:logsDir
             $service.LocalReportsDir | Should -Be $script:reportsDir
+        }
+    }
+
+    Context "FindDcuCli" {
+        It "Fails fast (RpcUnavailable) when the admin share (SMB/445) is unreachable" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $probe.IsSmbAvailableResult = $false   # short-circuits before any UNC Test-Path
+            $matcher = [DriverMatchingService]::new()
+            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $threw = $false; $errName = ''
+            try { $service.FindDcuCli('203.0.113.9') } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
+            $threw  | Should -BeTrue
+            $errName | Should -Be 'RpcUnavailableException'
         }
     }
 

@@ -489,10 +489,11 @@ class ExecutionService {
 
         # DCU names its scan report inconsistently across versions (Report.xml,
         # DCUApplicableUpdates.xml, ...), so don't guess a single name - copy the NEWEST
-        # *.xml the scan left in the remote DONUT folder. That is the report.
+        # *.xml the scan left at the top of the remote DONUT folder. That is the report.
+        # (Top level only: DCU writes it there, and a recursive UNC enumeration can stall.)
         $report = $null
         try {
-            $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -Recurse -ErrorAction Stop |
+            $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -ErrorAction Stop |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
         }
         catch {
@@ -504,11 +505,11 @@ class ExecutionService {
         }
         else {
             # Log what DCU actually left behind, so we can see whether it wrote the report
-            # under a different name/location - or didn't write one at all.
+            # under a different name - or didn't write one at all.
             $contents = try {
-                (Get-ChildItem -Path $remoteDir -Recurse -ErrorAction Stop | ForEach-Object { $_.Name }) -join ', '
+                (Get-ChildItem -Path $remoteDir -File -ErrorAction Stop | ForEach-Object { $_.Name }) -join ', '
             } catch { '<unreadable>' }
-            $this.Logger.LogWarning("[$hostName] No scan report (*.xml) found under $remoteDir - the apply/count will see no updates. Folder contains: $contents")
+            $this.Logger.LogWarning("[$hostName] No scan report (*.xml) found in $remoteDir - the apply/count will see no updates. Folder contains: $contents")
         }
 
         return @{ Log = $localLog; Report = $localReport }
@@ -535,7 +536,8 @@ class ExecutionService {
         # PsExec Arguments
         $psexecArgs = @(
             '-accepteula',
-            '-nobanner', 
+            '-nobanner',
+            '-n', '60',     # connect timeout (s): give up instead of hanging on a dead host
             '-s',           # Run as SYSTEM
             '-h',           # Elevated token
             "\\$ip",
@@ -562,6 +564,14 @@ class ExecutionService {
     }
 
     [string] FindDcuCli([string]$ip) {
+        # The lookup below probes the admin share over SMB (445). If that port is blocked
+        # - which IsHostOnline (RPC/135) does NOT rule out - Test-Path blocks with no
+        # timeout and the job spins forever. Check it first and fail fast with a reason.
+        if (-not $this.Probe.IsSmbAvailable($ip)) {
+            $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot locate dcu-cli or run psexec.")
+            throw [RpcUnavailableException]::new($ip)
+        }
+
         $paths = @(
             "\\$ip\C$\Program Files (x86)\Dell\CommandUpdate\dcu-cli.exe",
             "\\$ip\C$\Program Files\Dell\CommandUpdate\dcu-cli.exe"
