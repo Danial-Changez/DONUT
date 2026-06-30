@@ -40,28 +40,26 @@ class ActiveDirectoryService {
         $p = $prefix.Trim()
         $seen = [System.Collections.Generic.HashSet[string]]::new()
 
-        $specs = @(
-            @{ Kind = 'Computer'; Filter = [AdFilter]::ComputerFilter($p);
-               Props = @('name', 'sAMAccountName', 'userAccountControl', 'distinguishedName') }
-            @{ Kind = 'User'; Filter = [AdFilter]::UserFilter($p);
-               Props = @('sAMAccountName', 'userPrincipalName', 'displayName', 'name',
-                         'msDS-User-Account-Control-Computed', 'userAccountControl', 'distinguishedName') }
-        )
+        # One filter for computers + users so each forest is bound + queried ONCE per
+        # search (halves the LDAP round-trips and binds vs a query per kind). Each row's
+        # kind is recovered from objectCategory in MapRow.
+        $filter = [AdFilter]::CombinedFilter($p)
+        $props = @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
+                   'userAccountControl', 'msDS-User-Account-Control-Computed',
+                   'distinguishedName', 'objectCategory')
 
         foreach ($domain in $this.Domains) {
-            foreach ($spec in $specs) {
-                try {
-                    $rows = $this.QueryDirectory($domain, $spec.Filter, $spec.Props, $this.MaxPerDomain)
-                    foreach ($row in $rows) {
-                        $item = $this.MapRow($spec.Kind, $domain, $row)
-                        if ($null -ne $item -and $seen.Add($item.Key())) {
-                            $results.Add($item)
-                        }
+            try {
+                $rows = $this.QueryDirectory($domain, $filter, $props, $this.MaxPerDomain * 2)
+                foreach ($row in $rows) {
+                    $item = $this.MapRow($domain, $row)
+                    if ($null -ne $item -and $seen.Add($item.Key())) {
+                        $results.Add($item)
                     }
                 }
-                catch {
-                    $this.Logger.LogWarning("AD search in '$domain' ($($spec.Kind)) failed: $($_.Exception.Message)")
-                }
+            }
+            catch {
+                $this.Logger.LogWarning("AD search in '$domain' failed: $($_.Exception.Message)")
             }
         }
         return $results.ToArray()
@@ -84,17 +82,20 @@ class ActiveDirectoryService {
     }
 
     # --- pure mapping (exercised via Search in tests) ---------------------------
-    hidden [AdSearchResult] MapRow([string]$kind, [string]$domain, [hashtable]$row) {
+    # Kind is recovered from objectCategory (CN=Computer,... vs CN=Person,...) since the
+    # combined filter returns both kinds in one result set.
+    hidden [AdSearchResult] MapRow([string]$domain, [hashtable]$row) {
         if ($null -eq $row) { return $null }
+        $isComputer = ([string]$row['objectCategory']) -match '(?i)CN=Computer'
         $r = [AdSearchResult]::new()
-        $r.Kind = $kind
+        $r.Kind = $(if ($isComputer) { 'Computer' } else { 'User' })
         $r.Domain = $domain
         $r.Name = [string]$row['name']
         # Computer sAMAccountNames carry a trailing '$'; strip it for display/identity.
         $r.SamAccountName = ([string]$row['sAMAccountName']).TrimEnd('$')
         $r.DistinguishedName = [string]$row['distinguishedName']
         $r.Enabled = -not [AdFilter]::IsDisabledFromUac($row['userAccountControl'])
-        if ($kind -eq 'User') {
+        if (-not $isComputer) {
             $r.UserPrincipalName = [string]$row['userPrincipalName']
             $r.DisplayName = [string]$row['displayName']
             $r.LockedOut = [AdFilter]::IsLockedFromComputed($row['msDS-User-Account-Control-Computed'])
@@ -114,7 +115,7 @@ class ActiveDirectoryService {
         try {
             $searcher.Filter = $filter
             $searcher.SizeLimit = $max
-            $searcher.ClientTimeout = [TimeSpan]::FromSeconds(5)
+            $searcher.ClientTimeout = [TimeSpan]::FromSeconds(3)
             foreach ($pr in $props) { [void]$searcher.PropertiesToLoad.Add($pr) }
 
             $rows = [System.Collections.Generic.List[hashtable]]::new()

@@ -71,6 +71,12 @@ class AdFilter {
         return "(&(objectCategory=computer)(|(name=$p*)(sAMAccountName=$p*)))"
     }
 
+    # Computers OR users in one filter, so a forest is bound + queried ONCE per search
+    # instead of twice. Each row's kind is recovered from objectCategory by the caller.
+    static [string] CombinedFilter([string]$prefix) {
+        return "(|$([AdFilter]::ComputerFilter($prefix))$([AdFilter]::UserFilter($prefix)))"
+    }
+
     # Current lock state, from the constructed msDS-User-Account-Control-Computed
     # attribute (reflects live lockout, unlike a raw non-zero lockoutTime).
     static [bool] IsLockedFromComputed([object]$uacComputed) {
