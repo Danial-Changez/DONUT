@@ -69,6 +69,8 @@ class TestExecutionService : ExecutionService {
         if ($this.ThrowOnGather) { throw "Simulated CIM failure" }
         return $this.GatherResult
     }
+
+    [void] WarmRuntimeAssemblies() { }   # no-op: tests never touch real DNS / CIM
 }
 
 Describe "WorkerServices" {
@@ -247,10 +249,12 @@ Describe "WorkerServices" {
             $result.Online   | Should -BeTrue
         }
 
-        It "WarmRunspace mode is a no-op (just loads the module graph into the runspace)" {
+        It "WarmRunspace mode loads the module graph + runtime assemblies, returns the marker" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
-            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            # TestExecutionService no-ops WarmRuntimeAssemblies so the test never opens a
+            # real DNS/CIM session.
+            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
             $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'WarmRunspace' })
 

@@ -116,10 +116,13 @@ class ExecutionService {
             return @{ Mode = 'Warm'; ActiveDc = [string]$dc; DomainControllers = @($this.Probe.GetDomainControllers()) }
         }
 
-        # No-op whose sole effect is that running this job forced RemoteWorker.ps1 to
-        # load the full worker module graph into its pool runspace - pre-warming it so
-        # a later concurrent scan/inventory never cold-loads (and freezes the UI).
+        # Running this job forced RemoteWorker.ps1 to load the full worker module graph
+        # into its pool runspace; WarmRuntimeAssemblies then cold-loads the heavy runtime
+        # assemblies (DNS, CIM/DCOM, TCP). Both happen here during the synchronous
+        # pre-warm so a later scan/inventory never cold-loads them under the loader lock
+        # (which freezes the UI).
         if ($mode -eq 'WarmRunspace') {
+            $this.WarmRuntimeAssemblies()
             return @{ Mode = 'WarmRunspace' }
         }
 
@@ -139,6 +142,21 @@ class ExecutionService {
         # No log here: routine TTL re-validations would spam it. The presenter logs
         # only a first find or an actual IP change (CompleteResolve).
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
+    }
+
+    # Cold-loads the heavy runtime assemblies the worker uses - DNS resolution, CIM/DCOM
+    # and TCP sockets - against localhost, so the FIRST real probe doesn't load them under
+    # the process-wide CLR loader lock and freeze the UI. Best-effort: only the load
+    # matters, not the results. Overridable so unit tests skip the local I/O.
+    [void] WarmRuntimeAssemblies() {
+        try { Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction SilentlyContinue | Out-Null } catch { }
+        try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() } catch { }
+        try {
+            $opt = New-CimSessionOption -Protocol Dcom
+            $s = New-CimSession -SessionOption $opt -ErrorAction Stop
+            try { Get-CimInstance -CimSession $s -ClassName Win32_ComputerSystem -Property Name -ErrorAction Stop | Out-Null } catch { }
+            Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue
+        } catch { }
     }
 
     # The job's target IP, resolved at most once: returns the pre-resolved/seeded IP
