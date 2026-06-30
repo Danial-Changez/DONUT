@@ -28,6 +28,7 @@ using module "..\..\Core\TimeFormat.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\AdSearchResult.psm1"
+using module "..\..\Models\ScanCacheDecision.psm1"
 
 class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
@@ -55,6 +56,7 @@ class HomePresenter : AsyncJobPresenter {
     [HostResolver] $Resolver
     [bool] $PoolWarmed = $false   # single-shot guard for WarmPool
     [timespan] $InventoryTtl = [timespan]::FromMinutes(3)   # select-prefetch skips inventory fresher than this
+    [timespan] $ScanCacheTtl = [timespan]::FromHours(24)    # reuse a scan/update-scan newer than this instead of re-scanning
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
 
@@ -771,10 +773,40 @@ class HomePresenter : AsyncJobPresenter {
         return $false
     }
 
+    # True when the host's last scan can be reused instead of re-scanning (see
+    # ScanCacheDecision). Wires the recents fields + on-disk report to the pure rule.
+    [bool] RecentScanIsFresh([string]$hostName) {
+        $rc = $this.GetRecord($hostName)
+        if ($null -eq $rc) { return $false }
+        return [ScanCacheDecision]::IsFresh(
+            $rc.LastJobType,
+            [RecentConnectionsStore]::ParseSeen($rc.LastSeen),
+            [datetime]::UtcNow,
+            $this.ScanCacheTtl,
+            ($null -ne $this.UpdateService.ParseUpdateReport($hostName)))
+    }
+
     [void] StartProcess([string]$hostName) {
         $row = $this.EnsureRow($hostName)
-
         $command = $this.Config.GetActiveCommand()
+
+        # Reuse a scan that ran within the last 24h instead of re-scanning. A successful
+        # apply flips the host's last job to UpdateApply, so this is false afterwards ->
+        # the next run re-scans (the only intended bypass).
+        if (($command -eq 'scan' -or $command -eq 'applyUpdates') -and $this.RecentScanIsFresh($hostName)) {
+            $rc = $this.GetRecord($hostName)
+            $age = [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
+            if ($command -eq 'applyUpdates') {
+                $this.AppendLog($hostName, "Reusing scan from $age (under 24h); skipping re-scan.")
+                $this.ProceedWithApply($hostName)
+            } else {
+                $this.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
+                if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age - results are current.") }
+                $this.RefreshOverview()
+            }
+            return
+        }
+
         $this.AppendLog($hostName, "Starting $command for $hostName...")
 
         try {
@@ -870,7 +902,7 @@ class HomePresenter : AsyncJobPresenter {
         # Transition to apply phase after a successful update scan.
         $transitioned = $false
         if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
-            $transitioned = $this.HandleUpdateScanCompletion($job)
+            $transitioned = $this.ProceedWithApply($job.HostName)
         }
 
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
@@ -947,10 +979,11 @@ class HomePresenter : AsyncJobPresenter {
         $row.SetStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
     }
 
-    # Returns $true when an apply job was started (so the caller defers settling).
-    [bool] HandleUpdateScanCompletion([AsyncJob]$job) {
-        $hostName = $job.HostName
-
+    # Analyses the (fresh or reused) update report for a host, confirms with the
+    # operator, and kicks the apply. Returns $true when an apply job was started (so the
+    # job-completion caller defers settling). Takes a hostName, not a job, so it can run
+    # off the pump's UpdateScan completion OR directly off a reused <24h scan.
+    [bool] ProceedWithApply([string]$hostName) {
         # Identity gate: the parallel name-check (run with the scan) verifies the box
         # we scanned is actually the target. On a confirmed mismatch the IP has moved
         # to a different machine - abort before applying, drop the stale IP, re-resolve.
