@@ -1,7 +1,5 @@
 @startuml Component Diagram
-!include _dark-theme.puml
 title DONUT — Component View
-skinparam linetype ortho
 
 component "C# Wrapper" #2A1320 {
     [Donut.Launcher.exe]

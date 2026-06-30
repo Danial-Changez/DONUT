@@ -1,5 +1,4 @@
 @startuml Inventory and Storage Sequence Diagram
-!include _dark-theme.puml
 title Machine Detail — Inventory Prefetch + Storage Scan
 
 actor User

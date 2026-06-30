@@ -1,5 +1,4 @@
 @startuml Scan Sequence Diagram
-!include _dark-theme.puml
 title Scan a Machine (async, non-blocking)
 
 actor User
