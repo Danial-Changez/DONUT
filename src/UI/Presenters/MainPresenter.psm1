@@ -70,7 +70,6 @@ class MainPresenter {
                 $stream.Dispose()
             }
 
-            # Set as Main Window
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.MainWindow = $this.Window
             }
@@ -87,7 +86,6 @@ class MainPresenter {
             throw $msg
         }
 
-        # Load Resources (Styles)
         $this.Resources.ApplyResourcesToWindow($this.Window)
         $this.Logger.LogDebug("MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
         if ($this.Window.Resources.MergedDictionaries.Count -eq 0) {
@@ -98,7 +96,6 @@ class MainPresenter {
         $this.Controls = @{}
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
         
-        # Load Images
         $this.LoadImages()
         
         # Navigation Buttons
@@ -129,7 +126,6 @@ class MainPresenter {
         $this.Headers['Config'] = $this.Window.FindName("headerConfig")
         $this.Headers['Logs'] = $this.Window.FindName("headerLogs")
 
-        # Load Sub-Views
         $this.Views = @{}
         
         # Home View & Presenter
@@ -236,7 +232,6 @@ class MainPresenter {
     }
 
     [void] NavigateTo([string]$viewName) {
-        # Set main content
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) {
             $this.Controls['contentMain'].Content = $this.Views[$viewName]
 

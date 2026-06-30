@@ -109,7 +109,6 @@ class ConfigPresenter {
         
         $cmd = $this.CurrentSection.Substring(0,1).ToLower() + $this.CurrentSection.Substring(1)
         
-        # Get Args
         $cmdArgs = @{}
         if ($this.Config.Settings.ContainsKey('commands') -and 
             $this.Config.Settings['commands'].ContainsKey($cmd) -and 

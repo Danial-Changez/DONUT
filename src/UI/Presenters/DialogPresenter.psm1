@@ -64,7 +64,6 @@ class DialogPresenter {
         $this.Initialize()
         $self = $this
 
-        # Configure UI
         $this.SetText("txtHeader", $title)
         $this.SetText("txtSubHeader", $message)
         $this.SetList($listItems)
@@ -89,7 +88,6 @@ class DialogPresenter {
         $this.Initialize()
         $self = $this
 
-        # Configure UI
         $this.SetText("txtHeader", $title)
         $this.SetText("txtSubHeader", $message)
         $this.SetList($listItems)

@@ -191,7 +191,6 @@ class SelfUpdateService {
         $tempWorker = Join-Path $stageDir "InstallWorker.ps1"
         Copy-Item -Path $workerScript -Destination $tempWorker -Force
 
-        # Build Arguments
         $argList = @(
             "-File `"$tempWorker`"",
             "-MsiPath `"$MsiPath`"",
@@ -203,7 +202,6 @@ class SelfUpdateService {
             $argList += "-Rollback"
         }
 
-        # Start the worker in a new PowerShell process
         Start-Process -FilePath "powershell.exe" -ArgumentList $argList -WindowStyle Hidden
     }
 }

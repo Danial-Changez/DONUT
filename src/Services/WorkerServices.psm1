@@ -454,19 +454,13 @@ class ExecutionService {
         # Reuse the job's resolved/prefetched IP (resolves at most once).
         $ip = $this.ResolvedIpFor($computer)
 
-        # Find DCU Path
         $dcuPath = $this.FindDcuCli($ip)
         $this.Logger.LogInfo("Found dcu-cli at $dcuPath on $computer")
 
-        # Build Remote Command
         # DCU CLI syntax: dcu-cli.exe /<command> -option1=value1 -option2=value2
-        # Stop existing process first to avoid conflicts
+        # Stop any existing DCU process first to avoid conflicts.
         $stopCmd = "Stop-Process -Name 'DellCommandUpdate' -Force -ErrorAction SilentlyContinue"
-        
-        # Ensure temp directory exists
         $mkdirCmd = "New-Item -Path 'C:\temp\DONUT' -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null"
-        
-        # Execute DCU CLI with command and arguments
         $dcuCmd = "& '$dcuPath' /$command $argsString"
         $remoteCmd = "$stopCmd; $mkdirCmd; $dcuCmd"
 
