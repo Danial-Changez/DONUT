@@ -210,8 +210,11 @@ class AppConfig {
             }
             # String values with content
             elseif ($val -is [string]) {
-                # Values with spaces need quotes
-                if ($val -match '\s') {
+                # Quote values containing a space OR a comma. The command runs
+                # remotely under `pwsh -c`, where a bare comma is the array
+                # operator and breaks parsing (e.g. a multi-value option like
+                # -updateDeviceCategory=audio,video,network).
+                if ($val -match '[\s,]') {
                     $argList.Add("-$key=`"$val`"") | Out-Null
                 } else {
                     $argList.Add("-$key=$val") | Out-Null
