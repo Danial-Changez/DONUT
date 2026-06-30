@@ -148,6 +148,39 @@ Describe "DiskUsageTree.Build" {
     }
 }
 
+Describe "DiskUsageTree.BuildNested" {
+    BeforeAll {
+        function New-Folder([string]$path, [long]$size) {
+            $f = [FolderUsage]::new(); $f.Path = $path; $f.SizeBytes = $size; $f
+        }
+    }
+
+    It "returns roots with children nested by path containment (size order preserved)" {
+        $folders = @(
+            (New-Folder 'C:\Users\' 180),
+            (New-Folder 'C:\Windows\' 100),
+            (New-Folder 'C:\Users\CE\' 40),
+            (New-Folder 'C:\Users\CE\OneDrive\' 36),
+            (New-Folder 'C:\Windows\Installer\' 30)
+        )
+        $roots = [DiskUsageTree]::BuildNested($folders)
+
+        ($roots | ForEach-Object { $_.Path }) | Should -Be @('C:\Users\', 'C:\Windows\')
+        $users = $roots[0]
+        $users.Depth | Should -Be 0
+        ($users.Children | ForEach-Object { $_.Label }) | Should -Be @('CE\')
+        $ce = $users.Children[0]
+        $ce.Depth | Should -Be 1
+        ($ce.Children | ForEach-Object { $_.Label }) | Should -Be @('OneDrive\')
+        $ce.Children[0].Depth | Should -Be 2
+        ($roots[1].Children | ForEach-Object { $_.Label }) | Should -Be @('Installer\')
+    }
+
+    It "returns empty for an empty list" {
+        ([DiskUsageTree]::BuildNested(@())).Count | Should -Be 0
+    }
+}
+
 Describe "DiskUsageReport round-trip" {
     It "survives ToHashtable -> FromHashtable" {
         $r = [WizTreeCsv]::ParseTopFolders(@'

@@ -282,8 +282,12 @@
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
                          TextWrapping="Wrap" />
-              <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="DiskFoldersList" />
+              <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                <TreeView x:Name="DiskFoldersList"
+                          Style="{DynamicResource DiskTree}"
+                          ItemContainerStyle="{DynamicResource DiskTreeItem}"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </ScrollViewer>
             </StackPanel>
           </Border>
