@@ -1,3 +1,13 @@
+<#
+.SYNOPSIS
+    Thread-safe leveled file logger, plus a NullLogService no-op.
+
+.DESCRIPTION
+    Writes [INFO]/[WARN]/[ERROR]/[DEBUG] lines to a per-run log file under a lock,
+    with exception and structured-event helpers. NullLogService is the no-op used
+    when a collaborator is constructed without a logger; Coalesce returns the
+    given logger or a NullLogService so callers never null-check.
+#>
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot

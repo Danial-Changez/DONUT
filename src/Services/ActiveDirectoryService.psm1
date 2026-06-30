@@ -1,17 +1,21 @@
 using module "..\Core\LogService.psm1"
 using module "..\Models\AdSearchResult.psm1"
 
-# ActiveDirectoryService
-#
-# Live AD search (computers + users) across the org's separate forests, plus
-# unlocking locked-out user accounts. Mirrors NetworkProbe's seam pattern: the
-# env-coupled directory I/O is isolated in overridable hidden seams
-# (QueryDirectory, InvokeUnlock) so the multi-domain aggregation / mapping /
-# guard logic is unit-testable off a domain by subclassing and faking the seams.
-#
-# Each forest is queried independently (no shared Global Catalog spans them); a
-# down or untrusted forest is skipped + logged so the others still return.
+<#
+.SYNOPSIS
+    Live AD search (computers + users) across forests, plus account unlock.
 
+.DESCRIPTION
+    Searches the org's separate forests and unlocks locked-out user accounts.
+    Each forest is queried independently (no shared Global Catalog spans them); a
+    down or untrusted forest is skipped and logged so the others still return.
+
+.NOTES
+    Mirrors NetworkProbe's seam pattern: the env-coupled directory I/O is isolated
+    in overridable hidden seams (QueryDirectory, InvokeUnlock) so the multi-domain
+    aggregation / mapping / guard logic is unit-testable off a domain by
+    subclassing and faking the seams.
+#>
 class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()

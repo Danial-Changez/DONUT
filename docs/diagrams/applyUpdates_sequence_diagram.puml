@@ -1,83 +1,64 @@
 @startuml Apply Updates Sequence Diagram
+!include _dark-theme.puml
+title Apply Updates (scan reuse + confirm)
+
 actor User
-participant "HomeView" as View
 participant "HomePresenter" as Presenter
 participant "RemoteUpdateService" as Update
-participant "AsyncJob" as Job
-participant "ExecutionService" as Exec
 participant "DriverMatchingService" as Matcher
 participant "DialogPresenter" as Dialog
+participant "AsyncJob" as Job
+participant "ExecutionService" as Exec
 
-User -> View: Clicks "Apply Updates"
-View -> Presenter: OnSearch()
+User -> Presenter: Run host (mode = Apply) / Run all
 activate Presenter
+Presenter -> Presenter: StartProcess("PC-01")
 
-alt Multiple hosts entered
-    Presenter -> Dialog: ShowConfirmation("Apply updates to N hosts?")
-    Dialog --> Presenter: true/false
-end
-
-loop For each hostname
-    Presenter -> Presenter: StartProcess("PC-01")
-    
+alt Scan < 24h old and report cached
+    Presenter -> Presenter: RecentScanIsFresh() = true
+    note right of Presenter: Reuse the cached scan —\nskip straight to apply.
+else No fresh scan
     Presenter -> Update: PrepareScanForUpdates("PC-01")
-    activate Update
-    Update -> Update: ValidateHostConnectivity("PC-01")
-    Update -> Update: BuildWorkerArgs("PC-01", "Scan", {})
-    Update --> Presenter: JobParams (scriptPath, arguments)
-    deactivate Update
-
-    Presenter -> Job: new AsyncJob("PC-01", "UpdateScan")
-    Presenter -> Job: Start(scriptPath, arguments, configPath)
-    activate Job
-    ... Job executes ExecutionService.StartWorker() ...
-    Job -> Exec: StartWorker("PC-01", "Scan", ...)
-    Exec -> Exec: RunScanPhase(device)
-    Exec --> Job: ScanResults
-    Presenter -> Job: Poll()
-    Job --> Presenter: Status = "Completed"
-    deactivate Job
-
-    Presenter -> Update: ParseUpdateReport("PC-01")
-    activate Update
-    Update -> Matcher: FindBestDriverMatch(updates, drivers)
-    Matcher --> Update: MatchedUpdates
-    Update --> Presenter: UpdateList
-    deactivate Update
-
-    alt Updates Available
-        Presenter -> Dialog: ShowUpdateConfirmation(UpdateList)
-        activate Dialog
-        Dialog -> User: Show Update Popup
-        User --> Dialog: Confirms
-        Dialog --> Presenter: Confirmed
-        deactivate Dialog
-        
-        Presenter -> Update: PrepareApplyUpdates("PC-01", selectedUpdates)
-        activate Update
-        Update -> Update: BuildWorkerArgs("PC-01", "Apply", selectedUpdates)
-        Update --> Presenter: JobParams
-        deactivate Update
-        
-        Presenter -> Job: new AsyncJob("PC-01", "UpdateApply")
-        Presenter -> Job: Start(scriptPath, arguments, configPath)
-        activate Job
-        ... Job executes ExecutionService.StartWorker() ...
-        Job -> Exec: StartWorker("PC-01", "Apply", options, ...)
-        Exec -> Exec: RunApplyPhase(device, options)
-        Exec --> Job: ApplyResults
-        Presenter -> Job: Poll()
-        Job --> Presenter: Status = "Completed"
-        deactivate Job
-        
-        Presenter -> Presenter: Add to ManualRebootQueue if needed
-        Presenter -> View: UpdateStatus("Updates Applied")
-    else No Updates
-        Presenter -> View: UpdateStatus("No Updates Found")
-    end
+    Update --> Presenter: worker args
+    Presenter -> Job: queue UpdateScan
+    note right of Presenter: PumpJobs() runs the scan,\nthen OnJobCompleted() continues.
 end
 
-opt Manual Reboot Queue not empty
-    Presenter -> View: Display reboot required hosts
+Presenter -> Presenter: ProceedWithApply("PC-01")
+activate Presenter
+Presenter -> Update: ParseUpdateReport("PC-01")
+activate Update
+Update -> Matcher: FindBestDriverMatch(updates, drivers)
+Matcher --> Update: matched updates
+Update --> Presenter: update list
+deactivate Update
+
+alt Updates available
+    Presenter -> Dialog: ShowConfirmation("Apply N updates?", list)
+    activate Dialog
+    Dialog -> User: modal popup
+    User --> Dialog: Confirm
+    Dialog --> Presenter: true
+    deactivate Dialog
+
+    Presenter -> Update: PrepareApplyUpdates("PC-01", selected)
+    Update --> Presenter: worker args
+    Presenter -> Job: queue UpdateApply
+    activate Job
+    Job -> Exec: (pool) RunApplyPhase(device, options)
+    Exec --> Job: apply result + reboot flag
+    deactivate Job
+    Presenter -> Presenter: SettleHost() -> updateCount = 0
+    opt Reboot required
+        Presenter -> Presenter: ManualRebootQueue.Add("PC-01")
+    end
+else No updates
+    Presenter -> User: Toast "No updates found"
+end
+deactivate Presenter
+deactivate Presenter
+
+opt Reboot queue not empty
+    Presenter -> User: Show "manual reboot required" notice
 end
 @enduml

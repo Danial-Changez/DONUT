@@ -1,7 +1,12 @@
 @startuml Class Diagram
+!include _dark-theme.puml
+title DONUT — Class Structure
 skinparam classAttributeIconSize 0
+skinparam linetype ortho
 
-package "Donut.Models" {
+' Each layer carries its own muted tint so the four packages read at a glance:
+'   Models = blue · Core = green · Services = violet · UI = amber
+package "Donut.Models" #15233B {
     class AppConfig {
         +SourceRoot: string
         +LogsPath: string
@@ -9,16 +14,13 @@ package "Donut.Models" {
         +Settings: Hashtable
         +{static} Defaults: Hashtable
         --
-        +GetSetting(key: string, default: object): object
-        +SetSetting(key: string, value: object): void
+        +GetSetting(key, default): object
+        +SetSetting(key, value): void
         +GetActiveCommand(): string
-        +SetActiveCommand(command: string): void
-        +GetCommandArgs(command: string): Hashtable
-        +SetCommandArg(command: string, argName: string, value: object): void
+        +GetCommandArgs(command): Hashtable
         +GetThrottleLimit(): int
-        +SetThrottleLimit(limit: int): void
-        +BuildDcuArgs(command: string, overrides: Hashtable): string
-        -MergeWithDefaults(userSettings: Hashtable): Hashtable
+        +BuildDcuArgs(command, overrides): string
+        -MergeWithDefaults(userSettings): Hashtable
     }
 
     class DeviceContext {
@@ -39,7 +41,9 @@ package "Donut.Models" {
         Scan
         UpdateScan
         UpdateApply
-        BatteryReport
+        Inventory
+        DiskScan
+        Resolve
     }
 
     enum FleetState {
@@ -56,11 +60,92 @@ package "Donut.Models" {
         +Label: string
         +ColorKey: string
         +IsBusy: bool
-        +{static} FromJob(jobType: string, status: string, rebootRequired: bool): FleetStatus
+        +{static} FromJob(jobType, status, rebootRequired): FleetStatus
     }
 
     class DcuProgress {
-        +{static} ParsePercent(line: string): double
+        +{static} ParsePercent(line): double
+    }
+
+    class ScanCacheDecision {
+        +{static} IsFresh(lastJobType, lastSeen, now, ttl, reportExists): bool
+    }
+
+    class MachineInventory {
+        +Model: string
+        +ServiceTag: string
+        +BiosVersion: string
+        +HasBattery: bool
+        +DesignCapacity: long
+        +FullChargeCapacity: long
+        +ChargePercent: int
+        +FreeSpaceBytes: long
+        +TotalSpaceBytes: long
+        +LastBootTime: string
+        +{static} FromHashtable(h): MachineInventory
+        +ToHashtable(): Hashtable
+    }
+
+    class InventoryFormat {
+        +{static} BatteryHealthPercent(design, full): int
+        +{static} BatteryHealthLabel(hasBattery, pct): string
+        +{static} DiskFreeLabel(free, total): string
+        +{static} UptimeLabel(lastBoot): string
+    }
+
+    class FolderUsage {
+        +Path: string
+        +SizeBytes: long
+        +{static} FromHashtable(h): FolderUsage
+        +ToHashtable(): Hashtable
+    }
+
+    class DiskUsageReport {
+        +ScannedAt: string
+        +Folders: FolderUsage[]
+        +{static} FromHashtable(h): DiskUsageReport
+        +ToHashtable(): Hashtable
+    }
+
+    class WizTreeCsv {
+        +{static} ParseTopFolders(csvText, topN): DiskUsageReport
+    }
+
+    class FolderTreeNode {
+        +Path: string
+        +Label: string
+        +SizeBytes: long
+        +Depth: int
+        +Children: FolderTreeNode[]
+    }
+
+    class DiskUsageTree {
+        +{static} Build(folders): FolderTreeNode[]
+        +{static} BuildNested(folders): FolderTreeNode[]
+    }
+
+    class DiskUsageFormat {
+        +{static} SizeLabel(bytes): string
+    }
+
+    class AdSearchResult {
+        +Kind: string
+        +Name: string
+        +SamAccountName: string
+        +UserPrincipalName: string
+        +Domain: string
+        +Enabled: bool
+        +LockedOut: bool
+        +Key(): string
+        +Label(): string
+    }
+
+    class AdFilter {
+        +{static} EscapeLdap(text): string
+        +{static} UserFilter(prefix): string
+        +{static} ComputerFilter(prefix): string
+        +{static} IsLockedFromComputed(uacComputed): bool
+        +{static} IsDisabledFromUac(uac): bool
     }
 
     class RecentConnection {
@@ -70,20 +155,20 @@ package "Donut.Models" {
         +LastJobType: string
         +UpdateCount: int
         +RebootRequired: bool
-        +{static} FromHashtable(h: Hashtable): RecentConnection
+        +Inventory: MachineInventory
+        +DiskUsage: DiskUsageReport
+        +{static} FromHashtable(h): RecentConnection
     }
 
     class RecentConnectionsStore {
-        -Config: AppConfig
-        -ConfigManager: object
         +{static} Cap: int
-        +Upsert(hostname: string, status: string, jobType: string, updateCount: int, rebootRequired: bool): void
-        +Remove(hostname: string): void
-        +SeedFrom(hosts: string[]): void
+        +Upsert(host, status, jobType, count, reboot): void
+        +UpsertInventory(host, inv): void
+        +UpsertDiskUsage(host, report): void
+        +Remove(host): void
+        +SeedFrom(hosts): void
         +GetAll(): RecentConnection[]
-        +Count(): int
-        +{static} ParseSeen(value: string): datetime
-        -Save(): void
+        +{static} ParseSeen(value): datetime
     }
 
     enum PollOutcome {
@@ -97,26 +182,23 @@ package "Donut.Models" {
         +Outcome: PollOutcome
         +TokenData: object
         +Message: string
-        +{static} FromPollResult(result: object): DeviceFlowDecision
+        +{static} FromPollResult(result): DeviceFlowDecision
     }
 }
 
-package "Donut.Core" {
+package "Donut.Core" #102A20 {
     class ConfigManager {
         +SourceRoot: string
-        +ConfigPath: string
-        +LogsPath: string
-        +ReportsPath: string
         +LoadConfig(): AppConfig
-        +SaveConfig(config: AppConfig): void
+        +SaveConfig(config): void
         +EnsureDirectories(): void
     }
 
     class NetworkProbe {
-        +ResolveHost(hostname: string): IPAddress
-        +CheckReverseDNS(ip: IPAddress, expectedName: string): bool
-        +IsRpcAvailable(hostname: string): bool
-        +IsOnline(hostname: string): bool
+        +ResolveHost(hostname): IPAddress
+        +CheckReverseDNS(ip, expectedName): bool
+        +IsRpcAvailable(hostname): bool
+        +IsOnline(hostname): bool
     }
 
     class AsyncJob {
@@ -125,17 +207,13 @@ package "Donut.Core" {
         +Status: JobStatus
         +Logs: ConcurrentQueue<string>
         +Result: object
-        +TempConfigPath: string
-        -PowerShell: PowerShell
-        -AsyncResult: IAsyncResult
-        +Start(scriptPath: string, arguments: Hashtable, tempConfigPath: string): void
+        +Start(scriptPath, arguments, tempConfig): void
         +Poll(): void
         +Cleanup(): void
     }
 
     class RunspaceManager {
-        -{static} RunspacePool: RunspacePool
-        +{static} Initialize(min: int, max: int): void
+        +{static} Initialize(min, max): void
         +{static} GetPool(): RunspacePool
         +{static} Close(): void
     }
@@ -143,311 +221,283 @@ package "Donut.Core" {
     class HostListSource {
         +SourceRoot: string
         +ReadHosts(): string[]
-        +CandidatePaths(): string[]
         +ResolvePath(): string
-        #PathExists(path: string): bool
-        #ReadLines(path: string): string[]
     }
 
     class TimeFormat {
-        +{static} Relative(when: datetime): string
+        +{static} Relative(when): string
     }
 }
 
-package "Donut.Services" {
+package "Donut.Services" #221634 {
     class LogService {
-        +LogFilePath: string
-        -SyncRoot: object
-        +{static} Coalesce(logger: LogService): LogService
-        +LogInfo(message: string): void
-        +LogError(message: string): void
-        +LogWarning(message: string): void
-        +LogDebug(message: string): void
-        +LogException(message: string, errorRecord: ErrorRecord): void
-        +LogStructured(level: string, eventName: string, fields: Hashtable): void
-        +WriteLog(level: string, message: string): void
-        +GetRecentLogs(count: int): string[]
+        +LogInfo(message): void
+        +LogError(message): void
+        +LogWarning(message): void
+        +LogException(message, errorRecord): void
+        +{static} Coalesce(logger): LogService
     }
+    class NullLogService extends LogService
 
     class RemoteJobService {
         #Config: AppConfig
         #Probe: NetworkProbe
         #Logger: LogService
-        -ValidateHostConnectivity(host: string): void
-        -BuildWorkerArgs(host: string, type: string, options: Hashtable): Hashtable
+        +{static} AssertHostReachable(probe, logger, host): string
+        #BuildWorkerArgs(host, jobType, options): Hashtable
     }
 
-    class ScanService extends RemoteJobService {
-        +PrepareScan(host: string): Hashtable
+    class ScanService {
+        +PrepareScan(host): Hashtable
     }
 
-    class RemoteUpdateService extends RemoteJobService {
-        -DriverMatcher: DriverMatchingService
-        +PrepareScanForUpdates(host: string): Hashtable
-        +ParseUpdateReport(host: string): XmlDocument
-        +PrepareApplyUpdates(host: string, options: Hashtable): Hashtable
+    class RemoteUpdateService {
+        +DriverMatcher: DriverMatchingService
+        +PrepareScanForUpdates(host): Hashtable
+        +ParseUpdateReport(host): XmlDocument
+        +PrepareApplyUpdates(host, options): Hashtable
+        +CountUpdates(report): int
+    }
+
+    class HostResolver {
+        +Ttl: timespan
+        +NeedsResolve(host): bool
+        +PrepareResolve(host): Hashtable
+        +PrepareWarmRunspace(): Hashtable
+        +Record(host, ip, online): void
+        +CachedIp(host): string
+    }
+
+    class InventoryService {
+        +PrepareInventory(host): Hashtable
+        +ParseInventory(host): MachineInventory
+        +{static} BuildProbeScript(host): string
+    }
+
+    class DiskUsageService {
+        +{static} TopN: int
+        +PrepareDiskScan(host): Hashtable
+        +ParseDiskUsage(host): DiskUsageReport
+    }
+
+    class ActiveDirectoryService {
+        +Domains: string[]
+        +Search(prefix): AdSearchResult[]
+        +UnlockUser(user): bool
+        #QueryDirectory(domain, filter, props, max): Hashtable[]
+        #InvokeUnlock(sam, domain): void
     }
 
     class ExecutionService {
-        +Logger: LogService
-        +Probe: NetworkProbe
-        +Matcher: DriverMatchingService
-        +Config: AppConfig
-        +RemoteScriptPath: string
-        +LocalLogsDir: string
-        +LocalReportsDir: string
-        +{static} StartWorker(HostName: string, JobType: string, Options: Hashtable, Config: AppConfig, ...): Hashtable
-        +RunScanPhase(device: DeviceContext): Hashtable
-        +RunApplyPhase(device: DeviceContext, options: Hashtable): Hashtable
-        +CopyRemoteArtifacts(hostName: string, ip: string): Hashtable
-        -AssertReachable(device: DeviceContext): void
-        -InvokePsExec(params: Hashtable): void
-        -FindDcuCli(ip: string): string
+        +{static} StartWorker(host, jobType, options, config, ...): Hashtable
+        +RunResolvePhase(device, options): Hashtable
+        +RunScanPhase(device): Hashtable
+        +RunApplyPhase(device, options): Hashtable
+        +RunInventoryPhase(device, options): Hashtable
+        +RunDiskScanPhase(device, options): Hashtable
+        +CopyRemoteArtifacts(host, ip): Hashtable
     }
 
     class DriverMatchingService {
-        +BrandPatterns: Hashtable
-        +CategoryPatterns: Hashtable
-        +CategoryMappings: Hashtable
-        +DeviceClassMappings: Hashtable
-        +DetectBrand(manufacturer: string): string
-        +DetectBrandFromName(name: string): string
-        +DetectCategory(name: string): string
-        +MapReportCategory(reportCategory: string): string
-        +MapDeviceClass(deviceClass: string): string
-        +FindBestDriverMatch(updateName: string, installedDrivers: array): object
-        +CompareVersions(installedVersion: string, updateVersion: string): Hashtable
-        +NormalizeAppName(name: string): string
-        +FormatMatchResult(match: object, updateName: string, updateVersion: string): string
+        +DetectBrand(manufacturer): string
+        +FindBestDriverMatch(updateName, installedDrivers): object
+        +CompareVersions(installed, update): Hashtable
+        +FormatMatchResult(match, name, version): string
     }
 
     class SelfUpdateService {
-        +ClientId: string
-        +Scope: string
-        +TokenFile: string
-        +Owner: string
-        +Repo: string
         +GetStoredToken(): string
-        +SaveToken(tokenData: PSCustomObject): void
+        +SaveToken(tokenData): void
         +InitiateDeviceFlow(): PSCustomObject
-        +PollForToken(deviceCode: string): PSCustomObject
-        +GetLatestRelease(token: string): PSCustomObject
-        +GetReleaseAsset(release: PSCustomObject, pattern: string): PSCustomObject
-        +DownloadAsset(token: string, asset: PSCustomObject, destDir: string): string
-        +GetLocalVersion(): version
-        +VerifyFileHash(filePath: string, expectedHash: string): bool
-        +ApplyUpdate(msiPath: string, isRollback: bool, sourceRoot: string): void
+        +PollForToken(deviceCode): PSCustomObject
+        +GetLatestRelease(token): PSCustomObject
+        +DownloadAsset(token, asset, destDir): string
+        +VerifyFileHash(path, expectedHash): bool
+        +ApplyUpdate(msiPath, isRollback, sourceRoot): void
     }
 
     class ResourceService {
-        -StylesPath: string
         +LoadGlobalResources(): ResourceDictionary
-        +ApplyResourcesToWindow(window: Window): void
-        -LoadStylesInto(targetDictionary: ResourceDictionary): void
+        +ApplyResourcesToWindow(window): void
     }
 
     class SystemInfo {
         +Hostname: string
         +IPv4: string
         +Domain: string
-        +DomainJoined: bool
         +DomainController: string
-        +DcReachable: bool
         +HasBattery: bool
         +BatteryPercent: int
-        +Charging: bool
     }
 
     class SystemInfoService {
-        -Probe: NetworkProbe
-        -Logger: LogService
         +Gather(): SystemInfo
-        +{static} BatteryLabel(hasBattery: bool, percent: int, charging: bool): string
-        #GetHostname(): string
-        #GetPrimaryIPv4(): string
-        #GetDomainInfo(): Hashtable
-        #GetBatteryRaw(): Hashtable
+        +{static} BatteryLabel(hasBattery, percent, charging): string
     }
 }
 
-package "Donut.UI.Presenters" {
+package "Donut.UI.Presenters" #2B1A12 {
     class AsyncJobPresenter {
         #ActiveJobs: List<AsyncJob>
         +PumpJobs(): void
-        #OnJobPolled(job: AsyncJob): void
-        #OnJobCompleted(job: AsyncJob): void
+        #OnJobPolled(job): void
+        #OnJobCompleted(job): void
         #AfterPump(): void
     }
 
     class MainPresenter {
-        -Config: AppConfig
         -ConfigManager: ConfigManager
-        -NetworkProbe: NetworkProbe
-        -Resources: ResourceService
         -HomePresenter: HomePresenter
         -ConfigPresenter: ConfigPresenter
         -LogsPresenter: LogsPresenter
-        -BatteryPresenter: BatteryPresenter
+        -Resources: ResourceService
         +Initialize(): void
         +Show(): void
-        +LoadView(viewName: string): FrameworkElement
-        +NavigateTo(viewName: string): void
-        +ToggleHeaderVisibility(): void
+        +NavigateTo(viewName): void
+        +ToggleRail(): void
     }
 
     class HomePresenter extends AsyncJobPresenter {
         -ScanService: ScanService
         -UpdateService: RemoteUpdateService
-        -DialogPresenter: DialogPresenter
-        -HostListSource: HostListSource
-        -ManualRebootQueue: List<string>
+        -InventoryService: InventoryService
+        -DiskUsageService: DiskUsageService
+        -Resolver: HostResolver
+        -AdService: ActiveDirectoryService
+        -Store: RecentConnectionsStore
+        -ScanCacheTtl: timespan
         +OnSearch(): void
-        +StartProcess(host: string): void
-        +OnTimerTick(): void
-        +UpdateSearchButtonLabel(): void
-        +InitializeSearchBar(): void
-        +CopyUpdatesToClipboard(): void
+        +RunAll(): void
+        +RunHost(host): void
+        +StartProcess(host): void
+        +RecentScanIsFresh(host): bool
+        +ProceedWithApply(host): bool
+        +StartInventory(host, force): void
+        +FindBigFolders(host): void
+        +RenderBigFolders(report): void
+        +RunAdSearch(): void
+        +WarmPool(): void
     }
 
     class ConfigPresenter {
-        -ConfigManager: ConfigManager
-        -CurrentSection: string
-        -CurrentOptionView: FrameworkElement
         +LoadCurrentConfig(): void
-        +OnCommandChanged(item: object): void
-        +LoadOptionView(viewName: string): void
-        +PopulateFields(): void
+        +OnCommandChanged(item): void
         +OnSave(): void
-        -UpdateArgFromControl(cmdArgs: Hashtable, ctrl: FrameworkElement): void
     }
 
     class LogsPresenter {
-        -LogsDir: string
         +LoadLogs(): void
-        +LoadLogTab(logPath: string): void
         +ClearLogs(): void
     }
 
-    class BatteryPresenter extends AsyncJobPresenter {
-        -NetworkProbe: NetworkProbe
-        -HostListSource: HostListSource
-        +OnRunReport(): void
-        +StartBatteryReport(hostName: string): void
-        +OnTimerTick(): void
-    }
-
     class DialogPresenter {
-        +ShowConfirmation(title: string, message: string): bool
-        +ShowUpdateConfirmation(updates: array): bool
-        -Initialize(): void
-        -SetText(controlName: string, text: string): void
-        -SetList(items: string[]): void
-        -ConfigureButton(btnName: string, text: string, action: ScriptBlock): void
-        -HideControl(controlName: string): void
+        +ShowConfirmation(title, message, listItems): bool
+        +ShowAlert(title, message, listItems): void
+        +ShowUpdatePrompt(currentVer, newVer, isRollback): bool
     }
 
     class LoginPresenter {
-        -Service: SelfUpdateService
-        -Resources: ResourceService
-        -LoginWindow: Window
-        -PollTimer: DispatcherTimer
-        -DeviceCode: string
-        -Interval: int
-        -LoginSuccess: bool
         +ShowLogin(): bool
-        -LoadImages(): void
         -StartAuthFlow(): void
         -OnPollTick(): void
     }
 
     class UpdatePresenter {
-        -Service: SelfUpdateService
-        -Resources: ResourceService
-        -Dialog: DialogPresenter
         +CheckAndPrompt(): void
-        -ShowUpdateWindow(release: PSCustomObject, localVer: version, remoteVer: version): void
+        -ShowUpdateWindow(release, localVer, remoteVer): void
     }
 
     class ConnectionRow {
         +HostName: string
-        +Root: Border
         +RunAction: ScriptBlock
-        +SetIdleFrom(rc: RecentConnection): void
-        +SetStatus(status: FleetStatus): void
-        +SetPercent(percent: double): void
-        +AppendLog(text: string): void
-        +ToggleExpand(): void
-        +AnimateIn(): void
-        +{static} IdleColorKey(lastStatus: string): string
-        +{static} HumanStatus(lastStatus: string): string
+        +SetIdleFrom(rc): void
+        +SetStatus(status): void
+        +SetPercent(percent): void
+        +SetReachability(state): void
+        +{static} IdleColorKey(lastStatus): string
     }
 
     class ToastService {
-        -HostControl: ItemsControl
-        -DefaultDurationMs: int
-        +ShowSuccess(title: string, message: string): void
-        +ShowInfo(title: string, message: string): void
-        +ShowWarning(title: string, message: string): void
-        +ShowError(title: string, message: string): void
-        +Show(title: string, message: string, colorKey: string, durationMs: int): void
-        +Dismiss(card: Border): void
+        +ShowSuccess(title, message): void
+        +ShowInfo(title, message): void
+        +ShowWarning(title, message): void
+        +ShowError(title, message): void
     }
 }
 
+' --- inheritance ---------------------------------------------------------
+RemoteJobService <|-- ScanService
+RemoteJobService <|-- RemoteUpdateService
+RemoteJobService <|-- HostResolver
+RemoteJobService <|-- InventoryService
+RemoteJobService <|-- DiskUsageService
+
+' --- composition / navigation -------------------------------------------
 MainPresenter --> HomePresenter
 MainPresenter --> ConfigPresenter
 MainPresenter --> LogsPresenter
-MainPresenter --> BatteryPresenter
 MainPresenter --> ResourceService
+MainPresenter --> ToastService
 
 HomePresenter --> ScanService
 HomePresenter --> RemoteUpdateService
+HomePresenter --> InventoryService
+HomePresenter --> DiskUsageService
+HomePresenter --> HostResolver
+HomePresenter --> ActiveDirectoryService
 HomePresenter --> DialogPresenter
+HomePresenter --> RecentConnectionsStore
+HomePresenter --> ConnectionRow
+HomePresenter --> ToastService
+HomePresenter --> HostListSource
 HomePresenter --> AsyncJob
-
-BatteryPresenter --> NetworkProbe
-BatteryPresenter --> AsyncJob
 
 ScanService --> ExecutionService
 RemoteUpdateService --> ExecutionService
 RemoteUpdateService --> DriverMatchingService
+InventoryService --> ExecutionService
+DiskUsageService --> ExecutionService
 
 ExecutionService --> NetworkProbe
-ExecutionService --> LogService
 ExecutionService --> DriverMatchingService
-
-ConfigManager ..> AppConfig
 ExecutionService ..> DeviceContext
 
 AsyncJob --> RunspaceManager
 AsyncJob ..> JobStatus
 AsyncJob ..> JobKind
 
-HomePresenter --> HostListSource
-BatteryPresenter --> HostListSource
+ConfigManager ..> AppConfig
+ConfigPresenter --> ConfigManager
+
+' --- pure mappers consumed by the presenter -----------------------------
+HomePresenter ..> FleetStatus
+HomePresenter ..> DcuProgress
+HomePresenter ..> ScanCacheDecision
+HomePresenter ..> DiskUsageTree
+HomePresenter ..> MachineInventory
+HomePresenter ..> SystemInfoService
 
 FleetStatus ..> FleetState
-RecentConnectionsStore --> RecentConnection
-RecentConnectionsStore ..> AppConfig
-SystemInfoService --> NetworkProbe
-SystemInfoService ..> SystemInfo
-
+ScanCacheDecision ..> RecentConnection
 ConnectionRow ..> FleetStatus
 ConnectionRow ..> RecentConnection
 ConnectionRow ..> TimeFormat
 
-HomePresenter --> ConnectionRow
-HomePresenter --> ToastService
-HomePresenter --> SystemInfoService
-HomePresenter --> RecentConnectionsStore
-HomePresenter ..> FleetStatus
-HomePresenter ..> DcuProgress
-MainPresenter --> ToastService
+RecentConnectionsStore --> RecentConnection
+RecentConnection --> MachineInventory
+RecentConnection --> DiskUsageReport
+DiskUsageReport --> FolderUsage
+DiskUsageTree ..> FolderTreeNode
+DiskUsageService ..> DiskUsageReport
+InventoryService ..> MachineInventory
+MachineInventory ..> InventoryFormat
+ActiveDirectoryService --> AdSearchResult
+ActiveDirectoryService ..> AdFilter
+SystemInfoService ..> SystemInfo
 
 UpdatePresenter --> SelfUpdateService
 UpdatePresenter --> DialogPresenter
 LoginPresenter --> SelfUpdateService
-LoginPresenter --> ResourceService
 LoginPresenter ..> DeviceFlowDecision
 DeviceFlowDecision ..> PollOutcome
 

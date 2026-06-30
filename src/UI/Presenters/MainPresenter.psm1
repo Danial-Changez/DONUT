@@ -9,6 +9,15 @@ using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\ToastService.psm1"
 
+<#
+.SYNOPSIS
+    Owns the main window, the navigation rail, and the child presenters.
+
+.DESCRIPTION
+    Builds and shows MainWindow, loads each page's view on demand, switches the
+    active page from the rail, and constructs the Home / Config / Logs presenters
+    plus the shared ToastService. Applies the merged XAML resources to the window.
+#>
 class MainPresenter {
     [AppConfig] $Config
     [ConfigManager] $ConfigManager

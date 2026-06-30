@@ -1,15 +1,18 @@
-# HostListSource
-#
-# Resolves the WSID.txt host list shared by the Home and Battery presenters.
-# Both used to inline the same candidate-path array (per-user config copy first,
-# then the repo's res\WSID.txt) and the same read/trim/filter. That logic now
-# lives here, WPF-free and unit-testable.
-#
-# The filesystem touch points are isolated in overridable seam methods
-# (PathExists, ReadLines) mirroring NetworkProbe/SystemInfoService, so the
-# path-selection and parsing can be exercised off-disk by subclassing this type
-# and faking those seams. ReadHosts returns a trimmed, blank-free string[].
+<#
+.SYNOPSIS
+    Resolves and reads the bundled WSID.txt host list.
 
+.DESCRIPTION
+    Picks the host-list path (the per-user config copy first, then the repo's
+    res\WSID.txt) and reads/trims/filters it. WPF-free and unit-testable so the
+    Home presenter can seed its machine list without inlining that logic.
+
+.NOTES
+    The filesystem touch points are isolated in overridable seam methods
+    (PathExists, ReadLines), mirroring NetworkProbe / SystemInfoService, so
+    path-selection and parsing can be exercised off-disk by subclassing this type
+    and faking those seams. ReadHosts returns a trimmed, blank-free string[].
+#>
 class HostListSource {
     hidden [string] $SourceRoot
 

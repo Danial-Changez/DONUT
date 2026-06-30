@@ -1,5 +1,14 @@
 using module "..\Core\LogService.psm1"
 
+<#
+.SYNOPSIS
+    Matches Dell Command Update results to installed drivers by brand/category.
+
+.DESCRIPTION
+    Pattern tables (brand, category, device-class) plus version comparison and
+    result formatting, used to enrich the update report with "what is this, and
+    is it newer than what's installed?" detail.
+#>
 class DriverMatchingService {
     [hashtable] $BrandPatterns
     [hashtable] $CategoryPatterns

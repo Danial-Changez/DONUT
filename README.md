@@ -22,8 +22,11 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ## Features
 
 - **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
-- **Parallel Execution:** Uses PowerShell runspaces for parallel updates, with each computer being assigned its own tab.
-- **Dynamic Configuration:** Driven by user-friendly configuration files (`config.txt`).
+- **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI).
+- **Per-Machine Detail Panel:** Selecting a machine prefetches a lightweight inventory probe (model, Dell service tag, battery health, disk, uptime) and offers an on-demand **Storage scan** of the biggest folders on `C:` (WizTree), shown as an expandable tree.
+- **24h Scan Reuse:** A scan run within the last 24 hours is reused instead of re-scanning; it's only re-run after an apply.
+- **Live AD Finder:** The search bar searches Active Directory (computers + users) across the org's forests, and can unlock locked-out accounts inline.
+- **Dynamic Configuration:** Driven by a user-friendly JSON config (`config.json`) edited through the Config tab.
 - **GitHub App Updates:** Authenticates via a GitHub App (Device Flow) and self-updates from the latest GitHub release (supports rollback by tag).
 - **Detailed Logging:** Per-host logs for execution outcomes and errors.
 - **DNS and Error Validation:** Validates DNS/IP before execution.
@@ -74,13 +77,14 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 3. **List Target Computers:**
 
-   - Enter the target hostname(s) in the search bar, separated by commas or new lines.
-   - The UI will display a tab for each computer and manage the queue automatically.
+   - Enter the target hostname(s) in the search bar, separated by commas or new lines (or pick a machine from the AD finder dropdown).
+   - Click **Add** to queue them — this adds a row per machine and gathers its inventory (it does not scan or apply on its own).
 
 4. **Run and Monitor:**
 
-   - Click the search button (button with command name, i.e., **ApplyUpdates** or **Scan**) to start.
-   - Progress and logs are shown in real time in each computer's tab.
+   - The mode pill shows the active command (**Scan** or **ApplyUpdates**); click it to cycle the mode.
+   - Click a machine's **Run** button to run the active command on just that host, or **Run all** to run it on every idle machine (Apply asks once to confirm).
+   - Progress and logs are shown in real time in each machine's row and detail panel.
    - Manual reboot prompts and update confirmations are handled via popups in the UI.
 
    **Note: If you disconnect from the network while updates are running, they will continue, you will just lose access to the live feed.**

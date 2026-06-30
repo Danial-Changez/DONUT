@@ -6,6 +6,21 @@ using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DiskUsage.psm1"
 
+<#
+.SYNOPSIS
+    The runspace-pool worker engine: runs one remote phase end-to-end.
+
+.DESCRIPTION
+    Entry point (StartWorker) for the RemoteWorker.ps1 script. Asserts the target
+    is reachable on the pool thread, then dispatches by job kind to a phase —
+    resolve, scan, apply, inventory, or disk — invoking dcu-cli / CIM probes /
+    WizTree via PsExec as SYSTEM and copying the resulting artifacts back to the
+    local logs/reports folders for the services to parse.
+
+.NOTES
+    Runs entirely off the WPF dispatcher, in a pool runspace. Holds the
+    NetworkProbe + DriverMatchingService + LogService it needs to do the work.
+#>
 class ExecutionService {
     [LogService] $Logger
     [NetworkProbe] $Probe

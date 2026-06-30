@@ -1,11 +1,17 @@
-# DiskUsage
-#
-# Pure DTO + parsing/formatting for the "Find big folders on C:" feature: the
-# largest folders on a remote machine's C: drive, gathered by a WizTree MFT scan
-# (exported to CSV, copied back, parsed here). WPF-free so the parse/format logic
-# is unit-tested; the presenter renders it. Mirrors the MachineInventory /
-# InventoryFormat pure-helper pattern, including the ToHashtable/FromHashtable
-# round-trip used to cache the result on the recents store.
+<#
+.SYNOPSIS
+    Pure DTO + parsing/formatting for the "biggest folders on C:" feature.
+
+.DESCRIPTION
+    The largest folders on a remote machine's C: drive, gathered by a WizTree MFT
+    scan (exported to CSV, copied back, parsed here). Covers the folder DTOs
+    (FolderUsage / DiskUsageReport), the WizTree CSV parser (WizTreeCsv), the
+    path-containment tree builder (DiskUsageTree / FolderTreeNode), and size
+    formatting (DiskUsageFormat). WPF-free so the parse/format logic is
+    unit-tested and the presenter just renders it. Mirrors the MachineInventory /
+    InventoryFormat pure-helper pattern, including the ToHashtable / FromHashtable
+    round-trip used to cache the result on the recents store.
+#>
 
 # One folder and its on-disk size.
 class FolderUsage {

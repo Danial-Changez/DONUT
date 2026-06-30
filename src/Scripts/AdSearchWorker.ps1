@@ -1,3 +1,19 @@
+<#
+.SYNOPSIS
+    Runspace-pool worker for the live AD finder — searches one or more forests.
+
+.DESCRIPTION
+    Runs the unit-tested multi-forest ActiveDirectoryService.Search off the UI
+    thread and emits plain PSCustomObjects so results cross the runspace boundary
+    without class-identity coupling. Invoked by HomePresenter's debounced search,
+    one job per forest; a down or untrusted forest is skipped inside the service.
+
+.PARAMETER Domains
+    Forest/domain DNS names to query.
+
+.PARAMETER Prefix
+    The typed search prefix (matched against computers and users).
+#>
 using module "..\Services\ActiveDirectoryService.psm1"
 using module "..\Models\AdSearchResult.psm1"
 
@@ -8,10 +24,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Live AD finder worker: runs the (unit-tested) multi-forest search on the
-# runspace pool and emits plain PSCustomObjects so results cross the runspace
-# boundary without class-identity coupling. Invoked by HomePresenter's debounced
-# search; a down/untrusted forest is skipped inside the service.
 $svc = [ActiveDirectoryService]::new($Domains, $null)
 foreach ($r in $svc.Search($Prefix)) {
     [PSCustomObject]@{

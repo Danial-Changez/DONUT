@@ -1,15 +1,18 @@
-# ScanCacheDecision
-#
-# Pure mapper deciding whether a host's most recent scan can be REUSED instead of
-# re-scanning. WPF-free so the "is the cached scan still good?" rule is unit-tested
-# without a presenter/store; HomePresenter feeds it the recents fields + whether the
-# report file still exists. Mirrors the DeviceFlowDecision/FleetStatus pure-mapper
-# pattern.
-#
-# Reuse is allowed only when the host's LAST completed job was a Scan/UpdateScan (a
-# successful apply records 'UpdateApply', so reuse is off afterwards -> the next run
-# re-scans), it ran within the TTL, and its update report is still on disk.
+<#
+.SYNOPSIS
+    Pure rule: can a host's most recent scan be reused instead of re-scanning?
 
+.DESCRIPTION
+    WPF-free so the "is the cached scan still good?" decision is unit-tested
+    without a presenter/store; HomePresenter feeds it the recents fields plus
+    whether the report file still exists. Mirrors the DeviceFlowDecision /
+    FleetStatus pure-mapper pattern.
+
+    Reuse is allowed only when the host's LAST completed job was a Scan/UpdateScan
+    (a successful apply records 'UpdateApply', so reuse is off afterwards -> the
+    next run re-scans), it ran within the TTL, and its update report is still on
+    disk.
+#>
 class ScanCacheDecision {
     static [bool] IsFresh([string]$lastJobType, [datetime]$lastSeen, [datetime]$now, [timespan]$ttl, [bool]$reportExists) {
         if ($lastJobType -ne 'Scan' -and $lastJobType -ne 'UpdateScan') { return $false }

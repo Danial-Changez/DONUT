@@ -4,6 +4,14 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
 
+<#
+.SYNOPSIS
+    Drives the Config page: command selection and DCU option persistence.
+
+.DESCRIPTION
+    Loads the active command and its option sub-view, binds the controls to the
+    AppConfig command args, and saves edited options back through ConfigManager.
+#>
 class ConfigPresenter {
     [AppConfig] $Config
     [ConfigManager] $ConfigManager

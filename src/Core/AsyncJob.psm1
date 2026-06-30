@@ -3,6 +3,16 @@ using module '.\RunspaceManager.psm1'
 using module '.\LogService.psm1'
 using module '..\Models\JobEnums.psm1'
 
+<#
+.SYNOPSIS
+    A single background remote operation run on the shared runspace pool.
+
+.DESCRIPTION
+    Wraps a PowerShell instance bound to the RunspaceManager pool: Start() begins
+    RemoteWorker.ps1 asynchronously with the prepared arguments, Poll() drains its
+    streamed output into a thread-safe queue and flips Status on completion, and
+    Cleanup() disposes the instance. The presenter's PumpJobs loop polls these.
+#>
 class AsyncJob {
     [System.Management.Automation.PowerShell] $PowerShell
     [string] $HostName

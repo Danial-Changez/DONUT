@@ -1,0 +1,56 @@
+@startuml Inventory and Storage Sequence Diagram
+!include _dark-theme.puml
+title Machine Detail — Inventory Prefetch + Storage Scan
+
+actor User
+participant "HomePresenter" as Presenter
+participant "HostResolver" as Resolver
+participant "InventoryService" as Inv
+participant "DiskUsageService" as Disk
+participant "AsyncJob" as Job
+participant "RecentConnectionsStore" as Store
+
+User -> Presenter: Select machine row
+activate Presenter
+Presenter -> Presenter: SelectHost("PC-01")
+
+group Prefetch IP (background)
+    Presenter -> Resolver: NeedsResolve("PC-01")?
+    Resolver --> Presenter: true (stale / unknown)
+    Presenter -> Job: queue Resolve job
+    note right of Presenter: CompleteResolve() caches the IP\nand updates the row's reachability dot.
+end
+
+group Prefetch inventory (background, if stale)
+    Presenter -> Presenter: InventoryIsStale("PC-01")?
+    Presenter -> Inv: PrepareInventory("PC-01")
+    Inv --> Presenter: worker args (CIM probe script)
+    Presenter -> Job: queue Inventory job
+end
+
+== PumpJobs(): Inventory job completes ==
+Presenter -> Inv: ParseInventory("PC-01")
+activate Inv
+Inv --> Presenter: MachineInventory (model, battery, disk, uptime)
+deactivate Inv
+Presenter -> Store: UpsertInventory("PC-01", inv)
+Presenter -> Presenter: PopulateDetailCards()
+note right of Presenter: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested).
+
+== On demand ==
+User -> Presenter: Click "Storage scan"
+Presenter -> Disk: PrepareDiskScan("PC-01")
+Disk --> Presenter: worker args (TopN)
+Presenter -> Job: queue DiskScan job
+note right of Presenter: Worker deploys wiztree64.exe,\nMFT-scans C:, copies folders.json back.
+
+== PumpJobs(): DiskScan job completes ==
+Presenter -> Disk: ParseDiskUsage("PC-01")
+activate Disk
+Disk --> Presenter: DiskUsageReport (ranked folders)
+deactivate Disk
+Presenter -> Store: UpsertDiskUsage("PC-01", report)
+Presenter -> Presenter: RenderBigFolders()
+note right of Presenter: DiskUsageTree.BuildNested() nests folders\nby path containment -> TreeView render.
+deactivate Presenter
+@enduml

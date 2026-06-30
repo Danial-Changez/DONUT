@@ -1,0 +1,56 @@
+@startuml AD Finder Sequence Diagram
+!include _dark-theme.puml
+title Home Search Bar — Live AD Finder + Unlock
+
+actor User
+participant "HomePresenter" as Presenter
+participant "DispatcherTimer\n(debounce / poll)" as Timer
+participant "AdSearchWorker.ps1\n(per forest)" as Worker
+participant "ActiveDirectoryService" as AD
+participant "AdUnlockWorker.ps1" as Unlock
+
+User -> Presenter: Type prefix (>= MinPrefix chars)
+activate Presenter
+Presenter -> Presenter: OnSearchTextChanged()
+Presenter -> Timer: restart debounce
+deactivate Presenter
+
+Timer -> Presenter: debounce elapsed -> RunAdSearch()
+activate Presenter
+Presenter -> Presenter: AbortSearch() (bump SearchToken)
+loop one job per forest (concurrent)
+    Presenter -> Worker: BeginInvoke(domain, prefix) on pool
+    activate Worker
+    Worker -> AD: Search(prefix)
+    activate AD
+    AD -> AD: QueryDirectory() via DirectorySearcher\n(computers + users, AdFilter)
+    AD --> Worker: AdSearchResult[]
+    deactivate AD
+    Worker --> Presenter: (async) results
+    deactivate Worker
+end
+Presenter -> Timer: start poll timer
+deactivate Presenter
+
+loop poll until all forests land
+    Timer -> Presenter: PollSearch()
+    activate Presenter
+    note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nre-render the growing union.
+    Presenter -> User: Dropdown — COMPUTERS + USERS\n(locked users show "Unlock")
+    deactivate Presenter
+end
+
+alt Pick a computer
+    User -> Presenter: Click computer
+    Presenter -> Presenter: OnPickComputer() -> add host row + prefetch
+else Unlock a locked user
+    User -> Presenter: Click "Unlock"
+    Presenter -> Unlock: BeginInvoke(sam, domain) on pool
+    activate Unlock
+    Unlock -> AD: UnlockUser(user)
+    AD --> Unlock: success
+    Unlock --> Presenter: (async) result
+    deactivate Unlock
+    Presenter -> User: Toast "Account unlocked"
+end
+@enduml

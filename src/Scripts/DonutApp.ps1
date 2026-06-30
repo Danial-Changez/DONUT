@@ -1,4 +1,21 @@
-# Import Classes (Read at ParseTime)
+<#
+.SYNOPSIS
+    Builds the DONUT application graph and shows the main window.
+
+.DESCRIPTION
+    Dot-sourced by Start-Donut.ps1. Imports every class module at parse time
+    (using module, in dependency order: Models -> Core -> Services ->
+    Presenters), loads or creates the AppConfig via ConfigManager, ensures the
+    %LOCALAPPDATA%\DONUT logs/reports folders exist, wires the central LogService
+    and the runspace pool (throttle from config), constructs MainPresenter and
+    runs the WPF message loop.
+
+.NOTES
+    Classes are resolved at parse time, so the using-module graph below must stay
+    in dependency order.
+#>
+
+# Import classes (resolved at parse time)
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AdSearchResult.psm1"

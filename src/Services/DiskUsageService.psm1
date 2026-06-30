@@ -4,14 +4,18 @@ using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 using module ".\RemoteServices.psm1"
 
-# DiskUsageService
-#
-# Prepares and parses an on-demand "biggest folders on C:" probe: a WizTree MFT
-# scan that runs on the remote host (deployed + executed by the worker's
-# RunDiskScanPhase), exports a folder CSV which we copy back and parse into a
-# [DiskUsageReport]. Mirrors InventoryService (subclasses RemoteJobService, reuses
-# ValidateHostConnectivity / BuildWorkerArgs). Heavier than the inventory probe,
-# so it is triggered on demand rather than on every scan/apply.
+<#
+.SYNOPSIS
+    Prepares and parses the on-demand "biggest folders on C:" scan.
+
+.DESCRIPTION
+    A WizTree MFT scan that runs on the remote host (deployed and executed by the
+    worker's RunDiskScanPhase), exports a folder CSV which is copied back and
+    parsed into a [DiskUsageReport]. Mirrors InventoryService — subclasses
+    RemoteJobService, reusing AssertHostReachable / BuildWorkerArgs. Heavier than
+    the inventory probe, so it is triggered on demand rather than on every
+    scan/apply.
+#>
 class DiskUsageService : RemoteJobService {
 
     # Number of largest folders to keep. Kept small so the cached result stays

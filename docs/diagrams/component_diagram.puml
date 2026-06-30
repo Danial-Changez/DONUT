@@ -1,58 +1,70 @@
 @startuml Component Diagram
-component "C# Wrapper" {
+!include _dark-theme.puml
+title DONUT — Component View
+skinparam linetype ortho
+
+component "C# Wrapper" #2A1320 {
     [Donut.Launcher.exe]
 }
 
-component "UI Components (src/UI)" {
+component "UI (src/UI/Views)" #102A2E {
     [MainWindow.xaml]
     [HomeView.xaml]
     [ConfigView.xaml]
     [LogsView.xaml]
-    [BatteryView.xaml]
     [DialogWindow.xaml]
     [LoginWindow.xaml]
 }
 
-component "PowerShell Scripts" {
+component "Scripts (src/Scripts)" #2A2410 {
     [Start-Donut.ps1]
     [DonutApp.ps1]
     [RemoteWorker.ps1]
+    [AdSearchWorker.ps1]
+    [AdUnlockWorker.ps1]
     [InstallWorker.ps1]
 }
 
 component "PowerShell Classes (src)" {
-    package "Presenters" {
+    package "Presenters" #2B1A12 {
         [MainPresenter]
         [HomePresenter]
         [ConfigPresenter]
         [LogsPresenter]
-        [BatteryPresenter]
         [LoginPresenter]
         [UpdatePresenter]
         [DialogPresenter]
     }
-    package "Services" {
+    package "Services" #221634 {
         [ScanService]
         [RemoteUpdateService]
+        [InventoryService]
+        [DiskUsageService]
+        [HostResolver]
+        [ActiveDirectoryService]
         [ExecutionService]
         [DriverMatchingService]
         [SelfUpdateService]
         [LogService]
         [ResourceService]
     }
-    package "Core" {
+    package "Core" #102A20 {
         [ConfigManager]
         [NetworkProbe]
         [AsyncJob]
         [RunspaceManager]
+        [HostListSource]
     }
-    package "Models" {
+    package "Models" #15233B {
         [AppConfig]
-        [DeviceContext]
+        [RecentConnectionsStore]
+        [MachineInventory]
+        [DiskUsageReport]
+        [ScanCacheDecision]
     }
 }
 
-database "Configuration" {
+database "Bundled config (res/)" {
     [config.json]
     [WSID.txt]
 }
@@ -63,17 +75,39 @@ database "%LOCALAPPDATA%\\DONUT" {
     [reports/]
 }
 
-[Donut.Launcher.exe] ..> [Start-Donut.ps1] : Hosts/Launches
-[Start-Donut.ps1] ..> [MainPresenter] : Initializes
-[MainPresenter] ..> [MainWindow.xaml] : Manages
-[MainPresenter] ..> [HomePresenter] : Creates
-[MainPresenter] ..> [BatteryPresenter] : Creates
-[HomePresenter] ..> [ScanService] : Uses
-[HomePresenter] ..> [RemoteUpdateService] : Uses
-[HomePresenter] ..> [AsyncJob] : Creates
-[ScanService] ..> [ExecutionService] : Uses
-[RemoteUpdateService] ..> [ExecutionService] : Uses
-[ExecutionService] ..> [RemoteWorker.ps1] : Invokes via PsExec
-[AsyncJob] ..> [RunspaceManager] : Uses Pool
-[SelfUpdateService] ..> [InstallWorker.ps1] : Invokes
+[Donut.Launcher.exe] ..> [Start-Donut.ps1] : hosts / launches
+[Start-Donut.ps1] ..> [DonutApp.ps1] : dot-sources
+[DonutApp.ps1] ..> [MainPresenter] : initializes
+[MainPresenter] ..> [MainWindow.xaml] : manages
+[MainPresenter] ..> [HomePresenter] : creates
+
+[HomePresenter] ..> [HomeView.xaml] : binds
+[HomePresenter] ..> [ScanService] : scan
+[HomePresenter] ..> [RemoteUpdateService] : updates
+[HomePresenter] ..> [InventoryService] : per-machine probe
+[HomePresenter] ..> [DiskUsageService] : storage scan
+[HomePresenter] ..> [HostResolver] : prefetch IP
+[HomePresenter] ..> [ActiveDirectoryService] : live AD finder
+[HomePresenter] ..> [AsyncJob] : queues
+[HomePresenter] ..> [RecentConnectionsStore] : persists
+[HomePresenter] ..> [ScanCacheDecision] : 24h reuse
+
+[ScanService] ..> [ExecutionService]
+[RemoteUpdateService] ..> [ExecutionService]
+[InventoryService] ..> [ExecutionService]
+[DiskUsageService] ..> [ExecutionService]
+[RemoteUpdateService] ..> [DriverMatchingService]
+
+[ExecutionService] ..> [RemoteWorker.ps1] : invokes via PsExec
+[ActiveDirectoryService] ..> [AdSearchWorker.ps1] : LDAP query
+[ActiveDirectoryService] ..> [AdUnlockWorker.ps1] : unlock account
+[AsyncJob] ..> [RunspaceManager] : uses pool
+
+[ConfigPresenter] ..> [ConfigManager]
+[ConfigManager] ..> [AppConfig]
+[ConfigManager] ..> [config/]
+
+[UpdatePresenter] ..> [SelfUpdateService]
+[LoginPresenter] ..> [SelfUpdateService]
+[SelfUpdateService] ..> [InstallWorker.ps1] : invokes
 @enduml

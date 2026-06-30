@@ -1,6 +1,14 @@
 using namespace System.Windows.Controls
 using module "..\..\Models\AppConfig.psm1"
 
+<#
+.SYNOPSIS
+    Drives the Logs page: loads per-host log files into tabs and clears them.
+
+.DESCRIPTION
+    Reads the log files under %LOCALAPPDATA%\DONUT\logs into a tab each (plus a
+    Default tab) and clears them on request.
+#>
 class LogsPresenter {
     [AppConfig] $Config
     [System.Windows.FrameworkElement] $ViewContent

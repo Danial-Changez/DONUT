@@ -7,23 +7,23 @@ using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 
-# ConnectionRow
-#
-# A full-width row in the Home machine list (TeamViewer-style). One row per
-# machine; it serves double duty as both a persisted "recent connection" (idle
-# state, via SetIdleFrom) and a live run (SetStatus/SetPercent while a job is in
-# flight). Built in code, consistent with the passive-view pattern.
-#
-# Interaction:
-#   - single-clicking the row body selects it (SelectAction) -> the presenter
-#     opens the detail panel for that host (shows cached info; no network)
-#   - double-clicking the row gathers fresh inventory (GatherAction) for that host
-#   - the Run button is the ONLY way to execute a scan/update (RunAction), so a
-#     stray click never kicks off a remote run
-#
-# The live job log/output now lives in the detail panel, not in the row.
-# Pure status semantics (label/colour/busy) come from [FleetStatus].
+<#
+.SYNOPSIS
+    A full-width machine row in the Home list (TeamViewer-style).
 
+.DESCRIPTION
+    One row per machine; it serves double duty as both a persisted "recent
+    connection" (idle state, via SetIdleFrom) and a live run (SetStatus/SetPercent
+    while a job is in flight). Built in code, consistent with the passive-view
+    pattern. Pure status semantics (label/colour/busy) come from [FleetStatus].
+
+.NOTES
+    Interaction: single-clicking the row body selects it (the presenter opens the
+    detail panel from cache; no network); double-clicking gathers fresh inventory;
+    the Run button is the ONLY way to execute a scan/update, so a stray click
+    never kicks off a remote run. The live job log/output lives in the detail
+    panel, not in the row.
+#>
 class ConnectionRow {
     [string]      $HostName
     [Border]      $Root          # element added to the machine list
