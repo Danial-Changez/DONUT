@@ -248,7 +248,9 @@
         <Grid x:Name="DetailContent" Visibility="Collapsed">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <!-- Folders + log split the remaining height equally, so a window resize
+                 grows/shrinks both by the same amount. -->
+            <RowDefinition Height="*" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
@@ -275,21 +277,26 @@
           <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
           <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
                   Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-            <StackPanel>
-              <TextBlock Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
-              <TextBlock x:Name="DiskFoldersHint"
+              <TextBlock Grid.Row="1" x:Name="DiskFoldersHint"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
                          TextWrapping="Wrap" />
-              <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                 <TreeView x:Name="DiskFoldersList"
                           Style="{DynamicResource DiskTree}"
                           ItemContainerStyle="{DynamicResource DiskTreeItem}"
                           ScrollViewer.VerticalScrollBarVisibility="Disabled"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </ScrollViewer>
-            </StackPanel>
+            </Grid>
           </Border>
 
           <!-- Live job log -->
