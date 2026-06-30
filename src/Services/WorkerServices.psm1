@@ -156,7 +156,6 @@ class ExecutionService {
 
     [hashtable] RunScanPhase([DeviceContext] $device) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting preliminary scan.")
-        $this.AssertReachable($device)   # fail fast on a dead host; never block on a UNC/psexec timeout
 
         # Build scan arguments from config with remote path overrides
         $remoteOverrides = @{
@@ -191,7 +190,6 @@ class ExecutionService {
 
     [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
-        $this.AssertReachable($device)   # fail fast on a dead host; never block on a UNC/psexec timeout
 
         # Build apply arguments from config with runtime overrides
         $remoteOverrides = @{
@@ -222,11 +220,6 @@ class ExecutionService {
     # JSON locally. If that can't connect, fall back to the proven psexec+pwsh probe.
     [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
-        # Fail fast on the pool thread if the host is offline/unreachable, instead of
-        # blocking on a long CIM-connect + psexec timeout. (The first New-CimSession
-        # also cold-loads CIM assemblies under the process-wide loader lock, which is
-        # what froze the UI when probing a dead host.)
-        $this.AssertReachable($device)
         $ip = $this.ResolvedIpFor($device.HostName)
 
         # Fast path: gather over a remote CIM/DCOM session. A null result (session
@@ -381,7 +374,6 @@ class ExecutionService {
     # copies artifacts back); the exe is left in C:\temp\DONUT for reuse.
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
-        $this.AssertReachable($device)   # fail fast on a dead host; never block on a UNC/psexec timeout
 
         $ip = $this.ResolvedIpFor($device.HostName)
         $this.DeployWizTree($ip)
@@ -550,12 +542,8 @@ class ExecutionService {
     }
 
     [void] AssertReachable([DeviceContext] $device) {
-        # Reachability policy (IsOnline -> ResolveHost -> IsRpcAvailable): throws a
-        # typed failure (offline / unresolvable / RPC blocked) FAST, records the
-        # resolved IP on the device, and memoizes it as the job IP so a later
-        # ResolvedIpFor doesn't resolve a second time.
-        $ip = [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $device.HostName)
-        $device.IPAddress = $ip
-        if ([string]::IsNullOrWhiteSpace($this.JobIp)) { $this.JobIp = $ip }
+        # Reuse the shared connectivity policy (IsOnline -> ResolveHost ->
+        # IsRpcAvailable) and record the resolved IP on the device context.
+        $device.IPAddress = [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $device.HostName)
     }
 }
