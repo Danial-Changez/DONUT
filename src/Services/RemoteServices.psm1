@@ -3,6 +3,22 @@ using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 using module ".\DriverMatchingService.psm1"
 
+<#
+.SYNOPSIS
+    Base class + concrete services for preparing remote host operations.
+
+.DESCRIPTION
+    RemoteJobService is the shared base: it owns the connectivity policy
+    (AssertHostReachable: IsOnline -> ResolveHost -> IsRpcAvailable) and builds the
+    RemoteWorker.ps1 argument hashtable. ScanService prepares a DCU scan;
+    RemoteUpdateService prepares an update scan/apply and parses + counts the
+    resulting update report. The subclasses only PREPARE and PARSE off the UI
+    thread — the worker does the network I/O.
+
+.NOTES
+    InventoryService, DiskUsageService and HostResolver also subclass
+    RemoteJobService (in their own files) to reuse BuildWorkerArgs.
+#>
 # Base class for remote host operations
 class RemoteJobService {
     [AppConfig] $Config

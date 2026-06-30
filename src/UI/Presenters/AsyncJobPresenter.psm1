@@ -2,29 +2,30 @@ using namespace System.Collections.Generic
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Models\JobEnums.psm1"
 
-# AsyncJobPresenter
-#
-# Shared base for presenters that drive background AsyncJobs off a 200ms
-# DispatcherTimer (Home, Battery). Both used to repeat the identical polling
-# lifecycle in their own OnTimerTick: reverse-iterate $ActiveJobs, Poll() each
-# job, and on a terminal status ('Completed'/'Failed') do per-job completion
-# work then Cleanup() + RemoveAt. That loop now lives here once, in PumpJobs.
-#
-# Subclasses keep their UNIQUE behaviour via two overridable hooks:
-#   - OnJobPolled($job)    : runs every tick after Poll(), before the terminal
-#                            check (Home uses it to drain logs / drive the bar /
-#                            refresh the card; Battery leaves it a no-op).
-#   - OnJobCompleted($job) : runs once when a job reaches a terminal status,
-#                            before Cleanup()/RemoveAt (Home: driver-match /
-#                            apply-phase transition / recents persistence;
-#                            Battery: WebBrowser navigation).
-# AfterPump runs once at the end of a tick that processed jobs, for batch-level
-# work (Home: overview refresh + manual-reboot notice).
-#
-# This base owns only the loop and the ActiveJobs list; subclasses construct
-# their own DispatcherTimer (their constructor signatures are fixed) and call
-# PumpJobs from its Tick handler. WPF-free apart from the job collection.
+<#
+.SYNOPSIS
+    Shared base for presenters that drive background AsyncJobs on a timer.
 
+.DESCRIPTION
+    Owns the polling lifecycle once (PumpJobs, off a ~200ms DispatcherTimer):
+    reverse-iterate $ActiveJobs, Poll() each job, and on a terminal status
+    (Completed/Failed) do per-job completion work then Cleanup() + RemoveAt.
+
+    Subclasses keep their unique behaviour via overridable hooks:
+      - OnJobPolled($job)    runs every tick after Poll(), before the terminal
+                             check (Home drains logs, drives the bar, refreshes
+                             the card).
+      - OnJobCompleted($job) runs once when a job reaches a terminal status,
+                             before Cleanup()/RemoveAt (Home: driver match /
+                             apply-phase transition / recents persistence).
+      - AfterPump()          runs once at the end of a tick that processed jobs,
+                             for batch work (Home: overview refresh + reboot notice).
+
+.NOTES
+    This base owns only the loop and the ActiveJobs list; subclasses construct
+    their own DispatcherTimer and call PumpJobs from its Tick handler. WPF-free
+    apart from the job collection.
+#>
 class AsyncJobPresenter {
     [System.Collections.Generic.List[AsyncJob]] $ActiveJobs
 

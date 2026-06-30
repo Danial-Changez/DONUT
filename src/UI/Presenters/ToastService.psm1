@@ -4,16 +4,17 @@ using namespace System.Windows.Media
 using namespace System.Windows.Media.Animation
 using namespace System.Windows.Threading
 
-# ToastService
-#
-# Renders non-modal, auto-dismissing toast notifications into a host ItemsControl
-# (the top-right overlay in MainWindow). Used for *informational* feedback that
-# previously surfaced as modal alert dialogs (e.g. "manual reboot required",
-# "no updates found"). Decision dialogs still go through DialogPresenter.
-#
-# Toasts slide + fade in, sit for a few seconds, then slide + fade out; clicking
-# one dismisses it early.
+<#
+.SYNOPSIS
+    Renders non-modal, auto-dismissing toast notifications.
 
+.DESCRIPTION
+    Shows informational feedback in a host ItemsControl (the top-right overlay in
+    MainWindow) — e.g. "manual reboot required", "no updates found" — that
+    previously surfaced as modal alert dialogs. Decision dialogs still go through
+    DialogPresenter. Toasts slide + fade in, sit for a few seconds, then slide +
+    fade out; clicking one dismisses it early.
+#>
 class ToastService {
     hidden [ItemsControl] $HostControl
     hidden [int] $DefaultDurationMs = 5000

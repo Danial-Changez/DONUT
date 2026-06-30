@@ -30,6 +30,26 @@ using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\AdSearchResult.psm1"
 using module "..\..\Models\ScanCacheDecision.psm1"
 
+<#
+.SYNOPSIS
+    Presenter for the Home screen: machine list, per-machine detail, AD finder.
+
+.DESCRIPTION
+    Owns the machine list (a ConnectionRow per host, seeded from recents), the
+    Add / Run / Run-all flow (the mode pill selects Scan vs. Apply), and the
+    per-machine job lifecycle (extends AsyncJobPresenter's PumpJobs). On select it
+    prefetches the host IP (HostResolver) and inventory (InventoryService) and
+    renders the detail cards; Storage scan runs DiskUsageService on demand. The
+    search bar doubles as a live multi-forest AD finder (debounced fan-out) with
+    inline account unlock. A scan from the last 24h is reused (ScanCacheDecision)
+    instead of re-scanning.
+
+.NOTES
+    Must never block the STA UI thread: all remote work is queued as AsyncJobs on
+    the pre-warmed runspace pool and polled on a DispatcherTimer. Event-handler
+    scriptblocks capture $self/$presenter, since in a WPF handler $this rebinds to
+    the sender.
+#>
 class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
     [object] $ConfigManager           # duck-typed; used to persist recents

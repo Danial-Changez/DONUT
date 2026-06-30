@@ -1,7 +1,13 @@
-# -----------------------------------------------------------------------------
-# SelfUpdateService
-# Handles updating the DONUT application itself via GitHub Releases
-# -----------------------------------------------------------------------------
+<#
+.SYNOPSIS
+    Self-updates the DONUT application from GitHub Releases.
+
+.DESCRIPTION
+    Authenticates via a GitHub App device flow (DPAPI-encrypted token), discovers
+    the latest release, downloads and SHA-256 verifies the MSI, and hands off to
+    InstallWorker.ps1 to install or roll back. Compares the installed version to
+    the release tag to decide update vs. rollback vs. no-op.
+#>
 using module "..\Core\LogService.psm1"
 
 class SelfUpdateService {

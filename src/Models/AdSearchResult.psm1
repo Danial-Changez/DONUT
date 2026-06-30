@@ -1,11 +1,15 @@
-# AdSearchResult
-#
-# WPF-free DTO + pure LDAP-filter helpers for the Home search bar's live AD
-# finder (computers + locked-out users across the org's forests). Mirrors the
-# MachineInventory / DcuProgress pure-helper pattern: the filter-building, input
-# escaping and lock-state decode are unit-tested here; ActiveDirectoryService
-# performs the directory I/O and the presenter renders the results.
+<#
+.SYNOPSIS
+    WPF-free DTO + pure LDAP-filter helpers for the Home live AD finder.
 
+.DESCRIPTION
+    Backs the search bar's AD finder (computers + locked-out users across the
+    org's forests). AdSearchResult is the per-hit DTO; AdFilter builds the LDAP
+    filters, escapes input, and decodes the lock/disable bits. Mirrors the
+    MachineInventory / DcuProgress pure-helper pattern: the filter-building,
+    escaping and lock-state decode are unit-tested here; ActiveDirectoryService
+    performs the directory I/O and the presenter renders the results.
+#>
 class AdSearchResult {
     [string] $Kind = 'Computer'      # 'Computer' | 'User'
     [string] $Name = ''

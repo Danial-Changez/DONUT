@@ -2,19 +2,26 @@ using namespace System.Net
 using namespace System.Net.Sockets
 using module ".\LogService.psm1"
 
-# Resolves hostnames against an Active Directory domain controller so that DNS
-# answers come from an authoritative, online server rather than the local
-# resolver cache. Domain controllers are discovered once and cached; the first
-# reachable one is used as the DNS server for all subsequent lookups.
-#
-# Resolution is fail-hard: if no domain controller can be discovered or reached,
-# ResolveHost/CheckReverseDNS log an [ERROR] and return $null/$false rather than
-# silently falling back to the local resolver.
-#
-# The raw AD/DNS calls are isolated in overridable seam methods
-# (QueryDomainControllers, ResolveViaServer, ResolvePtrViaServer,
-# TestServerOnline) so the discovery/selection logic can be unit-tested off a
-# domain by subclassing this type and faking those seams.
+<#
+.SYNOPSIS
+    Authoritative, DC-backed host resolution + reachability checks.
+
+.DESCRIPTION
+    Resolves hostnames against an Active Directory domain controller so DNS
+    answers come from an authoritative, online server rather than the local
+    resolver cache. Domain controllers are discovered once and cached; the first
+    reachable one is used as the DNS server for all subsequent lookups.
+
+    Resolution is fail-hard: if no domain controller can be discovered or reached,
+    ResolveHost / CheckReverseDNS log an [ERROR] and return $null/$false rather
+    than silently falling back to the local resolver.
+
+.NOTES
+    The raw AD/DNS calls are isolated in overridable seam methods
+    (QueryDomainControllers, ResolveViaServer, ResolvePtrViaServer,
+    TestServerOnline) so the discovery/selection logic can be unit-tested off a
+    domain by subclassing this type and faking those seams.
+#>
 class NetworkProbe {
     [LogService] $Logger
 

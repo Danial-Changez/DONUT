@@ -113,11 +113,24 @@ The project adopts the **Passive View** variant of the MVP pattern.
 
 ### Key Classes
 
+Many models are deliberately WPF-free **pure mappers/DTOs** (no UI, no I/O) so the
+decision/format logic is unit-tested off-domain; the presenter consumes the result
+and pokes the controls.
+
 #### Models (`src/Models/`)
 | Class | Purpose |
 |-------|---------|
 | `AppConfig` | Configuration container with defaults, settings merge, and DCU CLI argument building |
-| `DeviceContext` | Remote device state: hostname, IP, online status, updates, matched drivers |
+| `DeviceContext` | Remote device state: hostname, IP, online status, status message |
+| `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `Resolve`) |
+| `FleetStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
+| `DcuProgress` | Pure parser: a DCU output line → percent complete |
+| `ScanCacheDecision` | Pure rule: is a host's last scan still fresh enough to reuse (24h)? |
+| `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
+| `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
+| `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
+| `RecentConnection` / `RecentConnectionsStore` | Persisted "recent machines" backing the Home list (status, counts, cached inventory + disk usage) |
+| `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
 #### Core (`src/Core/`)
 | Class | Purpose |
@@ -126,15 +139,25 @@ The project adopts the **Passive View** variant of the MVP pattern.
 | `NetworkProbe` | Domain-controller-authoritative DNS resolution (cached DC discovery + `Resolve-DnsName -Server`, fail-hard), reverse-DNS validation, RPC/online checks |
 | `AsyncJob` | Runspace-based async job wrapper with PowerShell execution |
 | `RunspaceManager` | Static RunspacePool management for parallel execution |
+| `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
+| `TimeFormat` | Pure "relative time" formatter (`2m ago`) |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
 
 #### Services (`src/Services/`)
+All remote services subclass `RemoteJobService` (shared connectivity policy + worker-arg
+building); they only **prepare/parse** off the UI thread — the worker does the network I/O.
+
 | Class | Purpose |
 |-------|---------|
-| `ExecutionService` | Remote PsExec execution, DCU CLI invocation, artifact copy |
-| `ScanService` | Prepare scan operations (extends RemoteJobService) |
-| `RemoteUpdateService` | Prepare update operations with driver matching |
+| `ExecutionService` | Remote PsExec execution, DCU CLI invocation, per-phase dispatch (resolve/scan/apply/inventory/disk), artifact copy |
+| `ScanService` | Prepare scan operations |
+| `RemoteUpdateService` | Prepare update scan/apply with driver matching; parse + count the update report |
+| `InventoryService` | Prepare + parse the per-machine CIM inventory probe |
+| `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
+| `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select) |
+| `ActiveDirectoryService` | Live multi-forest AD search (computers + users) and account unlock |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
+| `SystemInfoService` | Local machine facts (identity, domain, battery) for the title bar |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
 | `ResourceService` | XAML resource dictionary loading |
 
@@ -142,13 +165,15 @@ The project adopts the **Passive View** variant of the MVP pattern.
 | Class | Purpose |
 |-------|---------|
 | `MainPresenter` | Main window, navigation, view loading |
-| `HomePresenter` | Scan/apply operations, job management, clipboard copy |
+| `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
+| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management |
 | `ConfigPresenter` | Configuration UI, command selection, args persistence |
 | `LogsPresenter` | Log viewing, tab management, and clear functionality |
-| `BatteryPresenter` | Battery report generation |
 | `LoginPresenter` | GitHub Device Flow authentication UI |
 | `UpdatePresenter` | Self-update check and prompt |
-| `DialogPresenter` | Confirmation dialogs, update popups |
+| `DialogPresenter` | Confirmation dialogs, update/alert popups |
+| `ConnectionRow` | One machine row in the Home list (status dot, chip, progress, Run) |
+| `ToastService` | Transient success/info/warning/error toasts |
 
 ---
 

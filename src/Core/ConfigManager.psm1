@@ -1,6 +1,15 @@
 using module "..\Models\AppConfig.psm1"
 using module ".\LogService.psm1"
 
+<#
+.SYNOPSIS
+    Loads and saves DONUT's JSON config and ensures its data folders exist.
+
+.DESCRIPTION
+    Reads the bundled config under the source root plus the per-user override in
+    %LOCALAPPDATA%\DONUT, deserializes config.json into an AppConfig, and persists
+    changes back. Also guarantees the logs/reports directories exist.
+#>
 class ConfigManager {
     [string] $SourceRoot
     [string] $ConfigPath

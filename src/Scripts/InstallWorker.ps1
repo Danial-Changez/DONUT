@@ -1,11 +1,31 @@
-
 <#
-    DONUT Install Worker
-    Purpose:
-        - Gracefully close running DONUT processes
-        - Optionally uninstall previous version (rollback)
-        - Install new MSI
-        - Cleanup staging directory
+.SYNOPSIS
+    Standalone updater that installs (or rolls back) the DONUT MSI.
+
+.DESCRIPTION
+    Launched out-of-process by SelfUpdateService once an MSI is downloaded and
+    SHA-256 verified. Gracefully closes any running DONUT process, optionally
+    uninstalls the current version (rollback), installs the MSI via msiexec, then
+    cleans up the staging directory and relaunches the app.
+
+.PARAMETER MsiPath
+    Path to the downloaded, verified MSI to install.
+
+.PARAMETER ProcessNameToClose
+    Process to stop before installing (default 'DONUT').
+
+.PARAMETER Passive
+    Run msiexec with a passive (non-interactive) UI.
+
+.PARAMETER Rollback
+    Uninstall the current version first (revert to an older tag).
+
+.PARAMETER CloseTimeoutSeconds
+    Seconds to wait for a graceful process close before forcing it.
+
+.NOTES
+    Kept as a standalone script (not a class) so it can be copied to
+    %LOCALAPPDATA% and run independently of the install it is replacing.
 #>
 param(
     [string]$MsiPath,

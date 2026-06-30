@@ -1,6 +1,15 @@
 using namespace System.Windows
 using module "..\Core\LogService.psm1"
 
+<#
+.SYNOPSIS
+    Loads and applies the app's merged XAML resource dictionaries.
+
+.DESCRIPTION
+    Merges every *.xaml under src/UI/Styles into one ResourceDictionary (colours,
+    button styles, control templates, icons) and applies it to a window so views
+    can resolve the shared DynamicResource keys.
+#>
 class ResourceService {
     [string]$SourceRoot
     [LogService]$Logger

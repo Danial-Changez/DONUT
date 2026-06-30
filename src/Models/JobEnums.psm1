@@ -1,11 +1,14 @@
-# JobEnums
-#
-# Execution-state vocabulary for background AsyncJobs, promoted from loose
-# strings to enums so the job state machine is typo-proof. Kept in Models
-# (dependency-free) so Core (AsyncJob) can reference them without a layering
-# cycle. PowerShell coerces between an enum and its member name, so the pure
-# string-based presentation mapper (FleetStatus) and the existing tests keep
-# working unchanged.
+<#
+.SYNOPSIS
+    Execution-state vocabulary (enums) for background AsyncJobs.
+
+.DESCRIPTION
+    Promotes the job state machine from loose strings to enums so it is
+    typo-proof. Kept in Models (dependency-free) so Core (AsyncJob) can reference
+    them without a layering cycle. PowerShell coerces between an enum and its
+    member name, so the string-based presentation mapper (FleetStatus) and the
+    existing tests keep working unchanged.
+#>
 
 # Lifecycle state of an AsyncJob.
 enum JobStatus {

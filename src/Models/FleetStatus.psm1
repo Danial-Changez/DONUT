@@ -1,14 +1,17 @@
-# FleetStatus
-#
-# Pure presentation-state mapper for the Home fleet cards. Translates an
-# AsyncJob's (JobType, Status) plus the manual-reboot flag into the bits a card
-# needs to render: a human label, a colour resource key, and whether the host is
-# still busy (which drives the indeterminate progress animation).
-#
-# This is deliberately free of any WPF dependency so it can be unit-tested
-# off-domain and out-of-process. The presenter consumes the result and pokes the
-# actual controls.
+<#
+.SYNOPSIS
+    Pure presentation-state mapper for the Home fleet cards.
 
+.DESCRIPTION
+    Translates an AsyncJob's (JobType, Status) plus the manual-reboot flag into
+    the bits a card needs to render: a human label, a colour resource key, and
+    whether the host is still busy (which drives the indeterminate progress
+    animation).
+
+.NOTES
+    Deliberately free of any WPF dependency so it can be unit-tested off-domain
+    and out of process. The presenter consumes the result and pokes the controls.
+#>
 enum FleetState {
     Queued
     Scanning

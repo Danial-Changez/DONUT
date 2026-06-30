@@ -1,98 +1,77 @@
 @startuml Self-Update Sequence Diagram
+!include _dark-theme.puml
+title Self-Update (GitHub device flow + MSI)
+
 actor User
-participant "UpdatePresenter" as Presenter
+participant "Login / UpdatePresenter" as Presenter
 participant "SelfUpdateService" as Service
 participant "GitHub API" as GH
 participant "InstallWorker.ps1" as Worker
-
-User -> Presenter: Clicks "Check for Updates"
-activate Presenter
 
 Presenter -> Service: GetStoredToken()
 activate Service
 Service --> Presenter: DPAPI-decrypted token (or null)
 deactivate Service
 
-alt No Token
+alt No valid token
     Presenter -> Service: InitiateDeviceFlow()
     activate Service
     Service -> GH: POST /login/device/code
     GH --> Service: device_code, user_code, verification_uri
-    Service --> Presenter: DeviceFlowResponse
+    Service --> Presenter: device-flow response
     deactivate Service
-    
-    Presenter -> User: Show user_code & verification_uri
-    
-    loop Poll until authorized
+
+    Presenter -> User: Show user_code + verification_uri\n(copied to clipboard)
+
+    loop until authorized (DeviceFlowDecision)
         Presenter -> Service: PollForToken(deviceCode)
         activate Service
         Service -> GH: POST /login/oauth/access_token
-        GH --> Service: access_token (or pending)
-        Service --> Presenter: TokenData (or null)
+        GH --> Service: access_token (or pending / slow_down)
+        Service --> Presenter: token (or keep polling)
         deactivate Service
     end
-    
+
     Presenter -> Service: SaveToken(tokenData)
-    activate Service
-    Service --> Presenter: (saved with DPAPI)
-    deactivate Service
+    note right of Service: DPAPI (CurrentUser) + ACL hardened
 end
 
 Presenter -> Service: GetLatestRelease(token)
 activate Service
 Service -> GH: GET /repos/.../releases/latest
-GH --> Service: Release JSON (tag, assets)
-Service --> Presenter: Release object
+GH --> Service: release JSON (tag, assets)
+Service --> Presenter: release
 deactivate Service
 
 Presenter -> Service: GetLocalVersion()
-activate Service
-Service --> Presenter: local version
-deactivate Service
+Service --> Presenter: installed version
+Presenter -> Presenter: compare versions
 
-Presenter -> Presenter: Compare versions
+alt Update / rollback needed
+    Presenter -> User: ShowUpdatePrompt(current, new)
+    User --> Presenter: Confirm
 
-alt Update Available
-    Presenter -> User: Show update prompt
-    User --> Presenter: Confirm update
-    
-    Presenter -> Service: GetReleaseAsset(release, "*.msi")
+    Presenter -> Service: DownloadAsset(token, "*.msi", staging)
     activate Service
-    Service --> Presenter: MSI asset info
-    deactivate Service
-    
-    Presenter -> Service: DownloadAsset(token, asset, destDir)
-    activate Service
-    Service -> GH: Download MSI
+    Service -> GH: download MSI (+ checksum)
     GH --> Service: MSI file
-    Service --> Presenter: Local MSI path
+    Service --> Presenter: local MSI path
     deactivate Service
-    
+
     Presenter -> Service: VerifyFileHash(path, expectedHash)
+    note right of Service: SHA-256 — abort on mismatch
+
+    Presenter -> Service: ApplyUpdate(msiPath, isRollback, sourceRoot)
     activate Service
-    note right: SHA-256 verification
-    Service --> Presenter: true/false
-    deactivate Service
-    
-    Presenter -> Service: ApplyUpdate(msiPath, false, sourceRoot)
-    activate Service
-    
-    Service -> Worker: Start-Process pwsh -File InstallWorker.ps1
+    Service -> Worker: Start-Process pwsh InstallWorker.ps1
     activate Worker
-    
-    Worker -> Worker: Stop-Process "DONUT" (graceful)
-    Worker -> Worker: msiexec /i "NewVersion.msi" /passive
-    Worker -> Worker: Start-Process "Donut.Launcher.exe"
-    
+    Worker -> Worker: stop DONUT (graceful)
+    Worker -> Worker: msiexec /i NewVersion.msi /passive
+    Worker -> Worker: relaunch Donut.Launcher.exe
     deactivate Worker
     deactivate Service
-    
-    destroy Presenter
-    note over Presenter: App restarts with new version
-    
-else No Update Available
-    Presenter -> User: Show "Already up to date"
+    note over Presenter: app restarts on the new version
+else Already current
+    Presenter -> User: "Already up to date"
 end
-
-deactivate Presenter
 @enduml

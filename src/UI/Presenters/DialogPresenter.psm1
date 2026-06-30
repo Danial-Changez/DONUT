@@ -1,6 +1,19 @@
 using namespace System.Windows
 using module '..\..\Services\ResourceService.psm1'
 
+<#
+.SYNOPSIS
+    Hosts the modal dialog window (confirmation / alert / update prompt).
+
+.DESCRIPTION
+    Shows a themed modal DialogWindow for decisions that must block: confirm an
+    action (with an optional item list), acknowledge an alert, or approve an
+    update/rollback. Returns the user's choice as a bool.
+
+.NOTES
+    Event-handler scriptblocks capture $self, since in a WPF handler $this rebinds
+    to the sender (the button), not the presenter.
+#>
 class DialogPresenter {
     [ResourceService]$Resources
     [Window]$Window

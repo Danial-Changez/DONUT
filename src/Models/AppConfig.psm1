@@ -1,3 +1,14 @@
+<#
+.SYNOPSIS
+    Strongly-typed configuration container for DONUT.
+
+.DESCRIPTION
+    Holds the resolved source/logs/reports paths and the user Settings hashtable,
+    merged over a static Defaults table (active command, throttle limit, AD
+    forests, per-command DCU options). Builds the dcu-cli argument string for a
+    command from its configured options, and round-trips through ConfigManager's
+    JSON load/save.
+#>
 class AppConfig {
     [string] $SourceRoot
     [string] $LogsPath

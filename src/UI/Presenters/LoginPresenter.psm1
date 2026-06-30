@@ -5,6 +5,16 @@ using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\LogService.psm1'
 using module '..\..\Models\DeviceFlowDecision.psm1'
 
+<#
+.SYNOPSIS
+    Drives the GitHub device-flow sign-in window.
+
+.DESCRIPTION
+    Shows the login window, starts the device flow (SelfUpdateService), displays
+    the user code, and polls for the token on a DispatcherTimer — applying the
+    pure DeviceFlowDecision (authorize / keep polling / slow down / fail) to the
+    real UI and timer.
+#>
 class LoginPresenter {
     [SelfUpdateService]$Service
     [ResourceService]$Resources

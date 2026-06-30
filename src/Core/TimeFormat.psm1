@@ -1,8 +1,12 @@
-# TimeFormat
-#
-# Pure helper for rendering "time ago" labels in the machine list (e.g. the
-# subtitle "Completed · 2 min ago"). WPF-free so it can be unit-tested.
+<#
+.SYNOPSIS
+    Pure helper for rendering coarse "time ago" labels.
 
+.DESCRIPTION
+    Renders a relative time for a past instant (e.g. the machine-list subtitle
+    "Completed · 2 min ago"). Input may be UTC or local Kind; it is normalised to
+    UTC and compared against UtcNow. WPF-free so it can be unit-tested.
+#>
 class TimeFormat {
     # Renders a coarse relative time for a past instant. Input may be UTC or
     # local Kind; it is normalised to UTC and compared against UtcNow.

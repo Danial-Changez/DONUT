@@ -3,20 +3,25 @@ using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 using module ".\RemoteServices.psm1"
 
-# HostResolver
-#
-# Start-early IP-resolution cache. The expensive AD-authoritative resolution
-# (discover domain controllers, pick a live one, resolve via it) is kept off the
-# hot path: the active DC is warmed once at startup and each host's IP is resolved
-# in the background the moment it's selected, then cached here. When a remote job
-# starts, the presenter reads the cached IP and threads it to the worker so the
-# worker never resolves on the critical path.
-#
-# This type is WPF-free and does NO network itself - the resolution runs in the
-# worker (ExecutionService.RunResolvePhase). HostResolver only holds the cached
-# state + the "do we still need to resolve this?" decision, and builds the worker
-# args (subclassing RemoteJobService purely to reuse BuildWorkerArgs - it does NOT
-# call ValidateHostConnectivity, so nothing here touches the network/UI thread).
+<#
+.SYNOPSIS
+    Start-early IP-resolution cache that keeps DNS work off the hot path.
+
+.DESCRIPTION
+    The expensive AD-authoritative resolution (discover domain controllers, pick
+    a live one, resolve via it) is kept off the critical path: the active DC is
+    warmed once at startup and each host's IP is resolved in the background the
+    moment it's selected, then cached here. When a remote job starts, the
+    presenter reads the cached IP and threads it to the worker so the worker never
+    resolves on the critical path.
+
+.NOTES
+    WPF-free and does NO network itself — the resolution runs in the worker
+    (ExecutionService.RunResolvePhase). HostResolver only holds the cached state
+    plus the "do we still need to resolve this?" decision, and builds the worker
+    args (subclassing RemoteJobService purely to reuse BuildWorkerArgs; it does
+    NOT call AssertHostReachable, so nothing here touches the network/UI thread).
+#>
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
     hidden [hashtable] $IpCache  = @{}   # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys)

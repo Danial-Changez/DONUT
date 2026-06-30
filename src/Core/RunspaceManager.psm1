@@ -1,5 +1,16 @@
 using module '.\LogService.psm1'
 
+<#
+.SYNOPSIS
+    Static manager for the shared RunspacePool that runs remote jobs in parallel.
+
+.DESCRIPTION
+    Owns a single process-wide RunspacePool (sized to the configured throttle
+    limit) that AsyncJob borrows runspaces from, and exposes Initialize / GetPool /
+    Close. Pre-warming every runspace at startup keeps the CLR module-loader lock
+    off the hot path so concurrent jobs never block the UI. Optionally logs
+    lifecycle events.
+#>
 class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $RunspacePool
     static [LogService] $Logger = $null

@@ -1,17 +1,21 @@
 using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 
-# SystemInfoService
-#
-# Gathers the operator/controller environment shown in the Home overview strip:
-# this machine's network identity, domain controller health (reused from
-# NetworkProbe's DC discovery), and local battery state.
-#
-# All gathering is resilient (any probe failure degrades to a sensible default)
-# so the dashboard never blocks or throws on an off-domain or desktop machine.
-# The CIM/network calls live in seam methods; the pure label formatting is
-# static and unit-tested.
+<#
+.SYNOPSIS
+    Gathers the local controller environment shown in the Home overview strip.
 
+.DESCRIPTION
+    This machine's network identity, domain controller health (reused from
+    NetworkProbe's DC discovery), and local battery state. SystemInfo is the DTO;
+    SystemInfoService gathers it. All gathering is resilient (any probe failure
+    degrades to a sensible default) so the dashboard never blocks or throws on an
+    off-domain or desktop machine.
+
+.NOTES
+    The CIM/network calls live in seam methods; the pure label formatting is
+    static and unit-tested.
+#>
 class SystemInfo {
     [string] $Hostname = ''
     [string] $IPv4 = ''

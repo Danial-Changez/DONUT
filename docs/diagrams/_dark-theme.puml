@@ -1,0 +1,98 @@
+' ============================================================================
+'  DONUT shared diagram theme — neutral dark base.
+'  Just enough for a readable dark render; individual diagrams add group
+'  colours (per layer) where that aids comprehension. Included via:
+'      !include _dark-theme.puml
+' ============================================================================
+
+skinparam backgroundColor #0E0E11
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontColor #E5E7EB
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam roundCorner 6
+skinparam TitleFontColor #E5E7EB
+skinparam TitleFontSize 18
+skinparam TitleFontStyle bold
+skinparam ArrowColor #6B7280
+skinparam ArrowFontColor #9CA3AF
+
+' --- neutral surfaces (group colours are set per-diagram) ------------------
+skinparam class {
+    BackgroundColor #1A1A1F
+    BorderColor #3F3F46
+    FontColor #F3F4F6
+    FontStyle bold
+    AttributeFontColor #B6B6BD
+    AttributeFontStyle plain
+    AttributeFontSize 11
+    StereotypeFontColor #9CA3AF
+}
+skinparam component {
+    BackgroundColor #1A1A1F
+    BorderColor #3F3F46
+    FontColor #F3F4F6
+}
+skinparam rectangle {
+    BackgroundColor #1A1A1F
+    BorderColor #3F3F46
+    FontColor #F3F4F6
+}
+skinparam database {
+    BackgroundColor #161620
+    BorderColor #3F3F46
+    FontColor #F3F4F6
+}
+skinparam node {
+    BackgroundColor #161620
+    BorderColor #3F3F46
+    FontColor #F3F4F6
+}
+skinparam package {
+    FontColor #D1D5DB
+    FontStyle bold
+    BorderColor #52525B
+}
+skinparam packageStyle rectangle
+
+' --- sequence (single subtle accent) --------------------------------------
+skinparam sequence {
+    ArrowColor #8B86F0
+    LifeLineBorderColor #3F3F46
+    LifeLineBackgroundColor #161620
+    ParticipantBackgroundColor #1A1A1F
+    ParticipantBorderColor #4B4B55
+    ParticipantFontColor #F3F4F6
+    ActorBackgroundColor #1A1A1F
+    ActorBorderColor #4B4B55
+    ActorFontColor #F3F4F6
+    BoxBackgroundColor #131318
+    BoxBorderColor #3F3F46
+    BoxFontColor #A5B4FC
+    GroupBackgroundColor #201F33
+    GroupBorderColor #4B4B55
+    GroupFontColor #E5E7EB
+    GroupHeaderFontColor #C7D2FE
+    DividerBackgroundColor #1A1A1F
+    DividerBorderColor #4B4B55
+    DividerFontColor #C7D2FE
+}
+
+' --- activity -------------------------------------------------------------
+skinparam activity {
+    BackgroundColor #1A1A1F
+    BorderColor #4B4B55
+    FontColor #F3F4F6
+    DiamondBackgroundColor #161620
+    DiamondBorderColor #4B4B55
+    DiamondFontColor #F3F4F6
+    StartColor #8B86F0
+    EndColor #8B86F0
+    ArrowColor #6B7280
+}
+
+skinparam note {
+    BackgroundColor #161620
+    BorderColor #4B4B55
+    FontColor #D1D5DB
+}

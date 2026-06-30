@@ -1,69 +1,54 @@
 @startuml Scan Sequence Diagram
+!include _dark-theme.puml
+title Scan a Machine (async, non-blocking)
+
 actor User
 participant "HomeView" as View
 participant "HomePresenter" as Presenter
 participant "ScanService" as Scan
 participant "AsyncJob" as Job
+participant "RunspacePool" as Pool
 participant "ExecutionService" as Exec
-participant "NetworkProbe" as Net
-participant "RunspaceManager" as Pool
 
-User -> View: Clicks "Scan"
-View -> Presenter: OnSearch()
+User -> View: Click row "Run" (mode = Scan)
+View -> Presenter: RunHost("PC-01")
 activate Presenter
+Presenter -> Presenter: StartProcess("PC-01")
 
-Presenter -> Presenter: Parse hostnames from input
-Presenter -> Presenter: Validate host count
-
-loop For each hostname
+alt Scan < 24h old and report cached
+    Presenter -> Presenter: RecentScanIsFresh() = true
+    note right of Presenter: ScanCacheDecision.IsFresh()\nToast "results are current" — no job queued.
+else Needs a fresh scan
     Presenter -> Scan: PrepareScan("PC-01")
     activate Scan
-
-    Scan -> Scan: ValidateHostConnectivity("PC-01")
-    Scan -> Net: ResolveHost("PC-01")
-    Net --> Scan: IPAddress
-    Scan -> Net: CheckReverseDNS(ip, "PC-01")
-    Net --> Scan: true/false (warning only)
-    
     Scan -> Scan: BuildWorkerArgs("PC-01", "Scan", {})
-    Scan --> Presenter: JobParams (scriptPath, arguments)
+    Scan --> Presenter: worker args (no network on UI thread)
     deactivate Scan
 
+    Presenter -> Job: new AsyncJob("PC-01", Scan)
     Presenter -> Pool: GetPool()
-    Pool --> Presenter: RunspacePool
-    
-    Presenter -> Job: new AsyncJob("PC-01", "Scan")
-    Presenter -> Job: Start(scriptPath, arguments, configPath)
-    activate Job
-    Job --> Presenter: (async started)
-    deactivate Job
+    Presenter -> Job: Start(scriptPath, args)
+    Presenter -> Presenter: ActiveJobs.Add(job)
 end
-
-Presenter -> View: UpdateStatus("Scanning...")
 deactivate Presenter
 
-loop Timer tick (500ms)
+== DispatcherTimer tick: PumpJobs() ==
+
+loop while job running
     Presenter -> Job: Poll()
     activate Job
-    
-    alt Job completed
-        Job -> Exec: StartWorker("PC-01", "Scan", Options, Config, ...)
-        activate Exec
-        Exec -> Exec: RunScanPhase(DeviceContext)
-        Exec -> Net: IsOnline("PC-01")
-        Net --> Exec: true
-        Exec -> Exec: InvokePsExec(...)
-        note right: Runs DCU-CLI via PsExec
-        Exec -> Exec: CopyRemoteArtifacts(...)
-        Exec --> Job: ScanResults
-        deactivate Exec
-        Job --> Presenter: Status = "Completed"
-    else Job still running
-        Job --> Presenter: Status = "Running"
-    end
+    Job -> Exec: (pool thread) AssertHostReachable + RunScanPhase
+    activate Exec
+    Exec -> Exec: DCU-CLI scan via PsExec
+    Exec -> Exec: CopyRemoteArtifacts()
+    Exec --> Job: scan result + report path
+    deactivate Exec
+    Job --> Presenter: Status (Running / Completed)
     deactivate Job
+    Presenter -> Presenter: OnJobPolled() -> stream logs + % to card
 end
 
-Presenter -> Presenter: ProcessJobResults()
-Presenter -> View: DisplayResults(ScanResults)
+Presenter -> Presenter: OnJobCompleted() -> SettleHost(job)
+Presenter -> Presenter: Store.Upsert(host, status, updateCount)
+Presenter -> View: card -> Completed + update count
 @enduml

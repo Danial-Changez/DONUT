@@ -2,16 +2,23 @@ using module ".\AppConfig.psm1"
 using module ".\MachineInventory.psm1"
 using module ".\DiskUsage.psm1"
 
-# RecentConnection / RecentConnectionsStore
-#
-# Persisted "recent machines" backing the Home machine list. Entries live in
-# AppConfig.Settings['recentHosts'] as plain hashtables so they round-trip
-# cleanly through ConfigManager's ConvertTo-Json / ConvertFrom-Json -AsHashtable.
-#
-# The store keeps the array math pure and testable; persistence is delegated to
-# a duck-typed config manager (typed [object] to avoid a Models->Core->Models
-# using-module cycle). A $null manager makes Save() a no-op, which keeps unit
-# tests free of disk I/O.
+<#
+.SYNOPSIS
+    Persisted "recent machines" model backing the Home machine list.
+
+.DESCRIPTION
+    Entries live in AppConfig.Settings['recentHosts'] as plain hashtables so they
+    round-trip cleanly through ConfigManager's ConvertTo-Json /
+    ConvertFrom-Json -AsHashtable. RecentConnection is the typed view of one
+    entry (status, counts, cached inventory + disk usage); RecentConnectionsStore
+    owns the upsert/seed/cap/sort logic.
+
+.NOTES
+    The store keeps the array math pure and testable; persistence is delegated to
+    a duck-typed config manager (typed [object] to avoid a Models -> Core ->
+    Models using-module cycle). A $null manager makes Save() a no-op, which keeps
+    unit tests free of disk I/O.
+#>
 
 # Typed view of one stored entry (built from the raw hashtable for the UI).
 class RecentConnection {

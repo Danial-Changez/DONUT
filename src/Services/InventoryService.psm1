@@ -4,13 +4,17 @@ using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 using module ".\RemoteServices.psm1"
 
-# InventoryService
-#
-# Prepares and parses a per-machine "inventory" probe: a small self-contained
-# pwsh script that runs on the remote host (via the worker's PsExec path) and
-# writes laptop-troubleshooting facts as JSON, which we copy back and parse into
-# a [MachineInventory]. Mirrors ScanService (subclasses RemoteJobService, reuses
-# ValidateHostConnectivity / BuildWorkerArgs).
+<#
+.SYNOPSIS
+    Prepares and parses the per-machine inventory probe.
+
+.DESCRIPTION
+    Builds a small self-contained pwsh probe script that runs on the remote host
+    (via the worker's PsExec path) and writes laptop-troubleshooting facts as
+    JSON, which are copied back and parsed into a [MachineInventory]. Mirrors
+    ScanService — subclasses RemoteJobService, reusing AssertHostReachable /
+    BuildWorkerArgs.
+#>
 class InventoryService : RemoteJobService {
 
     InventoryService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}

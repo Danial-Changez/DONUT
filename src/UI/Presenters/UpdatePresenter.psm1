@@ -6,6 +6,15 @@ using module '..\..\Core\LogService.psm1'
 using module '.\LoginPresenter.psm1'
 using module '.\DialogPresenter.psm1'
 
+<#
+.SYNOPSIS
+    Checks for a newer release on startup and prompts to update or roll back.
+
+.DESCRIPTION
+    Uses SelfUpdateService to compare the installed version to the latest GitHub
+    release, and on a difference shows the update window (via DialogPresenter),
+    then downloads, verifies and applies the MSI (or rolls back to an older tag).
+#>
 class UpdatePresenter {
     [SelfUpdateService]$Service
     [ResourceService]$Resources
