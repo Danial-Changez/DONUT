@@ -146,13 +146,17 @@ class ExecutionService {
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
-    # Cold-loads the heavy runtime assemblies the worker uses - DNS resolution, CIM/DCOM
-    # and TCP sockets - against localhost, so the FIRST real probe doesn't load them under
-    # the process-wide CLR loader lock and freeze the UI. Best-effort: only the load
-    # matters, not the results. Overridable so unit tests skip the local I/O.
+    # Cold-loads the heavy runtime assemblies the worker uses - DNS resolution, CIM/DCOM,
+    # TCP sockets, and LDAP (System.DirectoryServices, used by the AD finder) - against
+    # localhost, so the FIRST real probe/search doesn't load them under the process-wide
+    # CLR loader lock and freeze the UI. Best-effort: only the load matters, not the
+    # results. System.DirectoryServices is a process-wide assembly load, so warming it in
+    # any one runspace primes every runspace's first AD search. Overridable so unit tests
+    # skip the local I/O.
     [void] WarmRuntimeAssemblies() {
         try { Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction SilentlyContinue | Out-Null } catch { }
         try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() } catch { }
+        try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue } catch { }
         try {
             $opt = New-CimSessionOption -Protocol Dcom
             $s = New-CimSession -SessionOption $opt -ErrorAction Stop
