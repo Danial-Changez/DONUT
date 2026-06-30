@@ -299,6 +299,7 @@ class ConnectionRow {
             'Completed'      { return 'AccentGreen' }
             'Failed'         { return 'AccentRed' }
             'RebootRequired' { return 'AccentYellow' }
+            'Offline'        { return 'BodyTextTertiary' }   # offline (host off) is grey, not error-red
             default          { return 'BodyTextTertiary' }
         }
         return 'BodyTextTertiary'
