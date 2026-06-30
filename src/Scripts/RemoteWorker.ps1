@@ -18,6 +18,11 @@
 .PARAMETER Options
     Per-job options (e.g. selected updates, TopN, the inventory probe script).
 
+.PARAMETER ResolvedIp
+    Pre-resolved target IP (from HostResolver) so the worker skips DNS on the hot
+    path. A dedicated argument, NOT an Options key, so it can never reach a dcu-cli
+    command line.
+
 .PARAMETER SourceRoot
     The 'src' root, used to locate scripts and bundled tools.
 
@@ -44,6 +49,7 @@ param(
     [string]$HostName,
     [string]$JobType,
     [hashtable]$Options,
+    [string]$ResolvedIp,
     [string]$SourceRoot,
     [string]$LogsDir,
     [string]$ReportsDir,
@@ -67,7 +73,7 @@ try {
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, @{})
     }
     
-    [ExecutionService]::StartWorker($HostName, $JobType, $Options, $config, $SourceRoot, $LogsDir, $ReportsDir)
+    [ExecutionService]::StartWorker($HostName, $JobType, $Options, $ResolvedIp, $config, $SourceRoot, $LogsDir, $ReportsDir)
 } catch {
     Write-Error "Worker failed: $_"
     exit 1

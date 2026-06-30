@@ -59,6 +59,7 @@ class ExecutionService {
         [string]$HostName,
         [string]$JobType,
         [hashtable]$Options,
+        [string]$ResolvedIp,
         [AppConfig]$Config,
         [string]$SourceRoot,
         [string]$LogsDir,
@@ -71,9 +72,10 @@ class ExecutionService {
         $service = [ExecutionService]::new($localLogger, $localProbe, $localMatcher, $Config, $SourceRoot, $LogsDir, $ReportsDir)
 
         # Use the pre-resolved IP (warmed in the background on selection) when the
-        # presenter threaded one through, so the worker skips DNS on the hot path.
-        if ($null -ne $Options -and $Options.ResolvedIp -and -not [string]::IsNullOrWhiteSpace([string]$Options.ResolvedIp)) {
-            $service.JobIp = [string]$Options.ResolvedIp
+        # presenter threaded one through, so the worker skips DNS on the hot path. It's a
+        # dedicated argument, never an Options key, so it can't leak into a dcu-cli line.
+        if (-not [string]::IsNullOrWhiteSpace($ResolvedIp)) {
+            $service.JobIp = $ResolvedIp
         }
 
         # Create Device Context

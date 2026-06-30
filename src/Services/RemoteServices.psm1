@@ -87,6 +87,10 @@ class RemoteJobService {
                 HostName   = $hostName
                 JobType    = $jobType
                 Options    = $options
+                # Seeded by the presenter (AttachResolvedIp) before Start, when a
+                # pre-resolved IP is cached. A dedicated arg, never an Options key, so it
+                # can't leak onto a dcu-cli command line.
+                ResolvedIp = ''
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath

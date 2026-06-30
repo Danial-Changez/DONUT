@@ -330,6 +330,7 @@ Describe "WorkerServices" {
                     "TestHost",
                     "Unknown",
                     @{},
+                    "",
                     $config,
                     $script:sourceRoot,
                     $script:logsDir,
@@ -461,9 +462,9 @@ Describe "WorkerServices" {
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $device = [DeviceContext]::new("ApplyTestHost")
 
-            # ResolvedIp is the IP seed AttachResolvedIp threads through Options; it is NOT
-            # a dcu-cli option and must be filtered out (else DCU returns 105). A real
-            # option in the same bag must still pass through.
+            # Defense-in-depth: ResolvedIp now rides its own worker argument (not Options),
+            # but should a non-option control key ever land in Options it must NOT reach
+            # the dcu-cli line (DCU returns 105). A real option in the bag still passes.
             $service.RunApplyPhase($device, @{ ResolvedIp = '10.124.28.147'; reboot = $true })
 
             $service.LastPsExecParams.Arguments | Should -Not -Match 'ResolvedIp'
