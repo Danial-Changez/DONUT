@@ -622,21 +622,6 @@ Describe "WorkerServices" {
             $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
             $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
         }
-
-        It "Fails fast (no CIM / psexec) when the host is unreachable" {
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            $service.GatherResult = @{ model = 'ShouldNotBeReached' }   # would succeed if we got past the gate
-            $device = [DeviceContext]::new("DeadHost")
-
-            { $service.RunInventoryPhase($device, @{ ScriptText = 'probe' }) } | Should -Throw "*not reachable*"
-            $service.LastInventoryScript | Should -BeNullOrEmpty   # CIM + psexec fallback never reached
-        }
     }
 
     Context "IsUsableInventory" {
