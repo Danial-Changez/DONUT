@@ -307,7 +307,7 @@ Describe "AppConfig" {
             
             $result = $config.BuildDcuArgs('scan', @{})
             
-            $result | Should -BeLike '*-report="C:\Program Files\DONUT Reports"*'
+            $result | Should -BeLike "*-report='C:\Program Files\DONUT Reports'*"
         }
 
         It "Should quote comma-separated multi-values (remote pwsh -c parses bare commas as arrays)" {
@@ -323,7 +323,7 @@ Describe "AppConfig" {
 
             $result = $config.BuildDcuArgs('scan', @{})
 
-            $result | Should -BeLike '*-updateDeviceCategory="audio,video,network"*'
+            $result | Should -BeLike "*-updateDeviceCategory='audio,video,network'*"
         }
 
         It "Should apply runtime overrides" {
