@@ -548,7 +548,11 @@ class ExecutionService {
             "`"$remoteCmd`""
         )
 
-        $this.Logger.LogInfo("Executing: psexec \\$ip /$command $argsString")
+        # Log the EXACT command line handed to psexec.exe - psexec flags plus the remote
+        # 'pwsh -c "..."' wrapper that actually runs dcu-cli - so a CLI/syntax failure
+        # (e.g. DCU 105) can be read straight from the log instead of reconstructed. This
+        # is the literal argument list Start-Process receives, in order.
+        $this.Logger.LogInfo("Executing: psexec.exe $($psexecArgs -join ' ')")
 
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
         
