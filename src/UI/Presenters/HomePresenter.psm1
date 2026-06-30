@@ -441,8 +441,11 @@ class HomePresenter : AsyncJobPresenter {
     hidden [void] AttachResolvedIp([hashtable]$prep, [string]$hostName) {
         $ip = $this.Resolver.GetCachedIp($hostName)
         if ([string]::IsNullOrWhiteSpace($ip)) { return }
-        if ($prep -and $prep.Arguments -and $prep.Arguments.Options) {
-            $prep.Arguments.Options.ResolvedIp = $ip
+        # Seed the worker's dedicated ResolvedIp argument - NOT an Options key. Options is
+        # merged into dcu-cli args for /applyUpdates, so an IP in there becomes a bogus
+        # -ResolvedIp=<ip> that DCU rejects with 105.
+        if ($prep -and $prep.Arguments) {
+            $prep.Arguments.ResolvedIp = $ip
         }
     }
 
