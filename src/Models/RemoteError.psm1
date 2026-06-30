@@ -33,6 +33,8 @@ enum RemoteFailureReason {
     Offline
     Unresolvable
     RpcUnavailable
+    ExecutionFailed
+    DcuMissing
     Unknown
 }
 
@@ -71,6 +73,25 @@ class RpcUnavailableException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::RpcUnavailable) {}
 }
 
+# A remote command (PsExec -> dcu-cli or a probe) ran but exited non-zero. Carries
+# the process exit code for diagnostics.
+class RemoteExecutionException : RemoteOperationException {
+    [int] $ExitCode
+
+    RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode) : base(
+        "$what failed on '$hostName' (exit code $exitCode).",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
+        $this.ExitCode = $exitCode
+    }
+}
+
+# Dell Command Update is not installed on the target, so there is nothing to drive.
+class DcuNotInstalledException : RemoteOperationException {
+    DcuNotInstalledException([string]$hostName) : base(
+        "Dell Command Update (dcu-cli.exe) is not installed on '$hostName'. Install DCU on the target machine.",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::DcuMissing) {}
+}
+
 # Re-derives the failure reason from a worker error message. Pure + WPF-free so the
 # presenter can pick a card state without depending on the exception type surviving
 # the runspace boundary. Matches the stable phrases the exceptions above emit.
@@ -80,6 +101,8 @@ class RemoteFailure {
         if ($message -match '(?i)offline or unreachable')            { return [RemoteFailureReason]::Offline }
         if ($message -match '(?i)could not resolve an ip|dns/ad')    { return [RemoteFailureReason]::Unresolvable }
         if ($message -match '(?i)rpc \(port 135\)')                  { return [RemoteFailureReason]::RpcUnavailable }
+        if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
+        if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }
 }

@@ -5,6 +5,7 @@ using module ".\RemoteServices.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DiskUsage.psm1"
+using module "..\Models\RemoteError.psm1"
 
 <#
 .SYNOPSIS
@@ -146,8 +147,7 @@ class ExecutionService {
         if ([string]::IsNullOrWhiteSpace($this.JobIp)) {
             $ip = $this.Probe.ResolveHost($hostName)
             if (-not $ip) {
-                $this.Logger.LogError("[$hostName] Could not resolve IP.")
-                throw "Could not resolve IP for $hostName"
+                throw [RemoteJobService]::Fail($this.Logger, [HostUnresolvableException]::new($hostName))
             }
             $this.JobIp = [string]$ip
         }
@@ -352,7 +352,7 @@ class ExecutionService {
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
 
         if ($p.ExitCode -ne 0) {
-            throw "Remote probe failed on $target (exit code $($p.ExitCode))."
+            throw [RemoteExecutionException]::new($target, 'Remote probe', $p.ExitCode)
         }
     }
 
@@ -515,7 +515,7 @@ class ExecutionService {
         # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
         # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
         if ($p.ExitCode -notin @(0, 1, 2, 3, 4, 5)) {
-            throw "PsExec/DCU failed with exit code $($p.ExitCode)"
+            throw [RemoteExecutionException]::new($computer, "DCU /$command", $p.ExitCode)
         }
         
         if ($p.ExitCode -eq 1) {
@@ -538,7 +538,7 @@ class ExecutionService {
                 }
             }
         }
-        throw "dcu-cli.exe not found on $ip"
+        throw [DcuNotInstalledException]::new($ip)
     }
 
     [void] AssertReachable([DeviceContext] $device) {

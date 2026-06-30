@@ -442,7 +442,7 @@ Describe "WorkerServices" {
             $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             
             # FindDcuCli checks UNC paths which won't exist in test
-            { $service.FindDcuCli("127.0.0.1") } | Should -Throw "*not found*"
+            { $service.FindDcuCli("127.0.0.1") } | Should -Throw "*not installed*"
         }
     }
 
