@@ -14,6 +14,9 @@ class RecordingPresenter : AsyncJobPresenter {
     [AsyncJob] $JobToAppendOnComplete = $null
     [string] $AppendTrigger = $null
 
+    [bool] $Modal = $false
+    [bool] IsModalOpen() { return $this.Modal }
+
     RecordingPresenter() : base() {
         $this.Polled = [System.Collections.Generic.List[string]]::new()
         $this.Completed = [System.Collections.Generic.List[string]]::new()
@@ -105,6 +108,24 @@ Describe "AsyncJobPresenter" {
             $script:p.Completed | Should -Be @("HOST")
             $script:p.ActiveJobs.Count | Should -Be 1
             $script:p.ActiveJobs[0] | Should -Be $apply
+        }
+
+        It "Defers completion + AfterPump while a modal is open, but still polls" {
+            $script:p.Modal = $true
+            $script:p.ActiveJobs.Add((New-TerminalJob "DONE" "Completed"))
+
+            $script:p.PumpJobs()
+
+            $script:p.Polled | Should -Be @("DONE")    # still polled, so the UI keeps updating
+            $script:p.Completed.Count | Should -Be 0   # completion (which may open a dialog) deferred
+            $script:p.AfterPumpCount | Should -Be 0    # AfterPump can open a dialog too, so deferred
+            $script:p.ActiveJobs.Count | Should -Be 1  # finished job kept for a later, non-modal tick
+
+            # When the modal closes, the next pump processes it normally.
+            $script:p.Modal = $false
+            $script:p.PumpJobs()
+            $script:p.Completed | Should -Be @("DONE")
+            $script:p.ActiveJobs.Count | Should -Be 0
         }
 
         It "Skips null entries without throwing" {

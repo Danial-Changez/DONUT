@@ -496,6 +496,7 @@ class HomePresenter : AsyncJobPresenter {
 
         foreach ($hostName in $targetHosts) {
             $this.EnsureRow($hostName)
+            $this.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
             $this.StartInventory($hostName, $true)
         }
         $this.SelectHost($targetHosts[0])
@@ -1006,6 +1007,12 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ActiveJobs.Count -eq 0 -and $this.ManualRebootQueue.Count -gt 0) {
             $this.ShowManualRebootNotice()
         }
+    }
+
+    # A confirm/alert/update dialog is modal; while one is up the pump must not open
+    # another (it would deadlock the UI). PumpJobs defers completion work until it closes.
+    [bool] IsModalOpen() {
+        return ($null -ne $this.DialogPresenter) -and $this.DialogPresenter.IsShowing
     }
 
     # Records the host's final state into the recent store and renders the row idle.
