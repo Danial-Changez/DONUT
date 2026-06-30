@@ -448,9 +448,26 @@ Describe "WorkerServices" {
             
             $options = @{ reboot = $true }
             $service.RunApplyPhase($device, $options)
-            
+
             # Arguments should contain the merged options
             $service.LastPsExecParams.Arguments | Should -Not -BeNullOrEmpty
+        }
+
+        It "Does not leak control keys (ResolvedIp) into the dcu-cli arguments" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $device = [DeviceContext]::new("ApplyTestHost")
+
+            # ResolvedIp is the IP seed AttachResolvedIp threads through Options; it is NOT
+            # a dcu-cli option and must be filtered out (else DCU returns 105). A real
+            # option in the same bag must still pass through.
+            $service.RunApplyPhase($device, @{ ResolvedIp = '10.124.28.147'; reboot = $true })
+
+            $service.LastPsExecParams.Arguments | Should -Not -Match 'ResolvedIp'
+            $service.LastPsExecParams.Arguments | Should -Match 'reboot'
         }
     }
 
