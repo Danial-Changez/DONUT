@@ -492,7 +492,7 @@ class ExecutionService {
         # *.xml the scan left in the remote DONUT folder. That is the report.
         $report = $null
         try {
-            $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -ErrorAction Stop |
+            $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -Recurse -ErrorAction Stop |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
         }
         catch {
@@ -503,7 +503,12 @@ class ExecutionService {
             $this.Logger.LogInfo("[$hostName] Copied scan report '$($report.Name)' -> $hostName-Updates.xml")
         }
         else {
-            $this.Logger.LogWarning("[$hostName] No scan report (*.xml) found in $remoteDir - the apply/count will see no updates.")
+            # Log what DCU actually left behind, so we can see whether it wrote the report
+            # under a different name/location - or didn't write one at all.
+            $contents = try {
+                (Get-ChildItem -Path $remoteDir -Recurse -ErrorAction Stop | ForEach-Object { $_.Name }) -join ', '
+            } catch { '<unreadable>' }
+            $this.Logger.LogWarning("[$hostName] No scan report (*.xml) found under $remoteDir - the apply/count will see no updates. Folder contains: $contents")
         }
 
         return @{ Log = $localLog; Report = $localReport }
