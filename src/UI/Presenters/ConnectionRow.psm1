@@ -41,6 +41,7 @@ class ConnectionRow {
     hidden [double]      $LastPercent = -1   # last % parsed from DCU output (-1 = unknown)
     hidden [string]      $BaseSubtitle = ''  # idle subtitle before the reachability suffix
     hidden [string]      $Reachability = 'Unknown'  # 'Online' | 'Offline' | 'Unknown'
+    hidden [string]      $IdleStatus = ''           # last job status, to restore the chip after offline
 
     ConnectionRow([string]$hostName) {
         $this.HostName = $hostName
@@ -196,21 +197,13 @@ class ConnectionRow {
 
     # Renders the persisted/idle state from a stored RecentConnection record.
     [void] SetIdleFrom([RecentConnection]$rc) {
-        $colorKey = [ConnectionRow]::IdleColorKey($rc.LastStatus)
-        $accent = $this.Brush($colorKey, [Colors]::Gray)
-        $this.Dot.Fill = $accent
+        $this.IdleStatus = $rc.LastStatus
+        $this.Dot.Fill = $this.Brush([ConnectionRow]::IdleColorKey($rc.LastStatus), [Colors]::Gray)
 
         $this.Progress.Visibility = [Visibility]::Collapsed
         $this.LastPercent = -1
 
-        if ([string]::IsNullOrWhiteSpace($rc.LastStatus)) {
-            $this.ChipBg.Visibility = [Visibility]::Collapsed
-        } else {
-            $this.ChipBg.Visibility = [Visibility]::Visible
-            $this.ChipText.Text = [ConnectionRow]::HumanStatus($rc.LastStatus)
-            $this.ChipText.Foreground = $accent
-            $this.ChipBg.Background = $this.Tint($accent, 38)
-        }
+        $this.ApplyChip()
 
         $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
             'never run'
@@ -228,7 +221,23 @@ class ConnectionRow {
     [void] SetReachability([string]$state) {
         $this.Reachability = $state
         $this.Dot.Opacity = $(if ($state -eq 'Offline') { 0.4 } else { 1.0 })
+        $this.ApplyChip()
         $this.ApplySubtitle()
+    }
+
+    # Renders the status chip: "Offline" (grey) when the host is unreachable, otherwise
+    # its last job status (hidden when it has never run).
+    hidden [void] ApplyChip() {
+        $status = if ($this.Reachability -eq 'Offline') { 'Offline' } else { $this.IdleStatus }
+        if ([string]::IsNullOrWhiteSpace($status)) {
+            $this.ChipBg.Visibility = [Visibility]::Collapsed
+            return
+        }
+        $accent = $this.Brush([ConnectionRow]::IdleColorKey($status), [Colors]::Gray)
+        $this.ChipBg.Visibility = [Visibility]::Visible
+        $this.ChipText.Text = [ConnectionRow]::HumanStatus($status)
+        $this.ChipText.Foreground = $accent
+        $this.ChipBg.Background = $this.Tint($accent, 38)
     }
 
     # Composes the idle subtitle from its base text plus the reachability tag.

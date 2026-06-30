@@ -846,6 +846,22 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.EnsureRow($hostName)
         $command = $this.Config.GetActiveCommand()
 
+        # Don't scan/apply a host we know is offline (it hangs the worker on the psexec
+        # connect), or one we haven't resolved yet (the worker would do the expensive AD
+        # resolve and can freeze the UI). Surface it and bail; for unknown, kick a resolve.
+        $reach = $this.Resolver.IsHostOnline($hostName)
+        if ($reach -eq 'Offline') {
+            $this.AppendLog($hostName, "Host is offline - skipping $command.")
+            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - skipped.") }
+            if ($row) { $row.SetReachability('Offline') }
+            return
+        }
+        if ($reach -ne 'Online') {
+            $this.PrefetchIp($hostName)
+            $this.AppendLog($hostName, "Resolving $hostName - run again in a moment.")
+            return
+        }
+
         # Reuse a scan that ran within the last 24h instead of re-scanning. A successful
         # apply flips the host's last job to UpdateApply, so this is false afterwards ->
         # the next run re-scans (the only intended bypass).
