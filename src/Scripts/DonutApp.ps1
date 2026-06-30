@@ -15,7 +15,6 @@
     in dependency order.
 #>
 
-# Import classes (resolved at parse time)
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AdSearchResult.psm1"
@@ -37,16 +36,13 @@ using module "..\UI\Presenters\LoginPresenter.psm1"
 using module "..\UI\Presenters\UpdatePresenter.psm1"
 using module "..\Services\ResourceService.psm1"
 
-# Initialize Config
 try {
-    # Initialize ConfigManager and Load Config
     Write-Host "Initializing ConfigManager..."
-    # Resolve parent path to maintain 'src' as the root
+    # Resolve the parent of Scripts\ so 'src' stays the root.
     $srcRoot = (Resolve-Path "$PSScriptRoot\..").Path
     $configManager = [ConfigManager]::new($srcRoot)
     $global:AppConfig = $configManager.LoadConfig()
 
-    # Ensure appdata folders exist (logs/reports)
     foreach ($folder in @("logs","reports")) {
         $path = Join-Path (Split-Path $configManager.ConfigPath -Parent) $folder
         if (-not (Test-Path $path)) { New-Item -Path $path -ItemType Directory -Force | Out-Null }
@@ -58,18 +54,15 @@ try {
     $logger.LogInfo("DONUT starting up.")
     [RunspaceManager]::SetLogger($logger)
 
-    # Initialize RunspaceManager with ThrottleLimit from config
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     [RunspaceManager]::Initialize(1, $throttleLimit)
 
-    # Initialize Resources
     $logger.LogInfo("Loading resources.")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
 
-    # Check for App Updates
     $logger.LogInfo("Checking for updates.")
     try {
         $selfUpdateService = [SelfUpdateService]::new($logger)
@@ -80,7 +73,6 @@ try {
         $logger.LogException("Update check failed", $_)
     }
 
-    # Launch Main Window
     $logger.LogInfo("Initializing MainPresenter.")
     $networkProbe = [NetworkProbe]::new($logger)
     $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)

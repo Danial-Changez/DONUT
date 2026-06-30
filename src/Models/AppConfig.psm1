@@ -175,7 +175,6 @@ class AppConfig {
         $this.SetSetting('throttleLimit', $limit)
     }
 
-    # Build DCU CLI argument string from command args
     # DCU CLI format: -option=value (not /option)
     [string] BuildDcuArgs([string]$command, [hashtable]$overrides) {
         $cmdArgs = $this.GetCommandArgs($command)

@@ -52,8 +52,7 @@ class LoginPresenter {
         }
 
         $this.LoginSuccess = $false
-        
-        # Load Images
+
         $this.LoadImages()
         
         $this.LoginWindow.ShowDialog() | Out-Null
@@ -100,7 +99,6 @@ class LoginPresenter {
 
             Start-Process $response.verification_uri
 
-            # Start Polling Timer
             $presenter = $this
             $this.PollTimer = [DispatcherTimer]::new()
             $this.PollTimer.Interval = [TimeSpan]::FromSeconds($this.Interval)
