@@ -211,11 +211,14 @@ class AppConfig {
             # String values with content
             elseif ($val -is [string]) {
                 # Quote values containing a space OR a comma. The command runs
-                # remotely under `pwsh -c`, where a bare comma is the array
-                # operator and breaks parsing (e.g. a multi-value option like
-                # -updateDeviceCategory=audio,video,network).
+                # remotely as  pwsh -c "<cmd>"  (PsExec strips its own quoting), so
+                # SINGLE-quote the value: double quotes would close that outer -c
+                # string in PsExec, and a bare comma is PowerShell's array operator.
+                # PowerShell consumes the single quotes, so dcu-cli still receives
+                # -key=value (e.g. -updateDeviceCategory=audio,video,network).
                 if ($val -match '[\s,]') {
-                    $argList.Add("-$key=`"$val`"") | Out-Null
+                    $escaped = $val -replace "'", "''"
+                    $argList.Add("-$key='$escaped'") | Out-Null
                 } else {
                     $argList.Add("-$key=$val") | Out-Null
                 }
