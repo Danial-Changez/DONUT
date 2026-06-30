@@ -626,6 +626,21 @@ Describe "WorkerServices" {
             $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
             $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
         }
+
+        It "Fails fast (no CIM / psexec) when RPC (135) is unreachable" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $probe.IsRpcAvailableResult = $false   # offline / RPC blocked
+            $matcher = [DriverMatchingService]::new()
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.GatherResult = @{ model = 'ShouldNotBeReached' }   # would succeed past the gate
+            $device = [DeviceContext]::new("DeadHost")
+
+            { $service.RunInventoryPhase($device, @{ ScriptText = 'probe' }) } | Should -Throw "*offline*"
+            $service.LastInventoryScript | Should -BeNullOrEmpty   # CIM + psexec fallback never reached
+        }
     }
 
     Context "IsUsableInventory" {

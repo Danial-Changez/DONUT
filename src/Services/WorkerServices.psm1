@@ -240,6 +240,14 @@ class ExecutionService {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
         $ip = $this.ResolvedIpFor($device.HostName)
 
+        # Bounded reachability gate (TCP 135, ~2s) so an offline host fails in seconds
+        # instead of hanging minutes on the unbounded CIM/psexec connect. This is only
+        # IsRpcAvailable - NOT the Test-Connection/ResolveHost combo that stalled a cold
+        # runspace - and the socket/CIM assemblies are pre-warmed, so it can't cold-load.
+        if (-not $this.Probe.IsRpcAvailable($ip)) {
+            throw [RemoteJobService]::Fail($this.Logger, [HostOfflineException]::new($device.HostName))
+        }
+
         # Fast path: gather over a remote CIM/DCOM session. A null result (session
         # wouldn't open), an all-null/unusable result (DCOM answered but WMI gave
         # nothing), or a thrown error all count as failure and fall through to the
@@ -467,30 +475,37 @@ class ExecutionService {
 
     [hashtable] CopyRemoteArtifacts([string] $hostName) {
         $ip = $this.ResolvedIpFor($hostName)
+        $remoteDir = "\\$ip\C$\temp\DONUT"
+        $remoteLog = Join-Path $remoteDir "scan.log"
 
-        # Remote Paths (UNC)
-        $remoteLog = "\\$ip\C$\temp\DONUT\scan.log"
-        $remoteReport = "\\$ip\C$\temp\DONUT\Report.xml" # DCU default report name might vary, usually Report.xml in the folder
-        
-        # If we specified -report C:\temp\DONUT, it creates C:\temp\DONUT\Report.xml (or similar)
-        # We need to be sure about the report filename.
-        # DCU 4.x+ usually creates "Report.xml" inside the folder.
-        
         $localLog = Join-Path $this.LocalLogsDir "$hostName.log"
         # Must match RemoteUpdateService.ParseUpdateReport's "<host>-Updates.xml", or the
         # scan's report is never read and the pending-updates count stays 0.
         $localReport = Join-Path $this.LocalReportsDir "$hostName-Updates.xml"
-        
+
         if (Test-Path $remoteLog) {
             Copy-Item -Path $remoteLog -Destination $localLog -Force
         }
-        
-        # Check for report file (it might be named differently or inside a subfolder)
-        # We'll try the standard one.
-        if (Test-Path "\\$ip\C$\temp\DONUT\Report.xml") {
-            Copy-Item -Path "\\$ip\C$\temp\DONUT\Report.xml" -Destination $localReport -Force
+
+        # DCU names its scan report inconsistently across versions (Report.xml,
+        # DCUApplicableUpdates.xml, ...), so don't guess a single name - copy the NEWEST
+        # *.xml the scan left in the remote DONUT folder. That is the report.
+        $report = $null
+        try {
+            $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -ErrorAction Stop |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
         }
-        
+        catch {
+            $this.Logger.LogWarning("[$hostName] Could not list reports in $remoteDir : $($_.Exception.Message)")
+        }
+        if ($report) {
+            Copy-Item -Path $report.FullName -Destination $localReport -Force
+            $this.Logger.LogInfo("[$hostName] Copied scan report '$($report.Name)' -> $hostName-Updates.xml")
+        }
+        else {
+            $this.Logger.LogWarning("[$hostName] No scan report (*.xml) found in $remoteDir - the apply/count will see no updates.")
+        }
+
         return @{ Log = $localLog; Report = $localReport }
     }
 
