@@ -20,6 +20,7 @@ class AsyncJob {
     [JobStatus] $Status
     [ConcurrentQueue[string]] $Logs
     [object] $Result
+    [string] $FailureMessage = ''   # first error text when Status is Failed (survives the runspace boundary)
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
@@ -73,6 +74,9 @@ class AsyncJob {
                 $this.Status = if ($this.PowerShell.HadErrors) { [JobStatus]::Failed } else { [JobStatus]::Completed }
 
                 if ($this.PowerShell.HadErrors) {
+                    if ($this.PowerShell.Streams.Error.Count -gt 0) {
+                        $this.FailureMessage = [string]$this.PowerShell.Streams.Error[0]
+                    }
                     foreach ($err in $this.PowerShell.Streams.Error) {
                         $this.Logs.Enqueue("Error: $err")
                         $this.Logger.LogError("[$($this.HostName)] $($this.JobType) error: $err")
@@ -84,6 +88,7 @@ class AsyncJob {
             }
             catch {
                 $this.Status = [JobStatus]::Failed
+                $this.FailureMessage = $_.Exception.Message
                 $this.Logs.Enqueue("Exception: $_")
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }

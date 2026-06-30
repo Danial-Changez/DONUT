@@ -29,6 +29,7 @@ using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\AdSearchResult.psm1"
 using module "..\..\Models\ScanCacheDecision.psm1"
+using module "..\..\Models\RemoteError.psm1"
 
 <#
 .SYNOPSIS
@@ -960,7 +961,14 @@ class HomePresenter : AsyncJobPresenter {
     [void] SettleHost([AsyncJob]$job) {
         $reboot = $this.ManualRebootQueue.Contains($job.HostName)
         $status = if ($job.Status -eq 'Failed') {
-            'Failed'
+            # An offline host gets its own grey "Offline" card instead of a red
+            # "Failed" - the box is just powered off, not faulted. The exception type
+            # is lost across the runspace boundary, so re-derive it from the message.
+            if ([RemoteFailure]::ReasonFromMessage($job.FailureMessage) -eq [RemoteFailureReason]::Offline) {
+                'Offline'
+            } else {
+                'Failed'
+            }
         } elseif ($reboot) {
             'RebootRequired'
         } else {
