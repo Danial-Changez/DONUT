@@ -164,9 +164,12 @@ class ExecutionService {
         }
         $scanArgs = $this.Config.BuildDcuArgs('scan', $remoteOverrides)
         
-        # If no updateDeviceCategory specified, default to all categories
+        # If no updateDeviceCategory specified, default to all categories.
+        # Single-quote the comma list so it survives the remote `pwsh -c` wrapper
+        # (a bare comma is PowerShell's array operator and breaks parsing); the
+        # remote PowerShell strips the quotes, so dcu-cli gets the plain list.
         if ($scanArgs -notmatch '-updateDeviceCategory') {
-            $scanArgs += ' -updateDeviceCategory=audio,video,network,storage,input,chipset,others'
+            $scanArgs += " -updateDeviceCategory='audio,video,network,storage,input,chipset,others'"
         }
         
         $params = @{

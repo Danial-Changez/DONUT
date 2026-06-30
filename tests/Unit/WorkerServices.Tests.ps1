@@ -164,8 +164,21 @@ Describe "WorkerServices" {
             $device = [DeviceContext]::new("TestHost")
 
             $result = $service.RunScanPhase($device)
-            
+
             $result.LogPath | Should -Be "C:\Fake\Scan.log"
+        }
+
+        It "Single-quotes the default updateDeviceCategory so the remote pwsh -c parses it" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.RunScanPhase([DeviceContext]::new("TestHost"))
+
+            # The BeforeEach config sets no updateDeviceCategory, so the default
+            # list is appended; it must be single-quoted (not bare commas).
+            $service.LastPsExecParams.Arguments | Should -BeLike "*-updateDeviceCategory='audio,video,network,storage,input,chipset,others'*"
         }
     }
 
