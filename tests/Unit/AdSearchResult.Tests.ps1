@@ -26,6 +26,12 @@ Describe "AdFilter filter construction" {
         $f | Should -Match ([regex]::Escape('name=WS-01*'))
         $f | Should -Match ([regex]::Escape('(objectCategory=computer)'))
     }
+    It "CombinedFilter ORs the computer and user filters into one query" {
+        $f = [AdFilter]::CombinedFilter('sar')
+        $f | Should -Match ([regex]::Escape('(objectCategory=computer)'))   # computer clause
+        $f | Should -Match ([regex]::Escape('(objectClass=user)'))         # user clause
+        $f | Should -Match '^\(\|\('                                       # top-level OR
+    }
     It "escapes an injection attempt so no extra clause is injected" {
         $f = [AdFilter]::UserFilter('a)(uid=*')
         $f | Should -Match ([regex]::Escape('sAMAccountName=a\29\28uid=\2a'))

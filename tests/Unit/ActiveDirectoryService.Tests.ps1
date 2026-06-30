@@ -23,8 +23,11 @@ class FakeAdService : ActiveDirectoryService {
     hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter, [string[]]$props, [int]$max) {
         $this.QueryCount++
         if ($this.FailDomains -contains $domain) { throw "domain $domain unreachable" }
-        $rows = if ($filter -like '*objectCategory=computer*') { $this.ComputerRows[$domain] } else { $this.UserRows[$domain] }
-        if ($null -eq $rows) { return @() }
+        # The combined filter asks for computers AND users in one query, so return both;
+        # MapRow decides each row's kind from its objectCategory.
+        $rows = @()
+        if ($null -ne $this.ComputerRows[$domain]) { $rows += $this.ComputerRows[$domain] }
+        if ($null -ne $this.UserRows[$domain]) { $rows += $this.UserRows[$domain] }
         return @($rows)
     }
 
@@ -44,10 +47,12 @@ BeforeAll {
             'msDS-User-Account-Control-Computed' = $(if ($locked) { 0x10 } else { 0x0 })
             'userAccountControl'                 = 0x200
             'distinguishedName'                  = "CN=$sam,DC=x"
+            'objectCategory'                     = 'CN=Person,CN=Schema,CN=Configuration,DC=x'
         }
     }
     function New-CompRow([string]$name) {
-        return @{ 'name' = $name; 'sAMAccountName' = "$name`$"; 'userAccountControl' = 0x1000; 'distinguishedName' = "CN=$name,DC=x" }
+        return @{ 'name' = $name; 'sAMAccountName' = "$name`$"; 'userAccountControl' = 0x1000; 'distinguishedName' = "CN=$name,DC=x"
+            'objectCategory' = 'CN=Computer,CN=Schema,CN=Configuration,DC=x' }
     }
 }
 
