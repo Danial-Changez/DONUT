@@ -1,5 +1,4 @@
 @startuml AD Finder Sequence Diagram
-!include _dark-theme.puml
 title Home Search Bar — Live AD Finder + Unlock
 
 actor User

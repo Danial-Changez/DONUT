@@ -1,8 +1,6 @@
 @startuml Class Diagram
-!include _dark-theme.puml
 title DONUT — Class Structure
 skinparam classAttributeIconSize 0
-skinparam linetype ortho
 
 ' Each layer carries its own muted tint so the four packages read at a glance:
 '   Models = blue · Core = green · Services = violet · UI = amber

@@ -1,5 +1,4 @@
 @startuml Self-Update Sequence Diagram
-!include _dark-theme.puml
 title Self-Update (GitHub device flow + MSI)
 
 actor User

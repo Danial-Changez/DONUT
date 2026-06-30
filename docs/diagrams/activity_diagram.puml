@@ -1,5 +1,4 @@
 @startuml Activity Diagram
-!include _dark-theme.puml
 title Remote Worker Flow (ExecutionService, in a pool runspace)
 
 start

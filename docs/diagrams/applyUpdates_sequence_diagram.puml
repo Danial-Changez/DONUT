@@ -1,5 +1,4 @@
 @startuml Apply Updates Sequence Diagram
-!include _dark-theme.puml
 title Apply Updates (scan reuse + confirm)
 
 actor User
