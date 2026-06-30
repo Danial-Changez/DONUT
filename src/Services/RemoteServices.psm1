@@ -1,4 +1,5 @@
 using module "..\Models\AppConfig.psm1"
+using module "..\Models\RemoteError.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
 using module ".\DriverMatchingService.psm1"
@@ -44,23 +45,31 @@ class RemoteJobService {
     # without duplicating it.
     static [string] AssertHostReachable([NetworkProbe]$probe, [LogService]$logger, [string]$hostName) {
         if (-not $probe.IsOnline($hostName)) {
-            $logger.LogError("Connectivity check failed: host '$hostName' is offline or unreachable.")
-            throw "Host '$hostName' is offline or unreachable."
+            throw [RemoteJobService]::Fail($logger, [HostOfflineException]::new($hostName))
         }
 
         $ip = $probe.ResolveHost($hostName)
         if (-not $ip) {
-            $logger.LogError("Connectivity check failed: could not resolve IP for '$hostName'.")
-            throw "Could not resolve IP for '$hostName'."
+            throw [RemoteJobService]::Fail($logger, [HostUnresolvableException]::new($hostName))
         }
 
         if (-not $probe.IsRpcAvailable($hostName)) {
-            $logger.LogError("Connectivity check failed: RPC (Port 135) not available on '$hostName'.")
-            throw "RPC (Port 135) is not available on '$hostName'. Check firewall rules."
+            throw [RemoteJobService]::Fail($logger, [RpcUnavailableException]::new($hostName))
         }
 
         $logger.LogDebug("Host '$hostName' passed connectivity checks ($ip).")
         return $ip.ToString()
+    }
+
+    # Logs a typed failure at its carried severity and returns it for the caller to
+    # throw, so the log entry and the exception can never drift apart.
+    hidden static [RemoteOperationException] Fail([LogService]$logger, [RemoteOperationException]$ex) {
+        switch ($ex.Level) {
+            ([ErrorLevel]::Warning) { $logger.LogWarning($ex.Message); break }
+            ([ErrorLevel]::Error)   { $logger.LogError($ex.Message); break }
+            default                 { $logger.LogInfo($ex.Message); break }
+        }
+        return $ex
     }
 
     hidden [hashtable] BuildWorkerArgs([string]$hostName, [string]$jobType, [hashtable]$options) {

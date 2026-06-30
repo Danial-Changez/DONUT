@@ -1,4 +1,5 @@
 using module "..\..\src\Models\AppConfig.psm1"
+using module "..\..\src\Models\RemoteError.psm1"
 using module "..\..\src\Core\NetworkProbe.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Services\DriverMatchingService.psm1"
@@ -195,10 +196,52 @@ Describe "RemoteServices" {
         }
     }
 
-    # Connectivity assertion (offline / unresolvable / no-RPC / reverse-DNS) now
-    # lives in the worker on the runspace-pool thread, so it no longer runs in the
-    # UI-thread Prepare* methods. Those cases are covered by WorkerServices.Tests
-    # (ExecutionService.AssertReachable + the phase-level wiring).
+    # The connectivity assertion runs in the worker on the runspace-pool thread, so
+    # it no longer runs in the UI-thread Prepare* methods. Its phase-level wiring is
+    # covered by WorkerServices.Tests; the typed/leveled failure policy itself is
+    # exercised directly here.
+    Context "AssertHostReachable (typed, leveled failures)" {
+        It "Throws HostOfflineException (Warning) when the host is offline" {
+            $probe = [MockNetworkProbe]::new(); $probe.IsOnlineResult = $false
+            $ex = $null
+            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-OFF') } catch { $ex = $_.Exception }
+            $ex.GetType().Name | Should -Be 'HostOfflineException'
+            [string]$ex.Level | Should -Be 'Warning'
+            $ex.HostName | Should -Be 'PC-OFF'
+            $ex.Message | Should -BeLike '*offline*'
+        }
+
+        It "Throws HostUnresolvableException (Error) when the IP cannot be resolved" {
+            $probe = [MockNetworkProbe]::new(); $probe.ResolveHostResult = $null
+            $ex = $null
+            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-DNS') } catch { $ex = $_.Exception }
+            $ex.GetType().Name | Should -Be 'HostUnresolvableException'
+            [string]$ex.Level | Should -Be 'Error'
+            $ex.HostName | Should -Be 'PC-DNS'
+        }
+
+        It "Throws RpcUnavailableException (Error) when RPC (port 135) is blocked" {
+            $probe = [MockNetworkProbe]::new(); $probe.IsRpcAvailableResult = $false
+            $ex = $null
+            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-RPC') } catch { $ex = $_.Exception }
+            $ex.GetType().Name | Should -Be 'RpcUnavailableException'
+            [string]$ex.Level | Should -Be 'Error'
+            $ex.Message | Should -BeLike '*RPC*'
+        }
+
+        It "Logs the failure at its carried severity (Warning for offline)" {
+            $probe = [MockNetworkProbe]::new(); $probe.IsOnlineResult = $false
+            $log = [CapturingLogService]::new()
+            try { [RemoteJobService]::AssertHostReachable($probe, $log, 'PC-OFF') } catch { }
+            $log.HasLevel('WARN') | Should -BeTrue
+            $log.Contains('offline') | Should -BeTrue
+        }
+
+        It "Returns the resolved IP string when the host passes every check" {
+            $probe = [MockNetworkProbe]::new()
+            [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-OK') | Should -Be '127.0.0.1'
+        }
+    }
 
     Context "Logging" {
         It "Should default to a no-op logger when constructed without one" {
