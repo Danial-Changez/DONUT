@@ -36,7 +36,7 @@ class HomePresenter : AsyncJobPresenter {
     [TextBox] $SearchBar
     [Button] $SearchButton
     [Button] $ClearButton
-    [Button] $RefreshButton
+    [Button] $RunAllButton
     [ItemsControl] $MachineList
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
@@ -64,7 +64,6 @@ class HomePresenter : AsyncJobPresenter {
     [TextBlock] $DetailHostText
     [TextBlock] $DetailProbed
     [Button] $DetailRefreshButton
-    [Button] $DetailRunButton
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
@@ -160,7 +159,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
         $this.SearchButton = $this.ViewContent.FindName('btnSearch')
         $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
-        $this.RefreshButton = $this.ViewContent.FindName('btnRefresh')
+        $this.RunAllButton = $this.ViewContent.FindName('btnRunAll')
         $this.MachineList = $this.ViewContent.FindName('MachineList')
         $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
         $this.ModePill = $this.ViewContent.FindName('txtMode')
@@ -183,7 +182,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.DetailHostText = $this.ViewContent.FindName('txtDetailHost')
         $this.DetailProbed = $this.ViewContent.FindName('txtDetailProbed')
         $this.DetailRefreshButton = $this.ViewContent.FindName('btnDetailRefresh')
-        $this.DetailRunButton = $this.ViewContent.FindName('btnDetailRun')
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
         $this.FindFoldersButton = $this.ViewContent.FindName('btnFindFolders')
@@ -193,10 +191,9 @@ class HomePresenter : AsyncJobPresenter {
         $presenter = $this
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
         if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
-        if ($this.RefreshButton) { $this.RefreshButton.Add_Click({ $presenter.RefreshAll() }.GetNewClosure()) }
+        if ($this.RunAllButton) { $this.RunAllButton.Add_Click({ $presenter.RunAll() }.GetNewClosure()) }
         if ($this.ModeButton) { $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure()) }
         if ($this.DetailRefreshButton) { $this.DetailRefreshButton.Add_Click({ $presenter.RefreshInventory($presenter.SelectedHost) }.GetNewClosure()) }
-        if ($this.DetailRunButton) { $this.DetailRunButton.Add_Click({ $presenter.RunHost($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.FindFoldersButton) { $this.FindFoldersButton.Add_Click({ $presenter.FindBigFolders($presenter.SelectedHost) }.GetNewClosure()) }
         if ($this.SearchBar) {
             $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
@@ -392,9 +389,10 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     [void] UpdateModePill() {
+        # The Add button is static ("Add" = queue + gather inventory); only the mode
+        # pill reflects the active command that Run / Run all will execute.
         $command = $this.Config.GetActiveCommand()
         $label = if ($command -eq 'applyUpdates') { "Apply Updates" } else { "Scan" }
-        if ($this.SearchButton) { $this.SearchButton.Content = $label }
         if ($this.ModePill) { $this.ModePill.Text = $label }
     }
 
@@ -425,6 +423,9 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateEmptyHint()
     }
 
+    # "Add": queue the typed host(s) into the machine list and gather their inventory.
+    # Non-destructive - it never scans/applies. Running the active command is a
+    # deliberate, separate step (per-row Run, or "Run all").
     [void] OnSearch() {
         $rawInput = $this.SearchBar.Text
         if ([string]::IsNullOrWhiteSpace($rawInput)) { return }
@@ -435,25 +436,39 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($targetHosts.Count -eq 0) { return }
 
-        # One confirmation for a destructive batch; single rows confirm in RunHost.
+        foreach ($hostName in $targetHosts) {
+            $this.EnsureRow($hostName)
+            $this.StartInventory($hostName, $true)
+        }
+        $this.SelectHost($targetHosts[0])
+        $this.UpdateEmptyHint()
+
+        $this.SearchBar.Text = ""
+    }
+
+    # "Run all": run the active command (Scan / Apply Updates) on every idle machine
+    # in the list. One confirmation for a destructive batch; per-host runs go through
+    # StartProcess (which reuses a fresh scan / shows the per-host updates confirm).
+    [void] RunAll() {
+        $idleHosts = @($this.Store.GetAll() | ForEach-Object { $_.Hostname } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $this.IsRunning($_) })
+        if ($idleHosts.Count -eq 0) { return }
+
         $command = $this.Config.GetActiveCommand()
-        if ($command -eq 'applyUpdates' -and $targetHosts.Count -gt 1) {
+        if ($command -eq 'applyUpdates') {
             $confirmed = $this.DialogPresenter.ShowConfirmation(
                 "Confirm Apply Updates",
-                "You are about to apply updates to $($targetHosts.Count) computers.",
-                $targetHosts
+                "You are about to apply updates to $($idleHosts.Count) computer(s).",
+                $idleHosts
             )
             if (-not $confirmed) { return }
         }
 
         $this.ManualRebootQueue.Clear()
-        $this.TotalJobsInBatch = $targetHosts.Count
-
-        foreach ($hostName in $targetHosts) {
+        $this.TotalJobsInBatch = $idleHosts.Count
+        foreach ($hostName in $idleHosts) {
             $this.StartProcess($hostName)
         }
-
-        $this.SearchBar.Text = ""
     }
 
     # ===================== AD live search (search-bar dropdown) =====================
@@ -1355,7 +1370,8 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     # Re-renders the overview strip + idle row timestamps; re-probes the selected
-    # machine if one is open (this is what the top Refresh button now does).
+    # machine if one is open. Called once on Initialize (the top-bar Refresh button
+    # was removed - the per-machine "Refresh info" handles on-demand re-probes).
     [void] RefreshAll() {
         if ($this.SelectedHost) { $this.RefreshInventory($this.SelectedHost) }
         $this.UpdateOverviewTiles()

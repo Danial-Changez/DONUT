@@ -61,7 +61,7 @@
         <Button
           x:Name="btnSearch"
           Grid.Column="2"
-          Content="Scan"
+          Content="Add"
           Style="{DynamicResource ButtonPrimary}"
           FontSize="12.5"
           Height="32"
@@ -111,11 +111,11 @@
       </StackPanel>
     </Button>
 
-    <!-- Refresh (neutral secondary, like Arcane's dashboard Refresh) -->
+    <!-- Run all idle machines using the active mode (Scan / Apply Updates) -->
     <Button
-      x:Name="btnRefresh"
+      x:Name="btnRunAll"
       Grid.Column="2"
-      Content="Refresh"
+      Content="Run all"
       Style="{DynamicResource ButtonOutline}"
       Width="100"
       Height="36"
@@ -266,12 +266,10 @@
               <TextBlock x:Name="txtDetailProbed" Text="" FontFamily="Montserrat" FontSize="11"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
-            <Button x:Name="btnFindFolders" Grid.Column="1" Content="Find big folders"
+            <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
                     Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
-            <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh"
-                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
-            <Button x:Name="btnDetailRun" Grid.Column="3" Content="Run"
-                    Style="{DynamicResource ButtonPrimary}" FontSize="12.5" Width="90" Height="32" Margin="6,0,0,0" />
+            <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
+                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
           </Grid>
 
           <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
@@ -281,7 +279,7 @@
               <TextBlock Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
               <TextBlock x:Name="DiskFoldersHint"
-                         Text="Click &quot;Find big folders&quot; to scan this machine's C: drive."
+                         Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
                          TextWrapping="Wrap" />
               <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
