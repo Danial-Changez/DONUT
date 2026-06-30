@@ -111,6 +111,7 @@ class HomePresenter : AsyncJobPresenter {
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
+    [List[hashtable]] $AdWarmJobs          # one-shot startup AD warm jobs (results discarded)
     [List[object]]    $SearchResults       # accumulated rows for the current token (forests stream in)
     [HashSet[string]] $SearchSeen          # dedupe keys (Kind|Domain|Sam) for the current token
     [bool]            $SuppressSearch = $false
@@ -162,10 +163,11 @@ class HomePresenter : AsyncJobPresenter {
         # poll for completion (newest result wins).
         $this.AdService = [ActiveDirectoryService]::new($this.Config.GetDomains(), $this.Logger)
         $this.SearchJobs = [List[hashtable]]::new()
+        $this.AdWarmJobs = [List[hashtable]]::new()
         $this.SearchResults = [List[object]]::new()
         $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $this.SearchDebounce = [DispatcherTimer]::new()
-        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(350)
+        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(250)
         $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
         $this.SearchPollTimer = [DispatcherTimer]::new()
         $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
@@ -249,6 +251,12 @@ class HomePresenter : AsyncJobPresenter {
         # always lands on a warm runspace. Costs a brief one-time startup delay.
         $this.WarmPool()
 
+        # Prime the AD finder in the background (NOT blocking, unlike WarmPool): one
+        # throwaway search per forest so the AdSearchWorker graph + the per-forest LDAP
+        # bind / Kerberos ticket are warm before the user types. Fire-and-forget on the
+        # now-warm pool, so it never delays the window appearing.
+        $this.WarmAdSearch()
+
         $this.StartWarm()
     }
 
@@ -315,6 +323,37 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
         $this.Logger.LogInfo("Pre-warmed $($shells.Count) runspace(s).")
+    }
+
+    # Background, fire-and-forget AD-finder warm: one throwaway search per forest so the
+    # AdSearchWorker module graph, System.DirectoryServices, and the per-forest LDAP bind
+    # / Kerberos ticket are primed before the first keystroke. BeginInvoke with NO wait,
+    # so (unlike WarmPool) it never blocks the window from appearing. The handles are
+    # reaped on the first real search (ReapAdWarm).
+    hidden [void] WarmAdSearch() {
+        $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
+        foreach ($domain in $this.AdService.Domains) {
+            try {
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = [RunspaceManager]::GetPool()
+                $ps.AddCommand($worker) | Out-Null
+                $ps.AddParameter('Domains', @($domain)) | Out-Null
+                $ps.AddParameter('Prefix', 'zzz') | Out-Null   # throwaway: warms the bind, results discarded
+                $handle = $ps.BeginInvoke()
+                $this.AdWarmJobs.Add(@{ Ps = $ps; Handle = $handle })
+            }
+            catch {
+                $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
+            }
+        }
+    }
+
+    # Dispose the startup AD warm jobs (their results are never read). By the first real
+    # search they've done their job - loaded the graph and bound each forest.
+    hidden [void] ReapAdWarm() {
+        if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
+        foreach ($j in @($this.AdWarmJobs)) { try { $j.Ps.Dispose() } catch { } }
+        $this.AdWarmJobs.Clear()
     }
 
     # Resolve a host's IP in the background (single-flight). No-op until a DC is
@@ -565,6 +604,7 @@ class HomePresenter : AsyncJobPresenter {
     # Debounce elapsed: kick a background search on the runspace pool.
     [void] RunAdSearch() {
         $this.SearchDebounce.Stop()
+        $this.ReapAdWarm()   # startup warm has served its purpose once a real search runs
         $prefix = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
         if ($prefix.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
 
