@@ -171,6 +171,29 @@ class NetworkProbe {
         }
     }
 
+    [bool] IsSmbAvailable([string]$hostName) {
+        # Test TCP port 445 (SMB) - the admin share ($C$) and psexec transport. RPC (135)
+        # being open doesn't imply 445 is; when it's blocked, a host-side Test-Path over
+        # the admin share (and psexec itself) hangs with no timeout, so check it up front.
+        try {
+            $client = [TcpClient]::new()
+            $result = $client.BeginConnect($hostName, 445, $null, $null)
+            $success = $result.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))
+            if ($success) {
+                $client.EndConnect($result)
+                $client.Close()
+                return $true
+            }
+            $client.Close()
+            $this.Logger.LogDebug("SMB (port 445) not reachable on '$hostName'.")
+            return $false
+        }
+        catch {
+            $this.Logger.LogDebug("SMB availability check for '$hostName' failed: $($_.Exception.Message)")
+            return $false
+        }
+    }
+
     [bool] IsOnline([string]$hostName) {
         try {
             return (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)
