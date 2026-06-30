@@ -117,13 +117,15 @@ class WizTreeCsv {
     }
 }
 
-# One node in the rendered folder tree: the original path + size, plus the
-# display label (segment relative to its shown parent) and indent depth.
+# One node in the rendered folder tree: the original path + size, the display label
+# (segment relative to its shown parent), indent depth, and (for the nested view)
+# its child folders in size-ranked order.
 class FolderTreeNode {
     [string] $Path = ''
     [string] $Label = ''
     [long]   $SizeBytes = 0
     [int]    $Depth = 0
+    [FolderTreeNode[]] $Children = @()
 }
 
 # Pure helper that arranges a flat, size-ranked folder list into a tree by path
@@ -196,6 +198,56 @@ class DiskUsageTree {
         }
 
         return $out.ToArray()
+    }
+
+    # Same containment logic as Build, but returns the ROOT nodes with their Children
+    # populated (size-ranked order preserved at every level) for a real TreeView render.
+    static [FolderTreeNode[]] BuildNested([FolderUsage[]]$folders) {
+        $items = @($folders | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
+        if ($items.Count -eq 0) { return @() }
+
+        # parent[i] = index of the deepest other item whose path is a prefix of items[i].
+        $parent = @{}
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $best = -1; $bestLen = -1
+            for ($j = 0; $j -lt $items.Count; $j++) {
+                if ($i -eq $j) { continue }
+                $p = $items[$j].Path
+                if ($p.Length -lt $items[$i].Path.Length -and
+                    $items[$i].Path.StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase) -and
+                    $p.Length -gt $bestLen) {
+                    $best = $j; $bestLen = $p.Length
+                }
+            }
+            $parent[$i] = $best
+        }
+
+        # One node per item (depth + label below its shown parent).
+        $nodes = @()
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $d = 0; $cur = $parent[$i]
+            while ($cur -ge 0) { $d++; $cur = $parent[$cur] }
+            $pIdx = $parent[$i]
+            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) } else { $items[$i].Path }
+            if ([string]::IsNullOrEmpty($lbl)) { $lbl = $items[$i].Path }
+
+            $n = [FolderTreeNode]::new()
+            $n.Path = $items[$i].Path
+            $n.SizeBytes = $items[$i].SizeBytes
+            $n.Depth = $d
+            $n.Label = $lbl
+            $n.Children = @()
+            $nodes += $n
+        }
+
+        # Attach each node under its parent (input/size order preserved); collect roots.
+        $roots = [System.Collections.Generic.List[FolderTreeNode]]::new()
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $pIdx = $parent[$i]
+            if ($pIdx -ge 0) { $nodes[$pIdx].Children += $nodes[$i] }
+            else { $roots.Add($nodes[$i]) }
+        }
+        return $roots.ToArray()
     }
 }
 

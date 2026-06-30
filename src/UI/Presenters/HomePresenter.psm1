@@ -1285,17 +1285,29 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Collapsed }
-        foreach ($node in [DiskUsageTree]::Build($report.Folders)) {
-            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderRow($node))
+        # Real tree: nest folders under their parent and render expandable TreeViewItems.
+        foreach ($root in [DiskUsageTree]::BuildNested($report.Folders)) {
+            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderTreeItem($root))
         }
     }
 
-    # Builds one folder row (imperative, like BuildSearchRow): indented label on the
-    # left (nested under its parent folder), size on the right. Deeper nodes are
-    # dimmed slightly so the hierarchy reads at a glance.
-    hidden [object] BuildFolderRow([FolderTreeNode]$node) {
+    # Builds a TreeViewItem for a folder node and (recursively) its children. Roots
+    # start expanded; deeper levels collapse so the panel stays compact.
+    hidden [object] BuildFolderTreeItem([FolderTreeNode]$node) {
+        $item = [TreeViewItem]::new()
+        $item.Header = $this.BuildFolderHeader($node)
+        $item.IsExpanded = ($node.Depth -eq 0)
+        foreach ($child in $node.Children) {
+            [void]$item.Items.Add($this.BuildFolderTreeItem($child))
+        }
+        return $item
+    }
+
+    # The header content for a folder node: label on the left (the TreeView supplies
+    # the indent + guide line), human-readable size on the right.
+    hidden [object] BuildFolderHeader([FolderTreeNode]$node) {
         $grid = [Grid]::new()
-        $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 3)
+        $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
         $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
         $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
         $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
@@ -1308,8 +1320,6 @@ class HomePresenter : AsyncJobPresenter {
         $path.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
         $path.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
         $path.ToolTip = $node.Path
-        # 14px of indent per tree level (children sit under their parent folder).
-        $path.Margin = [System.Windows.Thickness]::new(($node.Depth * 14), 0, 0, 0)
         [Grid]::SetColumn($path, 0)
         [void]$grid.Children.Add($path)
 
