@@ -301,9 +301,11 @@
               </Grid.RowDefinitions>
               <ProgressBar x:Name="DetailProgress" Grid.Row="0" Height="3" Minimum="0" Maximum="100"
                            Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource AccentPurple}" />
+              <!-- Wrap + no horizontal scrollbar: the themed ScrollBar template is
+                   vertical-only, so a horizontal bar renders as a stray white box. -->
               <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" Background="Transparent" BorderThickness="0"
                        Foreground="#D4D4D8" FontFamily="Consolas" FontSize="12"
-                       TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="6" />
+                       TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="6" />
             </Grid>
           </Border>
         </Grid>
