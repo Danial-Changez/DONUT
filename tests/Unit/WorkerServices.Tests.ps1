@@ -471,7 +471,7 @@ Describe "WorkerServices" {
             $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $device = [DeviceContext]::new("NoRpcHost")
 
-            { $service.AssertReachable($device) } | Should -Throw "*RPC (Port 135) is not available*"
+            { $service.AssertReachable($device) } | Should -Throw "*RPC (port 135) is not reachable*"
         }
 
         It "Should set device IPAddress when reachable" {
