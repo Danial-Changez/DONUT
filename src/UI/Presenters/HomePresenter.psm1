@@ -242,15 +242,14 @@ class HomePresenter : AsyncJobPresenter {
         # in the background. A stale saved DC just falls back until the warm lands.
         $savedDc = [string]$this.Config.Settings['activeDomainController']
         if (-not [string]::IsNullOrWhiteSpace($savedDc)) { $this.Resolver.SetActiveDc($savedDc) }
-        $this.StartWarm()
+        # Warm every pool runspace's module graph SYNCHRONOUSLY now, before the window's
+        # message loop starts (we're still inside MainPresenter construction here). This
+        # is the one safe time to take the loader-lock hit: with no live dispatcher, the
+        # cold-load can't freeze it - so a later job, or the boot inventory prefetch,
+        # always lands on a warm runspace. Costs a brief one-time startup delay.
+        $this.WarmPool()
 
-        # Pre-warm the rest of the pool's runspaces once the UI goes idle (after first
-        # paint), so a later concurrent job never cold-loads the module graph and
-        # freezes the dispatcher. Deferred to idle so the warm-up itself can't freeze
-        # startup.
-        $this.ViewContent.Dispatcher.BeginInvoke(
-            [System.Windows.Threading.DispatcherPriority]::ApplicationIdle,
-            [System.Action]({ $presenter.WarmPool() }.GetNewClosure())) | Out-Null
+        $this.StartWarm()
     }
 
     # --- Start-early IP resolution (background, off the UI thread) --------------------
@@ -268,27 +267,54 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Warms every pool runspace's module graph so concurrent jobs (e.g. inventory +
-    # scan, or a batch of scans) never cold-load on the hot path. Fires throttleLimit
-    # no-op jobs at once - they overlap, forcing the pool to create + warm each
-    # runspace (then free it, so capacity is unaffected). One-shot.
+    # Warms every pool runspace's module graph SYNCHRONOUSLY. Cold-loading the worker
+    # class graph takes the process-wide CLR loader lock, so it MUST finish before the
+    # window's message loop runs - otherwise the first job (or the boot inventory
+    # prefetch) cold-loads while the dispatcher is rendering and freezes the UI. Fires
+    # throttleLimit no-op loads at once, then blocks until they all finish. Called
+    # during startup with no live UI, so the block can't freeze anything. One-shot.
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
         $n = $this.Config.GetThrottleLimit()
         if ($n -lt 1) { $n = 1 }
+
+        $pool = [RunspaceManager]::GetPool()
+        $shells = [System.Collections.Generic.List[object]]::new()
+        $handles = [System.Collections.Generic.List[object]]::new()
         for ($i = 0; $i -lt $n; $i++) {
             try {
                 $prep = $this.Resolver.PrepareWarmRunspace()
-                $job = [AsyncJob]::new('', [JobKind]::Resolve)
-                $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-                $this.ActiveJobs.Add($job)
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = $pool
+                $ps.AddCommand($prep.ScriptPath) | Out-Null
+                foreach ($k in $prep.Arguments.Keys) { $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null }
+                $handles.Add($ps.BeginInvoke())
+                $shells.Add($ps)
             }
             catch {
                 $this.Logger.LogException("Runspace warm-up could not start", $_)
             }
         }
-        $this.Logger.LogInfo("Pre-warming $n runspace(s).")
+
+        # Block (bounded) until each runspace has loaded the graph. WaitOne is STA-safe
+        # (WaitHandle.WaitAll throws on an STA thread), so wait on the handles one by one.
+        $deadline = [datetime]::UtcNow.AddSeconds(30)
+        for ($i = 0; $i -lt $shells.Count; $i++) {
+            try {
+                $remaining = [int][Math]::Max(0, [Math]::Ceiling(($deadline - [datetime]::UtcNow).TotalMilliseconds))
+                if ($handles[$i].AsyncWaitHandle.WaitOne($remaining)) {
+                    $shells[$i].EndInvoke($handles[$i])
+                }
+            }
+            catch {
+                $this.Logger.LogException("Runspace warm-up failed", $_)
+            }
+            finally {
+                try { $shells[$i].Dispose() } catch { }
+            }
+        }
+        $this.Logger.LogInfo("Pre-warmed $($shells.Count) runspace(s).")
     }
 
     # Resolve a host's IP in the background (single-flight). No-op until a DC is
