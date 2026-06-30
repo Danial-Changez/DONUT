@@ -340,6 +340,12 @@ class HomePresenter : AsyncJobPresenter {
                 }
                 $this.Resolver.CacheVerdict($hn, $newIp, $online)
                 $this.RenderReachability($hn)
+                # If this host's detail panel is open, surface the freshly-resolved IP.
+                if ($hn -eq $this.SelectedHost) {
+                    $rcSel = $this.GetRecord($hn)
+                    $iso = if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) { $rcSel.Inventory.ProbedAt } else { '' }
+                    $this.RenderDetailSubtitle($hn, $iso)
+                }
             }
             elseif ($mode -eq 'Name') {
                 $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
@@ -1398,18 +1404,31 @@ class HomePresenter : AsyncJobPresenter {
         return $grid
     }
 
-    # Updates the detail header's "probed ..." stamp and refreshes the top overview
-    # strip (which mirrors the selected machine). The per-machine model/battery/disk
-    # facts live in that top strip; the detail pane shows host + folders + log.
-    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
-        if ($this.DetailProbed) {
-            $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
-                         elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
-                         else { '' }
-            $this.DetailProbed.Text = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
-                "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
-            }
+    # Sets the detail-header subtitle under the host name: the real IP we connect to,
+    # followed by the inventory-probe freshness. Either part is omitted when unknown
+    # (so a never-probed host still shows its IP once resolved, and vice versa).
+    hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
+        if (-not $this.DetailProbed) { return }
+        $ip = $this.Resolver.GetCachedIp($hostName)
+        $probedText = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
+            "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
         }
+        $this.DetailProbed.Text = if (-not [string]::IsNullOrWhiteSpace($ip)) {
+            if ($probedText) { "$ip  ·  $probedText" } else { $ip }
+        } else {
+            $probedText
+        }
+    }
+
+    # Updates the detail header subtitle (IP + probe time) and refreshes the top
+    # overview strip (which mirrors the selected machine). The per-machine
+    # model/battery/disk facts live in that top strip; the detail pane shows host +
+    # folders + log.
+    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
+        $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
+                     elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
+                     else { '' }
+        $this.RenderDetailSubtitle($hostName, $probedIso)
 
         # The top overview strip mirrors the selected machine.
         $this.UpdateOverviewTiles()
