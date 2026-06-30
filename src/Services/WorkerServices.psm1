@@ -209,14 +209,21 @@ class ExecutionService {
     [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
 
-        # Pass only runtime options to /applyUpdates; let config supply the rest. We do
-        # NOT add -outputLog here: the pending-update count comes from the scan report
-        # (not apply.log), and some DCU builds reject -outputLog on /applyUpdates with a
-        # 105 (invalid command-line syntax) even though /scan accepts it.
-        $remoteOverrides = @{}
+        # Merge runtime options, but ONLY keys that are real dcu-cli options for this
+        # command. The job's Options bag also carries control data - notably ResolvedIp,
+        # the pre-resolved IP seed AttachResolvedIp threads through - which must NEVER
+        # reach the command line: dcu-cli rejects an unknown -ResolvedIp=<ip> with 105
+        # (invalid option syntax). /scan never hit this because it doesn't merge Options
+        # into its args.
+        $remoteOverrides = @{
+            outputLog = 'C:\temp\DONUT\apply.log'
+        }
+        $validOptionKeys = @($this.Config.GetCommandArgs('applyUpdates').Keys)
         if ($null -ne $options) {
             foreach ($key in $options.Keys) {
-                $remoteOverrides[$key] = $options[$key]
+                if ($validOptionKeys -contains $key) {
+                    $remoteOverrides[$key] = $options[$key]
+                }
             }
         }
 
