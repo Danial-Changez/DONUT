@@ -209,17 +209,17 @@ class ExecutionService {
     [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
 
-        # Build apply arguments from config with runtime overrides
-        $remoteOverrides = @{
-            outputLog = 'C:\temp\DONUT\apply.log'
-        }
-        # Merge user-provided options
+        # Pass only runtime options to /applyUpdates; let config supply the rest. We do
+        # NOT add -outputLog here: the pending-update count comes from the scan report
+        # (not apply.log), and some DCU builds reject -outputLog on /applyUpdates with a
+        # 105 (invalid command-line syntax) even though /scan accepts it.
+        $remoteOverrides = @{}
         if ($null -ne $options) {
             foreach ($key in $options.Keys) {
                 $remoteOverrides[$key] = $options[$key]
             }
         }
-        
+
         $applyArgs = $this.Config.BuildDcuArgs('applyUpdates', $remoteOverrides)
 
         $params = @{
@@ -555,7 +555,9 @@ class ExecutionService {
         # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
         # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
         if ($p.ExitCode -notin @(0, 1, 2, 3, 4, 5)) {
-            throw [RemoteExecutionException]::new($computer, "DCU /$command", $p.ExitCode)
+            # Carry the full argument string so a syntax error (e.g. DCU 105) surfaces the
+            # exact command in the user-visible error, not just the bare command name.
+            throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $p.ExitCode)
         }
         
         if ($p.ExitCode -eq 1) {
