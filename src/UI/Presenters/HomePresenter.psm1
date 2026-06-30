@@ -366,11 +366,14 @@ class HomePresenter : AsyncJobPresenter {
                 }
                 $this.Resolver.CacheVerdict($hn, $newIp, $online)
                 $this.RenderReachability($hn)
-                # If this host's detail panel is open, surface the freshly-resolved IP.
+                # If this host's detail panel is open, surface the freshly-resolved IP
+                # and (now that we know if it's reachable) gather its inventory - or skip
+                # it for an offline host.
                 if ($hn -eq $this.SelectedHost) {
                     $rcSel = $this.GetRecord($hn)
                     $iso = if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) { $rcSel.Inventory.ProbedAt } else { '' }
                     $this.RenderDetailSubtitle($hn, $iso)
+                    $this.GatherInventoryIfOnline($hn)
                 }
             }
             elseif ($mode -eq 'Name') {
@@ -1204,10 +1207,25 @@ class HomePresenter : AsyncJobPresenter {
         # PrefetchIp above will update it when it lands).
         $this.RenderReachability($hostName)
 
-        # Start-early: prefetch this machine's inventory in the background (skipped
-        # when it's still fresh), so the detail panel fills itself without a
-        # double-click. Runs on the pool - never blocks the UI.
-        $this.StartInventory($hostName, $false)
+        # Gather inventory only once the host is known-reachable. An OFFLINE host is
+        # skipped entirely (gathering hangs the worker); an ONLINE host is gathered with
+        # its IP already cached, so the worker never does the expensive AD resolve on the
+        # freeze-prone path. If the verdict isn't cached yet, PrefetchIp's resolve lands
+        # in CompleteResolve, which calls GatherInventoryIfOnline.
+        if (-not $this.Resolver.NeedsResolve($hostName)) {
+            $this.GatherInventoryIfOnline($hostName)
+        }
+    }
+
+    # Starts the inventory probe only when the host is known-online. Offline hosts are
+    # skipped (gathering hangs the worker); a still-unknown host is left for
+    # CompleteResolve to retry once the background resolve lands.
+    [void] GatherInventoryIfOnline([string]$hostName) {
+        switch ($this.Resolver.IsHostOnline($hostName)) {
+            'Online'  { $this.StartInventory($hostName, $false) }
+            'Offline' { $this.AppendLog($hostName, "Host is offline - skipping inventory.") }
+            default   { }   # 'Unknown': resolve still in flight; CompleteResolve calls us again.
+        }
     }
 
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
@@ -1238,6 +1256,20 @@ class HomePresenter : AsyncJobPresenter {
     # inventory is still fresh, so repeated selects don't re-gather needlessly.
     [void] StartInventory([string]$hostName, [bool]$force) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        # Only gather from a host we already know is online (so the worker reuses the
+        # cached IP). An offline host hangs the worker on the CIM/psexec connect; a host
+        # whose reachability isn't known yet would make the worker do the expensive AD
+        # resolve, which can freeze the UI. In that case kick a background resolve and
+        # bail - CompleteResolve re-gathers the selected host once the verdict lands.
+        $state = $this.Resolver.IsHostOnline($hostName)
+        if ($state -eq 'Offline') {
+            $this.AppendLog($hostName, "Host is offline - skipping inventory.")
+            return
+        }
+        if ($state -ne 'Online') {
+            $this.PrefetchIp($hostName)
+            return
+        }
         foreach ($j in $this.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::Inventory) { return }
         }
