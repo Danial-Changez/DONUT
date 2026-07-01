@@ -80,6 +80,7 @@ class HomePresenter : AsyncJobPresenter {
     [timespan] $ScanCacheTtl = [timespan]::FromHours(24)    # reuse a scan/update-scan newer than this instead of re-scanning
     [string] $SelectedHost
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
+    [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox
 
     # Detail-panel controls
     [System.Windows.UIElement] $DetailEmptyHint
@@ -142,6 +143,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateService = [RemoteUpdateService]::new($config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
         $this.Store = [RecentConnectionsStore]::new($config, $configManager)
+        # Coalesce the store's config.json writes: mutations mark pending; we flush once
+        # per drained batch / on close (AfterPump, ClearCompleted, window Closing), so a
+        # "Run all" no longer serializes the whole config on every host completion.
+        $this.Store.DeferSave = $true
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
         $this.DiskUsageService = [DiskUsageService]::new($config, $this.NetworkProbe, $this.Logger)
@@ -235,6 +240,8 @@ class HomePresenter : AsyncJobPresenter {
             $this.Store.SeedFrom($this.ReadWsidHosts())
         }
         $this.BuildRows()
+        # Persist the one-time WSID seed now (store saves are deferred; see DeferSave).
+        $this.Store.FlushSave()
 
         $this.UpdateModePill()
         $this.RefreshAll()
@@ -837,6 +844,8 @@ class HomePresenter : AsyncJobPresenter {
         $presenter = $this
         $w.Add_LocationChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
         $w.Add_SizeChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
+        # Persist any deferred recents on close (safety net beyond the per-batch flush).
+        $w.Add_Closing({ try { $presenter.Store.FlushSave() } catch { } }.GetNewClosure())
     }
 
     # Nudges the open popup's offset to force WPF to recompute its placement
@@ -976,21 +985,25 @@ class HomePresenter : AsyncJobPresenter {
     [void] OnJobPolled([AsyncJob]$job) {
         # Resolve jobs are pure background precompute - no row/progress/log UI.
         if ($job.JobType -eq [JobKind]::Resolve) { return }
+
+        # Drain this tick's queued output once, then append as a single batch.
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $line = $null
+        while ($job.Logs.TryDequeue([ref]$line)) { $lines.Add($line) }
+
         if ($job.JobType -eq [JobKind]::Inventory -or $job.JobType -eq [JobKind]::DiskScan) {
-            $line = $null
-            while ($job.Logs.TryDequeue([ref]$line)) { $this.AppendLog($job.HostName, $line) }
+            if ($lines.Count -gt 0) { $this.AppendLogLines($job.HostName, $lines.ToArray()) }
             return
         }
 
-        $row = $this.GetRow($job.HostName)
-
-        $logEntry = $null
         $latestPct = -1
-        while ($job.Logs.TryDequeue([ref]$logEntry)) {
-            $this.AppendLog($job.HostName, $logEntry)
-            $pct = [DcuProgress]::ParsePercent($logEntry)
+        foreach ($entry in $lines) {
+            $pct = [DcuProgress]::ParsePercent($entry)
             if ($pct -ge 0) { $latestPct = $pct }
         }
+        if ($lines.Count -gt 0) { $this.AppendLogLines($job.HostName, $lines.ToArray()) }
+
+        $row = $this.GetRow($job.HostName)
         if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
 
         $this.RefreshCardStatus($job)
@@ -1047,8 +1060,13 @@ class HomePresenter : AsyncJobPresenter {
     # surface any pending manual-reboot notice.
     [void] AfterPump() {
         $this.RefreshOverview()
-        if ($this.ActiveJobs.Count -eq 0 -and $this.ManualRebootQueue.Count -gt 0) {
-            $this.ShowManualRebootNotice()
+        # Batch fully drained: persist any coalesced recents changes in one write, and
+        # surface any pending manual-reboot notice.
+        if ($this.ActiveJobs.Count -eq 0) {
+            $this.Store.FlushSave()
+            if ($this.ManualRebootQueue.Count -gt 0) {
+                $this.ShowManualRebootNotice()
+            }
         }
     }
 
@@ -1095,10 +1113,7 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     [RecentConnection] GetRecord([string]$hostName) {
-        foreach ($rc in $this.Store.GetAll()) {
-            if ($rc.Hostname -eq $hostName) { return $rc }
-        }
-        return $null
+        return $this.Store.GetByHost($hostName)
     }
 
     [void] RefreshCardStatus([AsyncJob]$job) {
@@ -1223,13 +1238,33 @@ class HomePresenter : AsyncJobPresenter {
     # Appends a job-output line to the host's buffer and, when it's the selected
     # host, to the live detail log. (Replaces the old per-row inline log.)
     [void] AppendLog([string]$hostName, [string]$text) {
+        $this.AppendLogLines($hostName, @($text))
+    }
+
+    # Batched log append: buffer all lines at once, cap the ring buffer, and touch the
+    # detail TextBox a single time (one AppendText + one ScrollToEnd) instead of per line.
+    [void] AppendLogLines([string]$hostName, [string[]]$lines) {
+        if ($null -eq $lines -or $lines.Count -eq 0) { return }
         if (-not $this.LogBuffers.ContainsKey($hostName)) {
             $this.LogBuffers[$hostName] = [System.Collections.Generic.List[string]]::new()
         }
-        $this.LogBuffers[$hostName].Add($text)
+        $buf = $this.LogBuffers[$hostName]
+        $buf.AddRange($lines)
+
+        # Ring-buffer cap: keep memory (and the TextBox) bounded over a long session.
+        $trimmed = $false
+        if ($buf.Count -gt $this.MaxLogLines) {
+            $buf.RemoveRange(0, $buf.Count - $this.MaxLogLines)
+            $trimmed = $true
+        }
 
         if ($hostName -eq $this.SelectedHost -and $this.DetailLog) {
-            $this.DetailLog.AppendText("$text`n")
+            if ($trimmed) {
+                # Old lines were dropped - re-render the (now capped) buffer once.
+                $this.DetailLog.Text = (($buf -join "`n") + "`n")
+            } else {
+                $this.DetailLog.AppendText((($lines -join "`n") + "`n"))
+            }
             $this.DetailLog.ScrollToEnd()
         }
     }
@@ -1572,6 +1607,7 @@ class HomePresenter : AsyncJobPresenter {
         }
         $this.UpdateEmptyHint()
         $this.RefreshOverview()
+        $this.Store.FlushSave()
     }
 
     [void] UpdateEmptyHint() {
@@ -1669,9 +1705,9 @@ class HomePresenter : AsyncJobPresenter {
         foreach ($logPath in $logFiles) {
             if (Test-Path $logPath) {
                 try {
-                    Get-Content -Path $logPath -ErrorAction Stop | ForEach-Object {
-                        $this.AppendLog($hostName, $_)
-                    }
+                    # One read + one batched append, instead of per-line append + scroll.
+                    $content = @(Get-Content -Path $logPath -ErrorAction Stop)
+                    if ($content.Count -gt 0) { $this.AppendLogLines($hostName, [string[]]$content) }
                 } catch { }
             }
         }

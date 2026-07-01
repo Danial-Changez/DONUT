@@ -120,6 +120,9 @@ class ScanService : RemoteJobService {
 # Handles scanning for and applying updates on remote hosts
 class RemoteUpdateService : RemoteJobService {
     [DriverMatchingService] $DriverMatcher
+    # Parsed-report cache: host -> @{ Ticks; Xml }, invalidated by the report file's
+    # last-write time so a fresh scan re-parses but repeated reads in one flow don't.
+    hidden [hashtable] $ReportCache = @{}
 
     RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe, [DriverMatchingService] $matcher) : base($config, $probe) {
         $this.DriverMatcher = $matcher
@@ -138,7 +141,17 @@ class RemoteUpdateService : RemoteJobService {
         if (-not (Test-Path $reportPath)) { return $null }
 
         try {
-            return [xml](Get-Content $reportPath)
+            # Cache the parsed doc keyed by the file's last-write time, so the repeated
+            # calls in one apply flow (fresh-check -> proceed -> settle) don't re-read +
+            # re-parse the XML on the UI thread. A new scan writes a newer file, which
+            # misses the cache and re-parses.
+            $ticks = (Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
+            $cached = $this.ReportCache[$hostName]
+            if ($null -ne $cached -and $cached.Ticks -eq $ticks) { return $cached.Xml }
+
+            $xml = [xml](Get-Content -LiteralPath $reportPath)
+            $this.ReportCache[$hostName] = @{ Ticks = $ticks; Xml = $xml }
+            return $xml
         }
         catch {
             $this.Logger.LogException("Failed to parse update report for $hostName", $_)

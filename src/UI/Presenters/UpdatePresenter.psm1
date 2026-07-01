@@ -3,6 +3,7 @@ using namespace System.Windows.Threading
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\LogService.psm1'
+using module '..\..\Core\RunspaceManager.psm1'
 using module '.\LoginPresenter.psm1'
 using module '.\DialogPresenter.psm1'
 
@@ -20,6 +21,13 @@ class UpdatePresenter {
     [ResourceService]$Resources
     [DialogPresenter]$Dialog
     [LogService]$Logger
+
+    # Background-check state: the read-only discovery runs on the runspace pool and is
+    # polled on the dispatcher, so startup never blocks on the GitHub round-trip.
+    [DispatcherTimer] $CheckTimer
+    hidden [object]   $CheckPs
+    hidden [object]   $CheckHandle
+    hidden [bool]     $CheckStarted = $false
 
     UpdatePresenter([SelfUpdateService]$service, [ResourceService]$resources) {
         $this.Service = $service
@@ -58,6 +66,87 @@ class UpdatePresenter {
         }
         catch {
             $this.Logger.LogException("Update check failed", $_)
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Background check (window shows first; GitHub round-trip runs on the pool)
+    # -------------------------------------------------------------------------
+
+    # One-shot: kick the read-only discovery on the runspace pool, then poll it on the
+    # dispatcher. Called after the main window renders, so startup never blocks on the
+    # GitHub round-trip. Safe to call more than once (Window.ContentRendered can refire).
+    [void] StartBackgroundCheck() {
+        if ($this.CheckStarted) { return }
+        $this.CheckStarted = $true
+        $this.KickCheck()
+    }
+
+    hidden [void] KickCheck() {
+        try {
+            $worker = Join-Path $this.Resources.SourceRoot 'Scripts\UpdateCheckWorker.ps1'
+            $this.CheckPs = [System.Management.Automation.PowerShell]::Create()
+            $this.CheckPs.RunspacePool = [RunspaceManager]::GetPool()
+            $this.CheckPs.AddCommand($worker) | Out-Null
+            $this.CheckHandle = $this.CheckPs.BeginInvoke()
+
+            if (-not $this.CheckTimer) {
+                $presenter = $this
+                $this.CheckTimer = [DispatcherTimer]::new()
+                $this.CheckTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+                $this.CheckTimer.Add_Tick({ $presenter.PollCheck() }.GetNewClosure())
+            }
+            $this.CheckTimer.Start()
+        }
+        catch {
+            $this.Logger.LogException("Background update check could not start", $_)
+        }
+    }
+
+    # Poll the pool job; when it lands, dispose it and act on the result (UI thread).
+    [void] PollCheck() {
+        if ($null -eq $this.CheckHandle -or -not $this.CheckHandle.IsCompleted) { return }
+        $this.CheckTimer.Stop()
+
+        $result = $null
+        try { $result = @($this.CheckPs.EndInvoke($this.CheckHandle)) | Select-Object -Last 1 }
+        catch { $this.Logger.LogException("Update check failed", $_) }
+        try { $this.CheckPs.Dispose() } catch { }
+        $this.CheckPs = $null
+        $this.CheckHandle = $null
+
+        if ($result -is [hashtable]) { $this.HandleResult($result) }
+    }
+
+    # Acts on the worker's result on the dispatcher: log in if there's no token (then
+    # re-check), otherwise compare versions and prompt. Modals are safe here.
+    hidden [void] HandleResult([hashtable]$result) {
+        if ($result.ContainsKey('Error') -and $result.Error) {
+            $this.Logger.LogError("Update check: $($result.Error)")
+            return
+        }
+
+        if (-not $result.HasToken) {
+            $loginPresenter = [LoginPresenter]::new($this.Service, $this.Resources)
+            if ($loginPresenter.ShowLogin()) {
+                $this.KickCheck()   # got a token now - re-run discovery on the pool
+            } else {
+                $this.Logger.LogInfo("Login cancelled or failed.")
+            }
+            return
+        }
+
+        if (-not $result.Release) { return }
+
+        try {
+            $remoteVer = [version]$result.Release.tag_name
+            $localVer = if ($result.LocalVersion) { [version]$result.LocalVersion } else { [version]'0.0.0.0' }
+            if ($remoteVer -ne $localVer) {
+                $this.ShowUpdateWindow($result.Release, $localVer, $remoteVer)
+            }
+        }
+        catch {
+            $this.Logger.LogException("Update version comparison failed", $_)
         }
     }
 

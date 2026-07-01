@@ -7,6 +7,7 @@ using module "..\..\Services\ResourceService.psm1"
 using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
+using module ".\UpdatePresenter.psm1"
 using module ".\ToastService.psm1"
 
 <#
@@ -28,6 +29,7 @@ class MainPresenter {
     [ConfigPresenter] $ConfigPresenter
     [LogsPresenter] $LogsPresenter
     [HomePresenter] $HomePresenter
+    [UpdatePresenter] $UpdatePresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [ResourceService] $Resources
@@ -48,6 +50,16 @@ class MainPresenter {
         $this.NetworkProbe = $networkProbe
         $this.Resources = $resources
         $this.Logger = $networkProbe.Logger
+        $this.Initialize()
+    }
+
+    MainPresenter([AppConfig] $config, [ConfigManager] $configManager, [NetworkProbe] $networkProbe, [ResourceService] $resources, [UpdatePresenter] $updatePresenter) {
+        $this.Config = $config
+        $this.ConfigManager = $configManager
+        $this.NetworkProbe = $networkProbe
+        $this.Resources = $resources
+        $this.Logger = $networkProbe.Logger
+        $this.UpdatePresenter = $updatePresenter
         $this.Initialize()
     }
 
@@ -127,26 +139,14 @@ class MainPresenter {
         $this.Headers['Logs'] = $this.Window.FindName("headerLogs")
 
         $this.Views = @{}
-        
-        # Home View & Presenter
+
+        # Home View & Presenter (the default page - built eagerly). Config and Logs are
+        # built lazily on first navigation (EnsureView), so startup doesn't pay for the
+        # Logs presenter reading every log file when the user may never open that tab.
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
             $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
-        }
-        
-        # Config View & Presenter
-        $configView = $this.LoadView("ConfigView.xaml")
-        $this.Views['Config'] = $configView
-        if ($configView) {
-            $this.ConfigPresenter = [ConfigPresenter]::new($this.Config, $this.ConfigManager, $configView)
-        }
-
-        # Logs
-        $logsView = $this.LoadView("LogsView.xaml")
-        $this.Views['Logs'] = $logsView
-        if ($logsView) {
-            $this.LogsPresenter = [LogsPresenter]::new($this.Config, $logsView)
         }
 
         # Bind Navigation Events
@@ -190,6 +190,13 @@ class MainPresenter {
             }
         }.GetNewClosure())
 
+        # Kick the self-update check once the window has rendered, so the GitHub
+        # round-trip runs on the pool instead of blocking the window from appearing.
+        if ($this.UpdatePresenter) {
+            $up = $this.UpdatePresenter
+            $this.Window.Add_ContentRendered({ $up.StartBackgroundCheck() }.GetNewClosure())
+        }
+
         # Default Navigation
         $this.NavigateTo('Home')
     }
@@ -231,7 +238,30 @@ class MainPresenter {
         return $null
     }
 
+    # Builds a page's view + presenter the first time it's needed (Home is built at
+    # startup; Config/Logs are deferred here so their construction cost - notably the
+    # Logs presenter reading every log file - isn't paid until the tab is opened).
+    hidden [void] EnsureView([string]$viewName) {
+        if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) { return }
+
+        if ($viewName -eq 'Config') {
+            $configView = $this.LoadView("ConfigView.xaml")
+            $this.Views['Config'] = $configView
+            if ($configView) {
+                $this.ConfigPresenter = [ConfigPresenter]::new($this.Config, $this.ConfigManager, $configView)
+            }
+        }
+        elseif ($viewName -eq 'Logs') {
+            $logsView = $this.LoadView("LogsView.xaml")
+            $this.Views['Logs'] = $logsView
+            if ($logsView) {
+                $this.LogsPresenter = [LogsPresenter]::new($this.Config, $logsView)
+            }
+        }
+    }
+
     [void] NavigateTo([string]$viewName) {
+        $this.EnsureView($viewName)
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) {
             $this.Controls['contentMain'].Content = $this.Views[$viewName]
 

@@ -61,6 +61,63 @@ Describe "RecentConnectionsStore" {
         }
     }
 
+    Context "GetByHost (indexed lookup)" {
+        It "Returns the entry for a known host (case-insensitive)" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
+            $script:store.Upsert("PC-2", "Failed", "UpdateApply", 0, $false)
+
+            $rc = $script:store.GetByHost("pc-1")
+            $rc | Should -Not -BeNullOrEmpty
+            $rc.Hostname | Should -Be "PC-1"
+            $rc.UpdateCount | Should -Be 2
+        }
+
+        It "Returns null for an unknown or blank host" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.GetByHost("NOPE") | Should -BeNullOrEmpty
+            $script:store.GetByHost("") | Should -BeNullOrEmpty
+        }
+
+        It "Reflects mutations after the cache was already built (invalidation)" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 1, $false)
+            $script:store.GetByHost("PC-1").UpdateCount | Should -Be 1   # builds the cache
+            $script:store.Upsert("PC-1", "Completed", "Scan", 9, $false) # mutate -> must invalidate
+            $script:store.GetByHost("PC-1").UpdateCount | Should -Be 9
+            $script:store.Remove("PC-1")
+            $script:store.GetByHost("PC-1") | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Deferred saves (DeferSave / FlushSave)" {
+        It "Does not write until FlushSave when DeferSave is on, then writes once" {
+            $script:saves = 0
+            $fakeMgr = [pscustomobject]@{}
+            $fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
+            $deferStore = [RecentConnectionsStore]::new($script:config, $fakeMgr)
+            $deferStore.DeferSave = $true
+
+            $deferStore.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $deferStore.Upsert("PC-2", "Completed", "Scan", 0, $false)
+            $script:saves | Should -Be 0    # nothing written yet
+
+            $deferStore.FlushSave()
+            $script:saves | Should -Be 1    # coalesced into a single write
+
+            $deferStore.FlushSave()
+            $script:saves | Should -Be 1    # nothing pending -> no extra write
+        }
+
+        It "Writes immediately when DeferSave is off (default)" {
+            $script:saves = 0
+            $fakeMgr = [pscustomobject]@{}
+            $fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
+            $immStore = [RecentConnectionsStore]::new($script:config, $fakeMgr)
+
+            $immStore.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:saves | Should -Be 1
+        }
+    }
+
     Context "Remove" {
         It "Removes the named host" {
             $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)

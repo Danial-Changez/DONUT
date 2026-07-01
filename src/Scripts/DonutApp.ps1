@@ -63,20 +63,23 @@ try {
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
 
-    $logger.LogInfo("Checking for updates.")
+    # Build the update presenter, but DON'T check yet: the check now runs in the
+    # background after the main window renders (UpdatePresenter.StartBackgroundCheck,
+    # kicked from MainPresenter), so startup never blocks on the GitHub round-trip.
+    $logger.LogInfo("Preparing self-update check (runs in the background once the window shows).")
+    $updatePresenter = $null
     try {
         $selfUpdateService = [SelfUpdateService]::new($logger)
         $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
-        $updatePresenter.CheckAndPrompt()
     }
     catch {
-        $logger.LogException("Update check failed", $_)
+        $logger.LogException("Update presenter could not be created", $_)
     }
 
     $logger.LogInfo("Initializing MainPresenter.")
     $networkProbe = [NetworkProbe]::new($logger)
-    $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
-    
+    $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService, $updatePresenter)
+
     $presenter.Show()
     
 }

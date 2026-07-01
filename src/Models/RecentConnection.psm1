@@ -54,6 +54,21 @@ class RecentConnectionsStore {
     hidden [object]    $ConfigManager   # duck-typed; may be $null in tests
     static [int] $Cap = 50
 
+    # Save coalescing: with DeferSave on, mutations mark PendingSave instead of
+    # writing config.json; FlushSave() performs the single deferred write. The UI
+    # turns this on and flushes once per drained batch, so a "Run all" no longer
+    # serializes the whole config on every host completion.
+    [bool]   $DeferSave = $false
+    hidden [bool] $PendingSave = $false
+
+    # Cached typed view, rebuilt lazily and invalidated on any mutation (all of which
+    # funnel through SetEntries). Without this, GetAll/GetByHost rebuilt every
+    # RecentConnection (+ nested inventory/disk) and re-sorted on each call - and the
+    # UI reads them every ~200ms tick. $Index maps lower(hostname) -> entry for O(1) lookup.
+    hidden [RecentConnection[]] $Cache
+    hidden [hashtable] $Index
+    hidden [bool] $CacheValid = $false
+
     RecentConnectionsStore([AppConfig]$config, [object]$configManager) {
         $this.Config = $config
         $this.ConfigManager = $configManager
@@ -69,6 +84,7 @@ class RecentConnectionsStore {
 
     hidden [void] SetEntries([object[]]$entries) {
         $this.Config.Settings['recentHosts'] = @($entries)
+        $this.CacheValid = $false
     }
 
     # Inserts or replaces (by hostname, case-insensitive) and stamps lastSeen=now.
@@ -187,11 +203,35 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Typed entries, newest first (blank lastSeen sorts oldest), capped.
+    # Typed entries, newest first (blank lastSeen sorts oldest), capped. Cached until
+    # the next mutation, so repeated per-tick reads don't rebuild + re-sort every time.
     [RecentConnection[]] GetAll() {
+        $this.EnsureCache()
+        return $this.Cache
+    }
+
+    # O(1) single-host lookup from the cached index (case-insensitive), or $null.
+    [RecentConnection] GetByHost([string]$hostname) {
+        if ([string]::IsNullOrWhiteSpace($hostname)) { return $null }
+        $this.EnsureCache()
+        $key = $hostname.Trim().ToLowerInvariant()
+        if ($this.Index.ContainsKey($key)) { return $this.Index[$key] }
+        return $null
+    }
+
+    # Rebuilds the typed cache + index from the raw entries when stale.
+    hidden [void] EnsureCache() {
+        if ($this.CacheValid) { return }
         $typed = @($this.Entries() | ForEach-Object { [RecentConnection]::FromHashtable([hashtable]$_) })
         $sorted = $typed | Sort-Object -Property @{ Expression = { [RecentConnectionsStore]::ParseSeen($_.LastSeen) }; Descending = $true }
-        return @($sorted | Select-Object -First ([RecentConnectionsStore]::Cap))
+        $this.Cache = @($sorted | Select-Object -First ([RecentConnectionsStore]::Cap))
+        $this.Index = @{}
+        foreach ($rc in $this.Cache) {
+            if ($null -ne $rc -and -not [string]::IsNullOrWhiteSpace($rc.Hostname)) {
+                $this.Index[$rc.Hostname.ToLowerInvariant()] = $rc
+            }
+        }
+        $this.CacheValid = $true
     }
 
     [int] Count() {
@@ -210,6 +250,18 @@ class RecentConnectionsStore {
     }
 
     hidden [void] Save() {
+        if ($this.DeferSave) { $this.PendingSave = $true; return }
+        $this.WriteConfig()
+    }
+
+    # Writes any pending deferred save (no-op when nothing is pending). Called by the
+    # UI once per drained batch / on close, so many upserts collapse to one disk write.
+    [void] FlushSave() {
+        if ($this.PendingSave) { $this.WriteConfig() }
+    }
+
+    hidden [void] WriteConfig() {
+        $this.PendingSave = $false
         if ($null -ne $this.ConfigManager) {
             $this.ConfigManager.SaveConfig($this.Config)
         }

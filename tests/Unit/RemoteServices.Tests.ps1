@@ -144,6 +144,37 @@ Describe "RemoteServices" {
             Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
         }
 
+        It "Caches the parsed report until the file's mtime changes" {
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+
+            $reportPath = Join-Path $script:reportsDir "CacheHost-Updates.xml"
+            Set-Content -Path $reportPath -Value @"
+<?xml version="1.0" encoding="UTF-8"?>
+<updates><update name="A" version="1"/></updates>
+"@
+
+            $r1 = $service.ParseUpdateReport("CacheHost")
+            $r2 = $service.ParseUpdateReport("CacheHost")
+            # Same file -> same cached instance (not re-parsed).
+            [object]::ReferenceEquals($r1, $r2) | Should -BeTrue
+            $service.CountUpdates($r1) | Should -Be 1
+
+            # Rewrite with a newer mtime -> cache miss -> fresh parse with new content.
+            Set-Content -Path $reportPath -Value @"
+<?xml version="1.0" encoding="UTF-8"?>
+<updates><update name="A" version="1"/><update name="B" version="2"/></updates>
+"@
+            (Get-Item -LiteralPath $reportPath).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddSeconds(5)
+
+            $r3 = $service.ParseUpdateReport("CacheHost")
+            [object]::ReferenceEquals($r1, $r3) | Should -BeFalse
+            $service.CountUpdates($r3) | Should -Be 2
+
+            Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
+        }
+
         It "Should return null for malformed XML" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
