@@ -7,7 +7,6 @@ using module "..\..\Services\ResourceService.psm1"
 using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
-using module ".\UpdatePresenter.psm1"
 using module ".\ToastService.psm1"
 
 <#
@@ -29,7 +28,6 @@ class MainPresenter {
     [ConfigPresenter] $ConfigPresenter
     [LogsPresenter] $LogsPresenter
     [HomePresenter] $HomePresenter
-    [UpdatePresenter] $UpdatePresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [ResourceService] $Resources
@@ -50,16 +48,6 @@ class MainPresenter {
         $this.NetworkProbe = $networkProbe
         $this.Resources = $resources
         $this.Logger = $networkProbe.Logger
-        $this.Initialize()
-    }
-
-    MainPresenter([AppConfig] $config, [ConfigManager] $configManager, [NetworkProbe] $networkProbe, [ResourceService] $resources, [UpdatePresenter] $updatePresenter) {
-        $this.Config = $config
-        $this.ConfigManager = $configManager
-        $this.NetworkProbe = $networkProbe
-        $this.Resources = $resources
-        $this.Logger = $networkProbe.Logger
-        $this.UpdatePresenter = $updatePresenter
         $this.Initialize()
     }
 
@@ -189,13 +177,6 @@ class MainPresenter {
                 [System.Windows.Application]::Current.Shutdown() 
             }
         }.GetNewClosure())
-
-        # Kick the self-update check once the window has rendered, so the GitHub
-        # round-trip runs on the pool instead of blocking the window from appearing.
-        if ($this.UpdatePresenter) {
-            $up = $this.UpdatePresenter
-            $this.Window.Add_ContentRendered({ $up.StartBackgroundCheck() }.GetNewClosure())
-        }
 
         # Default Navigation
         $this.NavigateTo('Home')

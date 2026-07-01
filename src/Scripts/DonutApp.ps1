@@ -63,24 +63,46 @@ try {
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
 
-    # Build the update presenter, but DON'T check yet: the check now runs in the
-    # background after the main window renders (UpdatePresenter.StartBackgroundCheck,
-    # kicked from MainPresenter), so startup never blocks on the GitHub round-trip.
-    $logger.LogInfo("Preparing self-update check (runs in the background once the window shows).")
-    $updatePresenter = $null
+    $logger.LogInfo("Preparing self-update + main window.")
+    $networkProbe = [NetworkProbe]::new($logger)
+    $selfUpdateService = [SelfUpdateService]::new($logger)
+    $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
+
+    # Build the main window ONCE, guarded. This is handed to the update presenter as the
+    # "while login is up" work, so the window (XAML load + runspace-pool warm) is built
+    # DURING the interactive device-flow sign-in and can be shown the instant it - and any
+    # update prompt - finishes. When a valid token means no login is shown, we build it
+    # right after the update check instead (below). Same hashtable ref either way, so the
+    # guard makes it build exactly once.
+    $mainHolder = @{ Presenter = $null }
+    $buildMain = {
+        if ($null -eq $mainHolder.Presenter) {
+            try {
+                $mainHolder.Presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
+                $logger.LogInfo("Main window preloaded.")
+            }
+            catch { $logger.LogException("Main window preload failed", $_) }
+        }
+    }.GetNewClosure()
+
     try {
-        $selfUpdateService = [SelfUpdateService]::new($logger)
-        $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
+        # Sign-in (if needed) + update check / prompt, all before the main window shows.
+        # The main window preloads during the login wait via $buildMain.
+        $updatePresenter.CheckAndPrompt($buildMain)
     }
     catch {
-        $logger.LogException("Update presenter could not be created", $_)
+        $logger.LogException("Update check failed", $_)
     }
 
-    $logger.LogInfo("Initializing MainPresenter.")
-    $networkProbe = [NetworkProbe]::new($logger)
-    $presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService, $updatePresenter)
-
-    $presenter.Show()
+    # Ensure the window is built (e.g. a valid token meant no login ran the builder), then
+    # show the already-warmed window instantly.
+    & $buildMain
+    if ($null -ne $mainHolder.Presenter) {
+        $mainHolder.Presenter.Show()
+    }
+    else {
+        $logger.LogError("Main window could not be built.")
+    }
     
 }
 catch {
