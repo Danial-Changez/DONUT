@@ -159,9 +159,9 @@
       <StackPanel>
         <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvModel" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvModel" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvModelSub" Text="no machine selected" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvModelSub" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
       </StackPanel>
     </Border>
@@ -172,9 +172,9 @@
       <StackPanel>
         <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvBattery" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvBattery" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvBatterySub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvBatterySub" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -185,9 +185,9 @@
       <StackPanel>
         <TextBlock Text="DISK" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvDisk" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvDisk" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvDiskSub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvDiskSub" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -198,9 +198,9 @@
       <StackPanel>
         <TextBlock Text="UPDATES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvUpdates" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvUpdates" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBlock x:Name="txtOvUpdatesSub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvUpdatesSub" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -355,9 +355,9 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBlock x:Name="txtDetailHost" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+              <TextBlock x:Name="txtDetailHost" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
                          Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-              <TextBlock x:Name="txtDetailProbed" Text="" FontFamily="Montserrat" FontSize="11"
+              <TextBlock x:Name="txtDetailProbed" Text="{Binding SelectedMachine.ProbedText}" FontFamily="Montserrat" FontSize="11"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"

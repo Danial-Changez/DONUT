@@ -489,10 +489,9 @@ class HomePresenter : AsyncJobPresenter {
     [void] RenderReachability([string]$hostName) {
         $state = $this.Resolver.IsHostOnline($hostName)
         $row = $this.GetRow($hostName)
+        # SetReachability updates the row dot/chip AND the view-model's DetailTitle (the
+        # detail header binds to SelectedMachine.DetailTitle), so no control poke needed.
         if ($row -and -not $this.IsRunning($hostName)) { $row.SetReachability($state) }
-        if ($hostName -eq $this.SelectedHost -and $this.DetailHostText) {
-            $this.DetailHostText.Text = if ($state -eq 'Offline') { "$hostName  -  offline" } else { $hostName }
-        }
     }
 
     # Threads this host's prefetched IP into a worker-args bundle's Options, so the
@@ -1312,7 +1311,7 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Visible }
-        if ($this.DetailHostText) { $this.DetailHostText.Text = $hostName }
+        # The detail header binds to SelectedMachine.DetailTitle / ProbedText - no poke.
 
         if ($this.DetailLog) {
             $this.DetailLog.Clear()
@@ -1454,11 +1453,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.Store.UpsertInventory($hostName, $inv)
         $this.AppendLog($hostName, "Inventory updated.")
 
-        if ($hostName -eq $this.SelectedHost) {
-            $rc = $this.GetRecord($hostName)
-            $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
-            $this.PopulateDetailCards($hostName, $cached, $rc)
-        }
+        # Push onto the host's view-model (bound; updates the overview/detail if it's the
+        # selected machine, and stays ready if it's selected later).
+        $rc = $this.GetRecord($hostName)
+        $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
+        $this.PopulateDetailCards($hostName, $cached, $rc)
     }
 
     # Queues an on-demand "biggest folders on C:" scan for the host (no-op if one
@@ -1585,34 +1584,24 @@ class HomePresenter : AsyncJobPresenter {
         return $grid
     }
 
-    # Sets the detail-header subtitle under the host name: the real IP we connect to,
-    # followed by the inventory-probe freshness. Either part is omitted when unknown
-    # (so a never-probed host still shows its IP once resolved, and vice versa).
+    # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model; the
+    # detail pane binds to SelectedMachine.ProbedText.
     hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
-        if (-not $this.DetailProbed) { return }
-        $ip = $this.Resolver.GetCachedIp($hostName)
-        $probedText = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
-            "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
-        }
-        $this.DetailProbed.Text = if (-not [string]::IsNullOrWhiteSpace($ip)) {
-            if ($probedText) { "$ip  ·  $probedText" } else { $ip }
-        } else {
-            $probedText
-        }
+        $vm = $this.GetRow($hostName)
+        if ($vm) { $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso) }
     }
 
-    # Updates the detail header subtitle (IP + probe time) and refreshes the top
-    # overview strip (which mirrors the selected machine). The per-machine
-    # model/battery/disk facts live in that top strip; the detail pane shows host +
-    # folders + log.
+    # Syncs the host's view-model detail/overview bindables from its inventory (cached or
+    # fresh). The overview strip + detail header bind to SelectedMachine.*, so this updates
+    # the UI whenever the selected host's facts change.
     [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
-        $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
-                     elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
-                     else { '' }
-        $this.RenderDetailSubtitle($hostName, $probedIso)
-
-        # The top overview strip mirrors the selected machine.
-        $this.UpdateOverviewTiles()
+        $vm = $this.GetRow($hostName)
+        if ($null -eq $vm) { return }
+        $useInv = if ($null -ne $inv) { $inv } elseif ($null -ne $rc) { $rc.Inventory } else { $null }
+        if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
+        $probedIso = if ($null -ne $useInv -and $useInv.ProbedAt) { $useInv.ProbedAt } else { '' }
+        $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso)
+        $vm.SetPendingUpdates($(if ($null -ne $rc) { $rc.UpdateCount } else { 0 }))
     }
 
     # Removes idle (not currently running) machines from the list and recents.
@@ -1661,55 +1650,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateOverviewTiles()
     }
 
-    # Populates the 4 overview tiles from the SELECTED machine's cached inventory
-    # (mirrors the detail cards); shows placeholders when nothing is selected.
-    [void] UpdateOverviewTiles() {
-        $dash = '—'
-        $hostName = $this.SelectedHost
-        if ([string]::IsNullOrWhiteSpace($hostName)) {
-            if ($this.OvModel) { $this.OvModel.Text = $dash }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = 'no machine selected' }
-            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
-            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
-            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
-            if ($this.OvUpdates) { $this.OvUpdates.Text = $dash }
-            if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = '' }
-            return
-        }
-
-        $rc = $this.GetRecord($hostName)
-        $inv = if ($null -ne $rc) { $rc.Inventory } else { $null }
-
-        if ($null -eq $inv) {
-            if ($this.OvModel) { $this.OvModel.Text = $dash }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = 'double-click to gather inventory' }
-            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
-            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
-            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
-        }
-        else {
-            if ($this.OvModel) { $this.OvModel.Text = if ($inv.Model) { $inv.Model } else { $dash } }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $hostName } }
-
-            $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
-            if ($this.OvBattery) { $this.OvBattery.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health) }
-            if ($this.OvBatterySub) {
-                $this.OvBatterySub.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
-                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
-                    "$($inv.ChargePercent)% - $state"
-                } else { '' }
-            }
-
-            if ($this.OvDisk) { $this.OvDisk.Text = [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes) }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)) }
-        }
-
-        $pending = if ($null -ne $rc) { $rc.UpdateCount } else { 0 }
-        if ($this.OvUpdates) { $this.OvUpdates.Text = "$pending" }
-        if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = 'pending update(s)' }
-    }
+    # The overview strip now binds to SelectedMachine.* (each view-model's OvModel/OvBattery/
+    # OvDisk/OvUpdates, populated via ApplyInventory / SetPendingUpdates), so there is nothing
+    # to poke here. Kept as a no-op so existing callers stay valid; the empty/placeholder
+    # states come from the bindings' FallbackValues and the view-model defaults.
+    [void] UpdateOverviewTiles() { }
 
     [System.Windows.Media.Brush] ResBrush([string]$key) {
         $res = $null

@@ -2,6 +2,7 @@ using namespace Donut.Mvvm
 using namespace System.Windows.Media
 using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\RecentConnection.psm1"
+using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 
 <#
@@ -35,6 +36,21 @@ class HostViewModel : ObservableObject {
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
 
+    # Detail-header + overview-strip bindables (the detail pane / overview mirror the
+    # SELECTED machine, so they bind to SelectedMachine.* - populated from cached/gathered
+    # inventory via ApplyInventory, reusing the pure InventoryFormat mappers).
+    [string] $DetailTitle = ''
+    [string] $ProbedText = ''
+    [string] $OvModel = '—'
+    [string] $OvModelSub = 'double-click to gather inventory'
+    [string] $OvBattery = '—'
+    [string] $OvBatterySub = ''
+    [string] $OvDisk = '—'
+    [string] $OvDiskSub = ''
+    [string] $OvUpdates = '0'
+    [string] $OvUpdatesSub = 'pending update(s)'
+    hidden [string] $CachedIp = ''   # last resolved IP, for ProbedText recomposition
+
     # Backing state for idle/reachability recomposition (mirrors ConnectionRow).
     hidden [string] $BaseSubtitle = ''
     hidden [string] $IdleStatus = ''
@@ -44,6 +60,7 @@ class HostViewModel : ObservableObject {
 
     HostViewModel([string]$hostName) {
         $this.HostName = $hostName
+        $this.DetailTitle = $hostName
         $this.DotBrush = [HostViewModel]::BrushFor('BodyTextTertiary')
     }
 
@@ -94,6 +111,50 @@ class HostViewModel : ObservableObject {
         $this.SetDotKey([HostViewModel]::IdleColorKey($rc.LastStatus))
         $this.ApplyChip()
         $this.ApplySubtitle()
+
+        # Populate the overview strip from the cached record so selecting the row shows its
+        # facts immediately (no re-probe needed).
+        $this.SetPendingUpdates($rc.UpdateCount)
+        if ($null -ne $rc.Inventory) { $this.ApplyInventory($rc.Inventory) }
+    }
+
+    # Fills the overview-strip / probed bindables from an inventory probe (cached or fresh),
+    # reusing the pure InventoryFormat mappers. The overview binds to SelectedMachine.*, so
+    # this updates the UI whenever the selected host's inventory changes.
+    [void] ApplyInventory([MachineInventory]$inv) {
+        if ($null -eq $inv) { return }
+        $this.Set('OvModel', $(if ($inv.Model) { $inv.Model } else { '—' }))
+        $this.Set('OvModelSub', $(if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $this.HostName }))
+
+        $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
+        $this.Set('OvBattery', [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health))
+        $this.Set('OvBatterySub', $(
+            if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
+                $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
+                "$($inv.ChargePercent)% - $state"
+            } else { '' }))
+
+        $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
+        $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)))
+
+        $this.SetProbed($this.CachedIp, $inv.ProbedAt)
+    }
+
+    # Sets the detail-header subtitle: the resolved IP plus the probe freshness (either part
+    # omitted when unknown). $ip is remembered so a later probe keeps showing it.
+    [void] SetProbed([string]$ip, [string]$probedIso) {
+        if (-not [string]::IsNullOrWhiteSpace($ip)) { $this.CachedIp = $ip }
+        $probed = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
+            "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
+        }
+        $this.Set('ProbedText', $(
+            if (-not [string]::IsNullOrWhiteSpace($this.CachedIp)) {
+                if ($probed) { "$($this.CachedIp)  ·  $probed" } else { $this.CachedIp }
+            } else { $probed }))
+    }
+
+    [void] SetPendingUpdates([int]$count) {
+        $this.Set('OvUpdates', "$count")
     }
 
     # Reflects the background reachability verdict on an idle row (offline => red dot +
@@ -107,6 +168,7 @@ class HostViewModel : ObservableObject {
         }
         $this.ApplyChip()
         $this.ApplySubtitle()
+        $this.Set('DetailTitle', $(if ($state -eq 'Offline') { "$($this.HostName)  -  offline" } else { $this.HostName }))
     }
 
     # ---- internal composition helpers ----
