@@ -244,8 +244,11 @@ class ExecutionService {
             OutputLog    = 'C:\temp\DONUT\apply.log'
         }
 
-        $this.InvokePsExec($params)
+        $applyCode = $this.InvokePsExec($params)
         $artifact = $this.CopyRemoteArtifacts($device.HostName)
+        # dcu-cli 1/5 => the apply landed but the box needs a reboot to finish. Surface it
+        # so the presenter flags a manual reboot (the card + the reboot toast).
+        $artifact['RebootRequired'] = [DcuLog]::NeedsReboot($applyCode)
         return $artifact
     }
 
@@ -575,7 +578,10 @@ class ExecutionService {
         return @{ Found = $false; Code = 0 }
     }
 
-    [void] InvokePsExec([hashtable] $parameters) {
+    # Runs dcu-cli via psexec and returns the effective dcu-cli return code (0 = done,
+    # 1/5 = done + reboot needed). Throws on any real failure. The caller (RunApplyPhase)
+    # uses the code to flag a needed reboot.
+    [int] InvokePsExec([hashtable] $parameters) {
         $computer = $parameters.ComputerName
         $command = $parameters.Command
         $argsString = $parameters.Arguments
@@ -651,7 +657,7 @@ class ExecutionService {
                 if ([DcuLog]::IsSuccess($dcu.Code)) {
                     $this.Logger.LogWarning("[$computer] psexec lost its connection ($([RemoteConnectionLostException]::Describe($exitCode))), but dcu-cli's log confirms return code $($dcu.Code) - treating DCU /$command as completed.")
                     if ([DcuLog]::NeedsReboot($dcu.Code)) { $this.Logger.LogInfo("[$computer] Reboot required to complete updates (dcu-cli code $($dcu.Code)).") }
-                    return
+                    return $dcu.Code
                 }
                 # dcu-cli itself reported a real error code: surface THAT, not the transport code.
                 throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $dcu.Code, [DcuLog]::DescribeReturnCode($dcu.Code))
@@ -675,6 +681,7 @@ class ExecutionService {
         if ([DcuLog]::NeedsReboot($exitCode)) {
             $this.Logger.LogInfo("[$computer] Reboot required to complete updates (dcu-cli code $exitCode).")
         }
+        return $exitCode
     }
 
     [string] FindDcuCli([string]$ip) {

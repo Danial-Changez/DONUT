@@ -35,9 +35,11 @@ class TestExecutionService : ExecutionService {
     
     TestExecutionService($l, $p, $m, $c, $s, $ld, $rd) : base($l, $p, $m, $c, $s, $ld, $rd) {}
 
-    [void] InvokePsExec([hashtable]$params) {
-        # Capture params for verification
+    [int] $PsExecReturnCode = 0   # dcu-cli code the mock reports back (0 = clean, 1/5 = reboot)
+    [int] InvokePsExec([hashtable]$params) {
+        # Capture params for verification; return the configured dcu-cli code.
         $this.LastPsExecParams = $params
+        return $this.PsExecReturnCode
     }
 
     [hashtable] CopyRemoteArtifacts([string]$hostName) {
@@ -423,6 +425,31 @@ Describe "WorkerServices" {
             $result | Should -Not -BeNullOrEmpty
             $result.Report | Should -Not -BeNullOrEmpty
             $result.Log | Should -Not -BeNullOrEmpty
+        }
+
+        It "flags RebootRequired when dcu-cli returns a reboot code (1 or 5)" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $device = [DeviceContext]::new("TestHost")
+
+            $service.PsExecReturnCode = 1
+            ($service.RunApplyPhase($device, @{})).RebootRequired | Should -BeTrue
+            $service.PsExecReturnCode = 5
+            ($service.RunApplyPhase($device, @{})).RebootRequired | Should -BeTrue
+        }
+
+        It "does not flag RebootRequired on a clean apply (code 0)" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $device = [DeviceContext]::new("TestHost")
+
+            ($service.RunApplyPhase($device, @{})).RebootRequired | Should -BeFalse
         }
 
         It "Should capture PsExec parameters for applyUpdates command" {

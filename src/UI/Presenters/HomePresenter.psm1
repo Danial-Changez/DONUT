@@ -1718,20 +1718,24 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     [void] CheckForManualReboot([AsyncJob]$job) {
-        $appData = Join-Path $env:LOCALAPPDATA "DONUT"
-        $rebootFlagPath = Join-Path $appData "reports\$($job.HostName)-reboot-required.flag"
+        $needsReboot = $false
 
+        # Primary signal: the apply worker sets RebootRequired on its result when dcu-cli
+        # returns 1/5 (applied, but a reboot is needed to finish). $job.Result is the
+        # worker's returned hashtable (wrapped in the invoke output collection), so unwrap it.
+        foreach ($item in @($job.Result)) {
+            if ($null -ne $item -and $item.RebootRequired) { $needsReboot = $true; break }
+        }
+
+        # Fallback: a reboot-required marker file, in case a future remote step writes one.
+        $rebootFlagPath = Join-Path (Join-Path $env:LOCALAPPDATA "DONUT") "reports\$($job.HostName)-reboot-required.flag"
         if (Test-Path $rebootFlagPath) {
-            if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
-                $this.ManualRebootQueue.Add($job.HostName)
-            }
+            $needsReboot = $true
             Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue
         }
 
-        if ($job.Result -and $job.Result -match 'reboot\s*required|needs\s*reboot|pending\s*reboot') {
-            if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
-                $this.ManualRebootQueue.Add($job.HostName)
-            }
+        if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {
+            $this.ManualRebootQueue.Add($job.HostName)
         }
     }
 
