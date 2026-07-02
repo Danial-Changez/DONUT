@@ -1112,13 +1112,15 @@ class HomePresenter : AsyncJobPresenter {
     [void] SettleHost([AsyncJob]$job) {
         $reboot = $this.ManualRebootQueue.Contains($job.HostName)
         $status = if ($job.Status -eq 'Failed') {
-            # An offline host gets its own grey "Offline" card instead of a red
-            # "Failed" - the box is just powered off, not faulted. The exception type
-            # is lost across the runspace boundary, so re-derive it from the message.
-            if ([RemoteFailure]::ReasonFromMessage($job.FailureMessage) -eq [RemoteFailureReason]::Offline) {
-                'Offline'
-            } else {
-                'Failed'
+            # The exception type is lost across the runspace boundary, so re-derive the
+            # reason from the message to pick a card state. An offline host gets a grey
+            # "Offline" (just powered off, not faulted); a connection-lost apply we
+            # couldn't confirm gets an amber "Unconfirmed" (the update likely applied -
+            # a re-scan settles it) rather than a red "Failed".
+            switch ([RemoteFailure]::ReasonFromMessage($job.FailureMessage)) {
+                ([RemoteFailureReason]::Offline)        { 'Offline' }
+                ([RemoteFailureReason]::ConnectionLost) { 'ConnectionLost' }
+                default                                 { 'Failed' }
             }
         } elseif ($reboot) {
             'RebootRequired'

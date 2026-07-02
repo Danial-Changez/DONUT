@@ -6,6 +6,7 @@ using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DiskUsage.psm1"
 using module "..\Models\RemoteError.psm1"
+using module "..\Models\DcuLog.psm1"
 
 <#
 .SYNOPSIS
@@ -200,6 +201,7 @@ class ExecutionService {
             ComputerName = $device.HostName
             Command      = 'scan'
             Arguments    = $scanArgs
+            OutputLog    = 'C:\temp\DONUT\scan.log'
         }
 
         $this.InvokePsExec($params)
@@ -239,6 +241,7 @@ class ExecutionService {
             ComputerName = $device.HostName
             Command      = 'applyUpdates'
             Arguments    = $applyArgs
+            OutputLog    = 'C:\temp\DONUT\apply.log'
         }
 
         $this.InvokePsExec($params)
@@ -528,6 +531,47 @@ class ExecutionService {
         return @{ Log = $localLog; Report = $localReport }
     }
 
+    # Reads dcu-cli's authoritative return code back from its outputLog over the admin
+    # share, used to recover the real result after psexec loses its connection mid-command.
+    # Retries briefly because the classic trigger - installing a NETWORK driver - drops the
+    # share for a few seconds while the NIC re-initialises. Returns DcuLog.ParseReturnCode's
+    # { Found; Code }; Found is $false when the log can't be read or has no return-code line
+    # (dcu-cli didn't finish). Also copies the log back locally for the detail panel.
+    # Overridable so unit tests don't touch the network.
+    [hashtable] ReadDcuReturnCode([string]$ip, [string]$outputLog) {
+        if ([string]::IsNullOrWhiteSpace($outputLog)) { return @{ Found = $false; Code = 0 } }
+
+        # Local drive path (C:\temp\DONUT\apply.log) -> admin-share UNC (\\ip\C$\temp\...).
+        if ($outputLog -notmatch '^[A-Za-z]:\\') { return @{ Found = $false; Code = 0 } }
+        $drive = $outputLog.Substring(0, 1)          # 'C'
+        $rest  = $outputLog.Substring(3)             # 'temp\DONUT\apply.log'
+        $remote = "\\$ip\$drive`$\$rest"             # \\ip\C$\temp\DONUT\apply.log
+        $localCopy = Join-Path $this.LocalLogsDir ("{0}-{1}" -f $ip, (Split-Path $outputLog -Leaf))
+
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+                if (Test-Path -LiteralPath $remote) {
+                    $text = Get-Content -LiteralPath $remote -Raw -ErrorAction Stop
+                    try { Set-Content -LiteralPath $localCopy -Value $text -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
+                    $parsed = [DcuLog]::ParseReturnCode($text)
+                    if ($parsed.Found) {
+                        $this.Logger.LogInfo("[$ip] Recovered dcu-cli return code $($parsed.Code) from $outputLog after a dropped connection.")
+                        return $parsed
+                    }
+                    # File is there but has no return-code line yet: dcu-cli may still be
+                    # writing (or the connection dropped before it finished) - wait and retry.
+                }
+            }
+            catch {
+                $this.Logger.LogDebug("[$ip] Reading $remote (attempt $attempt) failed: $($_.Exception.Message)")
+            }
+            if ($attempt -lt 5) { Start-Sleep -Seconds 3 }
+        }
+
+        $this.Logger.LogWarning("[$ip] Could not read a dcu-cli return code from $outputLog after the connection dropped.")
+        return @{ Found = $false; Code = 0 }
+    }
+
     [void] InvokePsExec([hashtable] $parameters) {
         $computer = $parameters.ComputerName
         $command = $parameters.Command
@@ -541,10 +585,18 @@ class ExecutionService {
 
         # DCU CLI syntax: dcu-cli.exe /<command> -option1=value1 -option2=value2
         # Stop any existing DCU process first to avoid conflicts.
+        $outputLog = [string]$parameters.OutputLog
         $stopCmd = "Stop-Process -Name 'DellCommandUpdate' -Force -ErrorAction SilentlyContinue"
         $mkdirCmd = "New-Item -Path 'C:\temp\DONUT' -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null"
+        # Clear this run's outputLog first, so whatever it holds afterward is THIS run's
+        # output - dcu-cli's own return-code line is then unambiguous when we have to read
+        # it back after a dropped connection (regardless of whether dcu-cli appends or
+        # overwrites, which Dell doesn't document).
+        $clearCmd = if (-not [string]::IsNullOrWhiteSpace($outputLog)) {
+            "Remove-Item -LiteralPath '$outputLog' -Force -ErrorAction SilentlyContinue"
+        } else { '' }
         $dcuCmd = "& '$dcuPath' /$command $argsString"
-        $remoteCmd = "$stopCmd; $mkdirCmd; $dcuCmd"
+        $remoteCmd = if ($clearCmd) { "$stopCmd; $mkdirCmd; $clearCmd; $dcuCmd" } else { "$stopCmd; $mkdirCmd; $dcuCmd" }
 
         # PsExec Arguments
         $psexecArgs = @(
@@ -587,8 +639,22 @@ class ExecutionService {
         # mean psexec's connection to the host dropped mid-command - NOT a dcu-cli exit code.
         # The classic trigger is /applyUpdates installing a NETWORK driver, which resets the
         # NIC that psexec's own SMB pipe rides over: psexec loses the pipe while dcu-cli
-        # finishes on the host. Surface it as its own cause (a re-scan confirms the apply).
+        # finishes on the host. dcu-cli's own return code is authoritative, so recover it
+        # from the outputLog (which we cleared before the run) instead of guessing.
         if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
+            $dcu = $this.ReadDcuReturnCode($ip, $outputLog)
+            if ($dcu.Found) {
+                # dcu-cli finished and recorded its verdict: trust that, not the dropped pipe.
+                if ($dcu.Code -in @(0, 1, 2, 3, 4, 5)) {
+                    $this.Logger.LogWarning("[$computer] psexec lost its connection ($([RemoteConnectionLostException]::Describe($exitCode))), but dcu-cli's log confirms return code $($dcu.Code) - treating DCU /$command as completed.")
+                    if ($dcu.Code -eq 1) { $this.Logger.LogInfo("[$computer] Reboot required to complete updates.") }
+                    return
+                }
+                # dcu-cli itself reported a real error code: surface THAT, not the transport code.
+                throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $dcu.Code)
+            }
+            # Couldn't read a verdict (log absent/unreadable, or dcu-cli never finished) - can't
+            # confirm, so report the connection loss (the operator can re-scan to check).
             throw [RemoteConnectionLostException]::new($computer, "DCU /$command", $exitCode)
         }
 

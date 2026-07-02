@@ -215,6 +215,7 @@ class HostViewModel : ObservableObject {
             'Completed'      { return 'AccentGreen' }
             'Failed'         { return 'AccentRed' }
             'RebootRequired' { return 'AccentYellow' }
+            'ConnectionLost' { return 'AccentOrange' }
             'Offline'        { return 'AccentRed' }
             default          { return 'BodyTextTertiary' }
         }
@@ -224,6 +225,7 @@ class HostViewModel : ObservableObject {
     static [string] HumanStatus([string]$lastStatus) {
         switch ($lastStatus) {
             'RebootRequired' { return 'Reboot required' }
+            'ConnectionLost' { return 'Unconfirmed' }
             default          { return $lastStatus }
         }
         return $lastStatus
@@ -235,6 +237,7 @@ class HostViewModel : ObservableObject {
         AccentGreen      = '#22C55E'
         AccentRed        = '#EF4444'
         AccentYellow     = '#FBBF24'
+        AccentOrange     = '#FB923C'
         AccentCyan       = '#38BDF8'
         AccentPurple     = '#8B5CF6'
         BodyTextTertiary = '#525252'
