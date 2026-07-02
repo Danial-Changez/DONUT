@@ -80,6 +80,15 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
+    # Releases the single-flight latch WITHOUT caching a verdict. Must be called when a
+    # resolve fails or never starts, otherwise the host stays "in flight" forever and
+    # NeedsResolve never lets it be re-resolved (it wedges on "run again in a moment").
+    # (CacheVerdict already clears the latch on a successful resolve.)
+    [void] ClearInFlight([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.InFlight.Remove($hostName.Trim())
+    }
+
     # Drops a host's cached verdict so the next attempt re-resolves (e.g. after a
     # job fails - the cached IP may be dead/stale).
     [void] Invalidate([string]$hostName) {

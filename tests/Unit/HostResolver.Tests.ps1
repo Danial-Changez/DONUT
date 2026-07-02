@@ -84,6 +84,15 @@ Describe "HostResolver" {
             $r.NeedsResolve("PC-1") | Should -BeFalse
         }
 
+        It "ClearInFlight releases the latch so a failed resolve can be retried" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.MarkInFlight("PC-1")
+            $r.NeedsResolve("PC-1") | Should -BeFalse   # wedged while in flight
+            $r.ClearInFlight("PC-1")                    # a failed resolve releases it
+            $r.NeedsResolve("PC-1") | Should -BeTrue    # uncached again -> re-resolves
+        }
+
         It "caching clears the in-flight flag" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")

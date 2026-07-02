@@ -397,6 +397,9 @@ class HomePresenter : AsyncJobPresenter {
             $this.ActiveJobs.Add($job)
         }
         catch {
+            # The latch is set before the job starts; release it if it didn't, or the host
+            # wedges (NeedsResolve stays false forever -> never re-resolves).
+            $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
         }
     }
@@ -411,7 +414,15 @@ class HomePresenter : AsyncJobPresenter {
     # Resolve job finished: cache the DC (warm) or the per-host verdict (fresh IP +
     # online), detect an IP change, persist the DC, and refresh the offline indicator.
     [void] CompleteResolve([AsyncJob]$job) {
-        if ($job.Status -eq 'Failed') { return }
+        if ($job.Status -eq 'Failed') {
+            # A failed resolve (e.g. the host was unreachable, so Resolve-DnsName errored
+            # and HadErrors tripped Failed) must still release the single-flight latch, or
+            # NeedsResolve stays false forever and the host can never be re-resolved - it
+            # wedges on "Resolving ... - run again in a moment". Leave the cache empty so
+            # the next select/run re-resolves from scratch.
+            $this.Resolver.ClearInFlight($job.HostName)
+            return
+        }
         foreach ($item in @($job.Result)) {
             if ($null -eq $item) { continue }
             $mode = [string]$item.Mode
