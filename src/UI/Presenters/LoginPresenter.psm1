@@ -32,13 +32,6 @@ class LoginPresenter {
     }
 
     [bool] ShowLogin() {
-        return $this.ShowLogin($null)
-    }
-
-    # $duringLogin (optional) runs on this window's dispatcher at Background priority, so
-    # it executes DURING the modal login wait - the caller passes the main-window preload
-    # so it's ready to show the instant sign-in finishes.
-    [bool] ShowLogin([scriptblock]$duringLogin) {
         $this.LoginWindow = $this.LoadXaml('LoginWindow.xaml')
 
         # Find Controls
@@ -61,14 +54,6 @@ class LoginPresenter {
         $this.LoginSuccess = $false
 
         $this.LoadImages()
-
-        # Queue the "while login is up" work (e.g. preloading the main window). At
-        # Background priority it runs once the login window has rendered and the modal
-        # loop is idle, so it overlaps the user's sign-in instead of delaying it.
-        if ($null -ne $duringLogin) {
-            $this.LoginWindow.Dispatcher.BeginInvoke(
-                [System.Windows.Threading.DispatcherPriority]::Background, [Action]$duringLogin) | Out-Null
-        }
 
         $this.LoginWindow.ShowDialog() | Out-Null
         return $this.LoginSuccess
