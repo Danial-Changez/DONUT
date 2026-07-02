@@ -36,6 +36,7 @@ enum RemoteFailureReason {
     ExecutionFailed
     DcuMissing
     ProcessStartFailed
+    ConnectionLost
     Unknown
 }
 
@@ -114,6 +115,47 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
+# psexec's connection to the host dropped mid-command - a Win32 transport error (e.g.
+# 233 ERROR_PIPE_NOT_CONNECTED, 64 ERROR_NETNAME_DELETED), NOT a dcu-cli exit code. The
+# classic trigger is applying a NETWORK driver (the update resets the NIC that psexec's
+# own SMB/named-pipe connection rides over), so psexec loses the pipe even though dcu-cli
+# completed on the host. Treated as a Warning because the update most likely applied - a
+# re-scan confirms it. Carries the raw exit code.
+class RemoteConnectionLostException : RemoteOperationException {
+    [int] $ExitCode
+
+    RemoteConnectionLostException([string]$hostName, [string]$what, [int]$exitCode) : base(
+        "$what on '$hostName' could not be confirmed: psexec lost its connection to the host ($([RemoteConnectionLostException]::Describe($exitCode))). This is a network/transport drop, not a DCU error - it typically happens when the update resets the network (e.g. a NIC/Ethernet driver), which severs psexec's own connection while dcu-cli finishes on the host. The update most likely applied; re-scan to confirm.",
+        $hostName, [ErrorLevel]::Warning, [RemoteFailureReason]::ConnectionLost) {
+        $this.ExitCode = $exitCode
+    }
+
+    # The Win32 codes psexec surfaces when its remote connection drops mid-command. None
+    # collide with dcu-cli's own codes (0-5, 1xx, 5xx, 1000s), so seeing one means the
+    # transport died, not that DCU reported it.
+    static [hashtable] $Codes = @{
+        64   = 'ERROR_NETNAME_DELETED'
+        109  = 'ERROR_BROKEN_PIPE'
+        121  = 'ERROR_SEM_TIMEOUT'
+        232  = 'ERROR_NO_DATA'
+        233  = 'ERROR_PIPE_NOT_CONNECTED'
+        1236 = 'ERROR_CONNECTION_ABORTED'
+    }
+
+    # True when an exit code is one of the known connection-lost transport codes.
+    static [bool] IsConnectionLost([int]$exitCode) {
+        return [RemoteConnectionLostException]::Codes.ContainsKey($exitCode)
+    }
+
+    # Formats a transport code with its Win32 name (so "233" reads as
+    # "code 233 ERROR_PIPE_NOT_CONNECTED").
+    static [string] Describe([int]$exitCode) {
+        $name = [RemoteConnectionLostException]::Codes[$exitCode]
+        if ($name) { return "code $exitCode $name" }
+        return "code $exitCode"
+    }
+}
+
 # Dell Command Update is not installed on the target, so there is nothing to drive.
 class DcuNotInstalledException : RemoteOperationException {
     DcuNotInstalledException([string]$hostName) : base(
@@ -132,6 +174,7 @@ class RemoteFailure {
         if ($message -match '(?i)rpc \(port 135\)')                  { return [RemoteFailureReason]::RpcUnavailable }
         if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
         if ($message -match '(?i)process-launch failure|exited during startup') { return [RemoteFailureReason]::ProcessStartFailed }
+        if ($message -match '(?i)lost its connection to the host')    { return [RemoteFailureReason]::ConnectionLost }
         if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }

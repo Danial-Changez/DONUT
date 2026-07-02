@@ -583,6 +583,15 @@ class ExecutionService {
             throw [RemoteProcessStartException]::new($computer, "DCU /$command", $exitCode)
         }
 
+        # psexec transport codes (e.g. 233 ERROR_PIPE_NOT_CONNECTED, 64 ERROR_NETNAME_DELETED)
+        # mean psexec's connection to the host dropped mid-command - NOT a dcu-cli exit code.
+        # The classic trigger is /applyUpdates installing a NETWORK driver, which resets the
+        # NIC that psexec's own SMB pipe rides over: psexec loses the pipe while dcu-cli
+        # finishes on the host. Surface it as its own cause (a re-scan confirms the apply).
+        if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
+            throw [RemoteConnectionLostException]::new($computer, "DCU /$command", $exitCode)
+        }
+
         # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
         # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
         if ($exitCode -notin @(0, 1, 2, 3, 4, 5)) {

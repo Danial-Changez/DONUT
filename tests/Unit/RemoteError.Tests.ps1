@@ -45,6 +45,27 @@ Describe "RemoteError" {
             [RemoteProcessStartException]::Describe(-1073741819) | Should -Be '0xC0000005 STATUS_ACCESS_VIOLATION'
             [RemoteProcessStartException]::Describe(-559038737)  | Should -BeLike '*0xDEADBEEF*'
         }
+        It "RemoteConnectionLostException is a Warning naming the transport code (ConnectionLost)" {
+            $ex = [RemoteConnectionLostException]::new('PC-7', 'DCU /applyUpdates', 233)
+            [string]$ex.Level  | Should -Be 'Warning'
+            [string]$ex.Reason | Should -Be 'ConnectionLost'
+            $ex.ExitCode       | Should -Be 233
+            $ex.Message        | Should -BeLike '*233 ERROR_PIPE_NOT_CONNECTED*'
+            $ex.Message        | Should -BeLike '*not a DCU error*'
+            $ex.Message        | Should -BeLike '*re-scan to confirm*'
+        }
+        It "IsConnectionLost matches transport codes but never dcu-cli's own codes" {
+            [RemoteConnectionLostException]::IsConnectionLost(233)  | Should -BeTrue   # ERROR_PIPE_NOT_CONNECTED
+            [RemoteConnectionLostException]::IsConnectionLost(64)   | Should -BeTrue   # ERROR_NETNAME_DELETED
+            [RemoteConnectionLostException]::IsConnectionLost(1236) | Should -BeTrue   # ERROR_CONNECTION_ABORTED
+            foreach ($dcu in 0, 1, 2, 3, 4, 5, 105, 500, 1000) {
+                [RemoteConnectionLostException]::IsConnectionLost($dcu) | Should -BeFalse
+            }
+        }
+        It "RemoteConnectionLostException.Describe names known codes, bare-formats others" {
+            [RemoteConnectionLostException]::Describe(64)  | Should -Be 'code 64 ERROR_NETNAME_DELETED'
+            [RemoteConnectionLostException]::Describe(999) | Should -Be 'code 999'
+        }
     }
 
     Context "RemoteFailure.ReasonFromMessage (re-derives reason across the runspace boundary)" {
@@ -55,6 +76,7 @@ Describe "RemoteError" {
             [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h','DCU /scan',500)).Message) | Should -Be 'ExecutionFailed'
             [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
             [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h','DCU /applyUpdates',-1073741502)).Message) | Should -Be 'ProcessStartFailed'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteConnectionLostException]::new('h','DCU /applyUpdates',233)).Message) | Should -Be 'ConnectionLost'
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
             [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'
