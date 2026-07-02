@@ -23,7 +23,7 @@ using module "..\..\Core\TimeFormat.psm1"
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
-    [string] $Subtitle = ''
+    [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [bool]   $ChipVisible = $false
     [double] $Percent = 0
@@ -52,7 +52,7 @@ class HostViewModel : ObservableObject {
     hidden [string] $CachedIp = ''   # last resolved IP, for ProbedText recomposition
 
     # Backing state for idle/reachability recomposition (mirrors ConnectionRow).
-    hidden [string] $BaseSubtitle = ''
+    hidden [string] $BaseSubtitle = 'never run'
     hidden [string] $IdleStatus = ''
     hidden [string] $Reachability = 'Unknown'
     hidden [string] $DotKey = 'BodyTextTertiary'

@@ -126,6 +126,7 @@ class HomePresenter : AsyncJobPresenter {
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
+    [DispatcherTimer] $IdleRefreshTimer   # advances idle rows' relative times every 30s
 
     # Host name -> HostViewModel (same instances live in $Vm.Machines)
     [hashtable] $Rows
@@ -168,6 +169,14 @@ class HomePresenter : AsyncJobPresenter {
         $this.Timer.Interval = [TimeSpan]::FromMilliseconds(200)
         $this.Timer.Add_Tick({ $presenter.OnTimerTick($this, $null) }.GetNewClosure())
         $this.Timer.Start()
+
+        # Periodically re-render idle rows so their relative times advance ("just now" ->
+        # "1 min ago" -> ...). Cheap: ApplyIdle only raises PropertyChanged for values that
+        # actually change (via ObservableObject.Set), i.e. the subtitle/probe text.
+        $this.IdleRefreshTimer = [DispatcherTimer]::new()
+        $this.IdleRefreshTimer.Interval = [TimeSpan]::FromSeconds(30)
+        $this.IdleRefreshTimer.Add_Tick({ $presenter.RefreshIdleTimes() }.GetNewClosure())
+        $this.IdleRefreshTimer.Start()
 
         # AD live-finder: debounce typing, run the search on the runspace pool,
         # poll for completion (newest result wins).
@@ -1640,8 +1649,12 @@ class HomePresenter : AsyncJobPresenter {
     # was removed - the per-machine "Refresh info" handles on-demand re-probes).
     [void] RefreshAll() {
         if ($this.SelectedHost) { $this.RefreshInventory($this.SelectedHost) }
-        $this.UpdateOverviewTiles()
-        # Re-render idle rows so their relative times stay current.
+        $this.RefreshIdleTimes()
+    }
+
+    # Re-renders idle (not-running) rows from their stored record, so their relative-time
+    # subtitles advance over the session. Driven on Initialize and by IdleRefreshTimer (30s).
+    [void] RefreshIdleTimes() {
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {
                 $row = $this.GetRow($rc.Hostname)
