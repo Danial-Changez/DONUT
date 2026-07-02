@@ -561,19 +561,20 @@ class ExecutionService {
             "`"$remoteCmd`""
         )
 
-        # Log the EXACT command line handed to psexec.exe - psexec flags plus the remote
-        # 'pwsh -c "..."' wrapper that actually runs dcu-cli - so a CLI/syntax failure
-        # (e.g. DCU 105) can be read straight from the log instead of reconstructed. This
-        # is the literal argument list Start-Process receives, in order.
-        $this.Logger.LogInfo("Executing: psexec.exe $($psexecArgs -join ' ')")
+        # Log the EXACT command line (psexec flags + the remote 'pwsh -c "..."' wrapper that
+        # runs dcu-cli) to BOTH the app log and the job's detail panel, so a CLI/syntax
+        # failure (e.g. DCU 105) can be read straight from it - and the command corrected by
+        # hand if needed. This is the literal argument list Start-Process receives, in order.
+        $cmdLine = "psexec.exe $($psexecArgs -join ' ')"
+        $this.Logger.LogInfo("Executing: $cmdLine")
+        Write-Information "Executing: $cmdLine"
 
-        # Run psexec with its output redirected to temp files and TAILED live into the job's
-        # Information stream (AsyncJob drains it -> the presenter's pump -> DcuProgress), so
-        # DCU's per-line progress ("(9.41%)") drives the determinate bar and shows in the
-        # detail log. -ArgumentList is passed through UNCHANGED (a manual quoting change here
-        # previously caused DCU 105; the exact command line is logged just above), so this
-        # only changes WHERE the output goes - it used to spill to a stray psexec console.
-        $exitCode = $this.RunStreamed('psexec.exe', $psexecArgs)
+        # Run psexec in a console (no stdout redirect) - the reliable launch path; psexec's
+        # own console shows its live output. Diagnostics come from the command logged above
+        # and the exit code below. (An earlier file-redirect to capture DCU's progress
+        # removed that console and is a suspected cause of remote 0xC0000142 init failures.)
+        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
+        $exitCode = [int]$p.ExitCode
 
         # A negative exit code is a Windows process-launch/crash fault (NTSTATUS 0xC000xxxx,
         # e.g. 0xC0000142 STATUS_DLL_INIT_FAILED) - the remote pwsh never ran dcu-cli - so
@@ -592,51 +593,6 @@ class ExecutionService {
 
         if ($exitCode -eq 1) {
             $this.Logger.LogInfo("[$computer] Reboot required to complete updates.")
-        }
-    }
-
-    # Runs a process with stdout/stderr redirected to temp files and tails them live, so each
-    # line streams into the job's Information stream (Write-Information -> AsyncJob.Logs ->
-    # OnJobPolled -> DcuProgress bar + detail log). Returns the exit code. -ArgumentList is
-    # passed through unchanged, so it does NOT alter how the (delicately quoted) remote
-    # command reaches the exe - it only redirects the output (which used to hit a console).
-    hidden [int] RunStreamed([string]$exe, [string[]]$argList) {
-        $outFile = [System.IO.Path]::GetTempFileName()
-        $errFile = [System.IO.Path]::GetTempFileName()
-        $outReader = $null
-        $errReader = $null
-        try {
-            $proc = Start-Process -FilePath $exe -ArgumentList $argList -NoNewWindow -PassThru `
-                -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-            $share = [System.IO.FileShare]::ReadWrite
-            $outReader = [System.IO.StreamReader]::new([System.IO.File]::Open($outFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share))
-            $errReader = [System.IO.StreamReader]::new([System.IO.File]::Open($errFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share))
-
-            while (-not $proc.HasExited) {
-                $this.DrainReader($outReader)
-                $this.DrainReader($errReader)
-                Start-Sleep -Milliseconds 150
-            }
-            # Catch anything written between the final poll and process exit.
-            $this.DrainReader($outReader)
-            $this.DrainReader($errReader)
-            return [int]$proc.ExitCode
-        }
-        finally {
-            if ($outReader) { $outReader.Dispose() }
-            if ($errReader) { $errReader.Dispose() }
-            Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    # Streams each newly-available line from a tailed reader into the job's Information
-    # stream (drained by AsyncJob for the presenter's log + percentage parsing).
-    hidden [void] DrainReader([System.IO.StreamReader]$reader) {
-        if ($null -eq $reader) { return }
-        $line = $reader.ReadLine()
-        while ($null -ne $line) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Information $line }
-            $line = $reader.ReadLine()
         }
     }
 
