@@ -18,4 +18,15 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Security
 
+# MVVM base types (ObservableObject / RelayCommand). In production these are compiled into
+# Donut.Launcher and already loaded, so the guard skips. On the `pwsh -Sta` dev path they
+# aren't loaded, so compile them from the same source here - BEFORE the class graph parses,
+# or the view-model classes that inherit ObservableObject fail to resolve at parse time.
+if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
+    Add-Type -Path @(
+        "$PSScriptRoot\Launcher\ObservableObject.cs",
+        "$PSScriptRoot\Launcher\RelayCommand.cs"
+    ) -ReferencedAssemblies System.ObjectModel, WindowsBase, PresentationCore
+}
+
 . "$PSScriptRoot\Scripts\DonutApp.ps1"
