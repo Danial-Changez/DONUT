@@ -100,6 +100,19 @@ class HostResolver : RemoteJobService {
         return ($age -gt $this.Ttl)
     }
 
+    # True when a CACHED verdict has aged past the TTL. Unlike NeedsResolve this ignores
+    # DC/in-flight state and an uncached host (returns $false) - it answers only "is the
+    # verdict we already hold too old to trust?". The gather gate uses it so an aged-out
+    # 'Online' is re-validated (off-thread) before we open the freeze-prone CIM/psexec
+    # connect against a host that may since have gone offline.
+    [bool] IsVerdictStale([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
+        $name = $hostName.Trim()
+        if (-not $this.IpCache.ContainsKey($name)) { return $false }
+        $age = [datetime]::UtcNow - [datetime]$this.IpCache[$name]['CheckedAt']
+        return ($age -gt $this.Ttl)
+    }
+
     # --- Worker-arg builders (run the actual resolution on the pool) -------------------
 
     # Warm job: discover + pick a live domain controller (one-time, at startup).

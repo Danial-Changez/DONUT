@@ -1402,7 +1402,13 @@ class HomePresenter : AsyncJobPresenter {
             $this.AppendLog($hostName, "Host is offline - skipping inventory.")
             return
         }
-        if ($state -ne 'Online') {
+        # Gather only on a verdict we still trust. An unknown host - OR an 'Online' verdict
+        # that has aged past the TTL (the box may have gone offline since, e.g. a restart) -
+        # is re-validated first via the cheap, bounded, off-thread background resolve;
+        # CompleteResolve re-gathers the selected host once the fresh verdict lands. This
+        # keeps us from opening the freeze-prone CIM/psexec connect against a host that is no
+        # longer reachable.
+        if ($state -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {
             $this.PrefetchIp($hostName)
             return
         }
