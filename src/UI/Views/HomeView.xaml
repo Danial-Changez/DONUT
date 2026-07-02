@@ -235,9 +235,13 @@
            a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
            ScrollViewer, so it is NOT wrapped in one - that is what enables virtualization. -->
       <Grid Grid.Row="1" Margin="10,0,10,10">
+        <!-- SelectedItem is NOT bound to SelectedMachine: a PS-class auto-property doesn't
+             raise PropertyChanged when WPF writes it, so the SelectedMachine.* detail/overview
+             bindings wouldn't track selection. The presenter drives HomeVm.SelectedMachine via
+             SetSelected() (which raises) from SelectionChanged instead; the ListBox's own
+             SelectedItem still owns the row highlight. -->
         <ListBox x:Name="MachineList"
                  ItemsSource="{Binding Machines}"
-                 SelectedItem="{Binding SelectedMachine, Mode=TwoWay}"
                  Background="Transparent" BorderThickness="0"
                  HorizontalContentAlignment="Stretch"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"

@@ -1286,15 +1286,20 @@ class HomePresenter : AsyncJobPresenter {
     # open the detail panel for the newly selected host, or clear it on deselect.
     [void] OnMachineSelectionChanged() {
         $item = if ($this.MachineList) { $this.MachineList.SelectedItem } else { $null }
+        # Drive HomeVm.SelectedMachine ourselves (SetSelected raises PropertyChanged), so the
+        # detail/overview SelectedMachine.* bindings actually track the selection. The
+        # ListBox's own SelectedItem still owns the row highlight (IsSelected trigger).
+        $this.HomeVm.SetSelected($item)
         if ($item) { $this.SelectHost([string]$item.HostName) }
         else { $this.ClearSelection() }
     }
 
-    # Programmatic selection: selects the host's row in the ListBox, which drives the
-    # detail panel through OnMachineSelectionChanged. Used by Add and AD-picked computers.
+    # Programmatic selection: select the host's row in the ListBox (drives the highlight);
+    # its SelectionChanged fires OnMachineSelectionChanged, which sets SelectedMachine and
+    # opens the detail. Used by Add and AD-picked computers.
     [void] SelectMachine([string]$hostName) {
         $rowVm = $this.GetRow($hostName)
-        if ($rowVm) { $this.HomeVm.SetSelected($rowVm) }
+        if ($rowVm -and $this.MachineList) { $this.MachineList.SelectedItem = $rowVm }
     }
 
     # Opens the detail panel for a host (single click): the ListBox owns the selected
