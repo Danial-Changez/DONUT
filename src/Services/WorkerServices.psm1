@@ -421,6 +421,13 @@ class ExecutionService {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
 
         $ip = $this.ResolvedIpFor($device.HostName)
+        # Gate SMB (445) first, bounded ~2s: DeployWizTree copies the exe over the admin
+        # share, and a blocked 445 (which RPC/135 reachability does NOT rule out) makes that
+        # UNC copy hang forever with no timeout - the same trap FindDcuCli guards for dcu-cli.
+        if (-not $this.Probe.IsSmbAvailable($ip)) {
+            $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
+            throw [RpcUnavailableException]::new($ip)
+        }
         $this.DeployWizTree($ip)
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand())
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
