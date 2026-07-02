@@ -13,6 +13,27 @@
     <!-- Machine list -->
   </Grid.RowDefinitions>
 
+  <Grid.Resources>
+    <!-- MVVM (Phase 1): converter + machine-list item chrome. The machine list binds to
+         HomeViewModel.Machines; each item is a HostViewModel. -->
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    <Style x:Key="MachineListItem" TargetType="ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <!-- Strip the default ListBoxItem selection chrome; the row template draws its own
+           selected border via the IsSelected trigger. -->
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <ContentPresenter />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Grid.Resources>
+
   <!-- ============================ Action bar ============================ -->
   <Grid Grid.Row="0" Margin="0,0,0,16">
     <Grid.ColumnDefinitions>
@@ -210,24 +231,95 @@
                 FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
       </Grid>
 
-      <!-- Rows -->
-      <ScrollViewer Grid.Row="1" Margin="10,0,10,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid>
-          <TextBlock
-            x:Name="FleetEmptyHint"
-            Text="No machines yet. Enter computer names above and run a scan or update."
-            Foreground="{DynamicResource BodyTextTertiary}"
-            FontFamily="Montserrat"
-            FontSize="14"
-            TextWrapping="Wrap"
-            TextAlignment="Center"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Margin="40"
-          />
-          <ItemsControl x:Name="MachineList" />
-        </Grid>
-      </ScrollViewer>
+      <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
+           a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
+           ScrollViewer, so it is NOT wrapped in one - that is what enables virtualization. -->
+      <Grid Grid.Row="1" Margin="10,0,10,10">
+        <ListBox x:Name="MachineList"
+                 ItemsSource="{Binding Machines}"
+                 SelectedItem="{Binding SelectedMachine, Mode=TwoWay}"
+                 Background="Transparent" BorderThickness="0"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingStackPanel.IsVirtualizing="True"
+                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 ItemContainerStyle="{StaticResource MachineListItem}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"
+                      Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
+                <Border.Style>
+                  <Style TargetType="Border">
+                    <Setter Property="Background" Value="#1F1F1F" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Style.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#27272A" />
+                      </Trigger>
+                      <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource AccentPurple}" />
+                        <Setter Property="BorderThickness" Value="1.5" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <!-- Double-click a row to gather fresh inventory (single click selects). -->
+                <Border.InputBindings>
+                  <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding GatherCommand}" />
+                </Border.InputBindings>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
+                           VerticalAlignment="Center" Fill="{Binding DotBrush}" />
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
+                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="14"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
+                               FontFamily="Montserrat" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                  <ProgressBar Grid.Column="2" Width="120" Height="4" Margin="12,0,12,0"
+                               VerticalAlignment="Center" Minimum="0" Maximum="100"
+                               Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
+                               Foreground="{Binding ProgressBrush}" BorderThickness="0"
+                               Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}" />
+                  <Border Grid.Column="3" CornerRadius="8" Padding="10,3,10,3" VerticalAlignment="Center"
+                          Margin="0,0,8,0" Background="{Binding ChipBackground}"
+                          Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
+                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="11" />
+                  </Border>
+                  <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
+                          Style="{DynamicResource ButtonPrimary}" FontSize="11.5" Height="28"
+                          Padding="14,4" VerticalAlignment="Center"
+                          ToolTip="Run the active command on this machine" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock
+          x:Name="FleetEmptyHint"
+          Text="No machines yet. Enter computer names above and run a scan or update."
+          Foreground="{DynamicResource BodyTextTertiary}"
+          FontFamily="Montserrat"
+          FontSize="14"
+          TextWrapping="Wrap"
+          TextAlignment="Center"
+          HorizontalAlignment="Center"
+          VerticalAlignment="Center"
+          Margin="40"
+          IsHitTestVisible="False"
+        />
+      </Grid>
     </Grid>
   </Border>
 

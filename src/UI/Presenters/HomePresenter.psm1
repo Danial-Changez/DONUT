@@ -2,6 +2,7 @@ using namespace System.Windows.Controls
 using namespace System.Windows.Shapes
 using namespace System.Windows.Threading
 using namespace System.Collections.Generic
+using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
@@ -15,7 +16,8 @@ using module "..\..\Services\DriverMatchingService.psm1"
 using module "..\..\Services\SystemInfoService.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
-using module ".\ConnectionRow.psm1"
+using module "..\ViewModels\HostViewModel.psm1"
+using module "..\ViewModels\HomeViewModel.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -36,7 +38,8 @@ using module "..\..\Models\RemoteError.psm1"
     Presenter for the Home screen: machine list, per-machine detail, AD finder.
 
 .DESCRIPTION
-    Owns the machine list (a ConnectionRow per host, seeded from recents), the
+    Owns the machine list (a HostViewModel per host in HomeViewModel.Machines, bound to a
+    virtualizing ListBox and seeded from recents), the
     Add / Run / Run-all flow (the mode pill selects Scan vs. Apply), and the
     per-machine job lifecycle (extends AsyncJobPresenter's PumpJobs). On select it
     prefetches the host IP (HostResolver) and inventory (InventoryService) and
@@ -59,7 +62,8 @@ class HomePresenter : AsyncJobPresenter {
     [Button] $SearchButton
     [Button] $ClearButton
     [Button] $RunAllButton
-    [ItemsControl] $MachineList
+    [ListBox] $MachineList
+    [HomeViewModel] $HomeVm        # bound to HomeView.DataContext (Machines + SelectedMachine)
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
@@ -123,7 +127,7 @@ class HomePresenter : AsyncJobPresenter {
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
 
-    # Host name -> ConnectionRow
+    # Host name -> HostViewModel (same instances live in $Vm.Machines)
     [hashtable] $Rows
 
     # Manual reboot queue - hosts that require manual reboot after update
@@ -154,6 +158,7 @@ class HomePresenter : AsyncJobPresenter {
 
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
+        $this.HomeVm = [HomeViewModel]::new()   # bound to the view; owns the machine collection
         $this.LogBuffers = @{}
         $this.ManualRebootQueue = [List[string]]::new()
         $this.TotalJobsInBatch = 0
@@ -219,6 +224,14 @@ class HomePresenter : AsyncJobPresenter {
         $this.DiskFoldersHint = $this.ViewContent.FindName('DiskFoldersHint')
 
         $presenter = $this
+
+        # MVVM: bind the view to the HomeViewModel so the machine ListBox renders from
+        # $Vm.Machines, and react to selection (single click) to drive the detail panel.
+        $this.ViewContent.DataContext = $this.HomeVm
+        if ($this.MachineList) {
+            $this.MachineList.Add_SelectionChanged({ $presenter.OnMachineSelectionChanged() }.GetNewClosure())
+        }
+
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
         if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
         if ($this.RunAllButton) { $this.RunAllButton.Add_Click({ $presenter.RunAll() }.GetNewClosure()) }
@@ -524,8 +537,8 @@ class HomePresenter : AsyncJobPresenter {
     # Builds an idle row for every persisted recent connection (newest first).
     [void] BuildRows() {
         foreach ($rc in $this.Store.GetAll()) {
-            $row = $this.EnsureRow($rc.Hostname)
-            $row.SetIdleFrom($rc)
+            $vm = $this.EnsureRow($rc.Hostname)
+            $vm.ApplyIdle($rc)
         }
         $this.UpdateEmptyHint()
     }
@@ -548,7 +561,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
             $this.StartInventory($hostName, $true)
         }
-        $this.SelectHost($targetHosts[0])
+        $this.SelectMachine($targetHosts[0])
         $this.UpdateEmptyHint()
 
         $this.SearchBar.Text = ""
@@ -965,7 +978,7 @@ class HomePresenter : AsyncJobPresenter {
         }
         catch {
             $this.AppendLog($hostName, "Error starting process: $_")
-            $row.SetStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
+            $row.ApplyStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
     }
@@ -1108,7 +1121,7 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.GetRow($job.HostName)
         if ($row) {
             $rc = $this.GetRecord($job.HostName)
-            if ($rc) { $row.SetIdleFrom($rc) }
+            if ($rc) { $row.ApplyIdle($rc) }
         }
     }
 
@@ -1120,7 +1133,7 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.GetRow($job.HostName)
         if (-not $row) { return }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
-        $row.SetStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+        $row.ApplyStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
     }
 
     # Analyses the (fresh or reused) update report for a host, confirms with the
@@ -1208,27 +1221,28 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Returns the existing row for a host, or builds and inserts a new one.
-    [ConnectionRow] EnsureRow([string]$hostName) {
+    # Returns the existing row view-model for a host, or builds and inserts a new one.
+    # Adds to $Vm.Machines (the bound collection); the ListBox renders it via the template.
+    [HostViewModel] EnsureRow([string]$hostName) {
         if ($this.Rows.ContainsKey($hostName)) {
             return $this.Rows[$hostName]
         }
 
-        $row = [ConnectionRow]::new($hostName)
+        $vm = [HostViewModel]::new($hostName)
         $presenter = $this
-        $row.RunAction = { param($h) $presenter.RunHost($h) }.GetNewClosure()
-        $row.SelectAction = { param($h) $presenter.SelectHost($h) }.GetNewClosure()
-        $row.GatherAction = { param($h) $presenter.OnRowActivated($h) }.GetNewClosure()
-        $this.Rows[$hostName] = $row
-        if ($this.MachineList) {
-            $this.MachineList.Items.Add($row.Root) | Out-Null
-            $row.AnimateIn()
-        }
+        # Row commands close over the host name; Run = active command, double-click = gather.
+        $run = { param($p) $presenter.RunHost($hostName) }.GetNewClosure()
+        $gather = { param($p) $presenter.OnRowActivated($hostName) }.GetNewClosure()
+        $vm.RunCommand = [RelayCommand]::new([System.Action[object]]$run)
+        $vm.GatherCommand = [RelayCommand]::new([System.Action[object]]$gather)
+
+        $this.Rows[$hostName] = $vm
+        $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
         $this.UpdateEmptyHint()
-        return $row
+        return $vm
     }
 
-    [ConnectionRow] GetRow([string]$hostName) {
+    [HostViewModel] GetRow([string]$hostName) {
         if ($this.Rows.ContainsKey($hostName)) { return $this.Rows[$hostName] }
         return $null
     }
@@ -1269,18 +1283,28 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Opens the detail panel for a host (single click): marks it selected and
-    # renders cached inventory/folders instantly. Does NOT touch the network - a
-    # fresh probe is gathered on double-click (OnRowActivated) or the Refresh
-    # button, so selecting an offline machine can never block the UI thread.
+    # ListBox selection changed (single click, or programmatic via HomeVm.SetSelected):
+    # open the detail panel for the newly selected host, or clear it on deselect.
+    [void] OnMachineSelectionChanged() {
+        $item = if ($this.MachineList) { $this.MachineList.SelectedItem } else { $null }
+        if ($item) { $this.SelectHost([string]$item.HostName) }
+        else { $this.ClearSelection() }
+    }
+
+    # Programmatic selection: selects the host's row in the ListBox, which drives the
+    # detail panel through OnMachineSelectionChanged. Used by Add and AD-picked computers.
+    [void] SelectMachine([string]$hostName) {
+        $rowVm = $this.GetRow($hostName)
+        if ($rowVm) { $this.HomeVm.SetSelected($rowVm) }
+    }
+
+    # Opens the detail panel for a host (single click): the ListBox owns the selected
+    # visual; this renders cached inventory/folders instantly. Does NOT touch the network -
+    # a fresh probe is gathered on double-click (OnRowActivated) or Refresh, so selecting an
+    # offline machine can never block the UI thread.
     [void] SelectHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-
-        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
-            $this.Rows[$this.SelectedHost].SetSelected($false)
-        }
         $this.SelectedHost = $hostName
-        if ($this.Rows.ContainsKey($hostName)) { $this.Rows[$hostName].SetSelected($true) }
 
         # Start-early: resolve this host's IP in the background now, so it's cached
         # before the operator double-clicks to gather inventory or hits Run.
@@ -1332,15 +1356,13 @@ class HomePresenter : AsyncJobPresenter {
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
     # in the background. The probe runs on the runspace pool, never the UI thread.
     [void] OnRowActivated([string]$hostName) {
-        $this.SelectHost($hostName)
+        $this.SelectMachine($hostName)
         $this.StartInventory($hostName)
     }
 
     # Clears the current selection and returns the detail pane to its empty state.
+    # (The ListBox selected visual clears itself when its SelectedItem goes null.)
     [void] ClearSelection() {
-        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
-            $this.Rows[$this.SelectedHost].SetSelected($false)
-        }
         $this.SelectedHost = $null
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Visible }
@@ -1599,7 +1621,7 @@ class HomePresenter : AsyncJobPresenter {
 
         foreach ($hostName in $toRemove) {
             $row = $this.Rows[$hostName]
-            if ($this.MachineList -and $row) { $this.MachineList.Items.Remove($row.Root) }
+            if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
             $this.Rows.Remove($hostName)
             $this.Store.Remove($hostName)
             $this.LogBuffers.Remove($hostName)
@@ -1629,7 +1651,7 @@ class HomePresenter : AsyncJobPresenter {
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {
                 $row = $this.GetRow($rc.Hostname)
-                if ($row) { $row.SetIdleFrom($rc) }
+                if ($row) { $row.ApplyIdle($rc) }
             }
         }
     }
