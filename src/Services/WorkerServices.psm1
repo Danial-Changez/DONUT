@@ -567,18 +567,69 @@ class ExecutionService {
         # is the literal argument list Start-Process receives, in order.
         $this.Logger.LogInfo("Executing: psexec.exe $($psexecArgs -join ' ')")
 
-        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
-        
+        # Run psexec with its output redirected to temp files and TAILED live into the job's
+        # Information stream (AsyncJob drains it -> the presenter's pump -> DcuProgress), so
+        # DCU's per-line progress ("(9.41%)") drives the determinate bar and shows in the
+        # detail log. -ArgumentList is passed through UNCHANGED (a manual quoting change here
+        # previously caused DCU 105; the exact command line is logged just above), so this
+        # only changes WHERE the output goes - it used to spill to a stray psexec console.
+        $exitCode = $this.RunStreamed('psexec.exe', $psexecArgs)
+
         # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
         # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
-        if ($p.ExitCode -notin @(0, 1, 2, 3, 4, 5)) {
+        if ($exitCode -notin @(0, 1, 2, 3, 4, 5)) {
             # Carry the full argument string so a syntax error (e.g. DCU 105) surfaces the
             # exact command in the user-visible error, not just the bare command name.
-            throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $p.ExitCode)
+            throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $exitCode)
         }
-        
-        if ($p.ExitCode -eq 1) {
+
+        if ($exitCode -eq 1) {
             $this.Logger.LogInfo("[$computer] Reboot required to complete updates.")
+        }
+    }
+
+    # Runs a process with stdout/stderr redirected to temp files and tails them live, so each
+    # line streams into the job's Information stream (Write-Information -> AsyncJob.Logs ->
+    # OnJobPolled -> DcuProgress bar + detail log). Returns the exit code. -ArgumentList is
+    # passed through unchanged, so it does NOT alter how the (delicately quoted) remote
+    # command reaches the exe - it only redirects the output (which used to hit a console).
+    hidden [int] RunStreamed([string]$exe, [string[]]$argList) {
+        $outFile = [System.IO.Path]::GetTempFileName()
+        $errFile = [System.IO.Path]::GetTempFileName()
+        $outReader = $null
+        $errReader = $null
+        try {
+            $proc = Start-Process -FilePath $exe -ArgumentList $argList -NoNewWindow -PassThru `
+                -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            $share = [System.IO.FileShare]::ReadWrite
+            $outReader = [System.IO.StreamReader]::new([System.IO.File]::Open($outFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share))
+            $errReader = [System.IO.StreamReader]::new([System.IO.File]::Open($errFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share))
+
+            while (-not $proc.HasExited) {
+                $this.DrainReader($outReader)
+                $this.DrainReader($errReader)
+                Start-Sleep -Milliseconds 150
+            }
+            # Catch anything written between the final poll and process exit.
+            $this.DrainReader($outReader)
+            $this.DrainReader($errReader)
+            return [int]$proc.ExitCode
+        }
+        finally {
+            if ($outReader) { $outReader.Dispose() }
+            if ($errReader) { $errReader.Dispose() }
+            Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # Streams each newly-available line from a tailed reader into the job's Information
+    # stream (drained by AsyncJob for the presenter's log + percentage parsing).
+    hidden [void] DrainReader([System.IO.StreamReader]$reader) {
+        if ($null -eq $reader) { return }
+        $line = $reader.ReadLine()
+        while ($null -ne $line) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Information $line }
+            $line = $reader.ReadLine()
         }
     }
 
