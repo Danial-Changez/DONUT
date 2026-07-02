@@ -575,6 +575,13 @@ class ExecutionService {
         # only changes WHERE the output goes - it used to spill to a stray psexec console.
         $exitCode = $this.RunStreamed('psexec.exe', $psexecArgs)
 
+        # A negative exit code is a Windows process-launch/crash fault (NTSTATUS 0xC000xxxx,
+        # e.g. 0xC0000142 STATUS_DLL_INIT_FAILED) - the remote pwsh never ran dcu-cli - so
+        # surface it as its own cause, not as a DCU exit code (DCU returns small non-negatives).
+        if ($exitCode -lt 0) {
+            throw [RemoteProcessStartException]::new($computer, "DCU /$command", $exitCode)
+        }
+
         # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
         # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
         if ($exitCode -notin @(0, 1, 2, 3, 4, 5)) {

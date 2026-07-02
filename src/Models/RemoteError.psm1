@@ -35,6 +35,7 @@ enum RemoteFailureReason {
     RpcUnavailable
     ExecutionFailed
     DcuMissing
+    ProcessStartFailed
     Unknown
 }
 
@@ -85,6 +86,34 @@ class RemoteExecutionException : RemoteOperationException {
     }
 }
 
+# The remote process (pwsh) failed to start / crashed during startup - a Windows NTSTATUS
+# fault (e.g. 0xC0000142 STATUS_DLL_INIT_FAILED), NOT a dcu-cli exit code, so DCU never
+# actually ran. Commonly session-0 desktop-heap exhaustion after repeated remote runs, or
+# AV/EDR interference; it often succeeds on retry. Carries the raw exit code.
+class RemoteProcessStartException : RemoteOperationException {
+    [int] $ExitCode
+
+    RemoteProcessStartException([string]$hostName, [string]$what, [int]$exitCode) : base(
+        "$what could not run on '$hostName': the remote process exited during startup ($([RemoteProcessStartException]::Describe($exitCode))). This is a Windows process-launch failure, not a DCU error - commonly session-0 desktop-heap exhaustion after repeated remote runs, or AV/EDR interference; it often succeeds on retry.",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ProcessStartFailed) {
+        $this.ExitCode = $exitCode
+    }
+
+    # Formats a process exit code as its unsigned NTSTATUS hex plus a known name when we
+    # have one (so "-1073741502" reads as "0xC0000142 STATUS_DLL_INIT_FAILED").
+    static [string] Describe([int]$exitCode) {
+        $hex = '0x{0:X8}' -f ([int64]$exitCode -band 0xFFFFFFFFL)
+        $known = @{
+            '0xC0000142' = 'STATUS_DLL_INIT_FAILED'
+            '0xC0000005' = 'STATUS_ACCESS_VIOLATION'
+            '0xC000012D' = 'STATUS_COMMITMENT_LIMIT'
+            '0xC0000017' = 'STATUS_NO_MEMORY'
+        }
+        if ($known.ContainsKey($hex)) { return "$hex $($known[$hex])" }
+        return "exit code $exitCode / $hex"
+    }
+}
+
 # Dell Command Update is not installed on the target, so there is nothing to drive.
 class DcuNotInstalledException : RemoteOperationException {
     DcuNotInstalledException([string]$hostName) : base(
@@ -102,6 +131,7 @@ class RemoteFailure {
         if ($message -match '(?i)could not resolve an ip|dns/ad')    { return [RemoteFailureReason]::Unresolvable }
         if ($message -match '(?i)rpc \(port 135\)')                  { return [RemoteFailureReason]::RpcUnavailable }
         if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
+        if ($message -match '(?i)process-launch failure|exited during startup') { return [RemoteFailureReason]::ProcessStartFailed }
         if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }

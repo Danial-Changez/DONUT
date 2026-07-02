@@ -32,6 +32,19 @@ Describe "RemoteError" {
             [string]$ex.Level  | Should -Be 'Error'
             [string]$ex.Reason | Should -Be 'DcuMissing'
         }
+        It "RemoteProcessStartException decodes an NTSTATUS exit code (ProcessStartFailed)" {
+            $ex = [RemoteProcessStartException]::new('PC-6', 'DCU /applyUpdates', -1073741502)
+            [string]$ex.Level  | Should -Be 'Error'
+            [string]$ex.Reason | Should -Be 'ProcessStartFailed'
+            $ex.ExitCode       | Should -Be -1073741502
+            $ex.Message        | Should -BeLike '*0xC0000142 STATUS_DLL_INIT_FAILED*'
+            $ex.Message        | Should -BeLike '*not a DCU error*'
+        }
+        It "RemoteProcessStartException.Describe names known NTSTATUS codes, hex-formats others" {
+            [RemoteProcessStartException]::Describe(-1073741502) | Should -Be '0xC0000142 STATUS_DLL_INIT_FAILED'
+            [RemoteProcessStartException]::Describe(-1073741819) | Should -Be '0xC0000005 STATUS_ACCESS_VIOLATION'
+            [RemoteProcessStartException]::Describe(-559038737)  | Should -BeLike '*0xDEADBEEF*'
+        }
     }
 
     Context "RemoteFailure.ReasonFromMessage (re-derives reason across the runspace boundary)" {
@@ -41,6 +54,7 @@ Describe "RemoteError" {
             [string][RemoteFailure]::ReasonFromMessage(([RpcUnavailableException]::new('h')).Message)   | Should -Be 'RpcUnavailable'
             [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h','DCU /scan',500)).Message) | Should -Be 'ExecutionFailed'
             [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h','DCU /applyUpdates',-1073741502)).Message) | Should -Be 'ProcessStartFailed'
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
             [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'
