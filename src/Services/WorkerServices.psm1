@@ -550,7 +550,10 @@ class ExecutionService {
 
         for ($attempt = 1; $attempt -le 5; $attempt++) {
             try {
-                if (Test-Path -LiteralPath $remote) {
+                # Gate on SMB (445) first, bounded ~2s: a Test-Path/Get-Content against a UNC
+                # path whose share is still down (the NIC hasn't finished re-initialising)
+                # blocks with no timeout, so probe the port before touching the share.
+                if (($this.Probe.IsSmbAvailable($ip)) -and (Test-Path -LiteralPath $remote)) {
                     $text = Get-Content -LiteralPath $remote -Raw -ErrorAction Stop
                     try { Set-Content -LiteralPath $localCopy -Value $text -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
                     $parsed = [DcuLog]::ParseReturnCode($text)
@@ -645,29 +648,32 @@ class ExecutionService {
             $dcu = $this.ReadDcuReturnCode($ip, $outputLog)
             if ($dcu.Found) {
                 # dcu-cli finished and recorded its verdict: trust that, not the dropped pipe.
-                if ($dcu.Code -in @(0, 1, 2, 3, 4, 5)) {
+                if ([DcuLog]::IsSuccess($dcu.Code)) {
                     $this.Logger.LogWarning("[$computer] psexec lost its connection ($([RemoteConnectionLostException]::Describe($exitCode))), but dcu-cli's log confirms return code $($dcu.Code) - treating DCU /$command as completed.")
-                    if ($dcu.Code -eq 1) { $this.Logger.LogInfo("[$computer] Reboot required to complete updates.") }
+                    if ([DcuLog]::NeedsReboot($dcu.Code)) { $this.Logger.LogInfo("[$computer] Reboot required to complete updates (dcu-cli code $($dcu.Code)).") }
                     return
                 }
                 # dcu-cli itself reported a real error code: surface THAT, not the transport code.
-                throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $dcu.Code)
+                throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $dcu.Code, [DcuLog]::DescribeReturnCode($dcu.Code))
             }
             # Couldn't read a verdict (log absent/unreadable, or dcu-cli never finished) - can't
             # confirm, so report the connection loss (the operator can re-scan to check).
             throw [RemoteConnectionLostException]::new($computer, "DCU /$command", $exitCode)
         }
 
-        # DCU CLI exit codes: 0=success, 1=reboot required, 500+=errors
-        # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
-        if ($exitCode -notin @(0, 1, 2, 3, 4, 5)) {
-            # Carry the full argument string so a syntax error (e.g. DCU 105) surfaces the
-            # exact command in the user-visible error, not just the bare command name.
-            throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $exitCode)
+        # dcu-cli return codes: ONLY 0 is success; 1 and 5 mean "done, but reboot to
+        # finish". Everything else is an error - and 2/3/4/6/7/8 are the trap: they're
+        # small numbers but real failures (2 unknown error, 3 not a Dell system, 4 not
+        # admin), NOT benign. Reference:
+        # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
+        if (-not [DcuLog]::IsSuccess($exitCode)) {
+            # Carry the full argument string (a syntax error, DCU 105, needs the exact
+            # command) plus the decoded meaning so the error reads as its actual cause.
+            throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $exitCode, [DcuLog]::DescribeReturnCode($exitCode))
         }
 
-        if ($exitCode -eq 1) {
-            $this.Logger.LogInfo("[$computer] Reboot required to complete updates.")
+        if ([DcuLog]::NeedsReboot($exitCode)) {
+            $this.Logger.LogInfo("[$computer] Reboot required to complete updates (dcu-cli code $exitCode).")
         }
     }
 

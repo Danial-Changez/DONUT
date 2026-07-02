@@ -45,3 +45,32 @@ Describe "DcuLog.ParseReturnCode" {
         $r.Code  | Should -Be 2
     }
 }
+
+Describe "DcuLog return-code classification" {
+    It "treats ONLY 0, 1, 5 as success (2/3/4 are real errors, not benign)" {
+        foreach ($ok in 0, 1, 5) { [DcuLog]::IsSuccess($ok) | Should -BeTrue -Because "code $ok is success/reboot" }
+        foreach ($bad in 2, 3, 4, 6, 7, 8, 105, 500, 1000) {
+            [DcuLog]::IsSuccess($bad) | Should -BeFalse -Because "code $bad is a DCU error"
+        }
+    }
+
+    It "flags 1 and 5 (only) as needing a reboot" {
+        [DcuLog]::NeedsReboot(1) | Should -BeTrue
+        [DcuLog]::NeedsReboot(5) | Should -BeTrue
+        [DcuLog]::NeedsReboot(0) | Should -BeFalse
+        [DcuLog]::NeedsReboot(2) | Should -BeFalse
+    }
+
+    It "describes the small codes by their real meaning" {
+        [DcuLog]::DescribeReturnCode(2) | Should -Be 'unknown application error'
+        [DcuLog]::DescribeReturnCode(3) | Should -Be 'the system manufacturer is not Dell'
+        [DcuLog]::DescribeReturnCode(4) | Should -Be 'dcu-cli was not run with administrative privilege'
+    }
+
+    It "categorises the documented error ranges" {
+        [DcuLog]::DescribeReturnCode(105)  | Should -Be 'input-validation error'
+        [DcuLog]::DescribeReturnCode(500)  | Should -Be 'scan error'
+        [DcuLog]::DescribeReturnCode(1000) | Should -Be 'apply-updates error'
+        [DcuLog]::DescribeReturnCode(99999) | Should -Be 'error'
+    }
+}

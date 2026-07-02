@@ -85,6 +85,15 @@ class RemoteExecutionException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
         $this.ExitCode = $exitCode
     }
+
+    # Same, but with a decoded meaning appended (e.g. "exit code 3 - the system
+    # manufacturer is not Dell"), so a small DCU error code reads as its actual cause.
+    RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode, [string]$detail) : base(
+        $(if ([string]::IsNullOrWhiteSpace($detail)) { "$what failed on '$hostName' (exit code $exitCode)." }
+          else { "$what failed on '$hostName' (exit code $exitCode - $detail)." }),
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
+        $this.ExitCode = $exitCode
+    }
 }
 
 # The remote process (pwsh) failed to start / crashed during startup - a Windows NTSTATUS

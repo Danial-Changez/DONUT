@@ -27,6 +27,17 @@ Describe "RemoteError" {
             $ex.ExitCode       | Should -Be 500
             $ex.Message        | Should -BeLike '*exit code 500*'
         }
+        It "RemoteExecutionException appends a decoded detail when given one" {
+            $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 3, 'the system manufacturer is not Dell')
+            $ex.ExitCode | Should -Be 3
+            $ex.Message  | Should -BeLike '*exit code 3 - the system manufacturer is not Dell*'
+            [string][RemoteFailure]::ReasonFromMessage($ex.Message) | Should -Be 'ExecutionFailed'
+        }
+        It "RemoteExecutionException 4-arg tolerates a blank detail (no dangling dash)" {
+            $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 3, '')
+            $ex.Message | Should -BeLike '*exit code 3).*'
+            $ex.Message | Should -Not -BeLike '*- ).*'
+        }
         It "DcuNotInstalledException is an Error with the DcuMissing reason" {
             $ex = [DcuNotInstalledException]::new('PC-5')
             [string]$ex.Level  | Should -Be 'Error'
