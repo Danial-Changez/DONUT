@@ -1315,11 +1315,13 @@ class HomePresenter : AsyncJobPresenter {
     # Moves a host's card to the top of the list, so cards read newest-action-first.
     # Called on OPERATOR actions only (Add, Run, gather, storage scan) - background
     # completions and idle refreshes never reorder, so rows don't jump mid-watch.
-    # (Startup order comes from the store, which is already last-run-first.)
+    # The action is also stamped on the store (Touch), so the next launch opens in
+    # the same order; the write is deferred-save like every other store mutation.
     hidden [void] MoveRowToTop([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $vm = $this.GetRow($hostName)
         if ($null -eq $vm) { return }
+        $this.Store.Touch($hostName)
         $idx = $this.HomeVm.Machines.IndexOf($vm)
         if ($idx -gt 0) { $this.HomeVm.Machines.Move($idx, 0) }
     }

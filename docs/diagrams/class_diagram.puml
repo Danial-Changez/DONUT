@@ -175,6 +175,7 @@ package "Donut.Models" #15233B {
     class RecentConnection {
         +Hostname: string
         +LastSeen: string
+        +LastTouched: string
         +LastStatus: string
         +LastJobType: string
         +UpdateCount: int
@@ -187,6 +188,7 @@ package "Donut.Models" #15233B {
     class RecentConnectionsStore {
         +{static} Cap: int
         +Upsert(host, status, jobType, count, reboot): void
+        +Touch(host): void
         +UpsertInventory(host, inv): void
         +UpsertDiskUsage(host, report): void
         +Remove(host): void

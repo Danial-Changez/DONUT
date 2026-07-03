@@ -61,6 +61,67 @@ Describe "RecentConnectionsStore" {
         }
     }
 
+    Context "Touch (operator-action recency)" {
+        It "Creates a minimal never-run entry with a lastTouched stamp" {
+            $script:store.Touch("NEW-PC")
+
+            $rc = $script:store.GetByHost("NEW-PC")
+            $rc | Should -Not -BeNullOrEmpty
+            $rc.LastSeen | Should -BeNullOrEmpty          # still reads "never run"
+            $rc.LastTouched | Should -Not -BeNullOrEmpty
+        }
+
+        It "Does NOT stamp lastSeen on an existing entry (last run stays honest)" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $seenBefore = $script:store.GetByHost("PC-1").LastSeen
+
+            $script:store.Touch("PC-1")
+
+            $script:store.GetByHost("PC-1").LastSeen | Should -Be $seenBefore
+            $script:store.GetByHost("PC-1").LastTouched | Should -Not -BeNullOrEmpty
+        }
+
+        It "Orders a freshly-touched host ahead of an older-run one" {
+            $script:store.Upsert("RAN-EARLIER", "Completed", "Scan", 0, $false)
+            Start-Sleep -Milliseconds 10
+            $script:store.Touch("ADDED-NOW")
+
+            $script:store.GetAll()[0].Hostname | Should -Be "ADDED-NOW"
+        }
+
+        It "A newer run outranks an older touch (most recent activity wins)" {
+            $script:store.Touch("TOUCHED-FIRST")
+            Start-Sleep -Milliseconds 10
+            $script:store.Upsert("RAN-AFTER", "Completed", "Scan", 0, $false)
+
+            $script:store.GetAll()[0].Hostname | Should -Be "RAN-AFTER"
+        }
+    }
+
+    Context "Upsert carry-over (a run must not lose the caches)" {
+        It "Keeps the cached inventory across a later Upsert" {
+            $inv = [MachineInventory]::new()
+            $inv.Model = "Latitude 5440"
+            $script:store.UpsertInventory("PC-1", $inv)
+
+            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
+
+            $rc = $script:store.GetByHost("PC-1")
+            $rc.Inventory | Should -Not -BeNullOrEmpty
+            $rc.Inventory.Model | Should -Be "Latitude 5440"
+            $rc.LastStatus | Should -Be "Completed"
+        }
+
+        It "Keeps the lastTouched stamp across a later Upsert" {
+            $script:store.Touch("PC-1")
+            $touched = $script:store.GetByHost("PC-1").LastTouched
+
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+
+            $script:store.GetByHost("PC-1").LastTouched | Should -Be $touched
+        }
+    }
+
     Context "GetByHost (indexed lookup)" {
         It "Returns the entry for a known host (case-insensitive)" {
             $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
