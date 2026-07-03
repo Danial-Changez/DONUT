@@ -297,7 +297,7 @@ class ExecutionService {
         if ([string]::IsNullOrWhiteSpace($scriptText)) {
             throw "No inventory script supplied for $($device.HostName)."
         }
-        $this.InvokeRemotePwsh($ip, $scriptText)
+        $this.InvokeRemotePwsh($ip, $scriptText, 'DonutProbe', 10)
         $localPath = $this.CopyInventoryArtifact($device.HostName)
         return @{ InventoryPath = $localPath }
     }
@@ -383,14 +383,17 @@ class ExecutionService {
     # Runs an arbitrary pwsh script on the remote as SYSTEM. The script is passed
     # base64-encoded (UTF-16LE) via -EncodedCommand, which removes all psexec
     # command-line quoting hazards (unlike the dcu-cli '-c "..."' path).
-    # $target may be a host name or an IP - psexec accepts either.
-    [void] InvokeRemotePwsh([string]$target, [string]$scriptText) {
+    # $target may be a host name or an IP - psexec accepts either. $serviceName gives
+    # the session its own remote PSEXESVC (see InvokePsExec: shared-name sessions hang
+    # when the first one ends and deletes the service); $maxMinutes is the watchdog.
+    [void] InvokeRemotePwsh([string]$target, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
         $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptText)
         $encoded = [Convert]::ToBase64String($bytes)
 
         $psexecArgs = @(
             '-accepteula',
             '-nobanner',
+            '-r', $serviceName,
             '-n', '60',     # connect timeout (s): give up instead of hanging on a dead host
             '-s',           # Run as SYSTEM
             '-h',           # Elevated token
@@ -402,8 +405,17 @@ class ExecutionService {
             $encoded
         )
 
-        $this.Logger.LogInfo("Executing remote probe on \\$target")
-        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
+        $this.Logger.LogInfo("Executing remote probe on \\$target (service $serviceName, limit ${maxMinutes}m)")
+        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
+        $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
+        while (-not $p.HasExited) {
+            if ([datetime]::UtcNow -gt $deadline) {
+                try { $p.Kill($true) } catch { }
+                throw [RemoteTimeoutException]::new($target, 'Remote probe', $maxMinutes)
+            }
+            Start-Sleep -Milliseconds 1500
+        }
+        $p.WaitForExit()
         $exitCode = [int]$p.ExitCode
 
         # Classify like InvokePsExec: a negative code is a Windows process-launch fault
@@ -448,7 +460,7 @@ class ExecutionService {
             throw [RpcUnavailableException]::new($ip)
         }
         $this.DeployWizTree($ip)
-        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand())
+        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand(), 'DonutDisk', 20)
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
         $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
@@ -741,10 +753,15 @@ class ExecutionService {
         $dcuCmd = "& '$dcuPath' /$command $argsString"
         $remoteCmd = if ($clearCmd) { "$stopCmd; $mkdirCmd; $clearCmd; $dcuCmd" } else { "$stopCmd; $mkdirCmd; $dcuCmd" }
 
-        # PsExec Arguments
+        # PsExec Arguments. -r gives this job FAMILY its own remote service name:
+        # concurrent psexec sessions to the same host otherwise share one PSEXESVC, and
+        # when the first session ends psexec STOPS AND DELETES that service under the
+        # second one - whose client then hangs forever on dead pipes. Distinct names
+        # (DonutDcu / DonutDisk / DonutProbe) make concurrent job kinds independent.
         $psexecArgs = @(
             '-accepteula',
             '-nobanner',
+            '-r', 'DonutDcu',
             '-n', '60',     # connect timeout (s): give up instead of hanging on a dead host
             '-s',           # Run as SYSTEM
             '-h',           # Elevated token
@@ -775,8 +792,17 @@ class ExecutionService {
         # apply percentages - without touching psexec's console or stdout.
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
+        # Watchdog: a psexec session can hang forever (dead pipes after a transport race,
+        # a wedged remote process). Past the deadline, kill the local client so the worker
+        # is reclaimed and the job fails with a typed cause instead of Running forever.
+        $maxMinutes = if ($command -eq 'applyUpdates') { 120 } else { 30 }
+        $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         $seenChars = 0
         while (-not $p.HasExited) {
+            if ([datetime]::UtcNow -gt $deadline) {
+                try { $p.Kill($true) } catch { }
+                throw [RemoteTimeoutException]::new($computer, "DCU /$command", $maxMinutes)
+            }
             Start-Sleep -Milliseconds 1500
             $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
         }

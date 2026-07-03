@@ -37,6 +37,7 @@ enum RemoteFailureReason {
     DcuMissing
     ProcessStartFailed
     ConnectionLost
+    TimedOut
     Unknown
 }
 
@@ -165,6 +166,21 @@ class RemoteConnectionLostException : RemoteOperationException {
     }
 }
 
+# The remote operation ran past its watchdog deadline and the local psexec client was
+# terminated so the worker (and its runspace) could be reclaimed - without this, a hung
+# psexec session (e.g. the shared-PSEXESVC teardown race, or a wedged remote process)
+# kept the job Running forever and its single-flight guard blocked any retry. NOTE: only
+# the LOCAL client is killed; the remote process may still be running on the host.
+class RemoteTimeoutException : RemoteOperationException {
+    [int] $TimeoutMinutes
+
+    RemoteTimeoutException([string]$hostName, [string]$what, [int]$timeoutMinutes) : base(
+        "$what on '$hostName' did not finish within $timeoutMinutes minutes - the psexec session was terminated. The remote process may still be running on the host; give it a moment to settle before retrying.",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::TimedOut) {
+        $this.TimeoutMinutes = $timeoutMinutes
+    }
+}
+
 # Dell Command Update is not installed on the target, so there is nothing to drive.
 class DcuNotInstalledException : RemoteOperationException {
     DcuNotInstalledException([string]$hostName) : base(
@@ -184,6 +200,7 @@ class RemoteFailure {
         if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
         if ($message -match '(?i)process-launch failure|exited during startup') { return [RemoteFailureReason]::ProcessStartFailed }
         if ($message -match '(?i)lost its connection to the host')    { return [RemoteFailureReason]::ConnectionLost }
+        if ($message -match '(?i)did not finish within')              { return [RemoteFailureReason]::TimedOut }
         if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }

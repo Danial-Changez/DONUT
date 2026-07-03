@@ -55,10 +55,12 @@ class TestExecutionService : ExecutionService {
 
     [string] $LastInventoryScript = $null
     [string] $LastRemotePwshIp = $null
+    [string] $LastRemotePwshService = $null
 
-    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText) {
+    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
         $this.LastRemotePwshIp = $ip
         $this.LastInventoryScript = $scriptText
+        $this.LastRemotePwshService = $serviceName
     }
 
     [string] CopyInventoryArtifact([string]$hostName) {

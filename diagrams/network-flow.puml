@@ -98,6 +98,16 @@ else fresh Online
     has the -n 60 connect timeout and classifies exit codes by cause
     (launch fault / transport drop / real failure) like the dcu-cli path.
   end note
+  note right of W #E8F5E9
+    [FIXED] every psexec launch uses a per-job-family service name
+    (-r DonutDcu / DonutDisk / DonutProbe): concurrent sessions to the
+    SAME host used to share one PSEXESVC, and when the first finished
+    it deleted the service under the second - which then hung forever.
+    A worker WATCHDOG also kills the local psexec client past a per-job
+    deadline (scan 30m / apply 120m / probe 10m / disk 20m) -> typed
+    RemoteTimeoutException instead of a forever-Running job that blocks
+    the single-flight guard.
+  end note
   J --> P : CompleteInventory -> Store.UpsertInventory -> card
 end
 

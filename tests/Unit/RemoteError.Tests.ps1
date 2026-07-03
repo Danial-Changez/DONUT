@@ -77,6 +77,14 @@ Describe "RemoteError" {
             [RemoteConnectionLostException]::Describe(64)  | Should -Be 'code 64 ERROR_NETNAME_DELETED'
             [RemoteConnectionLostException]::Describe(999) | Should -Be 'code 999'
         }
+        It "RemoteTimeoutException is an Error carrying the watchdog limit (TimedOut)" {
+            $ex = [RemoteTimeoutException]::new('PC-8', 'Remote probe', 20)
+            [string]$ex.Level   | Should -Be 'Error'
+            [string]$ex.Reason  | Should -Be 'TimedOut'
+            $ex.TimeoutMinutes  | Should -Be 20
+            $ex.Message         | Should -BeLike '*did not finish within 20 minutes*'
+            $ex.Message         | Should -BeLike '*may still be running*'
+        }
     }
 
     Context "RemoteFailure.ReasonFromMessage (re-derives reason across the runspace boundary)" {
@@ -88,6 +96,7 @@ Describe "RemoteError" {
             [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
             [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h','DCU /applyUpdates',-1073741502)).Message) | Should -Be 'ProcessStartFailed'
             [string][RemoteFailure]::ReasonFromMessage(([RemoteConnectionLostException]::new('h','DCU /applyUpdates',233)).Message) | Should -Be 'ConnectionLost'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteTimeoutException]::new('h','Remote probe',20)).Message) | Should -Be 'TimedOut'
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
             [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'

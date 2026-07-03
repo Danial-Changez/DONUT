@@ -1580,7 +1580,12 @@ class HomePresenter : AsyncJobPresenter {
     [void] FindBigFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         foreach ($j in $this.ActiveJobs) {
-            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) { return }
+            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
+                # Say so instead of silently ignoring the click - a hung scan used to
+                # look like a dead button (the watchdog now also fails it eventually).
+                $this.AppendLog($hostName, "A storage scan is already running for $hostName - wait for it to finish (or time out).")
+                return
+            }
         }
         try {
             $this.AppendLog($hostName, "Scanning C: for largest folders...")
