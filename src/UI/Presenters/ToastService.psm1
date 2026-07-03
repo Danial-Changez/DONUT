@@ -1,26 +1,34 @@
-using namespace System.Windows
+using namespace Donut.Mvvm
+using namespace System.Collections.ObjectModel
 using namespace System.Windows.Controls
 using namespace System.Windows.Media
-using namespace System.Windows.Media.Animation
 using namespace System.Windows.Threading
+using module "..\ViewModels\ToastViewModel.psm1"
 
 <#
 .SYNOPSIS
-    Renders non-modal, auto-dismissing toast notifications.
+    Enqueues non-modal, auto-dismissing toast notifications (MVVM).
 
 .DESCRIPTION
-    Shows informational feedback in a host ItemsControl (the top-right overlay in
-    MainWindow) — e.g. "manual reboot required", "no updates found" — that
-    previously surfaced as modal alert dialogs. Decision dialogs still go through
-    DialogPresenter. Toasts slide + fade in, sit for a few seconds, then slide +
-    fade out; clicking one dismisses it early.
+    Shows informational feedback in the top-right overlay - e.g. "manual reboot
+    required", "no updates found" - that previously surfaced as modal alert dialogs.
+    Decision dialogs still go through DialogPresenter. The service owns an
+    ObservableCollection of ToastViewModels bound to the toastHost ItemsControl; the
+    card chrome and the slide/fade in/out animations live in the DataTemplate
+    (MainWindow.xaml). The service keeps the orchestration: per-toast auto-dismiss
+    timers, and the flip-IsClosing-then-remove dance that lets the exit storyboard
+    play before the item disappears.
 #>
 class ToastService {
     hidden [ItemsControl] $HostControl
+    hidden [ObservableCollection[object]] $Items
     hidden [int] $DefaultDurationMs = 5000
+    hidden [int] $ExitAnimationMs = 220   # slightly past the 180ms exit storyboard
 
     ToastService([ItemsControl] $toastHost) {
         $this.HostControl = $toastHost
+        $this.Items = [ObservableCollection[object]]::new()
+        if ($toastHost) { $toastHost.ItemsSource = $this.Items }
     }
 
     [void] ShowSuccess([string]$title, [string]$message) {
@@ -40,112 +48,46 @@ class ToastService {
         $this.Show($title, $message, 'AccentRed', 8000)
     }
 
-    # Builds and presents a toast. colorKey is a UIColors resource key used for
-    # the accent bar / title; durationMs is how long before auto-dismiss.
+    # Builds and enqueues a toast. colorKey is a UIColors resource key used for the
+    # accent bar / border / title / glow; durationMs is how long before auto-dismiss.
     [void] Show([string]$title, [string]$message, [string]$colorKey, [int]$durationMs) {
         if ($null -eq $this.HostControl) { return }
 
         $accent = $this.ResolveBrush($colorKey, [Colors]::White)
+        $accentColor = if ($accent -is [SolidColorBrush]) { $accent.Color } else { [Colors]::White }
 
-        # Card background: translucent zinc-900 for a subtle acrylic feel.
-        $bg = [SolidColorBrush]::new([Color]::FromArgb(235, 0x18, 0x18, 0x1B))
+        $toast = [ToastViewModel]::new($title, $message, $accent, $accentColor)
 
-        $card = [Border]::new()
-        $card.Background = $bg
-        $card.BorderBrush = $accent
-        $card.BorderThickness = [Thickness]::new(1)
-        $card.CornerRadius = [CornerRadius]::new(10)
-        $card.Margin = [Thickness]::new(0, 0, 0, 10)
-        $card.Padding = [Thickness]::new(0)
-        $card.Cursor = [System.Windows.Input.Cursors]::Hand
-        $card.Effect = $this.MakeGlow($accent)
-
-        $grid = [Grid]::new()
-        $col0 = [ColumnDefinition]::new(); $col0.Width = [GridLength]::new(4)
-        $col1 = [ColumnDefinition]::new(); $col1.Width = [GridLength]::new(1, [GridUnitType]::Star)
-        $grid.ColumnDefinitions.Add($col0)
-        $grid.ColumnDefinitions.Add($col1)
-
-        # Accent bar down the left edge.
-        $bar = [Border]::new()
-        $bar.Background = $accent
-        $bar.CornerRadius = [CornerRadius]::new(10, 0, 0, 10)
-        [Grid]::SetColumn($bar, 0)
-        $grid.Children.Add($bar)
-
-        $stack = [StackPanel]::new()
-        $stack.Margin = [Thickness]::new(14, 12, 14, 12)
-        [Grid]::SetColumn($stack, 1)
-
-        $titleBlock = [TextBlock]::new()
-        $titleBlock.Text = $title
-        $titleBlock.Foreground = $accent
-        $titleBlock.FontFamily = [FontFamily]::new('Montserrat')
-        $titleBlock.FontWeight = [FontWeights]::SemiBold
-        $titleBlock.FontSize = 14
-        $titleBlock.TextWrapping = [TextWrapping]::Wrap
-        $stack.Children.Add($titleBlock)
-
-        if (-not [string]::IsNullOrWhiteSpace($message)) {
-            $msgBlock = [TextBlock]::new()
-            $msgBlock.Text = $message
-            $msgBlock.Foreground = $this.ResolveBrush('TitleTextTertiary', [Colors]::Gainsboro)
-            $msgBlock.FontFamily = [FontFamily]::new('Montserrat')
-            $msgBlock.FontSize = 12.5
-            $msgBlock.TextWrapping = [TextWrapping]::Wrap
-            $msgBlock.Margin = [Thickness]::new(0, 4, 0, 0)
-            $stack.Children.Add($msgBlock)
-        }
-
-        $grid.Children.Add($stack)
-        $card.Child = $grid
-
-        # Slide-in transform.
-        $transform = [TranslateTransform]::new(40, 0)
-        $card.RenderTransform = $transform
-        $card.Opacity = 0
-
-        $this.HostControl.Items.Add($card) | Out-Null
-
-        # Animate in.
-        $easeOut = [QuadraticEase]::new(); $easeOut.EasingMode = [EasingMode]::EaseOut
-        $fadeIn = [DoubleAnimation]::new(0, 1, [Duration]::new([TimeSpan]::FromMilliseconds(200)))
-        $slideIn = [DoubleAnimation]::new(40, 0, [Duration]::new([TimeSpan]::FromMilliseconds(220)))
-        $slideIn.EasingFunction = $easeOut
-        $card.BeginAnimation([UIElement]::OpacityProperty, $fadeIn)
-        $transform.BeginAnimation([TranslateTransform]::XProperty, $slideIn)
-
-        # Click dismisses early.
         $svc = $this
-        $card.Add_MouseLeftButtonUp({ $svc.Dismiss($card) }.GetNewClosure())
+        $dismiss = { param($p) $svc.Dismiss($toast) }.GetNewClosure()
+        $toast.DismissCommand = [RelayCommand]::new([System.Action[object]]$dismiss)
+
+        $this.Items.Add($toast)
 
         # Auto-dismiss timer.
         $timer = [DispatcherTimer]::new()
         $timer.Interval = [TimeSpan]::FromMilliseconds($durationMs)
         $timer.Add_Tick({
             $timer.Stop()
-            $svc.Dismiss($card)
+            $svc.Dismiss($toast)
         }.GetNewClosure())
         $timer.Start()
     }
 
-    # Animates a toast out and removes it from the host once finished.
-    [void] Dismiss([Border]$card) {
-        if ($null -eq $card -or -not $this.HostControl.Items.Contains($card)) { return }
+    # Plays the exit animation (IsClosing DataTrigger), then removes the item.
+    [void] Dismiss([object]$toast) {
+        if ($null -eq $toast -or -not $this.Items.Contains($toast)) { return }
+        if ($toast.IsClosing) { return }   # already on its way out
+        $toast.Close()
 
-        $transform = $card.RenderTransform
-        $fadeOut = [DoubleAnimation]::new($card.Opacity, 0, [Duration]::new([TimeSpan]::FromMilliseconds(180)))
-
-        $panel = $this.HostControl
-        $fadeOut.Add_Completed({
-            if ($panel.Items.Contains($card)) { $panel.Items.Remove($card) }
+        $svc = $this
+        $reaper = [DispatcherTimer]::new()
+        $reaper.Interval = [TimeSpan]::FromMilliseconds($this.ExitAnimationMs)
+        $reaper.Add_Tick({
+            $reaper.Stop()
+            if ($svc.Items.Contains($toast)) { [void]$svc.Items.Remove($toast) }
         }.GetNewClosure())
-
-        if ($transform -is [TranslateTransform]) {
-            $slideOut = [DoubleAnimation]::new(0, 40, [Duration]::new([TimeSpan]::FromMilliseconds(180)))
-            $transform.BeginAnimation([TranslateTransform]::XProperty, $slideOut)
-        }
-        $card.BeginAnimation([UIElement]::OpacityProperty, $fadeOut)
+        $reaper.Start()
     }
 
     # Resolves a brush from the host's merged resource dictionaries, falling back
@@ -155,15 +97,5 @@ class ToastService {
         if ($this.HostControl) { $res = $this.HostControl.TryFindResource($key) }
         if ($res -is [Brush]) { return $res }
         return [SolidColorBrush]::new($fallback)
-    }
-
-    # A soft outer glow in the accent colour for the synthwave look.
-    hidden [System.Windows.Media.Effects.DropShadowEffect] MakeGlow([Brush]$accent) {
-        $glow = [System.Windows.Media.Effects.DropShadowEffect]::new()
-        $glow.BlurRadius = 18
-        $glow.ShadowDepth = 0
-        $glow.Opacity = 0.55
-        if ($accent -is [SolidColorBrush]) { $glow.Color = $accent.Color }
-        return $glow
     }
 }
