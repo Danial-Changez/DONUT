@@ -4,10 +4,12 @@ using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Services\ResourceService.psm1"
+using namespace Donut.Mvvm
 using module ".\ConfigPresenter.psm1"
 using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\ToastService.psm1"
+using module "..\ViewModels\MainViewModel.psm1"
 
 <#
 .SYNOPSIS
@@ -32,6 +34,7 @@ class MainPresenter {
     [LogService] $Logger
     [ResourceService] $Resources
     [ToastService] $ToastService
+    [MainViewModel] $MainVm
     [bool] $RailCollapsed
 
     # Toggle-button graphics: full DONUT wordmark when expanded, donut icon when collapsed.
@@ -137,34 +140,28 @@ class MainPresenter {
             $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
         }
 
-        # Bind Navigation Events
+        # Shell view-model: navigation, rail toggle, and window chrome are bound
+        # commands (MainWindow.xaml). The presenter stays the coordinator - the
+        # commands call back into it for the shell work that is imperative by design:
+        # lazy page construction, the rail animations, and the header swap.
         $presenter = $this
-        $this.Controls['btnHome'].Add_Click({ $presenter.NavigateTo('Home') }.GetNewClosure())
-        $this.Controls['btnConfig'].Add_Click({ $presenter.NavigateTo('Config') }.GetNewClosure())
-        $this.Controls['btnLogs'].Add_Click({ $presenter.NavigateTo('Logs') }.GetNewClosure())
-
-        # Rail collapse / expand
-        if ($this.Controls['btnRailToggle']) {
-            $this.Controls['btnRailToggle'].Add_Click({ $presenter.ToggleRail() }.GetNewClosure())
-        }
-        
-        # Window Control Events
-        $btnClose = $this.Window.FindName("btnClose")
-        if ($btnClose) { $btnClose.Add_Click({ $presenter.Window.Close() }.GetNewClosure()) }
-        
-        $btnMinimize = $this.Window.FindName("btnMinimize")
-        if ($btnMinimize) { $btnMinimize.Add_Click({ $presenter.Window.WindowState = 'Minimized' }.GetNewClosure()) }
-        
-        $btnMaximize = $this.Window.FindName("btnMaximize")
-        if ($btnMaximize) { 
-            $btnMaximize.Add_Click({ 
-                if ($presenter.Window.WindowState -eq 'Maximized') {
-                    $presenter.Window.WindowState = 'Normal'
-                } else {
-                    $presenter.Window.WindowState = 'Maximized'
-                }
-            }.GetNewClosure()) 
-        }
+        $this.MainVm = [MainViewModel]::new()
+        $nav = { param($p) $presenter.NavigateTo([string]$p) }.GetNewClosure()
+        $this.MainVm.NavigateCommand = [RelayCommand]::new([System.Action[object]]$nav)
+        $rail = { param($p) $presenter.ToggleRail() }.GetNewClosure()
+        $this.MainVm.ToggleRailCommand = [RelayCommand]::new([System.Action[object]]$rail)
+        $min = { param($p) $presenter.Window.WindowState = 'Minimized' }.GetNewClosure()
+        $this.MainVm.MinimizeCommand = [RelayCommand]::new([System.Action[object]]$min)
+        $max = { param($p)
+            if ($presenter.Window.WindowState -eq 'Maximized') { $presenter.Window.WindowState = 'Normal' }
+            else { $presenter.Window.WindowState = 'Maximized' }
+        }.GetNewClosure()
+        $this.MainVm.MaximizeCommand = [RelayCommand]::new([System.Action[object]]$max)
+        $close = { param($p) $presenter.Window.Close() }.GetNewClosure()
+        $this.MainVm.CloseCommand = [RelayCommand]::new([System.Action[object]]$close)
+        # Pages set their own DataContext (HomeVm/LogsVm/ConfigVm), so the shell's
+        # context never leaks into them.
+        $this.Window.DataContext = $this.MainVm
 
         # Drag Move
         $this.Window.Add_MouseLeftButtonDown({ 
@@ -265,6 +262,8 @@ class MainPresenter {
                 $this.Headers[$headerKey].Visibility = if ($headerKey -eq $viewName) { 'Visible' } else { 'Collapsed' }
             }
         }
+
+        if ($this.MainVm) { $this.MainVm.Set('ActivePage', $viewName) }
     }
 
     # Collapses the sidebar to an icon-only rail (or expands it back), animating
@@ -274,6 +273,7 @@ class MainPresenter {
         if (-not $sidebar) { return }
 
         $this.RailCollapsed = -not $this.RailCollapsed
+        if ($this.MainVm) { $this.MainVm.Set('IsRailCollapsed', $this.RailCollapsed) }
 
         # Swap the toggle graphic: donut icon when collapsed, full wordmark when expanded.
         $logo = $this.Window.FindName("Logo")

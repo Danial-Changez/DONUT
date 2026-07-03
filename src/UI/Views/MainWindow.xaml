@@ -68,6 +68,7 @@
                                  in MainPresenter.ToggleRail). Top margin (30) lines it up with the
                                  page header icon, which sits below the 30px window-control row. -->
                             <Button x:Name="btnRailToggle"
+                                    Command="{Binding ToggleRailCommand}"
                                     HorizontalAlignment="Left"
                                     Margin="14,24,8,26"
                                     Background="Transparent"
@@ -99,6 +100,8 @@
                             </Button>
                             <!-- Menu Buttons -->
                             <RadioButton x:Name="btnHome"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Home"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentPurpleLight}">
                                 <StackPanel Orientation="Horizontal"
@@ -111,6 +114,8 @@
                                 </StackPanel>
                             </RadioButton>
                             <RadioButton x:Name="btnConfig"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Config"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentBlue}">
                                 <StackPanel Orientation="Horizontal"
@@ -123,6 +128,8 @@
                                 </StackPanel>
                             </RadioButton>
                             <RadioButton x:Name="btnLogs"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Logs"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentCyan}">
                                 <StackPanel Orientation="Horizontal"
@@ -166,18 +173,21 @@
                                     Background="Transparent"
                                     Margin="0,0,5,0">
                             <Button x:Name="btnClose"
+                                    Command="{Binding CloseCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentPink}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource xMark}" />
                             </Button>
                             <Button x:Name="btnMaximize"
+                                    Command="{Binding MaximizeCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentYellow}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource Square}" />
                             </Button>
                             <Button x:Name="btnMinimize"
+                                    Command="{Binding MinimizeCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentBlueLight}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
