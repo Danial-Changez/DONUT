@@ -528,6 +528,22 @@ class ExecutionService {
         # scan's report is never read and the pending-updates count stays 0.
         $localReport = Join-Path $this.LocalReportsDir "$hostName-Updates.xml"
 
+        # This runs right after the dcu-cli run - exactly the window where an applied
+        # NIC driver may have just reset the adapter. Wait briefly (bounded 2s probes)
+        # for the share to come back instead of running unbounded UNC ops against it
+        # (the known forever-hang pattern FindDcuCli / the disk scan gate). Non-fatal:
+        # artifacts are diagnostics + the pending count, and a completed apply must not
+        # be reported failed because its log couldn't be copied.
+        $smbUp = $false
+        for ($attempt = 1; $attempt -le 4; $attempt++) {
+            if ($this.Probe.IsSmbAvailable($ip)) { $smbUp = $true; break }
+            if ($attempt -lt 4) { Start-Sleep -Seconds 3 }
+        }
+        if (-not $smbUp) {
+            $this.Logger.LogWarning("[$hostName] Admin share (SMB/445) not reachable after the run - log/report not copied; the pending-update count may be stale until the next scan.")
+            return @{ Log = $localLog; Report = $localReport }
+        }
+
         if (Test-Path $remoteLog) {
             Copy-Item -Path $remoteLog -Destination $localLog -Force
         }
@@ -560,21 +576,66 @@ class ExecutionService {
         return @{ Log = $localLog; Report = $localReport }
     }
 
+    # Maps a target-local drive path (C:\temp\DONUT\apply.log) to its admin-share UNC
+    # (\\ip\C$\temp\DONUT\apply.log). Returns '' when the path isn't drive-rooted.
+    hidden static [string] ToAdminShare([string]$ip, [string]$localPath) {
+        if ([string]::IsNullOrWhiteSpace($localPath)) { return '' }
+        if ($localPath -notmatch '^[A-Za-z]:\\') { return '' }
+        $drive = $localPath.Substring(0, 1)          # 'C'
+        $rest  = $localPath.Substring(3)             # 'temp\DONUT\apply.log'
+        return "\\$ip\$drive`$\$rest"                # \\ip\C$\temp\DONUT\apply.log
+    }
+
+    # Clears the run's outputLog over the admin share BEFORE psexec starts. The remote-side
+    # clear (inside the psexec command) only runs if the remote pwsh actually executes - so
+    # if the connection drops during psexec's handshake, a PREVIOUS run's log would survive
+    # and ReadDcuReturnCode could "confirm" a run that never happened from its old
+    # "return code: 0". Returns the freshness baseline for ReadDcuReturnCode:
+    #   $null                 - the log is gone (any log found later is this run's)
+    #   a LastWriteTimeUtc    - a leftover couldn't be deleted (e.g. locked); only a log
+    #                           written STRICTLY after this stamp is trusted. Both stamps
+    #                           come from the target's filesystem, so controller clock skew
+    #                           can't bite.
+    #   [datetime]::MaxValue  - a leftover exists but couldn't even be statted: never trust
+    #                           the log this run (fall back to the unconfirmed path).
+    # SMB is known-good here: FindDcuCli gated port 445 and touched the same share just
+    # before this runs.
+    hidden [object] ClearRemoteOutputLog([string]$ip, [string]$outputLog) {
+        $remote = [ExecutionService]::ToAdminShare($ip, $outputLog)
+        if (-not $remote) { return $null }
+        try {
+            if (-not (Test-Path -LiteralPath $remote)) { return $null }
+            Remove-Item -LiteralPath $remote -Force -ErrorAction Stop
+            return $null
+        }
+        catch {
+            try {
+                $stamp = (Get-Item -LiteralPath $remote -ErrorAction Stop).LastWriteTimeUtc
+                $this.Logger.LogWarning("[$ip] Could not clear $outputLog before the run (locked?) - only output newer than $($stamp.ToString('o')) will be trusted.")
+                return $stamp
+            }
+            catch {
+                $this.Logger.LogWarning("[$ip] Could not clear or stat $outputLog before the run - its content will not be trusted for confirmation.")
+                return [datetime]::MaxValue
+            }
+        }
+    }
+
     # Reads dcu-cli's authoritative return code back from its outputLog over the admin
     # share, used to recover the real result after psexec loses its connection mid-command.
     # Retries briefly because the classic trigger - installing a NETWORK driver - drops the
-    # share for a few seconds while the NIC re-initialises. Returns DcuLog.ParseReturnCode's
-    # { Found; Code }; Found is $false when the log can't be read or has no return-code line
-    # (dcu-cli didn't finish). Also copies the log back locally for the detail panel.
-    # Overridable so unit tests don't touch the network.
-    [hashtable] ReadDcuReturnCode([string]$ip, [string]$outputLog) {
+    # share for a few seconds while the NIC re-initialises. $baseline is
+    # ClearRemoteOutputLog's verdict: only a log written after it is trusted, so a stale
+    # log from a previous run can never confirm a run that never happened. Returns
+    # DcuLog.ParseReturnCode's { Found; Code }; Found is $false when the log can't be
+    # read, is stale, or has no return-code line (dcu-cli didn't finish). Also copies the
+    # log back locally for the detail panel. Overridable so unit tests don't touch the
+    # network.
+    [hashtable] ReadDcuReturnCode([string]$ip, [string]$outputLog, [object]$baseline) {
         if ([string]::IsNullOrWhiteSpace($outputLog)) { return @{ Found = $false; Code = 0 } }
 
-        # Local drive path (C:\temp\DONUT\apply.log) -> admin-share UNC (\\ip\C$\temp\...).
-        if ($outputLog -notmatch '^[A-Za-z]:\\') { return @{ Found = $false; Code = 0 } }
-        $drive = $outputLog.Substring(0, 1)          # 'C'
-        $rest  = $outputLog.Substring(3)             # 'temp\DONUT\apply.log'
-        $remote = "\\$ip\$drive`$\$rest"             # \\ip\C$\temp\DONUT\apply.log
+        $remote = [ExecutionService]::ToAdminShare($ip, $outputLog)
+        if (-not $remote) { return @{ Found = $false; Code = 0 } }
         $localCopy = Join-Path $this.LocalLogsDir ("{0}-{1}" -f $ip, (Split-Path $outputLog -Leaf))
 
         for ($attempt = 1; $attempt -le 5; $attempt++) {
@@ -583,15 +644,27 @@ class ExecutionService {
                 # path whose share is still down (the NIC hasn't finished re-initialising)
                 # blocks with no timeout, so probe the port before touching the share.
                 if (($this.Probe.IsSmbAvailable($ip)) -and (Test-Path -LiteralPath $remote)) {
-                    $text = Get-Content -LiteralPath $remote -Raw -ErrorAction Stop
-                    try { Set-Content -LiteralPath $localCopy -Value $text -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
-                    $parsed = [DcuLog]::ParseReturnCode($text)
-                    if ($parsed.Found) {
-                        $this.Logger.LogInfo("[$ip] Recovered dcu-cli return code $($parsed.Code) from $outputLog after a dropped connection.")
-                        return $parsed
+                    # Freshness gate: only trust a log written AFTER the pre-run clear's
+                    # baseline. A file at/before it is the PREVIOUS run's leftover (the
+                    # connection died before the remote command ran) - keep waiting in
+                    # case this run's dcu-cli is still coming up, but never confirm from it.
+                    $stale = $false
+                    if ($null -ne $baseline) {
+                        $item = Get-Item -LiteralPath $remote -ErrorAction Stop
+                        $stale = ($item.LastWriteTimeUtc -le [datetime]$baseline)
                     }
-                    # File is there but has no return-code line yet: dcu-cli may still be
-                    # writing (or the connection dropped before it finished) - wait and retry.
+                    if (-not $stale) {
+                        $text = Get-Content -LiteralPath $remote -Raw -ErrorAction Stop
+                        try { Set-Content -LiteralPath $localCopy -Value $text -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
+                        $parsed = [DcuLog]::ParseReturnCode($text)
+                        if ($parsed.Found) {
+                            $this.Logger.LogInfo("[$ip] Recovered dcu-cli return code $($parsed.Code) from $outputLog after a dropped connection.")
+                            return $parsed
+                        }
+                        # File is there but has no return-code line yet: dcu-cli may still
+                        # be writing (or the connection dropped before it finished) - wait
+                        # and retry.
+                    }
                 }
             }
             catch {
@@ -621,6 +694,13 @@ class ExecutionService {
         # DCU CLI syntax: dcu-cli.exe /<command> -option1=value1 -option2=value2
         # Stop any existing DCU process first to avoid conflicts.
         $outputLog = [string]$parameters.OutputLog
+
+        # Clear the outputLog from the CONTROLLER side too, and capture the freshness
+        # baseline. The remote-side clear below only happens if the remote command runs;
+        # without this, a connection lost during psexec's handshake leaves a stale log
+        # that would falsely "confirm" a run that never happened.
+        $logBaseline = $this.ClearRemoteOutputLog($ip, $outputLog)
+
         $stopCmd = "Stop-Process -Name 'DellCommandUpdate' -Force -ErrorAction SilentlyContinue"
         $mkdirCmd = "New-Item -Path 'C:\temp\DONUT' -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null"
         # Clear this run's outputLog first, so whatever it holds afterward is THIS run's
@@ -677,7 +757,7 @@ class ExecutionService {
         # finishes on the host. dcu-cli's own return code is authoritative, so recover it
         # from the outputLog (which we cleared before the run) instead of guessing.
         if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
-            $dcu = $this.ReadDcuReturnCode($ip, $outputLog)
+            $dcu = $this.ReadDcuReturnCode($ip, $outputLog, $logBaseline)
             if ($dcu.Found) {
                 # dcu-cli finished and recorded its verdict: trust that, not the dropped pipe.
                 if ([DcuLog]::IsSuccess($dcu.Code)) {

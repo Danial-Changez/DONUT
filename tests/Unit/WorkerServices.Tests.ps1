@@ -307,6 +307,19 @@ Describe "WorkerServices" {
         }
     }
 
+    Context "ToAdminShare" {
+        It "maps a drive-rooted target path to its admin-share UNC" {
+            [ExecutionService]::ToAdminShare('10.0.0.7', 'C:\temp\DONUT\apply.log') | Should -Be '\\10.0.0.7\C$\temp\DONUT\apply.log'
+            [ExecutionService]::ToAdminShare('10.0.0.7', 'D:\logs\scan.log')        | Should -Be '\\10.0.0.7\D$\logs\scan.log'
+        }
+        It "returns '' for blank, UNC, or relative paths" {
+            [ExecutionService]::ToAdminShare('10.0.0.7', '')                  | Should -Be ''
+            [ExecutionService]::ToAdminShare('10.0.0.7', $null)               | Should -Be ''
+            [ExecutionService]::ToAdminShare('10.0.0.7', '\\srv\share\x.log') | Should -Be ''
+            [ExecutionService]::ToAdminShare('10.0.0.7', 'relative\x.log')    | Should -Be ''
+        }
+    }
+
     Context "CopyRemoteArtifacts" {
         It "Should return Report and Log paths" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
