@@ -118,7 +118,7 @@ else fresh Online
     J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
     W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
     W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
-    W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report)
+    W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report;\nSMB-gated with a brief retry - warns + skips instead of hanging)
     J --> P : Complete(UpdateScan)
   end
 end
@@ -145,10 +145,14 @@ else Match OR Unknown
   P -> J : UpdateApply
   J -> W : RunApplyPhase -> InvokePsExec
   W -> N : FindDcuCli -> IsSmbAvailable(ip)
-  W -> H : Remove-Item apply.log (clear) ; dcu-cli /applyUpdates (-outputLog apply.log)
+  W -> H : clear apply.log over C$ (controller-side, + freshness baseline)
+  W -> H : psexec: clear again remotely ; dcu-cli /applyUpdates (-outputLog apply.log)
   note right of W #E8F5E9
-    [FIXED] clear the outputLog first so its content is unambiguously
-    THIS run's (sidesteps DCU's undocumented append/overwrite).
+    [FIXED] the log is cleared from the CONTROLLER before psexec starts -
+    the remote-side clear only runs if the remote command does. A leftover
+    that can't be deleted stamps a LastWriteTimeUtc baseline (target-vs-
+    target, skew-immune), so a stale log from a previous run can never
+    "confirm" a run that never happened.
   end note
 end
 
@@ -162,7 +166,7 @@ else transport code  (233 PIPE_NOT_CONNECTED / 64 NETNAME_DELETED / ...)
     SMB pipe rides over -> psexec loses the pipe though dcu-cli finished.
   end note
   W -> H : ReadDcuReturnCode: retry <=5x, each gated by IsSmbAvailable (2s)
-  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init)
+  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init;\nonly trusted if written AFTER the pre-run baseline)
   W -> W : DcuLog.ParseReturnCode (last "return code: N")
   alt N in {0,1,5}   -> treat as completed (1/5 = reboot)
     W --> J : return N
