@@ -170,6 +170,11 @@ class ExecutionService {
     # if present, otherwise resolves via the AD-authoritative path and memoizes it.
     hidden [string] ResolvedIpFor([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($this.JobIp)) {
+            # Every job start is supposed to thread the pre-resolved IP through
+            # (AttachResolvedIp), so landing here means a caller skipped it and this
+            # worker is about to do the SLOW full AD resolve (DC discovery + DNS) on
+            # its pool thread. Allowed, but flag it - it's a routing bug upstream.
+            $this.Logger.LogWarning("[$hostName] No pre-resolved IP was threaded to this job - falling back to a full AD resolve on the worker (slow path).")
             $ip = $this.Probe.ResolveHost($hostName)
             if (-not $ip) {
                 throw [RemoteJobService]::Fail($this.Logger, [HostUnresolvableException]::new($hostName))
@@ -321,7 +326,10 @@ class ExecutionService {
         if ([string]::IsNullOrWhiteSpace($ip)) { return $null }
         $session = $null
         try {
-            $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+            # -OperationTimeoutSec bounds the session's operations (incl. its connection
+            # test) so a box that answered the RPC gate but died mid-open (e.g. rebooting)
+            # can't hang the worker on DCOM's own multi-minute defaults.
+            $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -OperationTimeoutSec 15 -ErrorAction Stop
         }
         catch {
             $this.Logger.LogException("[$ip] Could not open CIM session for inventory", $_)
@@ -383,6 +391,7 @@ class ExecutionService {
         $psexecArgs = @(
             '-accepteula',
             '-nobanner',
+            '-n', '60',     # connect timeout (s): give up instead of hanging on a dead host
             '-s',           # Run as SYSTEM
             '-h',           # Elevated token
             "\\$target",
@@ -395,9 +404,19 @@ class ExecutionService {
 
         $this.Logger.LogInfo("Executing remote probe on \\$target")
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
+        $exitCode = [int]$p.ExitCode
 
-        if ($p.ExitCode -ne 0) {
-            throw [RemoteExecutionException]::new($target, 'Remote probe', $p.ExitCode)
+        # Classify like InvokePsExec: a negative code is a Windows process-launch fault
+        # and a Win32 transport code means psexec's pipe dropped mid-probe - neither is
+        # "the probe script failed", so name the real cause.
+        if ($exitCode -lt 0) {
+            throw [RemoteProcessStartException]::new($target, 'Remote probe', $exitCode)
+        }
+        if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
+            throw [RemoteConnectionLostException]::new($target, 'Remote probe', $exitCode)
+        }
+        if ($exitCode -ne 0) {
+            throw [RemoteExecutionException]::new($target, 'Remote probe', $exitCode)
         }
     }
 
