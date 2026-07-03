@@ -211,7 +211,7 @@ class ExecutionService {
         }
 
         $this.InvokePsExec($params)
-        $artifact = $this.CopyRemoteArtifacts($device.HostName)
+        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog)
 
         return @{
             ReportPath = $artifact.Report
@@ -251,7 +251,7 @@ class ExecutionService {
         }
 
         $applyCode = $this.InvokePsExec($params)
-        $artifact = $this.CopyRemoteArtifacts($device.HostName)
+        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog)
         # dcu-cli 1/5 => the apply landed but the box needs a reboot to finish. Surface it
         # so the presenter flags a manual reboot (the card + the reboot toast).
         $artifact['RebootRequired'] = [DcuLog]::NeedsReboot($applyCode)
@@ -531,10 +531,13 @@ class ExecutionService {
         return $local
     }
 
-    [hashtable] CopyRemoteArtifacts([string] $hostName) {
+    [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {
         $ip = $this.ResolvedIpFor($hostName)
         $remoteDir = "\\$ip\C$\temp\DONUT"
-        $remoteLog = Join-Path $remoteDir "scan.log"
+        # Copy the command's OWN outputLog (scan.log for a scan, apply.log for an
+        # apply), so the local <host>.log always holds the LAST run's log.
+        $logLeaf = if ([string]::IsNullOrWhiteSpace($outputLog)) { 'scan.log' } else { Split-Path $outputLog -Leaf }
+        $remoteLog = Join-Path $remoteDir $logLeaf
 
         $localLog = Join-Path $this.LocalLogsDir "$hostName.log"
         # Must match RemoteUpdateService.ParseUpdateReport's "<host>-Updates.xml", or the
@@ -886,9 +889,4 @@ class ExecutionService {
         throw [DcuNotInstalledException]::new($ip)
     }
 
-    [void] AssertReachable([DeviceContext] $device) {
-        # Reuse the shared connectivity policy (IsOnline -> ResolveHost ->
-        # IsRpcAvailable) and record the resolved IP on the device context.
-        $device.IPAddress = [RemoteJobService]::AssertHostReachable($this.Probe, $this.Logger, $device.HostName)
-    }
 }

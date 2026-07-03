@@ -185,7 +185,7 @@ consumes the result and exposes it to the bindings.
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
 
 #### Services (`src/Services/`)
-All remote services subclass `RemoteJobService` (shared connectivity policy + worker-arg
+All remote services subclass `RemoteJobService` (shared worker-arg
 building); they only **prepare/parse** off the UI thread — the worker does the network I/O.
 
 | Class | Purpose |

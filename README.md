@@ -22,7 +22,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ## Features
 
 - **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
-- **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI).
+- **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI). Cards are kept newest-action-first: adding a machine or running a scan/gather/storage scan moves its card to the top.
 - **Per-Machine Detail Panel:** Selecting a machine prefetches a lightweight inventory probe (model, Dell service tag, battery health, disk, uptime) and offers an on-demand **Storage scan** of the biggest folders on `C:` (WizTree), shown as an expandable tree.
 - **24h Scan Reuse:** A scan run within the last 24 hours is reused instead of re-scanning; it's only re-run after an apply.
 - **Live AD Finder:** The search bar searches Active Directory (computers + users) across the org's forests, and can unlock locked-out accounts inline.

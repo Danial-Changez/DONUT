@@ -271,7 +271,7 @@ package "Donut.Services" #221634 {
         #Config: AppConfig
         #Probe: NetworkProbe
         #Logger: LogService
-        +{static} AssertHostReachable(probe, logger, host): string
+        +{static} Fail(logger, exception): RemoteOperationException
         #BuildWorkerArgs(host, jobType, options): Hashtable
     }
 

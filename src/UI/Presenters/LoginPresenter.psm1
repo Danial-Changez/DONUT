@@ -93,6 +93,10 @@ class LoginPresenter {
     }
 
     [void] StartAuthFlow() {
+        # Re-entry guard: a second click starts a FRESH device flow. Stop the old
+        # poll first, or it keeps polling a dead device code and its failure would
+        # overwrite the new flow's code display.
+        if ($this.PollTimer -and $this.PollTimer.IsEnabled) { $this.PollTimer.Stop() }
         try {
             $response = $this.Service.InitiateDeviceFlow()
             $this.DeviceCode = $response.device_code

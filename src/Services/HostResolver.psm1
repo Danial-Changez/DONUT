@@ -19,8 +19,8 @@ using module ".\RemoteServices.psm1"
     WPF-free and does NO network itself — the resolution runs in the worker
     (ExecutionService.RunResolvePhase). HostResolver only holds the cached state
     plus the "do we still need to resolve this?" decision, and builds the worker
-    args (subclassing RemoteJobService purely to reuse BuildWorkerArgs; it does
-    NOT call AssertHostReachable, so nothing here touches the network/UI thread).
+    args (subclassing RemoteJobService purely to reuse BuildWorkerArgs, so
+    nothing here touches the network/UI thread).
 #>
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''

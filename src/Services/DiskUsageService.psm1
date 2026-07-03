@@ -12,7 +12,7 @@ using module ".\RemoteServices.psm1"
     A WizTree MFT scan that runs on the remote host (deployed and executed by the
     worker's RunDiskScanPhase), exports a folder CSV which is copied back and
     parsed into a [DiskUsageReport]. Mirrors InventoryService — subclasses
-    RemoteJobService, reusing AssertHostReachable / BuildWorkerArgs. Heavier than
+    RemoteJobService, reusing BuildWorkerArgs. Heavier than
     the inventory probe, so it is triggered on demand rather than on every
     scan/apply.
 #>

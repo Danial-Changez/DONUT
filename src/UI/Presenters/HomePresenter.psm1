@@ -40,7 +40,8 @@ using module "..\..\Models\RemoteError.psm1"
 
 .DESCRIPTION
     Owns the machine list (a HostViewModel per host in HomeViewModel.Machines, bound to a
-    virtualizing ListBox and seeded from recents), the
+    virtualizing ListBox, seeded from recents, and kept newest-action-first: an Add /
+    Run / gather / storage scan moves that card to the top), the
     Add / Run / Run-all flow (the mode pill selects Scan vs. Apply), and the
     per-machine job lifecycle (extends AsyncJobPresenter's PumpJobs). On select it
     prefetches the host IP (HostResolver) and inventory (InventoryService) and
@@ -137,6 +138,12 @@ class HomePresenter : AsyncJobPresenter {
     # missing/stale). CompleteResolve starts them once the fresh verdict lands, or drops
     # them with a reason when the resolve fails - never left queued silently.
     hidden [hashtable] $PendingRuns = @{}
+
+    # Inventory gathers queued the same way (StartInventory found the verdict
+    # missing/stale). CompleteResolve re-issues them once the fresh verdict lands, so
+    # EVERY verified host gets its gather - not just the selected one. Value = the
+    # strongest $force flag seen while queued.
+    hidden [hashtable] $PendingGathers = @{}
 
     # Highest scan milestone seen per host for the CURRENT job (host -> 1..5). Ratchets
     # so a re-emitted earlier line can't move the step backwards; reset at job start.
@@ -465,7 +472,14 @@ class HomePresenter : AsyncJobPresenter {
                     $rcSel = $this.GetRecord($hn)
                     $iso = if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) { $rcSel.Inventory.ProbedAt } else { '' }
                     $this.RenderDetailSubtitle($hn, $iso)
-                    $this.GatherInventoryIfOnline($hn)
+                }
+                # A gather was queued behind this re-verification (StartInventory found
+                # the verdict missing/stale): re-issue it now the fresh verdict is in.
+                # StartInventory logs the skip itself if the verdict came back Offline.
+                if ($this.PendingGathers.ContainsKey($hn)) {
+                    $gatherForce = [bool]$this.PendingGathers[$hn]
+                    $this.PendingGathers.Remove($hn)
+                    $this.StartInventory($hn, $gatherForce)
                 }
                 # A Run was queued behind this re-verification (StartProcess found the
                 # verdict missing/stale): start it now that a fresh verdict landed.
@@ -604,6 +618,11 @@ class HomePresenter : AsyncJobPresenter {
             $this.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
             $this.StartInventory($hostName, $true)
         }
+        # Newest action on top: surface the added cards at the head of the list
+        # (moved in reverse so the FIRST typed host ends up topmost).
+        $ordered = @($targetHosts)
+        [array]::Reverse($ordered)
+        foreach ($hostName in $ordered) { $this.MoveRowToTop($hostName) }
         $this.SelectMachine($targetHosts[0])
         $this.UpdateEmptyHint()
 
@@ -856,7 +875,13 @@ class HomePresenter : AsyncJobPresenter {
     # Runs a single host from a row click; confirms first when destructive.
     [void] RunHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-        if ($this.IsRunning($hostName)) { return }
+        if ($this.IsRunning($hostName)) {
+            # Say why nothing happened - a storage scan also holds the row busy, and
+            # a silent return reads as a dead Run button.
+            $this.AppendLog($hostName, "A job is already running for $hostName - wait for it to finish.")
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Already running - wait for the current job to finish.") }
+            return
+        }
 
         if ($this.Config.GetActiveCommand() -eq 'applyUpdates') {
             $confirmed = $this.DialogPresenter.ShowConfirmation(
@@ -866,6 +891,7 @@ class HomePresenter : AsyncJobPresenter {
             )
             if (-not $confirmed) { return }
         }
+        $this.MoveRowToTop($hostName)
         $this.StartProcess($hostName)
     }
 
@@ -1286,6 +1312,18 @@ class HomePresenter : AsyncJobPresenter {
         return $null
     }
 
+    # Moves a host's card to the top of the list, so cards read newest-action-first.
+    # Called on OPERATOR actions only (Add, Run, gather, storage scan) - background
+    # completions and idle refreshes never reorder, so rows don't jump mid-watch.
+    # (Startup order comes from the store, which is already last-run-first.)
+    hidden [void] MoveRowToTop([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $vm = $this.GetRow($hostName)
+        if ($null -eq $vm) { return }
+        $idx = $this.HomeVm.Machines.IndexOf($vm)
+        if ($idx -gt 0) { $this.HomeVm.Machines.Move($idx, 0) }
+    }
+
     # --- Detail panel + inventory probe ----------------------------------------------
 
     # Appends a job-output line to the host's buffer and, when it's the selected
@@ -1380,30 +1418,17 @@ class HomePresenter : AsyncJobPresenter {
         # PrefetchIp above will update it when it lands).
         $this.RenderReachability($hostName)
 
-        # Gather inventory only once the host is known-reachable. An OFFLINE host is
-        # skipped entirely (gathering hangs the worker); an ONLINE host is gathered with
-        # its IP already cached, so the worker never does the expensive AD resolve on the
-        # freeze-prone path. If the verdict isn't cached yet, PrefetchIp's resolve lands
-        # in CompleteResolve, which calls GatherInventoryIfOnline.
-        if (-not $this.Resolver.NeedsResolve($hostName)) {
-            $this.GatherInventoryIfOnline($hostName)
-        }
-    }
-
-    # Starts the inventory probe only when the host is known-online. Offline hosts are
-    # skipped (gathering hangs the worker); a still-unknown host is left for
-    # CompleteResolve to retry once the background resolve lands.
-    [void] GatherInventoryIfOnline([string]$hostName) {
-        switch ($this.Resolver.IsHostOnline($hostName)) {
-            'Online'  { $this.StartInventory($hostName, $false) }
-            'Offline' { $this.AppendLog($hostName, "Host is offline - skipping inventory.") }
-            default   { }   # 'Unknown': resolve still in flight; CompleteResolve calls us again.
-        }
+        # Gather inventory (or queue it behind the in-flight verdict). StartInventory
+        # gates on a FRESH 'Online' verdict - an offline host is skipped with a log
+        # line, and an unknown/stale one is queued for CompleteResolve to re-issue -
+        # so selecting an unreachable machine can never open the freeze-prone connect.
+        $this.StartInventory($hostName, $false)
     }
 
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
     # in the background. The probe runs on the runspace pool, never the UI thread.
     [void] OnRowActivated([string]$hostName) {
+        $this.MoveRowToTop($hostName)
         $this.SelectMachine($hostName)
         $this.StartInventory($hostName)
     }
@@ -1439,11 +1464,14 @@ class HomePresenter : AsyncJobPresenter {
         }
         # Gather only on a verdict we still trust. An unknown host - OR an 'Online' verdict
         # that has aged past the TTL (the box may have gone offline since, e.g. a restart) -
-        # is re-validated first via the cheap, bounded, off-thread background resolve;
-        # CompleteResolve re-gathers the selected host once the fresh verdict lands. This
-        # keeps us from opening the freeze-prone CIM/psexec connect against a host that is no
-        # longer reachable.
+        # is re-validated first via the cheap, bounded, off-thread background resolve. The
+        # gather is QUEUED (keeping the strongest force seen) and CompleteResolve re-issues
+        # it once the fresh verdict lands - for every host, not just the selected one. This
+        # keeps us from opening the freeze-prone CIM/psexec connect against a host that is
+        # no longer reachable.
         if ($state -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {
+            $prevForce = $this.PendingGathers.ContainsKey($hostName) -and [bool]$this.PendingGathers[$hostName]
+            $this.PendingGathers[$hostName] = ($force -or $prevForce)
             $this.PrefetchIp($hostName)
             return
         }
@@ -1471,8 +1499,9 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Forces a re-probe of the selected host.
+    # Forces a re-probe of the selected host (detail-panel Refresh).
     [void] RefreshInventory([string]$hostName) {
+        $this.MoveRowToTop($hostName)
         $this.StartInventory($hostName)
     }
 
@@ -1488,6 +1517,11 @@ class HomePresenter : AsyncJobPresenter {
     # Inventory job finished: parse + cache + repopulate the detail cards.
     [void] CompleteInventory([AsyncJob]$job) {
         $hostName = $job.HostName
+        # The card may have been cleared while the probe was in flight (probes don't
+        # count as "running", so Clear doesn't wait for them). Persisting now would
+        # re-create a ghost recents entry that resurfaces on the next launch - drop
+        # the result instead.
+        if (-not $this.Rows.ContainsKey($hostName)) { return }
         if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
             $this.DetailProgress.IsIndeterminate = $false
             $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
@@ -1528,6 +1562,7 @@ class HomePresenter : AsyncJobPresenter {
                 return
             }
         }
+        $this.MoveRowToTop($hostName)
         try {
             $this.AppendLog($hostName, "Scanning C: for largest folders...")
             if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
@@ -1613,6 +1648,12 @@ class HomePresenter : AsyncJobPresenter {
             $this.Rows.Remove($hostName)
             $this.Store.Remove($hostName)
             $this.LogBuffers.Remove($hostName)
+            # Drop any work queued behind a reachability verdict: a pending run/gather
+            # must not fire after the operator cleared the card (CompleteResolve would
+            # re-create the row and run on a host that was just removed).
+            $this.PendingRuns.Remove($hostName)
+            $this.PendingGathers.Remove($hostName)
+            $this.ScanSteps.Remove($hostName)
             if ($hostName -eq $this.SelectedHost) { $this.ClearSelection() }
         }
         $this.UpdateEmptyHint()

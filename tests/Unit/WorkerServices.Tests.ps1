@@ -30,9 +30,8 @@ class MockNetworkProbeWorker : NetworkProbe {
 # Partial Mock of ExecutionService to avoid real PsExec calls
 class TestExecutionService : ExecutionService {
     [hashtable] $LastPsExecParams = @{}
-    [bool] $ThrowOnAssertReachable = $false
     [hashtable] $ApplyResult = @{ Status = "Success" }
-    
+
     TestExecutionService($l, $p, $m, $c, $s, $ld, $rd) : base($l, $p, $m, $c, $s, $ld, $rd) {}
 
     [int] $PsExecReturnCode = 0   # dcu-cli code the mock reports back (0 = clean, 1/5 = reboot)
@@ -42,15 +41,11 @@ class TestExecutionService : ExecutionService {
         return $this.PsExecReturnCode
     }
 
-    [hashtable] CopyRemoteArtifacts([string]$hostName) {
-        # Mock behavior: return dummy paths
+    [string] $LastCopiedOutputLog = $null
+    [hashtable] CopyRemoteArtifacts([string]$hostName, [string]$outputLog) {
+        # Mock behavior: capture which log the phase asked for; return dummy paths.
+        $this.LastCopiedOutputLog = $outputLog
         return @{ Report = "C:\Fake\Report.xml"; Log = "C:\Fake\Scan.log" }
-    }
-    
-    [void] AssertReachable([DeviceContext]$device) {
-        if ($this.ThrowOnAssertReachable) {
-            throw "Device not reachable: $($device.HostName)"
-        }
     }
 
     [string] $LastInventoryScript = $null
@@ -211,39 +206,11 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "AssertReachable" {
-        It "Should throw when device is not reachable" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $true
-            $device = [DeviceContext]::new("UnreachableHost")
-
-            { $service.AssertReachable($device) } | Should -Throw "*not reachable*"
-        }
-
-        It "Should not throw when device is reachable" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.ThrowOnAssertReachable = $false
-            $device = [DeviceContext]::new("ReachableHost")
-
-            { $service.AssertReachable($device) } | Should -Not -Throw
-        }
-    }
-
-    # NOTE: the per-phase reachability pre-check (AssertReachable) was removed -
-    # running it in the fresh worker runspace (Test-Connection / DC-backed
-    # ResolveHost) stalled the host process. The worker now resolves + runs psexec
-    # directly and fails gracefully if the host is unreachable; connectivity is
-    # never probed on the UI thread (Prepare* builds args only).
+    # NOTE: there is deliberately no worker-level reachability pre-check - running
+    # one in a fresh worker runspace (Test-Connection / DC-backed ResolveHost)
+    # stalled the host process. Each phase gates its own transport with bounded
+    # port probes (RPC-135 / SMB-445) and fails typed if the host is unreachable;
+    # connectivity is never probed on the UI thread (Prepare* builds args only).
 
     Context "RunResolvePhase" {
         It "Warm mode returns the active DC and the DC list" {
@@ -331,8 +298,8 @@ Describe "WorkerServices" {
             
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
-            $result = $service.CopyRemoteArtifacts("TestHost")
-            
+            $result = $service.CopyRemoteArtifacts("TestHost", 'C:\temp\DONUT\scan.log')
+
             $result.Report | Should -Not -BeNullOrEmpty
             $result.Log | Should -Not -BeNullOrEmpty
         }
@@ -471,14 +438,25 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
+
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $device = [DeviceContext]::new("ApplyTestHost")
 
             $service.RunApplyPhase($device, @{})
-            
+
             $service.LastPsExecParams.ComputerName | Should -Be "ApplyTestHost"
             $service.LastPsExecParams.Command | Should -Be "applyUpdates"
+        }
+
+        It "Copies the apply's OWN outputLog back (apply.log, not the phase-1 scan.log)" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.RunApplyPhase([DeviceContext]::new("ApplyTestHost"), @{})
+
+            $service.LastCopiedOutputLog | Should -Be 'C:\temp\DONUT\apply.log'
         }
 
         It "Should merge runtime options with config" {
@@ -528,62 +506,6 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "AssertReachable Real Implementation" {
-        It "Should throw when host is offline" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $probe.IsOnlineResult = $false
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("OfflineHost")
-
-            { $service.AssertReachable($device) } | Should -Throw "*offline or unreachable*"
-        }
-
-        It "Should throw when RPC is unavailable" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $probe.IsOnlineResult = $true
-            $probe.IsRpcAvailableResult = $false
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("NoRpcHost")
-
-            { $service.AssertReachable($device) } | Should -Throw "*RPC (port 135) is not reachable*"
-        }
-
-        It "Should set device IPAddress when reachable" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            
-            # Create a mock that returns a proper IP
-            $probe = [MockNetworkProbeWorker]::new()
-            $probe.IsOnlineResult = $true
-            $probe.IsRpcAvailableResult = $true
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("localhost")
-            
-            # This should succeed for localhost
-            try {
-                $service.AssertReachable($device)
-                # If localhost resolves, IPAddress should be set
-                if ($device.IPAddress) {
-                    $device.IPAddress | Should -Not -BeNullOrEmpty
-                }
-            }
-            catch {
-                # Expected if RPC isn't available on localhost in test env
-                $_.Exception.Message | Should -BeLike "*RPC*"
-            }
-        }
-    }
-
     Context "InvokePsExec Parameters" {
         It "Should capture command and arguments" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
@@ -616,8 +538,8 @@ Describe "WorkerServices" {
             
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             
-            $result = $service.CopyRemoteArtifacts("WORKSTATION01")
-            
+            $result = $service.CopyRemoteArtifacts("WORKSTATION01", 'C:\temp\DONUT\scan.log')
+
             # Our mock returns fixed paths, but we validate the structure
             $result.ContainsKey('Report') | Should -Be $true
             $result.ContainsKey('Log') | Should -Be $true
