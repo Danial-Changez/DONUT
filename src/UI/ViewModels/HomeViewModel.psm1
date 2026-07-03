@@ -20,8 +20,14 @@ class HomeViewModel : ObservableObject {
     [ObservableCollection[HostViewModel]] $Machines
     [HostViewModel] $SelectedMachine
 
+    # AD finder dropdown rows (SearchRowViewModel headers + results, one flat list).
+    # The popup's ItemsControl binds ItemsSource here; the presenter repopulates it
+    # per render (UI thread only, like Machines).
+    [ObservableCollection[object]] $SearchResults
+
     HomeViewModel() {
         $this.Machines = [ObservableCollection[HostViewModel]]::new()
+        $this.SearchResults = [ObservableCollection[object]]::new()
     }
 
     # Programmatic selection: raises so the bound ListBox.SelectedItem follows (which then

@@ -110,7 +110,73 @@
               Padding="6"
               SnapsToDevicePixels="True">
         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="340">
-          <StackPanel x:Name="SearchResultsList" />
+          <!-- One flat list of SearchRowViewModels: section headers and result rows share
+               the template, switched by IsHeader. Replaces the imperative
+               BuildSectionHeader/BuildSearchRow builders. -->
+          <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid>
+                  <!-- Section header ("COMPUTERS" / "USERS") -->
+                  <TextBlock Text="{Binding HeaderText}" FontFamily="Montserrat" FontSize="10"
+                             FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}"
+                             Margin="6,6,0,4">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <!-- Result row: computers pick into the search bar on click; locked
+                       users get an inline Unlock button. -->
+                  <Border CornerRadius="7" Padding="10,6,8,6" Margin="0,0,0,2">
+                    <Border.Style>
+                      <Style TargetType="Border">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsComputer}" Value="True">
+                            <Setter Property="Cursor" Value="Hand" />
+                          </DataTrigger>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
+                          </Trigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Border.Style>
+                    <Border.InputBindings>
+                      <!-- Null for user rows: the gesture is simply ignored. -->
+                      <MouseBinding MouseAction="LeftClick" Command="{Binding PickCommand}" />
+                    </Border.InputBindings>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Primary}" FontFamily="Montserrat" FontSize="13"
+                                   Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Secondary}" FontFamily="Montserrat" FontSize="11"
+                                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Content="Unlock" Command="{Binding UnlockCommand}"
+                              Style="{DynamicResource ButtonOutline}" Height="28" FontSize="11"
+                              VerticalAlignment="Center"
+                              Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
+                    </Grid>
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </ScrollViewer>
       </Border>
     </Popup>

@@ -18,6 +18,7 @@ using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\HostViewModel.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
+using module "..\ViewModels\SearchRowViewModel.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -108,8 +109,7 @@ class HomePresenter : AsyncJobPresenter {
 
     # AD live-search (search-bar dropdown: computers + locked-out users)
     [ActiveDirectoryService] $AdService
-    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup
-    [object]          $SearchList         # StackPanel inside the popup
+    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup (rows render via binding)
     [DispatcherTimer] $SearchDebounce
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
@@ -216,7 +216,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
         $this.SearchPopup = $this.ViewContent.FindName('SearchResultsPopup')
-        $this.SearchList = $this.ViewContent.FindName('SearchResultsList')
 
         $this.OvModel = $this.ViewContent.FindName('txtOvModel')
         $this.OvModelSub = $this.ViewContent.FindName('txtOvModelSub')
@@ -723,105 +722,45 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
+    # Maps the accumulated hits to display rows (section headers + results, one flat
+    # list) and swaps them into the bound collection; the popup's ItemsControl renders
+    # them via its DataTemplate. Commands close over the presenter's handlers, mirroring
+    # EnsureRow's Run/Gather pattern.
     [void] RenderAdResults([object[]]$results) {
-        if (-not $this.SearchList) { return }
-        $this.SearchList.Children.Clear()
         if ($null -eq $results -or $results.Count -eq 0) { $this.CloseSearchPopup(); return }
 
         $computers = @($results | Where-Object { $_.Kind -eq 'Computer' })
         $users = @($results | Where-Object { $_.Kind -eq 'User' })
 
+        $presenter = $this
+        # ($items, not $rows: a local colliding case-insensitively with the $Rows
+        # property breaks assignment inside PS class methods.)
+        $items = [System.Collections.Generic.List[object]]::new()
         if ($computers.Count -gt 0) {
-            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('COMPUTERS'))
-            foreach ($c in $computers) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($c)) }
+            $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
+            foreach ($c in $computers) {
+                $vm = [SearchRowViewModel]::FromResult($c)
+                $cap = [string]$c.Name
+                $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
+                $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
+                $items.Add($vm)
+            }
         }
         if ($users.Count -gt 0) {
-            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('USERS'))
-            foreach ($u in $users) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($u)) }
-        }
-        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
-    }
-
-    hidden [object] BuildSectionHeader([string]$text) {
-        $tb = [TextBlock]::new()
-        $tb.Text = $text
-        $tb.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $tb.FontSize = 10
-        $tb.FontWeight = [System.Windows.FontWeights]::SemiBold
-        $tb.Foreground = $this.ResBrush('BodyTextTertiary')
-        $tb.Margin = [System.Windows.Thickness]::new(6, 6, 0, 4)
-        return $tb
-    }
-
-    # Builds one dropdown row (imperative, like ConnectionRow). Computers pick into
-    # the search bar; locked users get an inline Unlock button.
-    hidden [object] BuildSearchRow([object]$r) {
-        $presenter = $this
-        $border = [Border]::new()
-        $border.CornerRadius = [System.Windows.CornerRadius]::new(7)
-        $border.Padding = [System.Windows.Thickness]::new(10, 6, 8, 6)
-        $border.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
-        $border.Background = [System.Windows.Media.Brushes]::Transparent
-        $hover = $this.ResBrush('PanelBackgroundHover')
-        $border.Add_MouseEnter({ $border.Background = $hover }.GetNewClosure())
-        $border.Add_MouseLeave({ $border.Background = [System.Windows.Media.Brushes]::Transparent }.GetNewClosure())
-
-        $grid = [Grid]::new()
-        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
-        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
-
-        $stack = [StackPanel]::new()
-        $stack.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $primary = [TextBlock]::new()
-        $primary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $primary.FontSize = 13
-        $primary.Foreground = $this.ResBrush('TitleTextPrimary')
-        $primary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-        $secondary = [TextBlock]::new()
-        $secondary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $secondary.FontSize = 11
-        $secondary.Foreground = $this.ResBrush('BodyTextTertiary')
-        $secondary.Margin = [System.Windows.Thickness]::new(0, 1, 0, 0)
-        $secondary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-
-        if ($r.Kind -eq 'User') {
-            $label = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
-            if ($r.LockedOut) { $label = $label + " `u{1F512}" }
-            $primary.Text = $label
-            $sub = @([string]$r.DisplayName, [string]$r.Domain) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-            $secondary.Text = ($sub -join '  -  ')
-        }
-        else {
-            $primary.Text = [string]$r.Name
-            $secondary.Text = "$([string]$r.Domain)  -  computer"
-            $cap = [string]$r.Name
-            $border.Cursor = [System.Windows.Input.Cursors]::Hand
-            $border.Add_MouseLeftButtonUp({ $presenter.OnPickComputer($cap) }.GetNewClosure())
-        }
-        [void]$stack.Children.Add($primary)
-        [void]$stack.Children.Add($secondary)
-        [Grid]::SetColumn($stack, 0)
-        [void]$grid.Children.Add($stack)
-
-        if ($r.Kind -eq 'User' -and $r.LockedOut) {
-            $btn = [Button]::new()
-            $btn.Content = 'Unlock'
-            $btn.Height = 28
-            $btn.FontSize = 11
-            $btn.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-            if ($this.MachineList) {
-                $style = $this.MachineList.TryFindResource('ButtonOutline')
-                if ($style) { $btn.Style = $style }
+            $items.Add([SearchRowViewModel]::Header('USERS'))
+            foreach ($u in $users) {
+                $vm = [SearchRowViewModel]::FromResult($u)
+                if ($vm.CanUnlock) {
+                    $unlock = { param($p) $presenter.OnUnlockUser($u) }.GetNewClosure()
+                    $vm.UnlockCommand = [RelayCommand]::new([System.Action[object]]$unlock)
+                }
+                $items.Add($vm)
             }
-            $u = $r
-            $btn.Add_Click({ $presenter.OnUnlockUser($u) }.GetNewClosure())
-            [Grid]::SetColumn($btn, 1)
-            [void]$grid.Children.Add($btn)
         }
 
-        $border.Child = $grid
-        return $border
+        $this.HomeVm.SearchResults.Clear()
+        foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
+        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
     }
 
     # Computer chosen: drop it into the bar so the operator can run the active
