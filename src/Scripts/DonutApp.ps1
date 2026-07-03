@@ -57,7 +57,13 @@ try {
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
-    [RunspaceManager]::Initialize(1, $throttleLimit)
+    # min = max PINS every runspace: the pool's idle cleanup (CleanupInterval, 15 min)
+    # only disposes runspaces ABOVE the minimum, so with min=1 all but one warmed
+    # runspace died after 15 idle minutes - and the next CONCURRENT job (e.g. a storage
+    # scan during a DCU scan) landed on a fresh COLD runspace, whose class-graph load
+    # under the process-wide CLR loader lock froze the UI. Pinned, the startup warm
+    # (WarmPool) covers every runspace for the app's lifetime.
+    [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
 
     $logger.LogInfo("Loading resources.")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
