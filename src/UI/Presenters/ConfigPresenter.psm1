@@ -1,8 +1,10 @@
 using namespace System.Windows
 using namespace System.Windows.Controls
+using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
+using module "..\ViewModels\ConfigViewModel.psm1"
 
 <#
 .SYNOPSIS
@@ -19,7 +21,7 @@ class ConfigPresenter {
     [FrameworkElement] $ViewContent
     [ComboBox] $MainCommandComboBox
     [ContentControl] $ConfigOptionsContent
-    [Button] $SaveButton
+    [ConfigViewModel] $ConfigVm
     [FrameworkElement] $CurrentOptionView
     [string] $CurrentSection
 
@@ -34,20 +36,22 @@ class ConfigPresenter {
     [void] Initialize() {
         $this.MainCommandComboBox = $this.ViewContent.FindName('MainCommandComboBox')
         $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
-        $this.SaveButton = $this.ViewContent.FindName('btnSaveConfig')
+
+        # Page VM: the Save button binds SaveCommand (replaces the Click wiring). The
+        # command combo's SelectionChanged stays an event - it's view navigation (which
+        # option form is shown), not data.
+        $this.ConfigVm = [ConfigViewModel]::new()
+        $presenter = $this
+        $save = { param($p) $presenter.OnSave() }.GetNewClosure()
+        $this.ConfigVm.SaveCommand = [RelayCommand]::new([System.Action[object]]$save)
+        $this.ViewContent.DataContext = $this.ConfigVm
 
         if ($this.MainCommandComboBox) {
-            $presenter = $this
-            $this.MainCommandComboBox.Add_SelectionChanged({ 
+            $this.MainCommandComboBox.Add_SelectionChanged({
                 if ($_.AddedItems.Count -gt 0) {
-                    $presenter.OnCommandChanged($_.AddedItems[0]) 
+                    $presenter.OnCommandChanged($_.AddedItems[0])
                 }
             }.GetNewClosure())
-        }
-
-        if ($this.SaveButton) {
-            $presenter = $this
-            $this.SaveButton.Add_Click({ $presenter.OnSave() }.GetNewClosure())
         }
 
         $this.LoadCurrentConfig()

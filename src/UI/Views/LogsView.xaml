@@ -2,6 +2,9 @@
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    <Grid.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Grid.Resources>
     <Border Background="{DynamicResource PanelBackground}"
             CornerRadius="6"
             Margin="10"
@@ -12,13 +15,49 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="60" />
             </Grid.RowDefinitions>
+            <!-- One tab per LogTabViewModel (headers + content are templated; the
+                 container chrome comes from the style's ItemContainerStyle). -->
             <TabControl x:Name="LogsTabControl"
                         Grid.Row="0"
                         Style="{DynamicResource TerminalTabControlStyle}"
-                        Margin="10,10,10,10" />
+                        ItemsSource="{Binding Tabs}"
+                        IsSynchronizedWithCurrentItem="True"
+                        Margin="10,10,10,10">
+                <TabControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Header}" />
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <!-- Truncation bar for tail-loaded large files -->
+                            <Border Grid.Row="0" Padding="8,4,8,6"
+                                    Visibility="{Binding IsTruncated, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding TruncationNote}" Foreground="Gray"
+                                               VerticalAlignment="Center" />
+                                    <Button Content="Load full file" Command="{Binding LoadFullCommand}"
+                                            Style="{DynamicResource ButtonOutline}"
+                                            Padding="8,2,8,2" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Border>
+                            <TextBox Grid.Row="1" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     FontFamily="Consolas" Background="Transparent" Foreground="White"
+                                     BorderThickness="0" />
+                        </Grid>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
             <Button x:Name="btnClearLogs"
                     Grid.Row="1"
                     Content="Clear Logs"
+                    Command="{Binding ClearCommand}"
                     Style="{DynamicResource ModernButton}"
                     Margin="0,0,0,15"
                     HorizontalAlignment="Center"
