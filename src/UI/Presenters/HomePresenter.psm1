@@ -1088,17 +1088,14 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # End of tick: refresh fleet counts and, once the batch is fully drained,
-    # surface any pending manual-reboot notice.
+    # End of tick: refresh fleet counts and, once the batch is fully drained, persist
+    # any coalesced recents changes in one write. (Reboot-required is announced once,
+    # per-host, at apply completion - no batch notice, which both duplicated the toast
+    # and never fired if the batch didn't fully drain.)
     [void] AfterPump() {
         $this.RefreshOverview()
-        # Batch fully drained: persist any coalesced recents changes in one write, and
-        # surface any pending manual-reboot notice.
         if ($this.ActiveJobs.Count -eq 0) {
             $this.Store.FlushSave()
-            if ($this.ManualRebootQueue.Count -gt 0) {
-                $this.ShowManualRebootNotice()
-            }
         }
     }
 
@@ -1139,6 +1136,11 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
 
+        # The reboot flag is now persisted (card state) and was toasted at completion -
+        # consume the queue entry so a later run of this host can't inherit a stale
+        # "reboot required" it already satisfied.
+        if ($reboot) { [void]$this.ManualRebootQueue.Remove($job.HostName) }
+
         $row = $this.GetRow($job.HostName)
         if ($row) {
             $rc = $this.GetRecord($job.HostName)
@@ -1155,6 +1157,20 @@ class HomePresenter : AsyncJobPresenter {
         if (-not $row) { return }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
         $row.ApplyStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+    }
+
+    # Aborts a pending apply when the identity check has CONFIRMED that the box at the
+    # host's IP answers as a different machine (the IP moved): logs + toasts the actual
+    # name, drops the stale IP, and kicks a re-resolve. Returns $true when the apply must
+    # stop. Called twice - before analysing the report AND again after the confirmation
+    # dialog - because the parallel name-check may land its verdict while the dialog is up.
+    hidden [bool] AbortOnIdentityMismatch([string]$hostName) {
+        if ($this.Resolver.IdentityVerdict($hostName) -ne 'Mismatch') { return $false }
+        $actual = $this.Resolver.GetVerifiedName($hostName)
+        $this.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
+        if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
+        $this.InvalidateResolved($hostName)
+        return $true
     }
 
     # Analyses the (fresh or reused) update report for a host, confirms with the
@@ -1215,6 +1231,16 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
 
+        # Surface the identity verdict in the dialog so the operator knows whether the
+        # target's name was actually confirmed (Match) or the check hasn't landed yet
+        # (Unknown - it runs in parallel with the scan and may still be in flight).
+        $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
+            "Identity verified: the machine answers as '$($this.Resolver.GetVerifiedName($hostName))'."
+        } else {
+            "Identity not verified yet (name check still pending) - proceed with care."
+        }
+        $displayList = @($identityLine, '') + $displayList
+
         $this.AppendLog($hostName, "Driver analysis complete. Waiting for confirmation...")
         $confirmed = $this.DialogPresenter.ShowConfirmation("Updates Available", "Updates found for $hostName", $displayList)
 
@@ -1222,6 +1248,10 @@ class HomePresenter : AsyncJobPresenter {
             $this.AppendLog($hostName, "Cancelled by user.")
             return $false
         }
+
+        # Re-check AFTER the dialog: the parallel name-check may have landed a Mismatch
+        # while the operator was reading it (the pump keeps draining resolve jobs).
+        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
 
         $this.AppendLog($hostName, "Confirmed. Phase 2: Applying updates...")
         $this.CopyUpdatesToClipboard($hostName, $clipboardList)
@@ -1737,18 +1767,6 @@ class HomePresenter : AsyncJobPresenter {
         if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {
             $this.ManualRebootQueue.Add($job.HostName)
         }
-    }
-
-    [void] ShowManualRebootNotice() {
-        if ($this.ManualRebootQueue.Count -eq 0) { return }
-        $hostList = $this.ManualRebootQueue.ToArray() -join ", "
-        if ($this.Toasts) {
-            $this.Toasts.ShowWarning(
-                "Manual reboot required",
-                "These machines need a manual reboot to finish updating: $hostList"
-            )
-        }
-        $this.ManualRebootQueue.Clear()
     }
 
     [array] GetInstalledDriversFromReport([xml]$report) {
