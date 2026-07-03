@@ -1,7 +1,7 @@
 @startuml network-flow
 title DONUT — Remote operation network routing (resolve -> reconnect -> update -> settle)
 ' Code-grounded trace. Method names map 1:1 to source so each step is navigable.
-' Legend:  green note = bug fixed this session   |   pink note = open hotspot to inspect
+' Legend:  green note = bug fixed/hardened   |   tan note = concurrency/modal caveat
 
 skinparam maxMessageSize 260
 skinparam sequenceMessageAlign left
@@ -80,34 +80,42 @@ else fresh Online
   P -> J : Inventory
   J -> W : RunInventoryPhase
   W -> N : IsRpcAvailable(ip) (2s gate)
-  W -> H : New-CimSession (DCOM)  -> Win32_* fast path
-  note right of W #FFE0E0
-    [OPEN] New-CimSession has NO bounded connect timeout. If the RPC
-    gate passes but the box dies during session-open (mid-restart),
-    this can hang the worker (pool thread, not the UI).
+  W -> H : New-CimSession (DCOM, -OperationTimeoutSec 15)  -> Win32_* fast path
+  note right of W #E8F5E9
+    [FIXED] both CIM opens (inventory + the identity name query) are
+    bounded by -OperationTimeoutSec 15 - a box that died after the RPC
+    gate fails in seconds, not DCOM's multi-minute defaults.
   end note
   W -> H : psexec probe fallback (if CIM empty/blocked)
+  note right of W #E8F5E9
+    [FIXED] the probe psexec (also used by the WizTree disk scan) now
+    has the -n 60 connect timeout and classifies exit codes by cause
+    (launch fault / transport drop / real failure) like the dcu-cli path.
+  end note
   J --> P : CompleteInventory -> Store.UpsertInventory -> card
 end
 
 == Phase 3 — Run (scan / apply), "from where left off" ==
 OP -> P : Run  (StartProcess, active command)
-P -> R : IsHostOnline(host)
-alt Offline -> skip   /   Unknown -> PrefetchIp + bail
-  P -> P : (bail; re-run once the verdict lands)
-else Online
-  note right of P #FFE0E0
-    [OPEN] the Run path trusts a cached 'Online' WITHOUT the
-    IsVerdictStale freshness check that StartInventory now uses.
-    Mitigated: worker SMB gate fails fast + identity gate guards
-    a moved IP, so it can't freeze or apply to the wrong box.
+P -> R : IsHostOnline(host) + IsVerdictStale(host)
+alt Offline
+  P -> P : skip + toast ("host is offline")
+else Unknown OR stale 'Online'
+  P -> R : PendingRuns[host] = queued ; PrefetchIp (re-verify off-thread)
+  R --> P : CompleteResolve (fresh verdict) -> auto-StartProcess / skip-with-toast / drop-with-reason
+  note right of P #E8F5E9
+    [FIXED] a missing OR aged-out 'Online' verdict is re-verified first
+    and the run is QUEUED - it starts automatically once the fresh
+    verdict lands. Offline -> skipped with a toast; failed resolve ->
+    dropped with a reason. Never queued silently, no second Run click.
   end note
+else fresh Online
   alt scan cached < 24h (RecentScanIsFresh)  — resume, don't rescan
     P -> P : reuse scan -> ProceedWithApply (skips Phase-1 rescan)
   else fresh scan needed
     P -> J : UpdateScan
     P -> J : Resolve{Name}  (StartVerifyName — parallel identity check)
-    J -> W : RunScanPhase -> InvokePsExec
+    J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
     W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
     W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
     W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report)
@@ -120,17 +128,20 @@ P -> R : IdentityVerdict(host)  (from the parallel Name check)
 alt Mismatch  (the IP now answers as a different machine)
   P -> P : ABORT apply + InvalidateResolved (drop IP, re-resolve)
 else Match OR Unknown
-  note right of P #FFE0E0
-    [OPEN] 'Unknown' PROCEEDS. The Name check runs in parallel with
-    the scan and may not have landed (or failed) by apply time, so a
-    genuine mismatch that hasn't resolved yet is NOT blocked here.
+  note right of P #E8F5E9
+    [HARDENED] the dialog now STATES the verdict ("identity verified
+    as X" / "not verified yet - proceed with care"), and it is
+    RE-CHECKED after the dialog closes (the pump keeps draining the
+    parallel name-check while it's open) - a late Mismatch aborts
+    before the destructive step. 'Unknown' proceeds by design.
   end note
-  P -> P : parse report -> driver match -> ShowConfirmation (MODAL)
+  P -> P : parse report -> driver match -> ShowConfirmation (MODAL, + identity line)
   note over P #FFF6E5
     Modal opens inside the pump. IsModalOpen() then DEFERS other jobs'
     completions to a later non-modal tick (avoids stacked dialogs).
   end note
   OP -> P : confirm
+  P -> R : re-check IdentityVerdict  (late Mismatch -> ABORT + re-resolve)
   P -> J : UpdateApply
   J -> W : RunApplyPhase -> InvokePsExec
   W -> N : FindDcuCli -> IsSmbAvailable(ip)
@@ -193,18 +204,16 @@ note over P #F0F0F0
   ConnectionLost(amber "Unconfirmed") / Offline(grey) / Failed(red)
 end note
 P -> P : AfterPump -> FlushSave (coalesced 1 write/batch)
-alt ActiveJobs empty
-  P -> OP : ShowManualRebootNotice (batch)
-  note right of P #FFE0E0
-    [MINOR] per-host toast (Phase 6) + batch notice here = two toasts
-    for the same reboot. Batch only flushes when the queue drains.
-  end note
-end
+note right of P #E8F5E9
+  [FIXED] reboot-required is announced ONCE, per host, at apply
+  completion (toast + yellow card); SettleHost consumes the queue
+  entry after persisting it. The redundant batch notice - which
+  double-toasted and only fired when the whole batch drained - is gone.
+end note
 
 legend right
   |= colour |= meaning |
-  |<#E8F5E9> green | bug fixed this session |
-  |<#FFE0E0> pink  | open hotspot to inspect |
+  |<#E8F5E9> green | bug fixed / hardened (all audit hotspots resolved) |
   |<#FFF6E5> tan   | concurrency / modal note |
 endlegend
 @enduml
