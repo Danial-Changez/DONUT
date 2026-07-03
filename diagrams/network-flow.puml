@@ -35,8 +35,14 @@ N -> DC : Get-ADDomainController + TestServerOnline
 W -> W : WarmRuntimeAssemblies()\n(cold-load DNS/CIM/TCP/LDAP off the UI thread)
 J --> P : CompleteResolve -> Resolver.SetActiveDc(dc)
 note over P,R #E8F5E9
-  Warm loads the heavy assemblies on the pool so the FIRST real
-  probe can't cold-load under the loader lock and freeze the UI.
+  Warm loads the heavy assemblies + the worker class graph into EVERY
+  pool runspace so no job ever cold-loads under the process-wide CLR
+  loader lock (which stalls the WPF dispatcher = UI freeze).
+  [FIXED] the pool is now PINNED (min = max): its idle cleanup
+  (15 min) only reaps runspaces above min, so previously all but one
+  warmed runspace died after 15 idle minutes - and the next
+  CONCURRENT job (e.g. storage scan mid DCU-scan) landed on a fresh
+  cold runspace and froze the UI. Pinned, the warm holds for life.
 end note
 
 == Phase 1 — Resolve a host (start-early, on select) ==
