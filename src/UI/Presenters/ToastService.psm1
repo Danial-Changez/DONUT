@@ -7,12 +7,12 @@ using module "..\ViewModels\ToastViewModel.psm1"
 
 <#
 .SYNOPSIS
-    Enqueues non-modal, auto-dismissing toast notifications (MVVM).
+    Enqueues non-modal, auto-dismissing toast notifications.
 
 .DESCRIPTION
     Shows informational feedback in the top-right overlay - e.g. "manual reboot
-    required", "no updates found" - that previously surfaced as modal alert dialogs.
-    Decision dialogs still go through DialogPresenter. The service owns an
+    required", "no updates found" - without stealing focus or blocking the pump;
+    decision dialogs go through DialogPresenter. The service owns an
     ObservableCollection of ToastViewModels bound to the toastHost ItemsControl; the
     card chrome and the slide/fade in/out animations live in the DataTemplate
     (MainWindow.xaml). The service keeps the orchestration: per-toast auto-dismiss

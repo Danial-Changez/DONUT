@@ -20,11 +20,13 @@ else No fresh scan
     Presenter -> Update: PrepareScanForUpdates("PC-01")
     Update --> Presenter: worker args
     Presenter -> Job: queue UpdateScan
+    Presenter -> Job: queue Resolve{Name} (StartVerifyName —\nparallel identity check of the box at the cached IP)
     note right of Presenter: PumpJobs() runs the scan,\nthen OnJobCompleted() continues.
 end
 
 Presenter -> Presenter: ProceedWithApply("PC-01")
 activate Presenter
+Presenter -> Presenter: AbortOnIdentityMismatch? (IP moved ->\nabort, drop the stale IP, re-resolve)
 Presenter -> Update: ParseUpdateReport("PC-01")
 activate Update
 Update -> Matcher: FindBestDriverMatch(updates, drivers)
@@ -33,31 +35,28 @@ Update --> Presenter: update list
 deactivate Update
 
 alt Updates available
-    Presenter -> Dialog: ShowConfirmation("Apply N updates?", list)
+    Presenter -> Dialog: ShowConfirmation("Updates found", list + identity-verdict line)
     activate Dialog
     Dialog -> User: modal popup
     User --> Dialog: Confirm
     Dialog --> Presenter: true
     deactivate Dialog
+    Presenter -> Presenter: re-check AbortOnIdentityMismatch\n(the parallel name-check may land while the dialog is up)
 
     Presenter -> Update: PrepareApplyUpdates("PC-01", selected)
     Update --> Presenter: worker args
     Presenter -> Job: queue UpdateApply
     activate Job
     Job -> Exec: (pool) RunApplyPhase(device, options)
-    Exec --> Job: apply result + reboot flag
+    note right of Exec: InvokePsExec: watchdog 120m; live-tails apply.log\n(percent lines drive the bar). If psexec's pipe drops\n(e.g. a NIC-driver install), dcu-cli's own return code is\nrecovered from apply.log — see diagrams/network-flow.puml.
+    Exec --> Job: apply result + RebootRequired (dcu code 1/5)
     deactivate Job
-    Presenter -> Presenter: SettleHost() -> updateCount = 0
-    opt Reboot required
-        Presenter -> Presenter: ManualRebootQueue.Add("PC-01")
-    end
+    Presenter -> Presenter: CheckForManualReboot(job) -> ManualRebootQueue
+    Presenter -> User: Toast per host: "applied" /\n"applied — manual reboot required"
+    Presenter -> Presenter: SettleHost() -> updateCount = 0,\ncard Completed / RebootRequired (queue entry consumed)
 else No updates
     Presenter -> User: Toast "No updates found"
 end
 deactivate Presenter
 deactivate Presenter
-
-opt Reboot queue not empty
-    Presenter -> User: Show "manual reboot required" notice
-end
 @enduml

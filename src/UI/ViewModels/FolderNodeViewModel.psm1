@@ -2,8 +2,7 @@ using module "..\..\Models\DiskUsage.psm1"
 
 <#
 .SYNOPSIS
-    Display-ready node for the largest-folders TreeView (MVVM replacement for the
-    imperative BuildFolderTreeItem/BuildFolderHeader builders).
+    Display-ready node for the largest-folders TreeView.
 
 .DESCRIPTION
     Wraps a FolderTreeNode (the pure containment-tree model) with the exact values the

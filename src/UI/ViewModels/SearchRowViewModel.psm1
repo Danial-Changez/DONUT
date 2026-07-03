@@ -1,18 +1,16 @@
 <#
 .SYNOPSIS
-    Display-ready row for the AD finder dropdown (MVVM replacement for the imperative
-    BuildSearchRow/BuildSectionHeader builders).
+    Display-ready row for the AD finder dropdown.
 
 .DESCRIPTION
     One flat collection drives the whole dropdown: section headers and result rows are
     both SearchRowViewModels, distinguished by IsHeader; the single DataTemplate shows
-    the header text or the row chrome via triggers. FromResult carries over the exact
-    label rules the imperative builder had: users show UPN (SamAccountName fallback)
-    with a lock glyph when locked out and "DisplayName - Domain" underneath; computers
-    show the machine name over "Domain - computer" and are pickable. Commands
-    (PickCommand for computers, UnlockCommand for locked users) are attached by the
-    presenter after construction, closing over its handlers - same pattern as
-    HostViewModel's Run/Gather commands.
+    the header text or the row chrome via triggers. Label rules: users show UPN
+    (SamAccountName fallback) with a lock glyph when locked out and
+    "DisplayName - Domain" underneath; computers show the machine name over
+    "Domain - computer" and are pickable. Commands (PickCommand for computers,
+    UnlockCommand for locked users) are attached by the presenter after construction,
+    closing over its handlers - same pattern as HostViewModel's Run/Gather commands.
 
 .NOTES
     Values are computed once per render (the whole collection is swapped), so no

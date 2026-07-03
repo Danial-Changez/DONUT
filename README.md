@@ -112,13 +112,13 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ### Key Concepts
 
 - **Runspaces:** Used for parallel remote execution, runspace management, and UI updates.
-- **WPF UI:** All user interaction is via the XAML-based interface and supporting presenter modules.
+- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture section](docs/Refactoring_Proposal.md#2-architecture-mvp--mvvm).
 - **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
 - **GitHub App Updates:** Requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256.
 
 ## Contributing
 
-- **UI Changes:** Edit XAML files in `Views/` and `Styles/`.
+- **UI Changes:** Edit XAML files in `Views/` and `Styles/`; bindable state/commands live in `UI/ViewModels/`, coordination in `UI/Presenters/`.
 - **Logic Changes:** Update event logic in the respective `Core/` or `Service/` directories, with each page's supporting function(s) in its relevant module file.
 - **Deploying Changes:**
   - Build a new MSI in PowerShell Studio (update the Product Version).

@@ -4,13 +4,13 @@ using module ".\HostViewModel.psm1"
 
 <#
 .SYNOPSIS
-    View-model backing the Home screen's machine list (MVVM).
+    View-model backing the Home screen: machine list, selection, and finder rows.
 
 .DESCRIPTION
     Holds the bindable machine collection and the selected machine. The ListBox in
-    HomeView binds ItemsSource -> Machines and SelectedItem -> SelectedMachine (TwoWay).
-    HomePresenter is the coordinator: it owns this VM, adds/updates HostViewModels, and
-    reacts to selection. Grows in later phases (detail/overview bind to SelectedMachine).
+    HomeView binds ItemsSource -> Machines and SelectedItem -> SelectedMachine (TwoWay);
+    the detail pane and overview strip bind to SelectedMachine.*. HomePresenter is the
+    coordinator: it owns this VM, adds/updates HostViewModels, and reacts to selection.
 
 .NOTES
     Mutate Machines only on the UI thread (the presenter's pump already runs there).

@@ -109,7 +109,7 @@ class MainPresenter {
         # Collapsible rail
         $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
         $this.Controls['btnRailToggle'] = $this.Window.FindName("btnRailToggle")
-        # The logo is now the toggle button itself (its image swaps on collapse),
+        # The logo doubles as the toggle button (its image swaps on collapse),
         # so it is NOT part of the fading label set.
         $this.Controls['railLabels'] = @(
             $this.Window.FindName("lblHome"),

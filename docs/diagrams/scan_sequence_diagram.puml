@@ -14,7 +14,12 @@ View -> Presenter: RunHost("PC-01")
 activate Presenter
 Presenter -> Presenter: StartProcess("PC-01")
 
-alt Scan < 24h old and report cached
+alt Host known Offline
+    Presenter -> Presenter: skip + toast ("host is offline")
+else Verdict missing or older than the 5-min TTL
+    Presenter -> Presenter: queue in PendingRuns + PrefetchIp (re-verify off-thread)
+    note right of Presenter: CompleteResolve() starts the run\nautomatically once a fresh verdict lands\n(or drops it with a reason). See\ndiagrams/network-flow.puml for the full trace.
+else Scan < 24h old and report cached
     Presenter -> Presenter: RecentScanIsFresh() = true
     note right of Presenter: ScanCacheDecision.IsFresh()\nToast "results are current" — no job queued.
 else Needs a fresh scan
@@ -36,15 +41,17 @@ deactivate Presenter
 loop while job running
     Presenter -> Job: Poll()
     activate Job
-    Job -> Exec: (pool thread) AssertHostReachable + RunScanPhase
+    Job -> Exec: (pool thread) RunScanPhase
     activate Exec
-    Exec -> Exec: DCU-CLI scan via PsExec
-    Exec -> Exec: CopyRemoteArtifacts()
+    Exec -> Exec: FindDcuCli (SMB-445 gated, bounded 2s)
+    Exec -> Exec: DCU-CLI scan via PsExec (-r DonutDcu,\nwatchdog kills the client after 30m)
+    Exec -> Exec: live-tail scan.log -> Information stream\n(milestones + every line, while psexec runs)
+    Exec -> Exec: CopyRemoteArtifacts() (SMB-gated, non-fatal)
     Exec --> Job: scan result + report path
     deactivate Exec
     Job --> Presenter: Status (Running / Completed)
     deactivate Job
-    Presenter -> Presenter: OnJobPolled() -> stream logs + % to card
+    Presenter -> Presenter: OnJobPolled() -> stream lines to detail terminal,\nscan step "N/5" + bar onto the HostViewModel (bindings render it)
 end
 
 Presenter -> Presenter: OnJobCompleted() -> SettleHost(job)

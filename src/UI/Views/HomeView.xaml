@@ -14,7 +14,7 @@
   </Grid.RowDefinitions>
 
   <Grid.Resources>
-    <!-- MVVM (Phase 1): converter + machine-list item chrome. The machine list binds to
+    <!-- Converter + machine-list item chrome. The machine list binds to
          HomeViewModel.Machines; each item is a HostViewModel. -->
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
     <Style x:Key="MachineListItem" TargetType="ListBoxItem">
@@ -111,8 +111,7 @@
               SnapsToDevicePixels="True">
         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="340">
           <!-- One flat list of SearchRowViewModels: section headers and result rows share
-               the template, switched by IsHeader. Replaces the imperative
-               BuildSectionHeader/BuildSearchRow builders. -->
+               the template, switched by IsHeader. -->
           <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
@@ -486,8 +485,7 @@
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                   <TreeView.ItemTemplate>
                     <!-- One folder row: relative label left (root rows brighter), formatted
-                         size right; children nest via the template. Replaces the imperative
-                         BuildFolderTreeItem/BuildFolderHeader builders. -->
+                         size right; children nest via the template. -->
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                       <Grid Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>

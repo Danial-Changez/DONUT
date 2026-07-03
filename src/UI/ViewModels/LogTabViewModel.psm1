@@ -8,8 +8,8 @@ using namespace Donut.Mvvm
     The TabControl's ItemTemplate binds Header; its ContentTemplate binds Text plus the
     truncation bar (IsTruncated/TruncationNote/LoadFullCommand). Large files start as a
     tail with IsTruncated=$true; LoadFullCommand (assigned by LogsPresenter, which owns
-    the file I/O) calls ShowFull with the whole file, which flips the bar off - the
-    tail/full pagination behaviour is unchanged, only the rendering moved to bindings.
+    the file I/O) calls ShowFull with the whole file, which flips the bar off - so
+    opening a tab never blocks on reading a multi-MB log.
 #>
 class LogTabViewModel : ObservableObject {
     [string] $Header = ''

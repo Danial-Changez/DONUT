@@ -2,35 +2,39 @@
 title Remote Worker Flow (ExecutionService, in a pool runspace)
 
 start
-:Receive HostName + JobType + Options;
-note right: Runs on a RunspaceManager pool\nthread, never the WPF dispatcher.
-
-:Assert host reachable;
+:Receive HostName + JobType + Options + ResolvedIp;
 note right
-  RemoteJobService.AssertHostReachable()
-  IsOnline() -> ResolveHost() -> IsRpcAvailable(135)
+  Runs on a RunspaceManager pool thread, never the
+  WPF dispatcher. ResolvedIp is the prefetched IP
+  (HostResolver), so the worker skips DNS on the
+  hot path; each phase gates its own transport
+  with BOUNDED port probes (RPC-135 / SMB-445, ~2s)
+  before touching the target.
 end note
-
-if (Reachable?) then (no)
-    :Log error + return Failure;
-    stop
-else (yes)
-endif
 
 switch (JobType?)
 case (Resolve / WarmRunspace)
-    :Resolve via active DC + reverse-DNS verify;
-    note right: HostResolver caches the IP;\nWarmRunspace is a no-op that\njust pre-loads the module graph.
+    :Resolve via the active DC + probe RPC-135;
+    note right: HostResolver caches the {Ip, Online}\nverdict (5-min TTL); WarmRunspace just\npre-loads the module graph + assemblies.
 case (Scan / UpdateScan)
-    :Run DCU-CLI scan via PsExec (SYSTEM);
+    :SMB gate -> clear outputLog (+ baseline) ->\ndcu-cli /scan via PsExec (SYSTEM, -r DonutDcu);
+    :Live-tail scan.log -> Information stream\n(milestones "N/5" + every line);
 case (UpdateApply)
-    :Run DCU-CLI applyUpdates via PsExec;
-    :Flag RebootRequired from exit code;
+    :Same PsExec path, dcu-cli /applyUpdates\n(watchdog 120m; tail drives the percent bar);
+    :On a dropped pipe (233/64/...), recover dcu-cli's
+    authoritative return code from apply.log;
+    :Flag RebootRequired from dcu code 1/5;
 case (Inventory)
-    :Run inventory probe (CIM) via PsExec;
+    :RPC gate -> CIM/DCOM fast path (15s bound),\nfalling back to the PsExec probe (-r DonutProbe);
 case (DiskScan)
-    :Deploy + run wiztree64.exe (MFT scan);
+    :SMB gate -> deploy + run wiztree64.exe\n(MFT scan, -r DonutDisk, watchdog 20m);
 endswitch
+note right
+  A per-job watchdog (scan 30m / apply 120m /
+  probe 10m / disk 20m) kills the psexec client
+  past its deadline -> typed RemoteTimeoutException
+  instead of a forever-Running job.
+end note
 
 :Copy remote artifacts back;
 note right

@@ -3,8 +3,7 @@ using namespace System.Windows.Media
 
 <#
 .SYNOPSIS
-    One toast card in the top-right overlay (MVVM replacement for the imperative
-    card builder in ToastService).
+    One toast card in the top-right overlay.
 
 .DESCRIPTION
     The toastHost ItemsControl renders these via its DataTemplate: accent-coloured

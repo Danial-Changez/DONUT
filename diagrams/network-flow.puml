@@ -66,7 +66,7 @@ alt needs resolve
     end note
   else job Completed
     P -> R : CacheVerdict(host, ip, online)  (stamps CheckedAt for the 5-min TTL)
-    P -> P : RenderReachability + GatherInventoryIfOnline
+    P -> P : RenderReachability + GatherInventoryIfOnline (selected host only)
   end
 end
 
@@ -130,7 +130,7 @@ else fresh Online
     P -> P : reuse scan -> ProceedWithApply (skips Phase-1 rescan)
   else fresh scan needed
     P -> J : UpdateScan
-    P -> J : Resolve{Name}  (StartVerifyName — parallel identity check)
+    P -> J : Resolve{Name}  (StartVerifyName — parallel identity check, applyUpdates mode only)
     J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
     W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
     W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
@@ -164,6 +164,7 @@ else Match OR Unknown
   W -> N : FindDcuCli -> IsSmbAvailable(ip)
   W -> H : clear apply.log over C$ (controller-side, + freshness baseline)
   W -> H : psexec: clear again remotely ; dcu-cli /applyUpdates (-outputLog apply.log)
+  W -> H : live-tail apply.log while psexec runs -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
   note right of W #E8F5E9
     [FIXED] the log is cleared from the CONTROLLER before psexec starts -
     the remote-side clear only runs if the remote command does. A leftover

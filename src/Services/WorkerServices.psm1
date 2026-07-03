@@ -13,11 +13,12 @@ using module "..\Models\DcuLog.psm1"
     The runspace-pool worker engine: runs one remote phase end-to-end.
 
 .DESCRIPTION
-    Entry point (StartWorker) for the RemoteWorker.ps1 script. Asserts the target
-    is reachable on the pool thread, then dispatches by job kind to a phase —
-    resolve, scan, apply, inventory, or disk — invoking dcu-cli / CIM probes /
-    WizTree via PsExec as SYSTEM and copying the resulting artifacts back to the
-    local logs/reports folders for the services to parse.
+    Entry point (StartWorker) for the RemoteWorker.ps1 script. Dispatches by job
+    kind to a phase — resolve, scan, apply, inventory, or disk — invoking dcu-cli /
+    CIM probes / WizTree via PsExec as SYSTEM and copying the resulting artifacts
+    back to the local logs/reports folders for the services to parse. Each phase
+    gates its own transport first (bounded RPC-135 / SMB-445 probes), so an
+    unreachable target fails in seconds instead of hanging the pool thread.
 
 .NOTES
     Runs entirely off the WPF dispatcher, in a pool runspace. Holds the

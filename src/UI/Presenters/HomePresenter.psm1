@@ -1289,7 +1289,7 @@ class HomePresenter : AsyncJobPresenter {
     # --- Detail panel + inventory probe ----------------------------------------------
 
     # Appends a job-output line to the host's buffer and, when it's the selected
-    # host, to the live detail log. (Replaces the old per-row inline log.)
+    # host, to the live detail log.
     [void] AppendLog([string]$hostName, [string]$text) {
         $this.AppendLogLines($hostName, @($text))
     }
@@ -1522,8 +1522,8 @@ class HomePresenter : AsyncJobPresenter {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         foreach ($j in $this.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
-                # Say so instead of silently ignoring the click - a hung scan used to
-                # look like a dead button (the watchdog now also fails it eventually).
+                # Say so instead of silently ignoring the click - otherwise a slow scan
+                # reads as a dead button (the worker watchdog fails a hung one eventually).
                 $this.AppendLog($hostName, "A storage scan is already running for $hostName - wait for it to finish (or time out).")
                 return
             }
@@ -1653,7 +1653,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateOverviewTiles()
     }
 
-    # The overview strip now binds to SelectedMachine.* (each view-model's OvModel/OvBattery/
+    # The overview strip binds to SelectedMachine.* (each view-model's OvModel/OvBattery/
     # OvDisk/OvUpdates, populated via ApplyInventory / SetPendingUpdates), so there is nothing
     # to poke here. Kept as a no-op so existing callers stay valid; the empty/placeholder
     # states come from the bindings' FallbackValues and the view-model defaults.

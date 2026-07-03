@@ -11,8 +11,7 @@ using module "..\ViewModels\LogsViewModel.psm1"
     Reads the log files under the logs directory into LogTabViewModels (the TabControl
     renders them via templates) and clears them on request. Large files are tail-loaded
     (the last TailBytes) with a "Load full file" command, so opening the tab never
-    blocks on reading a multi-MB log into a TextBox - same pagination as before, with
-    the rendering moved to bindings.
+    blocks on reading a multi-MB log into a TextBox.
 #>
 class LogsPresenter {
     [AppConfig] $Config

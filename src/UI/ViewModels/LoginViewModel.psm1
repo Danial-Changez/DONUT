@@ -8,7 +8,7 @@ using namespace Donut.Mvvm
     LoginWindow binds the output panel (verification URI + user code / status) to
     OutputText and the GitHub button to AuthCommand. LoginPresenter remains the
     coordinator: it owns the device-flow poll timer, the DeviceFlowDecision handling,
-    and the modal lifecycle, pushing status here instead of poking the TextBox.
+    and the modal lifecycle, and pushes each status update here via SetOutput.
 #>
 class LoginViewModel : ObservableObject {
     [string] $OutputText = ''

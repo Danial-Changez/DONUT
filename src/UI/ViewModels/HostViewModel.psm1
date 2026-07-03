@@ -9,14 +9,14 @@ using module ".\FolderNodeViewModel.psm1"
 
 <#
 .SYNOPSIS
-    View-model for one machine row in the Home list (MVVM replacement for ConnectionRow).
+    View-model for one machine row in the Home list, plus the detail pane it mirrors.
 
 .DESCRIPTION
     Inherits the C# ObservableObject base so WPF binds to it and updates live when the
     coordinator (HomePresenter) sets its properties on the UI thread. Exposes ready-to-bind
     values (labels, visibility bools, and Brushes) so the DataTemplate stays plain; the
-    status/colour DECISIONS reuse the tested pure mappers ([FleetStatus] for running, the
-    idle mappers below - carried over from ConnectionRow).
+    status/colour DECISIONS reuse the tested pure mappers ([FleetStatus] while a job runs,
+    the idle mappers below when one isn't).
 
 .NOTES
     Brushes are built from the accent hexes in UIColors.xaml (kept in sync here; the app
@@ -60,7 +60,8 @@ class HostViewModel : ObservableObject {
     [bool]   $HasFolders = $false
     hidden [object] $FoldersSource = $null   # last-applied report, to skip no-op rebuilds
 
-    # Backing state for idle/reachability recomposition (mirrors ConnectionRow).
+    # Backing state for idle/reachability recomposition: the chip/subtitle are rebuilt
+    # from these whenever either the stored status or the live reachability changes.
     hidden [string] $BaseSubtitle = 'never run'
     hidden [string] $IdleStatus = ''
     hidden [string] $Reachability = 'Unknown'
@@ -238,7 +239,7 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressBrush', [HostViewModel]::BrushFor($key))
     }
 
-    # --- Pure status mapping (carried over verbatim from ConnectionRow) ---------------
+    # --- Pure status mapping (idle rows; running rows go through FleetStatus) ---------
 
     static [string] IdleColorKey([string]$lastStatus) {
         switch ($lastStatus) {
@@ -281,7 +282,7 @@ class HostViewModel : ObservableObject {
         return $b
     }
 
-    # Chip background = accent at ~15% alpha (matches ConnectionRow's runtime tint).
+    # Chip background = the accent at ~15% alpha, so the chip reads as a soft pill.
     static [Brush] TintFor([string]$key) {
         $hex = [HostViewModel]::Accents[$key]
         if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
