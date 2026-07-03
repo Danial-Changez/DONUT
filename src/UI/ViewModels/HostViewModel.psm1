@@ -3,7 +3,9 @@ using namespace System.Windows.Media
 using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\MachineInventory.psm1"
+using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Core\TimeFormat.psm1"
+using module ".\FolderNodeViewModel.psm1"
 
 <#
 .SYNOPSIS
@@ -51,6 +53,12 @@ class HostViewModel : ObservableObject {
     [string] $OvUpdates = '0'
     [string] $OvUpdatesSub = 'pending update(s)'
     hidden [string] $CachedIp = ''   # last resolved IP, for ProbedText recomposition
+
+    # Largest-folders tree (bound by the detail pane's TreeView via SelectedMachine.Folders):
+    # display-ready FolderNodeViewModel roots + an emptiness flag for the hint text.
+    [object] $Folders = @()
+    [bool]   $HasFolders = $false
+    hidden [object] $FoldersSource = $null   # last-applied report, to skip no-op rebuilds
 
     # Backing state for idle/reachability recomposition (mirrors ConnectionRow).
     hidden [string] $BaseSubtitle = 'never run'
@@ -165,6 +173,18 @@ class HostViewModel : ObservableObject {
 
     [void] SetPendingUpdates([int]$count) {
         $this.Set('OvUpdates', "$count")
+    }
+
+    # Rebuilds the largest-folders display tree from a (cached or fresh) disk report.
+    # Skips the rebuild when the SAME report instance is re-applied (e.g. re-selecting the
+    # host), so the TreeView keeps its expansion state. Null/empty clears the tree, which
+    # flips the "click Storage scan" hint back on via HasFolders.
+    [void] ApplyFolders([DiskUsageReport]$report) {
+        if ($null -ne $report -and [object]::ReferenceEquals($this.FoldersSource, $report)) { return }
+        $this.FoldersSource = $report
+        $roots = [FolderNodeViewModel]::FromReport($report)
+        $this.Set('Folders', $roots)
+        $this.Set('HasFolders', ($roots.Count -gt 0))
     }
 
     # Reflects the background reachability verdict on an idle row (offline => red dot +

@@ -95,8 +95,6 @@ class HomePresenter : AsyncJobPresenter {
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
-    [ItemsControl] $DiskFoldersList
-    [System.Windows.UIElement] $DiskFoldersHint
 
     # Overview tile controls (mirror the selected remote machine)
     [TextBlock] $OvModel
@@ -238,8 +236,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
         $this.FindFoldersButton = $this.ViewContent.FindName('btnFindFolders')
-        $this.DiskFoldersList = $this.ViewContent.FindName('DiskFoldersList')
-        $this.DiskFoldersHint = $this.ViewContent.FindName('DiskFoldersHint')
+        # (Folders tree + its hint are fully binding-driven: SelectedMachine.Folders /
+        # SelectedMachine.HasFolders - no FindName wiring.)
 
         $presenter = $this
 
@@ -1432,8 +1430,12 @@ class HomePresenter : AsyncJobPresenter {
         $rc = $this.GetRecord($hostName)
         $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        # Folders tree binds to SelectedMachine.Folders - apply the cached report onto
+        # the host's view-model (same-instance re-applies are skipped, so re-selecting
+        # keeps the tree's expansion state).
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
-        $this.RenderBigFolders($cachedDisk)
+        $rowVm = $this.GetRow($hostName)
+        if ($rowVm) { $rowVm.ApplyFolders($cachedDisk) }
 
         # Reflect any already-known reachability verdict immediately (a fresh
         # PrefetchIp above will update it when it lands).
@@ -1635,74 +1637,13 @@ class HomePresenter : AsyncJobPresenter {
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
         if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
 
-        if ($hostName -eq $this.SelectedHost) {
-            $this.RenderBigFolders($report)
-        }
+        # Apply onto the host's view-model regardless of selection: the tree binds to
+        # SelectedMachine.Folders, so it shows now if selected and is ready if selected later.
+        $row = $this.GetRow($hostName)
+        if ($row) { $row.ApplyFolders($report) }
     }
 
     # Renders the largest-folders list (or the empty-state hint when there's none).
-    [void] RenderBigFolders([DiskUsageReport]$report) {
-        if (-not $this.DiskFoldersList) { return }
-        $this.DiskFoldersList.Items.Clear()
-
-        if ($null -eq $report -or $report.Folders.Count -eq 0) {
-            if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Visible }
-            return
-        }
-
-        if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Collapsed }
-        # Real tree: nest folders under their parent and render expandable TreeViewItems.
-        foreach ($root in [DiskUsageTree]::BuildNested($report.Folders)) {
-            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderTreeItem($root))
-        }
-    }
-
-    # Builds a TreeViewItem for a folder node and (recursively) its children. Roots
-    # start expanded; deeper levels collapse so the panel stays compact.
-    hidden [object] BuildFolderTreeItem([FolderTreeNode]$node) {
-        $item = [TreeViewItem]::new()
-        $item.Header = $this.BuildFolderHeader($node)
-        $item.IsExpanded = ($node.Depth -eq 0)
-        foreach ($child in $node.Children) {
-            [void]$item.Items.Add($this.BuildFolderTreeItem($child))
-        }
-        return $item
-    }
-
-    # The header content for a folder node: label on the left (the TreeView supplies
-    # the indent + guide line), human-readable size on the right.
-    hidden [object] BuildFolderHeader([FolderTreeNode]$node) {
-        $grid = [Grid]::new()
-        $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
-        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
-        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
-
-        $path = [TextBlock]::new()
-        $path.Text = $node.Label
-        $path.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $path.FontSize = 12
-        $path.Foreground = if ($node.Depth -eq 0) { $this.ResBrush('TitleTextPrimary') } else { $this.ResBrush('BodyTextSecondary') }
-        $path.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-        $path.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $path.ToolTip = $node.Path
-        [Grid]::SetColumn($path, 0)
-        [void]$grid.Children.Add($path)
-
-        $size = [TextBlock]::new()
-        $size.Text = [DiskUsageFormat]::SizeLabel($node.SizeBytes)
-        $size.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $size.FontSize = 12
-        $size.FontWeight = [System.Windows.FontWeights]::SemiBold
-        $size.Foreground = $this.ResBrush('BodyTextSecondary')
-        $size.Margin = [System.Windows.Thickness]::new(10, 0, 0, 0)
-        $size.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        [Grid]::SetColumn($size, 1)
-        [void]$grid.Children.Add($size)
-
-        return $grid
-    }
-
     # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model; the
     # detail pane binds to SelectedMachine.ProbedText.
     hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {

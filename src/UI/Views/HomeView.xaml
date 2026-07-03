@@ -396,16 +396,60 @@
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
-              <TextBlock Grid.Row="1" x:Name="DiskFoldersHint"
+              <TextBlock Grid.Row="1"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
-                         TextWrapping="Wrap" />
+                         TextWrapping="Wrap">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding SelectedMachine.HasFolders}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
               <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                 <TreeView x:Name="DiskFoldersList"
                           Style="{DynamicResource DiskTree}"
                           ItemContainerStyle="{DynamicResource DiskTreeItem}"
+                          ItemsSource="{Binding SelectedMachine.Folders}"
                           ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                  <TreeView.ItemTemplate>
+                    <!-- One folder row: relative label left (root rows brighter), formatted
+                         size right; children nest via the template. Replaces the imperative
+                         BuildFolderTreeItem/BuildFolderHeader builders. -->
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                      <Grid Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
+                                   FontFamily="Montserrat" FontSize="12"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRoot}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Grid.Column="1" Text="{Binding SizeText}"
+                                   FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource BodyTextSecondary}"
+                                   Margin="10,0,0,0" VerticalAlignment="Center" />
+                      </Grid>
+                    </HierarchicalDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
               </ScrollViewer>
             </Grid>
           </Border>
