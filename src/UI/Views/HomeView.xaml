@@ -290,11 +290,26 @@
                     <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
                                FontFamily="Montserrat" FontSize="11.5" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
-                  <ProgressBar Grid.Column="2" Width="120" Height="4" Margin="12,0,12,0"
-                               VerticalAlignment="Center" Minimum="0" Maximum="100"
-                               Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
-                               Foreground="{Binding ProgressBrush}" BorderThickness="0"
-                               Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}" />
+                  <StackPanel Grid.Column="2" Width="120" Margin="12,0,12,0" VerticalAlignment="Center"
+                              Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}">
+                    <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                 Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
+                                 Foreground="{Binding ProgressBrush}" BorderThickness="0" />
+                    <!-- Live milestone from dcu-cli's outputLog, e.g. "3/5 scanning devices". -->
+                    <TextBlock Text="{Binding StepText}" FontFamily="Montserrat" FontSize="9.5"
+                               Foreground="{DynamicResource BodyTextSecondary}" Margin="0,3,0,0"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding StepText}" Value="">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </StackPanel>
                   <Border Grid.Column="3" CornerRadius="8" Padding="10,3,10,3" VerticalAlignment="Center"
                           Margin="0,0,8,0" Background="{Binding ChipBackground}"
                           Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">

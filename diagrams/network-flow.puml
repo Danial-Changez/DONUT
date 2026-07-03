@@ -124,6 +124,7 @@ else fresh Online
     J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
     W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
     W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
+    W -> H : live-tail scan.log while psexec runs -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
     W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report;\nSMB-gated with a brief retry - warns + skips instead of hanging)
     J --> P : Complete(UpdateScan)
   end

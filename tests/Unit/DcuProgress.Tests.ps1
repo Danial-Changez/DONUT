@@ -65,4 +65,33 @@ Describe "DcuProgress" {
             [DcuProgress]::ParsePercent("weird (150%)") | Should -Be 100
         }
     }
+
+    Context "ParseScanStep - the five scan milestones" {
+        It "maps each milestone line (with its outputLog timestamp prefix) to its step" {
+            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:33] : Checking for updates...")                       | Should -Be 1
+            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:33] : Checking for application component updates...") | Should -Be 2
+            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:38] : Scanning system devices...")                    | Should -Be 3
+            [DcuProgress]::ParseScanStep("[2026-07-02 15:15:01] : Determining available updates...")              | Should -Be 4
+            [DcuProgress]::ParseScanStep("[2026-07-02 15:15:43] : Check for updates completed")                   | Should -Be 5
+        }
+
+        It "does not mistake the component check (step 2) for the update check (step 1)" {
+            # "Checking for application component updates" would also match a naive
+            # 'checking for' pattern - the more specific line must win.
+            [DcuProgress]::ParseScanStep("Checking for application component updates...") | Should -Be 2
+        }
+
+        It "returns 0 for non-milestone, blank, or null lines" {
+            [DcuProgress]::ParseScanStep("The computer manufacturer is 'Dell'") | Should -Be 0
+            [DcuProgress]::ParseScanStep("Downloading updates (1 of 3)...")     | Should -Be 0
+            [DcuProgress]::ParseScanStep("")                                    | Should -Be 0
+            [DcuProgress]::ParseScanStep($null)                                 | Should -Be 0
+        }
+
+        It "labels every step and knows the step count" {
+            [DcuProgress]::ScanStepCount | Should -Be 5
+            foreach ($s in 1..5) { [DcuProgress]::ScanStepLabel($s) | Should -Not -BeNullOrEmpty }
+            [DcuProgress]::ScanStepLabel(0) | Should -Be ''
+        }
+    }
 }

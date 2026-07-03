@@ -29,6 +29,7 @@ class HostViewModel : ObservableObject {
     [double] $Percent = 0
     [bool]   $ProgressVisible = $false
     [bool]   $ProgressIndeterminate = $false
+    [string] $StepText = ''   # live milestone beside the bar, e.g. "2/5 scanning devices"
     [Brush]  $DotBrush
     [Brush]  $ChipForeground
     [Brush]  $ChipBackground
@@ -81,6 +82,7 @@ class HostViewModel : ObservableObject {
             $this.Set('ProgressVisible', $false)
             $this.Set('ProgressIndeterminate', $false)
             $this.Set('Percent', [double]0)
+            $this.Set('StepText', '')
         }
     }
 
@@ -92,6 +94,14 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressIndeterminate', $false)
         $this.Set('ProgressVisible', $true)
         $this.Set('Percent', $pct)
+    }
+
+    # Shows a scan milestone beside the bar ("2/5 scanning devices"). $pct additionally
+    # drives the bar for jobs with no percentage output (a scan); pass -1 to leave the
+    # bar alone (an apply, whose own percent lines drive it).
+    [void] SetScanStep([string]$text, [double]$pct) {
+        $this.Set('StepText', $text)
+        if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
     # ---- Idle (persisted) state, from a stored RecentConnection ----

@@ -135,6 +135,15 @@ class HomePresenter : AsyncJobPresenter {
     [System.Collections.Generic.List[string]] $ManualRebootQueue
     [int] $TotalJobsInBatch
 
+    # Runs queued behind a reachability re-verification (StartProcess found the verdict
+    # missing/stale). CompleteResolve starts them once the fresh verdict lands, or drops
+    # them with a reason when the resolve fails - never left queued silently.
+    hidden [hashtable] $PendingRuns = @{}
+
+    # Highest scan milestone seen per host for the CURRENT job (host -> 1..5). Ratchets
+    # so a re-emitted earlier line can't move the step backwards; reset at job start.
+    hidden [hashtable] $ScanSteps = @{}
+
     HomePresenter([AppConfig] $config, [System.Windows.FrameworkElement] $view, [NetworkProbe] $networkProbe, [ResourceService] $resources, [ToastService] $toasts, [object] $configManager) {
         $this.Config = $config
         $this.ConfigManager = $configManager
@@ -421,6 +430,13 @@ class HomePresenter : AsyncJobPresenter {
             # wedges on "Resolving ... - run again in a moment". Leave the cache empty so
             # the next select/run re-resolves from scratch.
             $this.Resolver.ClearInFlight($job.HostName)
+            # A queued run can't proceed without a verdict - drop it with a reason
+            # instead of leaving it queued silently forever.
+            if ($this.PendingRuns.ContainsKey($job.HostName)) {
+                $this.PendingRuns.Remove($job.HostName)
+                $this.AppendLog($job.HostName, "Run not started: could not verify reachability (resolve failed).")
+                if ($this.Toasts) { $this.Toasts.ShowWarning($job.HostName, "Run not started - could not verify $($job.HostName) is reachable.") }
+            }
             return
         }
         foreach ($item in @($job.Result)) {
@@ -453,6 +469,17 @@ class HomePresenter : AsyncJobPresenter {
                     $iso = if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) { $rcSel.Inventory.ProbedAt } else { '' }
                     $this.RenderDetailSubtitle($hn, $iso)
                     $this.GatherInventoryIfOnline($hn)
+                }
+                # A Run was queued behind this re-verification (StartProcess found the
+                # verdict missing/stale): start it now that a fresh verdict landed.
+                if ($this.PendingRuns.ContainsKey($hn)) {
+                    $this.PendingRuns.Remove($hn)
+                    if ($online) {
+                        $this.StartProcess($hn)
+                    } else {
+                        $this.AppendLog($hn, "Host is offline - queued run skipped.")
+                        if ($this.Toasts) { $this.Toasts.ShowWarning($hn, "$hn is offline - run skipped.") }
+                    }
                 }
             }
             elseif ($mode -eq 'Name') {
@@ -941,9 +968,20 @@ class HomePresenter : AsyncJobPresenter {
             if ($row) { $row.SetReachability('Offline') }
             return
         }
-        if ($reach -ne 'Online') {
+        if ($reach -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {
+            # Unknown host - or an 'Online' verdict older than the TTL (the box may have
+            # gone offline since, e.g. a restart): re-verify off-thread first and QUEUE
+            # the run; CompleteResolve starts it automatically once the fresh verdict
+            # lands. Mirrors StartInventory's freshness gate, without a second Run click.
+            if (-not $this.Resolver.HasActiveDc()) {
+                # No DC warmed yet (startup edge): a resolve can't run, so don't queue -
+                # it would sit forever. Surface why instead.
+                $this.AppendLog($hostName, "Resolver not ready yet (no domain controller) - try again shortly.")
+                return
+            }
+            $this.PendingRuns[$hostName] = $true
             $this.PrefetchIp($hostName)
-            $this.AppendLog($hostName, "Resolving $hostName - run again in a moment.")
+            $this.AppendLog($hostName, "Verifying $hostName is reachable - the run starts automatically once confirmed.")
             return
         }
 
@@ -965,6 +1003,7 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $this.AppendLog($hostName, "Starting $command for $hostName...")
+        $this.ScanSteps.Remove($hostName)   # fresh job, fresh step ratchet
 
         try {
             $jobParams = switch ($command) {
@@ -1029,14 +1068,29 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $latestPct = -1
+        $latestStep = 0
         foreach ($entry in $lines) {
             $pct = [DcuProgress]::ParsePercent($entry)
             if ($pct -ge 0) { $latestPct = $pct }
+            $step = [DcuProgress]::ParseScanStep($entry)
+            if ($step -gt $latestStep) { $latestStep = $step }
         }
         if ($lines.Count -gt 0) { $this.AppendLogLines($job.HostName, $lines.ToArray()) }
 
         $row = $this.GetRow($job.HostName)
         if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
+
+        # Scan milestones -> "N/5 label" beside the bar. Ratchet per host so a re-emitted
+        # earlier line can't step backwards. For scan jobs (no percent output) the step
+        # also drives the bar (20/40/..%); an apply's own percent lines own the bar, so
+        # there the step is text-only (-1).
+        $prev = if ($this.ScanSteps.ContainsKey($job.HostName)) { [int]$this.ScanSteps[$job.HostName] } else { 0 }
+        if ($row -and $latestStep -gt $prev) {
+            $this.ScanSteps[$job.HostName] = $latestStep
+            $label = [DcuProgress]::ScanStepLabel($latestStep)
+            $stepPct = if ($job.JobType -eq 'UpdateApply') { -1 } else { $latestStep * 100.0 / [DcuProgress]::ScanStepCount }
+            $row.SetScanStep("$latestStep/$([DcuProgress]::ScanStepCount) $label", $stepPct)
+        }
 
         $this.RefreshCardStatus($job)
     }
@@ -1057,8 +1111,10 @@ class HomePresenter : AsyncJobPresenter {
             return
         }
 
+        # No end-of-job log dump: the worker live-tails dcu-cli's outputLog into the
+        # Information stream, so the detail terminal already streamed every line (the
+        # old dump also replayed a STALE previous-run file after a failed job).
         $this.AppendLog($job.HostName, "Job $($job.JobType) finished: $($job.Status)")
-        $this.AppendHostLogs($job.HostName)
 
         # Transition to apply phase after a successful update scan.
         $transitioned = $false
@@ -1181,13 +1237,7 @@ class HomePresenter : AsyncJobPresenter {
         # Identity gate: the parallel name-check (run with the scan) verifies the box
         # we scanned is actually the target. On a confirmed mismatch the IP has moved
         # to a different machine - abort before applying, drop the stale IP, re-resolve.
-        if ($this.Resolver.IdentityVerdict($hostName) -eq 'Mismatch') {
-            $actual = $this.Resolver.GetVerifiedName($hostName)
-            $this.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
-            $this.InvalidateResolved($hostName)
-            return $false
-        }
+        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
 
         $report = $this.UpdateService.ParseUpdateReport($hostName)
 
@@ -1258,6 +1308,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.AppendLog($hostName, "Updates list copied to clipboard.")
 
         try {
+            $this.ScanSteps.Remove($hostName)   # apply re-emits the scan milestones; restart the ratchet
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
             $this.AttachResolvedIp($prep, $hostName)
             $applyJob = [AsyncJob]::new($hostName, 'UpdateApply')
@@ -1728,23 +1779,6 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.MachineList) { $res = $this.MachineList.TryFindResource($key) }
         if ($res -is [System.Windows.Media.Brush]) { return $res }
         return [System.Windows.Media.Brushes]::Gray
-    }
-
-    [void] AppendHostLogs([string]$hostName) {
-        $logsDir = Join-Path $env:LOCALAPPDATA "DONUT\logs"
-        $logFiles = @(
-            (Join-Path $logsDir "$hostName.log"),
-            (Join-Path $logsDir "default.log")
-        )
-        foreach ($logPath in $logFiles) {
-            if (Test-Path $logPath) {
-                try {
-                    # One read + one batched append, instead of per-line append + scroll.
-                    $content = @(Get-Content -Path $logPath -ErrorAction Stop)
-                    if ($content.Count -gt 0) { $this.AppendLogLines($hostName, [string[]]$content) }
-                } catch { }
-            }
-        }
     }
 
     [void] CheckForManualReboot([AsyncJob]$job) {

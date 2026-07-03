@@ -576,6 +576,34 @@ class ExecutionService {
         return @{ Log = $localLog; Report = $localReport }
     }
 
+    # Tails the run's outputLog over the admin share: emits every COMPLETE line beyond
+    # $seenChars to the Information stream (the pump drains it into the detail terminal
+    # and parses scan steps / percentages from it) and returns the new consumed offset.
+    # Only whole lines are consumed - a partially-written tail line is left for the next
+    # poll, so a line is never emitted twice or split in half. Best-effort by design:
+    # any read error (share busy, NIC resetting) just returns the old offset and the
+    # next poll retries; progress display must never affect the run itself.
+    hidden [int] EmitNewDcuLogLines([string]$remoteLog, [int]$seenChars) {
+        if ([string]::IsNullOrWhiteSpace($remoteLog)) { return $seenChars }
+        try {
+            if (-not (Test-Path -LiteralPath $remoteLog)) { return $seenChars }
+            $text = Get-Content -LiteralPath $remoteLog -Raw -ErrorAction Stop
+            if ([string]::IsNullOrEmpty($text)) { return $seenChars }
+            if ($text.Length -lt $seenChars) { $seenChars = 0 }   # file was rewritten, restart
+            # Consume only up to the last newline: the final line may still be mid-write.
+            $upto = $text.LastIndexOf("`n")
+            if ($upto -lt $seenChars) { return $seenChars }
+            $chunk = $text.Substring($seenChars, $upto - $seenChars + 1)
+            foreach ($line in ($chunk -split "`r?`n")) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Information $line }
+            }
+            return $upto + 1
+        }
+        catch {
+            return $seenChars
+        }
+    }
+
     # Maps a target-local drive path (C:\temp\DONUT\apply.log) to its admin-share UNC
     # (\\ip\C$\temp\DONUT\apply.log). Returns '' when the path isn't drive-rooted.
     hidden static [string] ToAdminShare([string]$ip, [string]$localPath) {
@@ -740,8 +768,23 @@ class ExecutionService {
         # own console shows its live output. Diagnostics come from the command logged above
         # and the exit code below. (An earlier file-redirect to capture DCU's progress
         # removed that console and is a suspected cause of remote 0xC0000142 init failures.)
-        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -Wait -NoNewWindow -PassThru
+        # Progress comes from a DIFFERENT channel: dcu-cli appends milestones/percentages
+        # to its -outputLog as it runs, so while psexec runs we tail that file over the
+        # admin share and emit each new line to the Information stream. The pump drains it
+        # per tick, so the detail terminal streams live and the card gets scan steps /
+        # apply percentages - without touching psexec's console or stdout.
+        $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
+        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
+        $seenChars = 0
+        while (-not $p.HasExited) {
+            Start-Sleep -Milliseconds 1500
+            $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
+        }
+        $p.WaitForExit()   # flush the exit code after HasExited flips
         $exitCode = [int]$p.ExitCode
+        # Final flush so the tail (e.g. "The program exited with return code: N") reaches
+        # the detail terminal even when it landed between the last poll and exit.
+        $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
 
         # A negative exit code is a Windows process-launch/crash fault (NTSTATUS 0xC000xxxx,
         # e.g. 0xC0000142 STATUS_DLL_INIT_FAILED) - the remote pwsh never ran dcu-cli - so
