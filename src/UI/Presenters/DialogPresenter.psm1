@@ -1,5 +1,7 @@
 using namespace System.Windows
+using namespace Donut.Mvvm
 using module '..\..\Services\ResourceService.psm1'
+using module '..\ViewModels\DialogViewModel.psm1'
 
 <#
 .SYNOPSIS
@@ -63,70 +65,58 @@ class DialogPresenter {
 
     [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems) {
         $this.Initialize()
-        $self = $this
-
-        $this.SetText("txtHeader", $title)
-        $this.SetText("txtSubHeader", $message)
-        $this.SetList($listItems)
-
-        # Configure Buttons (close over $self - $this is the sender inside the handler)
-        $this.ConfigureButton("btnPrimary", "Confirm", {
-            $self.Result = $true
-            $self.Window.Close()
-        }.GetNewClosure())
-
-        $this.ConfigureButton("btnSecondary", "Cancel", {
-            $self.Result = $false
-            $self.Window.Close()
-        }.GetNewClosure())
-
-        $this.PrepareToShow()
-        $this.IsShowing = $true
-        try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
-        return $this.Result
+        $this.Window.DataContext = $this.NewVm($title, $message, $listItems, 'Confirm', 'Cancel')
+        return $this.ShowModal()
     }
 
     [void] ShowAlert([string]$title, [string]$message, [string[]]$listItems) {
         $this.Initialize()
-        $self = $this
-
-        $this.SetText("txtHeader", $title)
-        $this.SetText("txtSubHeader", $message)
-        $this.SetList($listItems)
-
-        # Configure Buttons (close over $self - $this is the sender inside the handler)
-        $this.ConfigureButton("btnPrimary", "OK", { $self.Window.Close() }.GetNewClosure())
-        $this.HideControl("btnSecondary")
-
-        $this.PrepareToShow()
-        $this.IsShowing = $true
-        try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
+        # No secondary button: the primary just acknowledges (result is ignored).
+        $this.Window.DataContext = $this.NewVm($title, $message, $listItems, 'OK', '')
+        [void]$this.ShowModal()
     }
 
     [bool] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
         $this.Initialize()
-        
-        $title = "Updates Detected!"
         $msg = "Current: $currentVer`nNew: $newVer`n`nWould you like to update now?"
         if ($isRollback) {
             $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
         }
-        
+        $this.Window.DataContext = $this.NewVm("Updates Detected!", $msg, @(), 'Update Now', 'Later')
+        return $this.ShowModal()
+    }
+
+    # Builds the dialog's content view-model: which parts show (Has* flags) and the
+    # two button commands. Primary resolves the dialog $true, secondary $false; an
+    # empty secondary text means a single-button (alert-style) dialog. Commands close
+    # over $self because $this rebinds to the sender inside WPF callbacks.
+    hidden [DialogViewModel] NewVm([string]$title, [string]$message, [string[]]$listItems, [string]$primaryText, [string]$secondaryText) {
+        $vm = [DialogViewModel]::new()
+        $vm.Title = $title
+        $vm.HasTitle = -not [string]::IsNullOrEmpty($title)
+        $vm.Message = $message
+        $vm.HasMessage = -not [string]::IsNullOrEmpty($message)
+        $vm.ListItems = @($listItems | Where-Object { $null -ne $_ })
+        $vm.HasList = ($vm.ListItems.Count -gt 0)
+
         $self = $this
-        $this.SetText("txtHeader", $title)
-        $this.SetText("txtSubHeader", $msg)
-        $this.HideControl("lstContent")
+        $vm.PrimaryText = $primaryText
+        $prim = { param($p) $self.Result = $true; $self.Window.Close() }.GetNewClosure()
+        $vm.PrimaryCommand = [RelayCommand]::new([System.Action[object]]$prim)
 
-        $this.ConfigureButton("btnPrimary", "Update Now", {
-            $self.Result = $true
-            $self.Window.Close()
-        }.GetNewClosure())
+        if (-not [string]::IsNullOrEmpty($secondaryText)) {
+            $vm.SecondaryText = $secondaryText
+            $vm.HasSecondary = $true
+            $sec = { param($p) $self.Result = $false; $self.Window.Close() }.GetNewClosure()
+            $vm.SecondaryCommand = [RelayCommand]::new([System.Action[object]]$sec)
+        }
+        return $vm
+    }
 
-        $this.ConfigureButton("btnSecondary", "Later", {
-            $self.Result = $false
-            $self.Window.Close()
-        }.GetNewClosure())
-
+    # Runs the modal: parents/fronts the window, flags IsShowing for the pump's
+    # reentrancy guard, and returns the button verdict.
+    hidden [bool] ShowModal() {
+        $this.Result = $false
         $this.PrepareToShow()
         $this.IsShowing = $true
         try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
@@ -154,46 +144,4 @@ class DialogPresenter {
         }
     }
 
-    hidden [void] SetText([string]$controlName, [string]$text) {
-        $ctrl = $this.Window.FindName($controlName)
-        if ($ctrl) {
-            if ([string]::IsNullOrEmpty($text)) {
-                $ctrl.Visibility = 'Collapsed'
-            } else {
-                $ctrl.Text = $text
-                $ctrl.Visibility = 'Visible'
-            }
-        }
-    }
-
-    hidden [void] SetList([string[]]$items) {
-        $ctrl = $this.Window.FindName("lstContent")
-        if ($ctrl) {
-            if ($null -eq $items -or $items.Count -eq 0) {
-                $ctrl.Visibility = 'Collapsed'
-            } else {
-                $ctrl.ItemsSource = $items
-                $ctrl.Visibility = 'Visible'
-            }
-        }
-    }
-
-    # $action must already be a closure (built with .GetNewClosure() in the caller,
-    # where $self is in scope). We do NOT re-close it here: $this in this scope isn't
-    # the caller's $self, and the handler must not pick up $this (which becomes the
-    # sender at click time). Initialize creates a fresh window each time, so there are
-    # no stale handlers to remove.
-    hidden [void] ConfigureButton([string]$btnName, [string]$text, [scriptblock]$action) {
-        $btn = $this.Window.FindName($btnName)
-        if ($btn) {
-            $btn.Content = $text
-            $btn.Visibility = 'Visible'
-            $btn.Add_Click($action)
-        }
-    }
-
-    hidden [void] HideControl([string]$controlName) {
-        $ctrl = $this.Window.FindName($controlName)
-        if ($ctrl) { $ctrl.Visibility = 'Collapsed' }
-    }
 }

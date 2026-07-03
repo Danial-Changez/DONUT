@@ -19,8 +19,8 @@ using module ".\RemoteServices.psm1"
     WPF-free and does NO network itself — the resolution runs in the worker
     (ExecutionService.RunResolvePhase). HostResolver only holds the cached state
     plus the "do we still need to resolve this?" decision, and builds the worker
-    args (subclassing RemoteJobService purely to reuse BuildWorkerArgs; it does
-    NOT call AssertHostReachable, so nothing here touches the network/UI thread).
+    args (subclassing RemoteJobService purely to reuse BuildWorkerArgs, so
+    nothing here touches the network/UI thread).
 #>
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
@@ -80,6 +80,15 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
+    # Releases the single-flight latch WITHOUT caching a verdict. Must be called when a
+    # resolve fails or never starts, otherwise the host stays "in flight" forever and
+    # NeedsResolve never lets it be re-resolved (it wedges on "run again in a moment").
+    # (CacheVerdict already clears the latch on a successful resolve.)
+    [void] ClearInFlight([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.InFlight.Remove($hostName.Trim())
+    }
+
     # Drops a host's cached verdict so the next attempt re-resolves (e.g. after a
     # job fails - the cached IP may be dead/stale).
     [void] Invalidate([string]$hostName) {
@@ -96,6 +105,19 @@ class HostResolver : RemoteJobService {
         $name = $hostName.Trim()
         if ($this.InFlight.ContainsKey($name)) { return $false }
         if (-not $this.IpCache.ContainsKey($name)) { return $true }
+        $age = [datetime]::UtcNow - [datetime]$this.IpCache[$name]['CheckedAt']
+        return ($age -gt $this.Ttl)
+    }
+
+    # True when a CACHED verdict has aged past the TTL. Unlike NeedsResolve this ignores
+    # DC/in-flight state and an uncached host (returns $false) - it answers only "is the
+    # verdict we already hold too old to trust?". The gather gate uses it so an aged-out
+    # 'Online' is re-validated (off-thread) before we open the freeze-prone CIM/psexec
+    # connect against a host that may since have gone offline.
+    [bool] IsVerdictStale([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
+        $name = $hostName.Trim()
+        if (-not $this.IpCache.ContainsKey($name)) { return $false }
         $age = [datetime]::UtcNow - [datetime]$this.IpCache[$name]['CheckedAt']
         return ($age -gt $this.Ttl)
     }

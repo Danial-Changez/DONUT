@@ -227,50 +227,25 @@ Describe "RemoteServices" {
         }
     }
 
-    # The connectivity assertion runs in the worker on the runspace-pool thread, so
-    # it no longer runs in the UI-thread Prepare* methods. Its phase-level wiring is
-    # covered by WorkerServices.Tests; the typed/leveled failure policy itself is
-    # exercised directly here.
-    Context "AssertHostReachable (typed, leveled failures)" {
-        It "Throws HostOfflineException (Warning) when the host is offline" {
-            $probe = [MockNetworkProbe]::new(); $probe.IsOnlineResult = $false
-            $ex = $null
-            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-OFF') } catch { $ex = $_.Exception }
-            $ex.GetType().Name | Should -Be 'HostOfflineException'
-            [string]$ex.Level | Should -Be 'Warning'
-            $ex.HostName | Should -Be 'PC-OFF'
-            $ex.Message | Should -BeLike '*offline*'
-        }
-
-        It "Throws HostUnresolvableException (Error) when the IP cannot be resolved" {
-            $probe = [MockNetworkProbe]::new(); $probe.ResolveHostResult = $null
-            $ex = $null
-            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-DNS') } catch { $ex = $_.Exception }
-            $ex.GetType().Name | Should -Be 'HostUnresolvableException'
-            [string]$ex.Level | Should -Be 'Error'
-            $ex.HostName | Should -Be 'PC-DNS'
-        }
-
-        It "Throws RpcUnavailableException (Error) when RPC (port 135) is blocked" {
-            $probe = [MockNetworkProbe]::new(); $probe.IsRpcAvailableResult = $false
-            $ex = $null
-            try { [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-RPC') } catch { $ex = $_.Exception }
-            $ex.GetType().Name | Should -Be 'RpcUnavailableException'
-            [string]$ex.Level | Should -Be 'Error'
-            $ex.Message | Should -BeLike '*RPC*'
-        }
-
-        It "Logs the failure at its carried severity (Warning for offline)" {
-            $probe = [MockNetworkProbe]::new(); $probe.IsOnlineResult = $false
+    # The worker phases gate their own transport and throw typed failures directly;
+    # RemoteJobService.Fail is the shared log-then-throw policy they route through
+    # (ResolvedIpFor, RunInventoryPhase), so the log entry and the exception can
+    # never drift apart. Exercised directly here.
+    Context "Fail (typed failures log at their carried severity)" {
+        It "Logs a Warning-level failure as WARN and returns the exception to throw" {
             $log = [CapturingLogService]::new()
-            try { [RemoteJobService]::AssertHostReachable($probe, $log, 'PC-OFF') } catch { }
+            $ex = [RemoteJobService]::Fail($log, [HostOfflineException]::new('PC-OFF'))
+            $ex.GetType().Name | Should -Be 'HostOfflineException'
+            $ex.HostName | Should -Be 'PC-OFF'
             $log.HasLevel('WARN') | Should -BeTrue
             $log.Contains('offline') | Should -BeTrue
         }
 
-        It "Returns the resolved IP string when the host passes every check" {
-            $probe = [MockNetworkProbe]::new()
-            [RemoteJobService]::AssertHostReachable($probe, [NullLogService]::new(), 'PC-OK') | Should -Be '127.0.0.1'
+        It "Logs an Error-level failure as ERROR" {
+            $log = [CapturingLogService]::new()
+            $ex = [RemoteJobService]::Fail($log, [RpcUnavailableException]::new('PC-RPC'))
+            $ex.GetType().Name | Should -Be 'RpcUnavailableException'
+            $log.HasLevel('ERROR') | Should -BeTrue
         }
     }
 

@@ -24,6 +24,7 @@ using module ".\DiskUsage.psm1"
 class RecentConnection {
     [string] $Hostname
     [string] $LastSeen        # ISO8601 UTC ('o'), or '' when never run
+    [string] $LastTouched     # last operator action (add/run/gather/storage scan), or ''
     [string] $LastStatus      # e.g. 'Completed','Failed','RebootRequired',''
     [string] $LastJobType
     [int]    $UpdateCount
@@ -35,6 +36,7 @@ class RecentConnection {
         $rc = [RecentConnection]::new()
         $rc.Hostname       = [string]$h['hostname']
         $rc.LastSeen       = [string]$h['lastSeen']
+        $rc.LastTouched    = [string]$h['lastTouched']
         $rc.LastStatus     = [string]$h['lastStatus']
         $rc.LastJobType    = [string]$h['lastJobType']
         $rc.UpdateCount    = if ($null -ne $h['updateCount']) { [int]$h['updateCount'] } else { 0 }
@@ -100,6 +102,49 @@ class RecentConnectionsStore {
             updateCount    = [int]$updateCount
             rebootRequired = [bool]$rebootRequired
         }
+
+        # Carry over what a run does NOT change: the cached inventory/disk-usage and
+        # the last operator-action stamp. Replacing the entry without these silently
+        # loses the caches on every completed run.
+        $prev = $null
+        foreach ($e in $this.Entries()) {
+            if ([string]$e['hostname'] -eq $name) { $prev = [hashtable]$e; break }
+        }
+        if ($null -ne $prev) {
+            foreach ($k in @('inventory', 'diskUsage', 'lastTouched')) {
+                if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
+            }
+        }
+
+        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
+        $this.SetEntries(@($entry) + $kept)
+        $this.Save()
+    }
+
+    # Stamps the host's last operator action (Add / Run / gather / storage scan),
+    # creating a minimal entry for a not-yet-tracked host, so the next launch
+    # orders cards newest-action-first - mirroring the session's move-to-top.
+    # Deliberately does NOT stamp lastSeen: that means "last run", and drives both
+    # the card's relative-time subtitle and the 24h scan-reuse rule.
+    [void] Touch([string]$hostname) {
+        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
+        $name = $hostname.Trim()
+
+        $entry = $null
+        foreach ($e in $this.Entries()) {
+            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
+        }
+        if ($null -eq $entry) {
+            $entry = @{
+                hostname       = $name
+                lastSeen       = ''
+                lastStatus     = ''
+                lastJobType    = ''
+                updateCount    = 0
+                rebootRequired = $false
+            }
+        }
+        $entry['lastTouched'] = [datetime]::UtcNow.ToString('o')
 
         $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
         $this.SetEntries(@($entry) + $kept)
@@ -203,8 +248,9 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Typed entries, newest first (blank lastSeen sorts oldest), capped. Cached until
-    # the next mutation, so repeated per-tick reads don't rebuild + re-sort every time.
+    # Typed entries, most-recent-activity first (see RecencyKey; blank stamps sort
+    # oldest), capped. Cached until the next mutation, so repeated per-tick reads
+    # don't rebuild + re-sort every time.
     [RecentConnection[]] GetAll() {
         $this.EnsureCache()
         return $this.Cache
@@ -219,11 +265,20 @@ class RecentConnectionsStore {
         return $null
     }
 
+    # A card's ordering key: the most recent of "last operator action" (lastTouched)
+    # and "last run" (lastSeen), so both acting on a card and completing a run float
+    # it toward the top of the next launch.
+    hidden static [datetime] RecencyKey([RecentConnection]$rc) {
+        $touched = [RecentConnectionsStore]::ParseSeen($rc.LastTouched)
+        $seen = [RecentConnectionsStore]::ParseSeen($rc.LastSeen)
+        return $(if ($touched -gt $seen) { $touched } else { $seen })
+    }
+
     # Rebuilds the typed cache + index from the raw entries when stale.
     hidden [void] EnsureCache() {
         if ($this.CacheValid) { return }
         $typed = @($this.Entries() | ForEach-Object { [RecentConnection]::FromHashtable([hashtable]$_) })
-        $sorted = $typed | Sort-Object -Property @{ Expression = { [RecentConnectionsStore]::ParseSeen($_.LastSeen) }; Descending = $true }
+        $sorted = $typed | Sort-Object -Property @{ Expression = { [RecentConnectionsStore]::RecencyKey($_) }; Descending = $true }
         $this.Cache = @($sorted | Select-Object -First ([RecentConnectionsStore]::Cap))
         $this.Index = @{}
         foreach ($rc in $this.Cache) {

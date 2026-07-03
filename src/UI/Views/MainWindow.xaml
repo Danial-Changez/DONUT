@@ -16,6 +16,9 @@
                       CornerRadius="0"
                       UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
     <Grid>
         <!-- Main window border and content -->
         <Border CornerRadius="10"
@@ -65,6 +68,7 @@
                                  in MainPresenter.ToggleRail). Top margin (30) lines it up with the
                                  page header icon, which sits below the 30px window-control row. -->
                             <Button x:Name="btnRailToggle"
+                                    Command="{Binding ToggleRailCommand}"
                                     HorizontalAlignment="Left"
                                     Margin="14,24,8,26"
                                     Background="Transparent"
@@ -96,6 +100,8 @@
                             </Button>
                             <!-- Menu Buttons -->
                             <RadioButton x:Name="btnHome"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Home"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentPurpleLight}">
                                 <StackPanel Orientation="Horizontal"
@@ -108,6 +114,8 @@
                                 </StackPanel>
                             </RadioButton>
                             <RadioButton x:Name="btnConfig"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Config"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentBlue}">
                                 <StackPanel Orientation="Horizontal"
@@ -120,6 +128,8 @@
                                 </StackPanel>
                             </RadioButton>
                             <RadioButton x:Name="btnLogs"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Logs"
                                          Style="{DynamicResource menuButton}"
                                          Tag="{DynamicResource AccentCyan}">
                                 <StackPanel Orientation="Horizontal"
@@ -163,18 +173,21 @@
                                     Background="Transparent"
                                     Margin="0,0,5,0">
                             <Button x:Name="btnClose"
+                                    Command="{Binding CloseCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentPink}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource xMark}" />
                             </Button>
                             <Button x:Name="btnMaximize"
+                                    Command="{Binding MaximizeCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentYellow}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource Square}" />
                             </Button>
                             <Button x:Name="btnMinimize"
+                                    Command="{Binding MinimizeCommand}"
                                     Style="{DynamicResource controlButton}"
                                     Tag="{DynamicResource AccentBlueLight}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
@@ -254,6 +267,80 @@
                       Margin="0,44,18,0"
                       Width="340"
                       Background="Transparent"
-                      IsHitTestVisible="True" />
+                      IsHitTestVisible="True">
+            <!-- One card per ToastViewModel: accent border/bar/title/glow, optional
+                 message, click to dismiss. Slide+fade in on load; the IsClosing
+                 DataTrigger plays the exit before ToastService removes the item. -->
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border x:Name="card"
+                            BorderBrush="{Binding Accent}" BorderThickness="1"
+                            CornerRadius="10" Margin="0,0,0,10" Cursor="Hand"
+                            Opacity="0">
+                        <Border.Background>
+                            <SolidColorBrush Color="#EB18181B" />
+                        </Border.Background>
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="slide" X="40" />
+                        </Border.RenderTransform>
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="0" Opacity="0.55"
+                                              Color="{Binding AccentColor}" />
+                        </Border.Effect>
+                        <Border.InputBindings>
+                            <MouseBinding MouseAction="LeftClick" Command="{Binding DismissCommand}" />
+                        </Border.InputBindings>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="4" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{Binding Accent}" CornerRadius="10,0,0,10" />
+                            <StackPanel Grid.Column="1" Margin="14,12,14,12">
+                                <TextBlock Text="{Binding Title}" Foreground="{Binding Accent}"
+                                           FontFamily="Montserrat" FontWeight="SemiBold" FontSize="14"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TitleTextTertiary}"
+                                           FontFamily="Montserrat" FontSize="12.5" TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <EventTrigger RoutedEvent="FrameworkElement.Loaded" SourceName="card">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="card"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     From="0" To="1" Duration="0:0:0.2" />
+                                    <DoubleAnimation Storyboard.TargetName="slide"
+                                                     Storyboard.TargetProperty="X"
+                                                     From="40" To="0" Duration="0:0:0.22">
+                                        <DoubleAnimation.EasingFunction>
+                                            <QuadraticEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <DataTrigger Binding="{Binding IsClosing}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="card"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.18" />
+                                        <DoubleAnimation Storyboard.TargetName="slide"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="40" Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Grid>
 </Window>

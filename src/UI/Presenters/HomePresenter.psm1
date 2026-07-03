@@ -2,6 +2,7 @@ using namespace System.Windows.Controls
 using namespace System.Windows.Shapes
 using namespace System.Windows.Threading
 using namespace System.Collections.Generic
+using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\FleetStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
@@ -15,7 +16,9 @@ using module "..\..\Services\DriverMatchingService.psm1"
 using module "..\..\Services\SystemInfoService.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
-using module ".\ConnectionRow.psm1"
+using module "..\ViewModels\HostViewModel.psm1"
+using module "..\ViewModels\HomeViewModel.psm1"
+using module "..\ViewModels\SearchRowViewModel.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -36,7 +39,9 @@ using module "..\..\Models\RemoteError.psm1"
     Presenter for the Home screen: machine list, per-machine detail, AD finder.
 
 .DESCRIPTION
-    Owns the machine list (a ConnectionRow per host, seeded from recents), the
+    Owns the machine list (a HostViewModel per host in HomeViewModel.Machines, bound to a
+    virtualizing ListBox, seeded from recents, and kept newest-action-first: an Add /
+    Run / gather / storage scan moves that card to the top), the
     Add / Run / Run-all flow (the mode pill selects Scan vs. Apply), and the
     per-machine job lifecycle (extends AsyncJobPresenter's PumpJobs). On select it
     prefetches the host IP (HostResolver) and inventory (InventoryService) and
@@ -59,7 +64,8 @@ class HomePresenter : AsyncJobPresenter {
     [Button] $SearchButton
     [Button] $ClearButton
     [Button] $RunAllButton
-    [ItemsControl] $MachineList
+    [ListBox] $MachineList
+    [HomeViewModel] $HomeVm        # bound to HomeView.DataContext (Machines + SelectedMachine)
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
@@ -91,8 +97,6 @@ class HomePresenter : AsyncJobPresenter {
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
-    [ItemsControl] $DiskFoldersList
-    [System.Windows.UIElement] $DiskFoldersHint
 
     # Overview tile controls (mirror the selected remote machine)
     [TextBlock] $OvModel
@@ -106,8 +110,7 @@ class HomePresenter : AsyncJobPresenter {
 
     # AD live-search (search-bar dropdown: computers + locked-out users)
     [ActiveDirectoryService] $AdService
-    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup
-    [object]          $SearchList         # StackPanel inside the popup
+    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup (rows render via binding)
     [DispatcherTimer] $SearchDebounce
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
@@ -122,13 +125,29 @@ class HomePresenter : AsyncJobPresenter {
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
+    [DispatcherTimer] $IdleRefreshTimer   # advances idle rows' relative times every 30s
 
-    # Host name -> ConnectionRow
+    # Host name -> HostViewModel (same instances live in $Vm.Machines)
     [hashtable] $Rows
 
     # Manual reboot queue - hosts that require manual reboot after update
     [System.Collections.Generic.List[string]] $ManualRebootQueue
     [int] $TotalJobsInBatch
+
+    # Runs queued behind a reachability re-verification (StartProcess found the verdict
+    # missing/stale). CompleteResolve starts them once the fresh verdict lands, or drops
+    # them with a reason when the resolve fails - never left queued silently.
+    hidden [hashtable] $PendingRuns = @{}
+
+    # Inventory gathers queued the same way (StartInventory found the verdict
+    # missing/stale). CompleteResolve re-issues them once the fresh verdict lands, so
+    # EVERY verified host gets its gather - not just the selected one. Value = the
+    # strongest $force flag seen while queued.
+    hidden [hashtable] $PendingGathers = @{}
+
+    # Highest scan milestone seen per host for the CURRENT job (host -> 1..5). Ratchets
+    # so a re-emitted earlier line can't move the step backwards; reset at job start.
+    hidden [hashtable] $ScanSteps = @{}
 
     HomePresenter([AppConfig] $config, [System.Windows.FrameworkElement] $view, [NetworkProbe] $networkProbe, [ResourceService] $resources, [ToastService] $toasts, [object] $configManager) {
         $this.Config = $config
@@ -154,6 +173,7 @@ class HomePresenter : AsyncJobPresenter {
 
         # $this.ActiveJobs is initialized by the AsyncJobPresenter base constructor.
         $this.Rows = @{}
+        $this.HomeVm = [HomeViewModel]::new()   # bound to the view; owns the machine collection
         $this.LogBuffers = @{}
         $this.ManualRebootQueue = [List[string]]::new()
         $this.TotalJobsInBatch = 0
@@ -163,6 +183,14 @@ class HomePresenter : AsyncJobPresenter {
         $this.Timer.Interval = [TimeSpan]::FromMilliseconds(200)
         $this.Timer.Add_Tick({ $presenter.OnTimerTick($this, $null) }.GetNewClosure())
         $this.Timer.Start()
+
+        # Periodically re-render idle rows so their relative times advance ("just now" ->
+        # "1 min ago" -> ...). Cheap: ApplyIdle only raises PropertyChanged for values that
+        # actually change (via ObservableObject.Set), i.e. the subtitle/probe text.
+        $this.IdleRefreshTimer = [DispatcherTimer]::new()
+        $this.IdleRefreshTimer.Interval = [TimeSpan]::FromSeconds(30)
+        $this.IdleRefreshTimer.Add_Tick({ $presenter.RefreshIdleTimes() }.GetNewClosure())
+        $this.IdleRefreshTimer.Start()
 
         # AD live-finder: debounce typing, run the search on the runspace pool,
         # poll for completion (newest result wins).
@@ -195,7 +223,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
         $this.SearchPopup = $this.ViewContent.FindName('SearchResultsPopup')
-        $this.SearchList = $this.ViewContent.FindName('SearchResultsList')
 
         $this.OvModel = $this.ViewContent.FindName('txtOvModel')
         $this.OvModelSub = $this.ViewContent.FindName('txtOvModelSub')
@@ -215,10 +242,18 @@ class HomePresenter : AsyncJobPresenter {
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
         $this.FindFoldersButton = $this.ViewContent.FindName('btnFindFolders')
-        $this.DiskFoldersList = $this.ViewContent.FindName('DiskFoldersList')
-        $this.DiskFoldersHint = $this.ViewContent.FindName('DiskFoldersHint')
+        # (Folders tree + its hint are fully binding-driven: SelectedMachine.Folders /
+        # SelectedMachine.HasFolders - no FindName wiring.)
 
         $presenter = $this
+
+        # MVVM: bind the view to the HomeViewModel so the machine ListBox renders from
+        # $Vm.Machines, and react to selection (single click) to drive the detail panel.
+        $this.ViewContent.DataContext = $this.HomeVm
+        if ($this.MachineList) {
+            $this.MachineList.Add_SelectionChanged({ $presenter.OnMachineSelectionChanged() }.GetNewClosure())
+        }
+
         if ($this.SearchButton) { $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure()) }
         if ($this.ClearButton) { $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure()) }
         if ($this.RunAllButton) { $this.RunAllButton.Add_Click({ $presenter.RunAll() }.GetNewClosure()) }
@@ -375,6 +410,9 @@ class HomePresenter : AsyncJobPresenter {
             $this.ActiveJobs.Add($job)
         }
         catch {
+            # The latch is set before the job starts; release it if it didn't, or the host
+            # wedges (NeedsResolve stays false forever -> never re-resolves).
+            $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
         }
     }
@@ -389,7 +427,22 @@ class HomePresenter : AsyncJobPresenter {
     # Resolve job finished: cache the DC (warm) or the per-host verdict (fresh IP +
     # online), detect an IP change, persist the DC, and refresh the offline indicator.
     [void] CompleteResolve([AsyncJob]$job) {
-        if ($job.Status -eq 'Failed') { return }
+        if ($job.Status -eq 'Failed') {
+            # A failed resolve (e.g. the host was unreachable, so Resolve-DnsName errored
+            # and HadErrors tripped Failed) must still release the single-flight latch, or
+            # NeedsResolve stays false forever and the host can never be re-resolved - it
+            # wedges on "Resolving ... - run again in a moment". Leave the cache empty so
+            # the next select/run re-resolves from scratch.
+            $this.Resolver.ClearInFlight($job.HostName)
+            # A queued run can't proceed without a verdict - drop it with a reason
+            # instead of leaving it queued silently forever.
+            if ($this.PendingRuns.ContainsKey($job.HostName)) {
+                $this.PendingRuns.Remove($job.HostName)
+                $this.AppendLog($job.HostName, "Run not started: could not verify reachability (resolve failed).")
+                if ($this.Toasts) { $this.Toasts.ShowWarning($job.HostName, "Run not started - could not verify $($job.HostName) is reachable.") }
+            }
+            return
+        }
         foreach ($item in @($job.Result)) {
             if ($null -eq $item) { continue }
             $mode = [string]$item.Mode
@@ -419,7 +472,25 @@ class HomePresenter : AsyncJobPresenter {
                     $rcSel = $this.GetRecord($hn)
                     $iso = if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) { $rcSel.Inventory.ProbedAt } else { '' }
                     $this.RenderDetailSubtitle($hn, $iso)
-                    $this.GatherInventoryIfOnline($hn)
+                }
+                # A gather was queued behind this re-verification (StartInventory found
+                # the verdict missing/stale): re-issue it now the fresh verdict is in.
+                # StartInventory logs the skip itself if the verdict came back Offline.
+                if ($this.PendingGathers.ContainsKey($hn)) {
+                    $gatherForce = [bool]$this.PendingGathers[$hn]
+                    $this.PendingGathers.Remove($hn)
+                    $this.StartInventory($hn, $gatherForce)
+                }
+                # A Run was queued behind this re-verification (StartProcess found the
+                # verdict missing/stale): start it now that a fresh verdict landed.
+                if ($this.PendingRuns.ContainsKey($hn)) {
+                    $this.PendingRuns.Remove($hn)
+                    if ($online) {
+                        $this.StartProcess($hn)
+                    } else {
+                        $this.AppendLog($hn, "Host is offline - queued run skipped.")
+                        if ($this.Toasts) { $this.Toasts.ShowWarning($hn, "$hn is offline - run skipped.") }
+                    }
                 }
             }
             elseif ($mode -eq 'Name') {
@@ -476,10 +547,9 @@ class HomePresenter : AsyncJobPresenter {
     [void] RenderReachability([string]$hostName) {
         $state = $this.Resolver.IsHostOnline($hostName)
         $row = $this.GetRow($hostName)
+        # SetReachability updates the row dot/chip AND the view-model's DetailTitle (the
+        # detail header binds to SelectedMachine.DetailTitle), so no control poke needed.
         if ($row -and -not $this.IsRunning($hostName)) { $row.SetReachability($state) }
-        if ($hostName -eq $this.SelectedHost -and $this.DetailHostText) {
-            $this.DetailHostText.Text = if ($state -eq 'Offline') { "$hostName  -  offline" } else { $hostName }
-        }
     }
 
     # Threads this host's prefetched IP into a worker-args bundle's Options, so the
@@ -524,8 +594,8 @@ class HomePresenter : AsyncJobPresenter {
     # Builds an idle row for every persisted recent connection (newest first).
     [void] BuildRows() {
         foreach ($rc in $this.Store.GetAll()) {
-            $row = $this.EnsureRow($rc.Hostname)
-            $row.SetIdleFrom($rc)
+            $vm = $this.EnsureRow($rc.Hostname)
+            $vm.ApplyIdle($rc)
         }
         $this.UpdateEmptyHint()
     }
@@ -548,7 +618,12 @@ class HomePresenter : AsyncJobPresenter {
             $this.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
             $this.StartInventory($hostName, $true)
         }
-        $this.SelectHost($targetHosts[0])
+        # Newest action on top: surface the added cards at the head of the list
+        # (moved in reverse so the FIRST typed host ends up topmost).
+        $ordered = @($targetHosts)
+        [array]::Reverse($ordered)
+        foreach ($hostName in $ordered) { $this.MoveRowToTop($hostName) }
+        $this.SelectMachine($targetHosts[0])
         $this.UpdateEmptyHint()
 
         $this.SearchBar.Text = ""
@@ -666,105 +741,45 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
+    # Maps the accumulated hits to display rows (section headers + results, one flat
+    # list) and swaps them into the bound collection; the popup's ItemsControl renders
+    # them via its DataTemplate. Commands close over the presenter's handlers, mirroring
+    # EnsureRow's Run/Gather pattern.
     [void] RenderAdResults([object[]]$results) {
-        if (-not $this.SearchList) { return }
-        $this.SearchList.Children.Clear()
         if ($null -eq $results -or $results.Count -eq 0) { $this.CloseSearchPopup(); return }
 
         $computers = @($results | Where-Object { $_.Kind -eq 'Computer' })
         $users = @($results | Where-Object { $_.Kind -eq 'User' })
 
+        $presenter = $this
+        # ($items, not $rows: a local colliding case-insensitively with the $Rows
+        # property breaks assignment inside PS class methods.)
+        $items = [System.Collections.Generic.List[object]]::new()
         if ($computers.Count -gt 0) {
-            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('COMPUTERS'))
-            foreach ($c in $computers) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($c)) }
+            $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
+            foreach ($c in $computers) {
+                $vm = [SearchRowViewModel]::FromResult($c)
+                $cap = [string]$c.Name
+                $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
+                $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
+                $items.Add($vm)
+            }
         }
         if ($users.Count -gt 0) {
-            [void]$this.SearchList.Children.Add($this.BuildSectionHeader('USERS'))
-            foreach ($u in $users) { [void]$this.SearchList.Children.Add($this.BuildSearchRow($u)) }
-        }
-        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
-    }
-
-    hidden [object] BuildSectionHeader([string]$text) {
-        $tb = [TextBlock]::new()
-        $tb.Text = $text
-        $tb.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $tb.FontSize = 10
-        $tb.FontWeight = [System.Windows.FontWeights]::SemiBold
-        $tb.Foreground = $this.ResBrush('BodyTextTertiary')
-        $tb.Margin = [System.Windows.Thickness]::new(6, 6, 0, 4)
-        return $tb
-    }
-
-    # Builds one dropdown row (imperative, like ConnectionRow). Computers pick into
-    # the search bar; locked users get an inline Unlock button.
-    hidden [object] BuildSearchRow([object]$r) {
-        $presenter = $this
-        $border = [Border]::new()
-        $border.CornerRadius = [System.Windows.CornerRadius]::new(7)
-        $border.Padding = [System.Windows.Thickness]::new(10, 6, 8, 6)
-        $border.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
-        $border.Background = [System.Windows.Media.Brushes]::Transparent
-        $hover = $this.ResBrush('PanelBackgroundHover')
-        $border.Add_MouseEnter({ $border.Background = $hover }.GetNewClosure())
-        $border.Add_MouseLeave({ $border.Background = [System.Windows.Media.Brushes]::Transparent }.GetNewClosure())
-
-        $grid = [Grid]::new()
-        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
-        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
-
-        $stack = [StackPanel]::new()
-        $stack.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $primary = [TextBlock]::new()
-        $primary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $primary.FontSize = 13
-        $primary.Foreground = $this.ResBrush('TitleTextPrimary')
-        $primary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-        $secondary = [TextBlock]::new()
-        $secondary.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $secondary.FontSize = 11
-        $secondary.Foreground = $this.ResBrush('BodyTextTertiary')
-        $secondary.Margin = [System.Windows.Thickness]::new(0, 1, 0, 0)
-        $secondary.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-
-        if ($r.Kind -eq 'User') {
-            $label = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
-            if ($r.LockedOut) { $label = $label + " `u{1F512}" }
-            $primary.Text = $label
-            $sub = @([string]$r.DisplayName, [string]$r.Domain) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-            $secondary.Text = ($sub -join '  -  ')
-        }
-        else {
-            $primary.Text = [string]$r.Name
-            $secondary.Text = "$([string]$r.Domain)  -  computer"
-            $cap = [string]$r.Name
-            $border.Cursor = [System.Windows.Input.Cursors]::Hand
-            $border.Add_MouseLeftButtonUp({ $presenter.OnPickComputer($cap) }.GetNewClosure())
-        }
-        [void]$stack.Children.Add($primary)
-        [void]$stack.Children.Add($secondary)
-        [Grid]::SetColumn($stack, 0)
-        [void]$grid.Children.Add($stack)
-
-        if ($r.Kind -eq 'User' -and $r.LockedOut) {
-            $btn = [Button]::new()
-            $btn.Content = 'Unlock'
-            $btn.Height = 28
-            $btn.FontSize = 11
-            $btn.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-            if ($this.MachineList) {
-                $style = $this.MachineList.TryFindResource('ButtonOutline')
-                if ($style) { $btn.Style = $style }
+            $items.Add([SearchRowViewModel]::Header('USERS'))
+            foreach ($u in $users) {
+                $vm = [SearchRowViewModel]::FromResult($u)
+                if ($vm.CanUnlock) {
+                    $unlock = { param($p) $presenter.OnUnlockUser($u) }.GetNewClosure()
+                    $vm.UnlockCommand = [RelayCommand]::new([System.Action[object]]$unlock)
+                }
+                $items.Add($vm)
             }
-            $u = $r
-            $btn.Add_Click({ $presenter.OnUnlockUser($u) }.GetNewClosure())
-            [Grid]::SetColumn($btn, 1)
-            [void]$grid.Children.Add($btn)
         }
 
-        $border.Child = $grid
-        return $border
+        $this.HomeVm.SearchResults.Clear()
+        foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
+        if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
     }
 
     # Computer chosen: drop it into the bar so the operator can run the active
@@ -860,7 +875,13 @@ class HomePresenter : AsyncJobPresenter {
     # Runs a single host from a row click; confirms first when destructive.
     [void] RunHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-        if ($this.IsRunning($hostName)) { return }
+        if ($this.IsRunning($hostName)) {
+            # Say why nothing happened - a storage scan also holds the row busy, and
+            # a silent return reads as a dead Run button.
+            $this.AppendLog($hostName, "A job is already running for $hostName - wait for it to finish.")
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Already running - wait for the current job to finish.") }
+            return
+        }
 
         if ($this.Config.GetActiveCommand() -eq 'applyUpdates') {
             $confirmed = $this.DialogPresenter.ShowConfirmation(
@@ -870,6 +891,7 @@ class HomePresenter : AsyncJobPresenter {
             )
             if (-not $confirmed) { return }
         }
+        $this.MoveRowToTop($hostName)
         $this.StartProcess($hostName)
     }
 
@@ -909,9 +931,20 @@ class HomePresenter : AsyncJobPresenter {
             if ($row) { $row.SetReachability('Offline') }
             return
         }
-        if ($reach -ne 'Online') {
+        if ($reach -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {
+            # Unknown host - or an 'Online' verdict older than the TTL (the box may have
+            # gone offline since, e.g. a restart): re-verify off-thread first and QUEUE
+            # the run; CompleteResolve starts it automatically once the fresh verdict
+            # lands. Mirrors StartInventory's freshness gate, without a second Run click.
+            if (-not $this.Resolver.HasActiveDc()) {
+                # No DC warmed yet (startup edge): a resolve can't run, so don't queue -
+                # it would sit forever. Surface why instead.
+                $this.AppendLog($hostName, "Resolver not ready yet (no domain controller) - try again shortly.")
+                return
+            }
+            $this.PendingRuns[$hostName] = $true
             $this.PrefetchIp($hostName)
-            $this.AppendLog($hostName, "Resolving $hostName - run again in a moment.")
+            $this.AppendLog($hostName, "Verifying $hostName is reachable - the run starts automatically once confirmed.")
             return
         }
 
@@ -933,6 +966,7 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $this.AppendLog($hostName, "Starting $command for $hostName...")
+        $this.ScanSteps.Remove($hostName)   # fresh job, fresh step ratchet
 
         try {
             $jobParams = switch ($command) {
@@ -965,7 +999,7 @@ class HomePresenter : AsyncJobPresenter {
         }
         catch {
             $this.AppendLog($hostName, "Error starting process: $_")
-            $row.SetStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
+            $row.ApplyStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
     }
@@ -997,14 +1031,29 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $latestPct = -1
+        $latestStep = 0
         foreach ($entry in $lines) {
             $pct = [DcuProgress]::ParsePercent($entry)
             if ($pct -ge 0) { $latestPct = $pct }
+            $step = [DcuProgress]::ParseScanStep($entry)
+            if ($step -gt $latestStep) { $latestStep = $step }
         }
         if ($lines.Count -gt 0) { $this.AppendLogLines($job.HostName, $lines.ToArray()) }
 
         $row = $this.GetRow($job.HostName)
         if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
+
+        # Scan milestones -> "N/5 label" beside the bar. Ratchet per host so a re-emitted
+        # earlier line can't step backwards. For scan jobs (no percent output) the step
+        # also drives the bar (20/40/..%); an apply's own percent lines own the bar, so
+        # there the step is text-only (-1).
+        $prev = if ($this.ScanSteps.ContainsKey($job.HostName)) { [int]$this.ScanSteps[$job.HostName] } else { 0 }
+        if ($row -and $latestStep -gt $prev) {
+            $this.ScanSteps[$job.HostName] = $latestStep
+            $label = [DcuProgress]::ScanStepLabel($latestStep)
+            $stepPct = if ($job.JobType -eq 'UpdateApply') { -1 } else { $latestStep * 100.0 / [DcuProgress]::ScanStepCount }
+            $row.SetScanStep("$latestStep/$([DcuProgress]::ScanStepCount) $label", $stepPct)
+        }
 
         $this.RefreshCardStatus($job)
     }
@@ -1025,8 +1074,10 @@ class HomePresenter : AsyncJobPresenter {
             return
         }
 
+        # No end-of-job log dump: the worker live-tails dcu-cli's outputLog into the
+        # Information stream, so the detail terminal already streamed every line (the
+        # old dump also replayed a STALE previous-run file after a failed job).
         $this.AppendLog($job.HostName, "Job $($job.JobType) finished: $($job.Status)")
-        $this.AppendHostLogs($job.HostName)
 
         # Transition to apply phase after a successful update scan.
         $transitioned = $false
@@ -1056,17 +1107,14 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # End of tick: refresh fleet counts and, once the batch is fully drained,
-    # surface any pending manual-reboot notice.
+    # End of tick: refresh fleet counts and, once the batch is fully drained, persist
+    # any coalesced recents changes in one write. (Reboot-required is announced once,
+    # per-host, at apply completion - no batch notice, which both duplicated the toast
+    # and never fired if the batch didn't fully drain.)
     [void] AfterPump() {
         $this.RefreshOverview()
-        # Batch fully drained: persist any coalesced recents changes in one write, and
-        # surface any pending manual-reboot notice.
         if ($this.ActiveJobs.Count -eq 0) {
             $this.Store.FlushSave()
-            if ($this.ManualRebootQueue.Count -gt 0) {
-                $this.ShowManualRebootNotice()
-            }
         }
     }
 
@@ -1080,13 +1128,15 @@ class HomePresenter : AsyncJobPresenter {
     [void] SettleHost([AsyncJob]$job) {
         $reboot = $this.ManualRebootQueue.Contains($job.HostName)
         $status = if ($job.Status -eq 'Failed') {
-            # An offline host gets its own grey "Offline" card instead of a red
-            # "Failed" - the box is just powered off, not faulted. The exception type
-            # is lost across the runspace boundary, so re-derive it from the message.
-            if ([RemoteFailure]::ReasonFromMessage($job.FailureMessage) -eq [RemoteFailureReason]::Offline) {
-                'Offline'
-            } else {
-                'Failed'
+            # The exception type is lost across the runspace boundary, so re-derive the
+            # reason from the message to pick a card state. An offline host gets a grey
+            # "Offline" (just powered off, not faulted); a connection-lost apply we
+            # couldn't confirm gets an amber "Unconfirmed" (the update likely applied -
+            # a re-scan settles it) rather than a red "Failed".
+            switch ([RemoteFailure]::ReasonFromMessage($job.FailureMessage)) {
+                ([RemoteFailureReason]::Offline)        { 'Offline' }
+                ([RemoteFailureReason]::ConnectionLost) { 'ConnectionLost' }
+                default                                 { 'Failed' }
             }
         } elseif ($reboot) {
             'RebootRequired'
@@ -1105,10 +1155,15 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
 
+        # The reboot flag is now persisted (card state) and was toasted at completion -
+        # consume the queue entry so a later run of this host can't inherit a stale
+        # "reboot required" it already satisfied.
+        if ($reboot) { [void]$this.ManualRebootQueue.Remove($job.HostName) }
+
         $row = $this.GetRow($job.HostName)
         if ($row) {
             $rc = $this.GetRecord($job.HostName)
-            if ($rc) { $row.SetIdleFrom($rc) }
+            if ($rc) { $row.ApplyIdle($rc) }
         }
     }
 
@@ -1120,7 +1175,21 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.GetRow($job.HostName)
         if (-not $row) { return }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
-        $row.SetStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+        $row.ApplyStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+    }
+
+    # Aborts a pending apply when the identity check has CONFIRMED that the box at the
+    # host's IP answers as a different machine (the IP moved): logs + toasts the actual
+    # name, drops the stale IP, and kicks a re-resolve. Returns $true when the apply must
+    # stop. Called twice - before analysing the report AND again after the confirmation
+    # dialog - because the parallel name-check may land its verdict while the dialog is up.
+    hidden [bool] AbortOnIdentityMismatch([string]$hostName) {
+        if ($this.Resolver.IdentityVerdict($hostName) -ne 'Mismatch') { return $false }
+        $actual = $this.Resolver.GetVerifiedName($hostName)
+        $this.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
+        if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
+        $this.InvalidateResolved($hostName)
+        return $true
     }
 
     # Analyses the (fresh or reused) update report for a host, confirms with the
@@ -1131,13 +1200,7 @@ class HomePresenter : AsyncJobPresenter {
         # Identity gate: the parallel name-check (run with the scan) verifies the box
         # we scanned is actually the target. On a confirmed mismatch the IP has moved
         # to a different machine - abort before applying, drop the stale IP, re-resolve.
-        if ($this.Resolver.IdentityVerdict($hostName) -eq 'Mismatch') {
-            $actual = $this.Resolver.GetVerifiedName($hostName)
-            $this.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
-            $this.InvalidateResolved($hostName)
-            return $false
-        }
+        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
 
         $report = $this.UpdateService.ParseUpdateReport($hostName)
 
@@ -1181,6 +1244,16 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
 
+        # Surface the identity verdict in the dialog so the operator knows whether the
+        # target's name was actually confirmed (Match) or the check hasn't landed yet
+        # (Unknown - it runs in parallel with the scan and may still be in flight).
+        $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
+            "Identity verified: the machine answers as '$($this.Resolver.GetVerifiedName($hostName))'."
+        } else {
+            "Identity not verified yet (name check still pending) - proceed with care."
+        }
+        $displayList = @($identityLine, '') + $displayList
+
         $this.AppendLog($hostName, "Driver analysis complete. Waiting for confirmation...")
         $confirmed = $this.DialogPresenter.ShowConfirmation("Updates Available", "Updates found for $hostName", $displayList)
 
@@ -1189,11 +1262,16 @@ class HomePresenter : AsyncJobPresenter {
             return $false
         }
 
+        # Re-check AFTER the dialog: the parallel name-check may have landed a Mismatch
+        # while the operator was reading it (the pump keeps draining resolve jobs).
+        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
+
         $this.AppendLog($hostName, "Confirmed. Phase 2: Applying updates...")
         $this.CopyUpdatesToClipboard($hostName, $clipboardList)
         $this.AppendLog($hostName, "Updates list copied to clipboard.")
 
         try {
+            $this.ScanSteps.Remove($hostName)   # apply re-emits the scan milestones; restart the ratchet
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
             $this.AttachResolvedIp($prep, $hostName)
             $applyJob = [AsyncJob]::new($hostName, 'UpdateApply')
@@ -1208,35 +1286,50 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Returns the existing row for a host, or builds and inserts a new one.
-    [ConnectionRow] EnsureRow([string]$hostName) {
+    # Returns the existing row view-model for a host, or builds and inserts a new one.
+    # Adds to $Vm.Machines (the bound collection); the ListBox renders it via the template.
+    [HostViewModel] EnsureRow([string]$hostName) {
         if ($this.Rows.ContainsKey($hostName)) {
             return $this.Rows[$hostName]
         }
 
-        $row = [ConnectionRow]::new($hostName)
+        $vm = [HostViewModel]::new($hostName)
         $presenter = $this
-        $row.RunAction = { param($h) $presenter.RunHost($h) }.GetNewClosure()
-        $row.SelectAction = { param($h) $presenter.SelectHost($h) }.GetNewClosure()
-        $row.GatherAction = { param($h) $presenter.OnRowActivated($h) }.GetNewClosure()
-        $this.Rows[$hostName] = $row
-        if ($this.MachineList) {
-            $this.MachineList.Items.Add($row.Root) | Out-Null
-            $row.AnimateIn()
-        }
+        # Row commands close over the host name; Run = active command, double-click = gather.
+        $run = { param($p) $presenter.RunHost($hostName) }.GetNewClosure()
+        $gather = { param($p) $presenter.OnRowActivated($hostName) }.GetNewClosure()
+        $vm.RunCommand = [RelayCommand]::new([System.Action[object]]$run)
+        $vm.GatherCommand = [RelayCommand]::new([System.Action[object]]$gather)
+
+        $this.Rows[$hostName] = $vm
+        $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
         $this.UpdateEmptyHint()
-        return $row
+        return $vm
     }
 
-    [ConnectionRow] GetRow([string]$hostName) {
+    [HostViewModel] GetRow([string]$hostName) {
         if ($this.Rows.ContainsKey($hostName)) { return $this.Rows[$hostName] }
         return $null
+    }
+
+    # Moves a host's card to the top of the list, so cards read newest-action-first.
+    # Called on OPERATOR actions only (Add, Run, gather, storage scan) - background
+    # completions and idle refreshes never reorder, so rows don't jump mid-watch.
+    # The action is also stamped on the store (Touch), so the next launch opens in
+    # the same order; the write is deferred-save like every other store mutation.
+    hidden [void] MoveRowToTop([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $vm = $this.GetRow($hostName)
+        if ($null -eq $vm) { return }
+        $this.Store.Touch($hostName)
+        $idx = $this.HomeVm.Machines.IndexOf($vm)
+        if ($idx -gt 0) { $this.HomeVm.Machines.Move($idx, 0) }
     }
 
     # --- Detail panel + inventory probe ----------------------------------------------
 
     # Appends a job-output line to the host's buffer and, when it's the selected
-    # host, to the live detail log. (Replaces the old per-row inline log.)
+    # host, to the live detail log.
     [void] AppendLog([string]$hostName, [string]$text) {
         $this.AppendLogLines($hostName, @($text))
     }
@@ -1269,18 +1362,33 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Opens the detail panel for a host (single click): marks it selected and
-    # renders cached inventory/folders instantly. Does NOT touch the network - a
-    # fresh probe is gathered on double-click (OnRowActivated) or the Refresh
-    # button, so selecting an offline machine can never block the UI thread.
+    # ListBox selection changed (single click, or programmatic via HomeVm.SetSelected):
+    # open the detail panel for the newly selected host, or clear it on deselect.
+    [void] OnMachineSelectionChanged() {
+        $item = if ($this.MachineList) { $this.MachineList.SelectedItem } else { $null }
+        # Drive HomeVm.SelectedMachine ourselves (SetSelected raises PropertyChanged), so the
+        # detail/overview SelectedMachine.* bindings actually track the selection. The
+        # ListBox's own SelectedItem still owns the row highlight (IsSelected trigger).
+        $this.HomeVm.SetSelected($item)
+        if ($item) { $this.SelectHost([string]$item.HostName) }
+        else { $this.ClearSelection() }
+    }
+
+    # Programmatic selection: select the host's row in the ListBox (drives the highlight);
+    # its SelectionChanged fires OnMachineSelectionChanged, which sets SelectedMachine and
+    # opens the detail. Used by Add and AD-picked computers.
+    [void] SelectMachine([string]$hostName) {
+        $rowVm = $this.GetRow($hostName)
+        if ($rowVm -and $this.MachineList) { $this.MachineList.SelectedItem = $rowVm }
+    }
+
+    # Opens the detail panel for a host (single click): the ListBox owns the selected
+    # visual; this renders cached inventory/folders instantly. Does NOT touch the network -
+    # a fresh probe is gathered on double-click (OnRowActivated) or Refresh, so selecting an
+    # offline machine can never block the UI thread.
     [void] SelectHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-
-        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
-            $this.Rows[$this.SelectedHost].SetSelected($false)
-        }
         $this.SelectedHost = $hostName
-        if ($this.Rows.ContainsKey($hostName)) { $this.Rows[$hostName].SetSelected($true) }
 
         # Start-early: resolve this host's IP in the background now, so it's cached
         # before the operator double-clicks to gather inventory or hits Run.
@@ -1288,7 +1396,7 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Visible }
-        if ($this.DetailHostText) { $this.DetailHostText.Text = $hostName }
+        # The detail header binds to SelectedMachine.DetailTitle / ProbedText - no poke.
 
         if ($this.DetailLog) {
             $this.DetailLog.Clear()
@@ -1301,46 +1409,35 @@ class HomePresenter : AsyncJobPresenter {
         $rc = $this.GetRecord($hostName)
         $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        # Folders tree binds to SelectedMachine.Folders - apply the cached report onto
+        # the host's view-model (same-instance re-applies are skipped, so re-selecting
+        # keeps the tree's expansion state).
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
-        $this.RenderBigFolders($cachedDisk)
+        $rowVm = $this.GetRow($hostName)
+        if ($rowVm) { $rowVm.ApplyFolders($cachedDisk) }
 
         # Reflect any already-known reachability verdict immediately (a fresh
         # PrefetchIp above will update it when it lands).
         $this.RenderReachability($hostName)
 
-        # Gather inventory only once the host is known-reachable. An OFFLINE host is
-        # skipped entirely (gathering hangs the worker); an ONLINE host is gathered with
-        # its IP already cached, so the worker never does the expensive AD resolve on the
-        # freeze-prone path. If the verdict isn't cached yet, PrefetchIp's resolve lands
-        # in CompleteResolve, which calls GatherInventoryIfOnline.
-        if (-not $this.Resolver.NeedsResolve($hostName)) {
-            $this.GatherInventoryIfOnline($hostName)
-        }
-    }
-
-    # Starts the inventory probe only when the host is known-online. Offline hosts are
-    # skipped (gathering hangs the worker); a still-unknown host is left for
-    # CompleteResolve to retry once the background resolve lands.
-    [void] GatherInventoryIfOnline([string]$hostName) {
-        switch ($this.Resolver.IsHostOnline($hostName)) {
-            'Online'  { $this.StartInventory($hostName, $false) }
-            'Offline' { $this.AppendLog($hostName, "Host is offline - skipping inventory.") }
-            default   { }   # 'Unknown': resolve still in flight; CompleteResolve calls us again.
-        }
+        # Gather inventory (or queue it behind the in-flight verdict). StartInventory
+        # gates on a FRESH 'Online' verdict - an offline host is skipped with a log
+        # line, and an unknown/stale one is queued for CompleteResolve to re-issue -
+        # so selecting an unreachable machine can never open the freeze-prone connect.
+        $this.StartInventory($hostName, $false)
     }
 
     # Double-clicking a row: select it (cheap, cached) and gather fresh inventory
     # in the background. The probe runs on the runspace pool, never the UI thread.
     [void] OnRowActivated([string]$hostName) {
-        $this.SelectHost($hostName)
+        $this.MoveRowToTop($hostName)
+        $this.SelectMachine($hostName)
         $this.StartInventory($hostName)
     }
 
     # Clears the current selection and returns the detail pane to its empty state.
+    # (The ListBox selected visual clears itself when its SelectedItem goes null.)
     [void] ClearSelection() {
-        if ($this.SelectedHost -and $this.Rows.ContainsKey($this.SelectedHost)) {
-            $this.Rows[$this.SelectedHost].SetSelected($false)
-        }
         $this.SelectedHost = $null
         if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Collapsed }
         if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Visible }
@@ -1367,7 +1464,16 @@ class HomePresenter : AsyncJobPresenter {
             $this.AppendLog($hostName, "Host is offline - skipping inventory.")
             return
         }
-        if ($state -ne 'Online') {
+        # Gather only on a verdict we still trust. An unknown host - OR an 'Online' verdict
+        # that has aged past the TTL (the box may have gone offline since, e.g. a restart) -
+        # is re-validated first via the cheap, bounded, off-thread background resolve. The
+        # gather is QUEUED (keeping the strongest force seen) and CompleteResolve re-issues
+        # it once the fresh verdict lands - for every host, not just the selected one. This
+        # keeps us from opening the freeze-prone CIM/psexec connect against a host that is
+        # no longer reachable.
+        if ($state -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {
+            $prevForce = $this.PendingGathers.ContainsKey($hostName) -and [bool]$this.PendingGathers[$hostName]
+            $this.PendingGathers[$hostName] = ($force -or $prevForce)
             $this.PrefetchIp($hostName)
             return
         }
@@ -1395,8 +1501,9 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Forces a re-probe of the selected host.
+    # Forces a re-probe of the selected host (detail-panel Refresh).
     [void] RefreshInventory([string]$hostName) {
+        $this.MoveRowToTop($hostName)
         $this.StartInventory($hostName)
     }
 
@@ -1412,6 +1519,11 @@ class HomePresenter : AsyncJobPresenter {
     # Inventory job finished: parse + cache + repopulate the detail cards.
     [void] CompleteInventory([AsyncJob]$job) {
         $hostName = $job.HostName
+        # The card may have been cleared while the probe was in flight (probes don't
+        # count as "running", so Clear doesn't wait for them). Persisting now would
+        # re-create a ghost recents entry that resurfaces on the next launch - drop
+        # the result instead.
+        if (-not $this.Rows.ContainsKey($hostName)) { return }
         if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
             $this.DetailProgress.IsIndeterminate = $false
             $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
@@ -1432,11 +1544,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.Store.UpsertInventory($hostName, $inv)
         $this.AppendLog($hostName, "Inventory updated.")
 
-        if ($hostName -eq $this.SelectedHost) {
-            $rc = $this.GetRecord($hostName)
-            $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
-            $this.PopulateDetailCards($hostName, $cached, $rc)
-        }
+        # Push onto the host's view-model (bound; updates the overview/detail if it's the
+        # selected machine, and stays ready if it's selected later).
+        $rc = $this.GetRecord($hostName)
+        $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
+        $this.PopulateDetailCards($hostName, $cached, $rc)
     }
 
     # Queues an on-demand "biggest folders on C:" scan for the host (no-op if one
@@ -1445,8 +1557,14 @@ class HomePresenter : AsyncJobPresenter {
     [void] FindBigFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         foreach ($j in $this.ActiveJobs) {
-            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) { return }
+            if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
+                # Say so instead of silently ignoring the click - otherwise a slow scan
+                # reads as a dead button (the worker watchdog fails a hung one eventually).
+                $this.AppendLog($hostName, "A storage scan is already running for $hostName - wait for it to finish (or time out).")
+                return
+            }
         }
+        $this.MoveRowToTop($hostName)
         try {
             $this.AppendLog($hostName, "Scanning C: for largest folders...")
             if ($hostName -eq $this.SelectedHost -and $this.DetailProgress) {
@@ -1495,102 +1613,31 @@ class HomePresenter : AsyncJobPresenter {
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
         if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
 
-        if ($hostName -eq $this.SelectedHost) {
-            $this.RenderBigFolders($report)
-        }
+        # Apply onto the host's view-model regardless of selection: the tree binds to
+        # SelectedMachine.Folders, so it shows now if selected and is ready if selected later.
+        $row = $this.GetRow($hostName)
+        if ($row) { $row.ApplyFolders($report) }
     }
 
     # Renders the largest-folders list (or the empty-state hint when there's none).
-    [void] RenderBigFolders([DiskUsageReport]$report) {
-        if (-not $this.DiskFoldersList) { return }
-        $this.DiskFoldersList.Items.Clear()
-
-        if ($null -eq $report -or $report.Folders.Count -eq 0) {
-            if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Visible }
-            return
-        }
-
-        if ($this.DiskFoldersHint) { $this.DiskFoldersHint.Visibility = [System.Windows.Visibility]::Collapsed }
-        # Real tree: nest folders under their parent and render expandable TreeViewItems.
-        foreach ($root in [DiskUsageTree]::BuildNested($report.Folders)) {
-            [void]$this.DiskFoldersList.Items.Add($this.BuildFolderTreeItem($root))
-        }
-    }
-
-    # Builds a TreeViewItem for a folder node and (recursively) its children. Roots
-    # start expanded; deeper levels collapse so the panel stays compact.
-    hidden [object] BuildFolderTreeItem([FolderTreeNode]$node) {
-        $item = [TreeViewItem]::new()
-        $item.Header = $this.BuildFolderHeader($node)
-        $item.IsExpanded = ($node.Depth -eq 0)
-        foreach ($child in $node.Children) {
-            [void]$item.Items.Add($this.BuildFolderTreeItem($child))
-        }
-        return $item
-    }
-
-    # The header content for a folder node: label on the left (the TreeView supplies
-    # the indent + guide line), human-readable size on the right.
-    hidden [object] BuildFolderHeader([FolderTreeNode]$node) {
-        $grid = [Grid]::new()
-        $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 2)
-        $c0 = [ColumnDefinition]::new(); $c0.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-        $c1 = [ColumnDefinition]::new(); $c1.Width = [System.Windows.GridLength]::Auto
-        $grid.ColumnDefinitions.Add($c0); $grid.ColumnDefinitions.Add($c1)
-
-        $path = [TextBlock]::new()
-        $path.Text = $node.Label
-        $path.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $path.FontSize = 12
-        $path.Foreground = if ($node.Depth -eq 0) { $this.ResBrush('TitleTextPrimary') } else { $this.ResBrush('BodyTextSecondary') }
-        $path.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-        $path.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $path.ToolTip = $node.Path
-        [Grid]::SetColumn($path, 0)
-        [void]$grid.Children.Add($path)
-
-        $size = [TextBlock]::new()
-        $size.Text = [DiskUsageFormat]::SizeLabel($node.SizeBytes)
-        $size.FontFamily = [System.Windows.Media.FontFamily]::new('Montserrat')
-        $size.FontSize = 12
-        $size.FontWeight = [System.Windows.FontWeights]::SemiBold
-        $size.Foreground = $this.ResBrush('BodyTextSecondary')
-        $size.Margin = [System.Windows.Thickness]::new(10, 0, 0, 0)
-        $size.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        [Grid]::SetColumn($size, 1)
-        [void]$grid.Children.Add($size)
-
-        return $grid
-    }
-
-    # Sets the detail-header subtitle under the host name: the real IP we connect to,
-    # followed by the inventory-probe freshness. Either part is omitted when unknown
-    # (so a never-probed host still shows its IP once resolved, and vice versa).
+    # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model; the
+    # detail pane binds to SelectedMachine.ProbedText.
     hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
-        if (-not $this.DetailProbed) { return }
-        $ip = $this.Resolver.GetCachedIp($hostName)
-        $probedText = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
-            "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
-        }
-        $this.DetailProbed.Text = if (-not [string]::IsNullOrWhiteSpace($ip)) {
-            if ($probedText) { "$ip  ·  $probedText" } else { $ip }
-        } else {
-            $probedText
-        }
+        $vm = $this.GetRow($hostName)
+        if ($vm) { $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso) }
     }
 
-    # Updates the detail header subtitle (IP + probe time) and refreshes the top
-    # overview strip (which mirrors the selected machine). The per-machine
-    # model/battery/disk facts live in that top strip; the detail pane shows host +
-    # folders + log.
+    # Syncs the host's view-model detail/overview bindables from its inventory (cached or
+    # fresh). The overview strip + detail header bind to SelectedMachine.*, so this updates
+    # the UI whenever the selected host's facts change.
     [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
-        $probedIso = if ($null -ne $inv -and $inv.ProbedAt) { $inv.ProbedAt }
-                     elseif ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory.ProbedAt }
-                     else { '' }
-        $this.RenderDetailSubtitle($hostName, $probedIso)
-
-        # The top overview strip mirrors the selected machine.
-        $this.UpdateOverviewTiles()
+        $vm = $this.GetRow($hostName)
+        if ($null -eq $vm) { return }
+        $useInv = if ($null -ne $inv) { $inv } elseif ($null -ne $rc) { $rc.Inventory } else { $null }
+        if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
+        $probedIso = if ($null -ne $useInv -and $useInv.ProbedAt) { $useInv.ProbedAt } else { '' }
+        $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso)
+        $vm.SetPendingUpdates($(if ($null -ne $rc) { $rc.UpdateCount } else { 0 }))
     }
 
     # Removes idle (not currently running) machines from the list and recents.
@@ -1599,10 +1646,16 @@ class HomePresenter : AsyncJobPresenter {
 
         foreach ($hostName in $toRemove) {
             $row = $this.Rows[$hostName]
-            if ($this.MachineList -and $row) { $this.MachineList.Items.Remove($row.Root) }
+            if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
             $this.Rows.Remove($hostName)
             $this.Store.Remove($hostName)
             $this.LogBuffers.Remove($hostName)
+            # Drop any work queued behind a reachability verdict: a pending run/gather
+            # must not fire after the operator cleared the card (CompleteResolve would
+            # re-create the row and run on a host that was just removed).
+            $this.PendingRuns.Remove($hostName)
+            $this.PendingGathers.Remove($hostName)
+            $this.ScanSteps.Remove($hostName)
             if ($hostName -eq $this.SelectedHost) { $this.ClearSelection() }
         }
         $this.UpdateEmptyHint()
@@ -1624,12 +1677,16 @@ class HomePresenter : AsyncJobPresenter {
     # was removed - the per-machine "Refresh info" handles on-demand re-probes).
     [void] RefreshAll() {
         if ($this.SelectedHost) { $this.RefreshInventory($this.SelectedHost) }
-        $this.UpdateOverviewTiles()
-        # Re-render idle rows so their relative times stay current.
+        $this.RefreshIdleTimes()
+    }
+
+    # Re-renders idle (not-running) rows from their stored record, so their relative-time
+    # subtitles advance over the session. Driven on Initialize and by IdleRefreshTimer (30s).
+    [void] RefreshIdleTimes() {
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {
                 $row = $this.GetRow($rc.Hostname)
-                if ($row) { $row.SetIdleFrom($rc) }
+                if ($row) { $row.ApplyIdle($rc) }
             }
         }
     }
@@ -1639,55 +1696,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateOverviewTiles()
     }
 
-    # Populates the 4 overview tiles from the SELECTED machine's cached inventory
-    # (mirrors the detail cards); shows placeholders when nothing is selected.
-    [void] UpdateOverviewTiles() {
-        $dash = '—'
-        $hostName = $this.SelectedHost
-        if ([string]::IsNullOrWhiteSpace($hostName)) {
-            if ($this.OvModel) { $this.OvModel.Text = $dash }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = 'no machine selected' }
-            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
-            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
-            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
-            if ($this.OvUpdates) { $this.OvUpdates.Text = $dash }
-            if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = '' }
-            return
-        }
-
-        $rc = $this.GetRecord($hostName)
-        $inv = if ($null -ne $rc) { $rc.Inventory } else { $null }
-
-        if ($null -eq $inv) {
-            if ($this.OvModel) { $this.OvModel.Text = $dash }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = 'double-click to gather inventory' }
-            if ($this.OvBattery) { $this.OvBattery.Text = $dash }
-            if ($this.OvBatterySub) { $this.OvBatterySub.Text = '' }
-            if ($this.OvDisk) { $this.OvDisk.Text = $dash }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = '' }
-        }
-        else {
-            if ($this.OvModel) { $this.OvModel.Text = if ($inv.Model) { $inv.Model } else { $dash } }
-            if ($this.OvModelSub) { $this.OvModelSub.Text = if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $hostName } }
-
-            $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
-            if ($this.OvBattery) { $this.OvBattery.Text = [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health) }
-            if ($this.OvBatterySub) {
-                $this.OvBatterySub.Text = if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
-                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
-                    "$($inv.ChargePercent)% - $state"
-                } else { '' }
-            }
-
-            if ($this.OvDisk) { $this.OvDisk.Text = [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes) }
-            if ($this.OvDiskSub) { $this.OvDiskSub.Text = [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)) }
-        }
-
-        $pending = if ($null -ne $rc) { $rc.UpdateCount } else { 0 }
-        if ($this.OvUpdates) { $this.OvUpdates.Text = "$pending" }
-        if ($this.OvUpdatesSub) { $this.OvUpdatesSub.Text = 'pending update(s)' }
-    }
+    # The overview strip binds to SelectedMachine.* (each view-model's OvModel/OvBattery/
+    # OvDisk/OvUpdates, populated via ApplyInventory / SetPendingUpdates), so there is nothing
+    # to poke here. Kept as a no-op so existing callers stay valid; the empty/placeholder
+    # states come from the bindings' FallbackValues and the view-model defaults.
+    [void] UpdateOverviewTiles() { }
 
     [System.Windows.Media.Brush] ResBrush([string]$key) {
         $res = $null
@@ -1696,51 +1709,26 @@ class HomePresenter : AsyncJobPresenter {
         return [System.Windows.Media.Brushes]::Gray
     }
 
-    [void] AppendHostLogs([string]$hostName) {
-        $logsDir = Join-Path $env:LOCALAPPDATA "DONUT\logs"
-        $logFiles = @(
-            (Join-Path $logsDir "$hostName.log"),
-            (Join-Path $logsDir "default.log")
-        )
-        foreach ($logPath in $logFiles) {
-            if (Test-Path $logPath) {
-                try {
-                    # One read + one batched append, instead of per-line append + scroll.
-                    $content = @(Get-Content -Path $logPath -ErrorAction Stop)
-                    if ($content.Count -gt 0) { $this.AppendLogLines($hostName, [string[]]$content) }
-                } catch { }
-            }
-        }
-    }
-
     [void] CheckForManualReboot([AsyncJob]$job) {
-        $appData = Join-Path $env:LOCALAPPDATA "DONUT"
-        $rebootFlagPath = Join-Path $appData "reports\$($job.HostName)-reboot-required.flag"
+        $needsReboot = $false
 
+        # Primary signal: the apply worker sets RebootRequired on its result when dcu-cli
+        # returns 1/5 (applied, but a reboot is needed to finish). $job.Result is the
+        # worker's returned hashtable (wrapped in the invoke output collection), so unwrap it.
+        foreach ($item in @($job.Result)) {
+            if ($null -ne $item -and $item.RebootRequired) { $needsReboot = $true; break }
+        }
+
+        # Fallback: a reboot-required marker file, in case a future remote step writes one.
+        $rebootFlagPath = Join-Path (Join-Path $env:LOCALAPPDATA "DONUT") "reports\$($job.HostName)-reboot-required.flag"
         if (Test-Path $rebootFlagPath) {
-            if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
-                $this.ManualRebootQueue.Add($job.HostName)
-            }
+            $needsReboot = $true
             Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue
         }
 
-        if ($job.Result -and $job.Result -match 'reboot\s*required|needs\s*reboot|pending\s*reboot') {
-            if (-not $this.ManualRebootQueue.Contains($job.HostName)) {
-                $this.ManualRebootQueue.Add($job.HostName)
-            }
+        if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {
+            $this.ManualRebootQueue.Add($job.HostName)
         }
-    }
-
-    [void] ShowManualRebootNotice() {
-        if ($this.ManualRebootQueue.Count -eq 0) { return }
-        $hostList = $this.ManualRebootQueue.ToArray() -join ", "
-        if ($this.Toasts) {
-            $this.Toasts.ShowWarning(
-                "Manual reboot required",
-                "These machines need a manual reboot to finish updating: $hostList"
-            )
-        }
-        $this.ManualRebootQueue.Clear()
     }
 
     [array] GetInstalledDriversFromReport([xml]$report) {

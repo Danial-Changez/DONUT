@@ -59,6 +59,11 @@
     <Color x:Key="AccentYellowColor"> #FBBF24</Color>
     <SolidColorBrush x:Key="AccentYellow"
                      Color="{StaticResource AccentYellowColor}" />
+    <!-- Amber-orange: a softer "attention" than red - used for the "unconfirmed"
+         connection-lost state (distinct from the yellow reboot-required). -->
+    <Color x:Key="AccentOrangeColor"> #FB923C</Color>
+    <SolidColorBrush x:Key="AccentOrange"
+                     Color="{StaticResource AccentOrangeColor}" />
     <Color x:Key="AccentCyanColor"> #38BDF8</Color>
     <SolidColorBrush x:Key="AccentCyan"
                      Color="{StaticResource AccentCyanColor}" />

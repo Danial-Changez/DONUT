@@ -13,6 +13,27 @@
     <!-- Machine list -->
   </Grid.RowDefinitions>
 
+  <Grid.Resources>
+    <!-- Converter + machine-list item chrome. The machine list binds to
+         HomeViewModel.Machines; each item is a HostViewModel. -->
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    <Style x:Key="MachineListItem" TargetType="ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <!-- Strip the default ListBoxItem selection chrome; the row template draws its own
+           selected border via the IsSelected trigger. -->
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <ContentPresenter />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Grid.Resources>
+
   <!-- ============================ Action bar ============================ -->
   <Grid Grid.Row="0" Margin="0,0,0,16">
     <Grid.ColumnDefinitions>
@@ -89,7 +110,72 @@
               Padding="6"
               SnapsToDevicePixels="True">
         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="340">
-          <StackPanel x:Name="SearchResultsList" />
+          <!-- One flat list of SearchRowViewModels: section headers and result rows share
+               the template, switched by IsHeader. -->
+          <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid>
+                  <!-- Section header ("COMPUTERS" / "USERS") -->
+                  <TextBlock Text="{Binding HeaderText}" FontFamily="Montserrat" FontSize="10"
+                             FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}"
+                             Margin="6,6,0,4">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <!-- Result row: computers pick into the search bar on click; locked
+                       users get an inline Unlock button. -->
+                  <Border CornerRadius="7" Padding="10,6,8,6" Margin="0,0,0,2">
+                    <Border.Style>
+                      <Style TargetType="Border">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsComputer}" Value="True">
+                            <Setter Property="Cursor" Value="Hand" />
+                          </DataTrigger>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
+                          </Trigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Border.Style>
+                    <Border.InputBindings>
+                      <!-- Null for user rows: the gesture is simply ignored. -->
+                      <MouseBinding MouseAction="LeftClick" Command="{Binding PickCommand}" />
+                    </Border.InputBindings>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Primary}" FontFamily="Montserrat" FontSize="13"
+                                   Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Secondary}" FontFamily="Montserrat" FontSize="11"
+                                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Content="Unlock" Command="{Binding UnlockCommand}"
+                              Style="{DynamicResource ButtonOutline}" Height="28" FontSize="11"
+                              VerticalAlignment="Center"
+                              Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
+                    </Grid>
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </ScrollViewer>
       </Border>
     </Popup>
@@ -138,9 +224,9 @@
       <StackPanel>
         <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvModel" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvModel" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvModelSub" Text="no machine selected" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvModelSub" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
       </StackPanel>
     </Border>
@@ -151,9 +237,9 @@
       <StackPanel>
         <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvBattery" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvBattery" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvBatterySub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvBatterySub" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -164,9 +250,9 @@
       <StackPanel>
         <TextBlock Text="DISK" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvDisk" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvDisk" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvDiskSub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvDiskSub" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -177,9 +263,9 @@
       <StackPanel>
         <TextBlock Text="UPDATES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvUpdates" Text="—" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock x:Name="txtOvUpdates" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBlock x:Name="txtOvUpdatesSub" Text="" FontFamily="Montserrat" FontSize="11.5"
+        <TextBlock x:Name="txtOvUpdatesSub" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="Montserrat" FontSize="11.5"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -210,24 +296,114 @@
                 FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
       </Grid>
 
-      <!-- Rows -->
-      <ScrollViewer Grid.Row="1" Margin="10,0,10,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid>
-          <TextBlock
-            x:Name="FleetEmptyHint"
-            Text="No machines yet. Enter computer names above and run a scan or update."
-            Foreground="{DynamicResource BodyTextTertiary}"
-            FontFamily="Montserrat"
-            FontSize="14"
-            TextWrapping="Wrap"
-            TextAlignment="Center"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Margin="40"
-          />
-          <ItemsControl x:Name="MachineList" />
-        </Grid>
-      </ScrollViewer>
+      <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
+           a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
+           ScrollViewer, so it is NOT wrapped in one - that is what enables virtualization. -->
+      <Grid Grid.Row="1" Margin="10,0,10,10">
+        <!-- SelectedItem is NOT bound to SelectedMachine: a PS-class auto-property doesn't
+             raise PropertyChanged when WPF writes it, so the SelectedMachine.* detail/overview
+             bindings wouldn't track selection. The presenter drives HomeVm.SelectedMachine via
+             SetSelected() (which raises) from SelectionChanged instead; the ListBox's own
+             SelectedItem still owns the row highlight. -->
+        <ListBox x:Name="MachineList"
+                 ItemsSource="{Binding Machines}"
+                 Background="Transparent" BorderThickness="0"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingStackPanel.IsVirtualizing="True"
+                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 ItemContainerStyle="{StaticResource MachineListItem}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"
+                      Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
+                <Border.Style>
+                  <Style TargetType="Border">
+                    <Setter Property="Background" Value="#1F1F1F" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Style.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#27272A" />
+                      </Trigger>
+                      <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource AccentPurple}" />
+                        <Setter Property="BorderThickness" Value="1.5" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <!-- Double-click a row to gather fresh inventory (single click selects). -->
+                <Border.InputBindings>
+                  <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding GatherCommand}" />
+                </Border.InputBindings>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
+                           VerticalAlignment="Center" Fill="{Binding DotBrush}" />
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
+                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="14"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
+                               FontFamily="Montserrat" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Width="120" Margin="12,0,12,0" VerticalAlignment="Center"
+                              Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}">
+                    <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                 Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
+                                 Foreground="{Binding ProgressBrush}" BorderThickness="0" />
+                    <!-- Live milestone from dcu-cli's outputLog, e.g. "3/5 scanning devices". -->
+                    <TextBlock Text="{Binding StepText}" FontFamily="Montserrat" FontSize="9.5"
+                               Foreground="{DynamicResource BodyTextSecondary}" Margin="0,3,0,0"
+                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding StepText}" Value="">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </StackPanel>
+                  <Border Grid.Column="3" CornerRadius="8" Padding="10,3,10,3" VerticalAlignment="Center"
+                          Margin="0,0,8,0" Background="{Binding ChipBackground}"
+                          Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
+                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="11" />
+                  </Border>
+                  <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
+                          Style="{DynamicResource ButtonPrimary}" FontSize="11.5" Height="28"
+                          Padding="14,4" VerticalAlignment="Center"
+                          ToolTip="Run the active command on this machine" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock
+          x:Name="FleetEmptyHint"
+          Text="No machines yet. Enter computer names above and run a scan or update."
+          Foreground="{DynamicResource BodyTextTertiary}"
+          FontFamily="Montserrat"
+          FontSize="14"
+          TextWrapping="Wrap"
+          TextAlignment="Center"
+          HorizontalAlignment="Center"
+          VerticalAlignment="Center"
+          Margin="40"
+          IsHitTestVisible="False"
+        />
+      </Grid>
     </Grid>
   </Border>
 
@@ -263,9 +439,9 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBlock x:Name="txtDetailHost" Text="—" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+              <TextBlock x:Name="txtDetailHost" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
                          Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-              <TextBlock x:Name="txtDetailProbed" Text="" FontFamily="Montserrat" FontSize="11"
+              <TextBlock x:Name="txtDetailProbed" Text="{Binding SelectedMachine.ProbedText}" FontFamily="Montserrat" FontSize="11"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
@@ -285,16 +461,59 @@
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
-              <TextBlock Grid.Row="1" x:Name="DiskFoldersHint"
+              <TextBlock Grid.Row="1"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
-                         TextWrapping="Wrap" />
+                         TextWrapping="Wrap">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding SelectedMachine.HasFolders}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
               <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                 <TreeView x:Name="DiskFoldersList"
                           Style="{DynamicResource DiskTree}"
                           ItemContainerStyle="{DynamicResource DiskTreeItem}"
+                          ItemsSource="{Binding SelectedMachine.Folders}"
                           ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                  <TreeView.ItemTemplate>
+                    <!-- One folder row: relative label left (root rows brighter), formatted
+                         size right; children nest via the template. -->
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                      <Grid Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
+                                   FontFamily="Montserrat" FontSize="12"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRoot}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Grid.Column="1" Text="{Binding SizeText}"
+                                   FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource BodyTextSecondary}"
+                                   Margin="10,0,0,0" VerticalAlignment="Center" />
+                      </Grid>
+                    </HierarchicalDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
               </ScrollViewer>
             </Grid>
           </Border>

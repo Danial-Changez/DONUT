@@ -229,7 +229,9 @@ class NetworkProbe {
     # Reads Win32_ComputerSystem.Name from the host at $ip over a DCOM CIM session
     # (root\cimv2, single property - none of the root\wmi serialization issues).
     hidden [string] QueryComputerName([string]$ip) {
-        $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+        # -OperationTimeoutSec bounds the open (see GatherRemoteInventory): a box that
+        # died between the RPC gate and this call must fail in seconds, not minutes.
+        $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -OperationTimeoutSec 15 -ErrorAction Stop
         try {
             $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem -Property Name -OperationTimeoutSec 10 -ErrorAction Stop
             return [string]$cs.Name

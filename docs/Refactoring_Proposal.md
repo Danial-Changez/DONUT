@@ -6,13 +6,15 @@ This document serves as the proposal/guide for refactoring the DONUT project fro
 
 - [1. Directory Structure](#1-directory-structure)
   - [Key Changes](#key-changes)
-- [2. Architecture: Model-View-Presenter (MVP)](#2-architecture-model-view-presenter-mvp)
-  - [Why MVP?](#why-mvp)
+- [2. Architecture: MVP → MVVM](#2-architecture-mvp--mvvm)
+  - [Why MVP first?](#why-mvp-first)
+  - [The MVVM migration](#the-mvvm-migration)
   - [The Layers](#the-layers)
   - [Key Classes](#key-classes)
     - [Models (`src/Models/`)](#models-srcmodels)
     - [Core (`src/Core/`)](#core-srccore)
     - [Services (`src/Services/`)](#services-srcservices)
+    - [ViewModels (`src/UI/ViewModels/`)](#viewmodels-srcuiviewmodels)
     - [Presenters (`src/UI/Presenters/`)](#presenters-srcuipresenters)
 - [4. Implementation Considerations](#4-implementation-considerations)
   - [Parallel Execution (Runspaces)](#parallel-execution-runspaces)
@@ -40,7 +42,8 @@ This document serves as the proposal/guide for refactoring the DONUT project fro
 
 ## 1. Directory Structure
 
-The new structure emphasizes testability and the Model-View-Presenter (MVP) architecture.
+The new structure emphasizes testability and a layered UI architecture (refactored to
+MVP first, since migrated to MVVM — see section 2).
 
 ```text
 root/
@@ -55,10 +58,11 @@ root/
 │   ├── Services/           <-- Business Logic
 │   ├── Scripts/            <-- Standalone scripts
 │   ├── UI/                 <-- UI Layer
-│   │   ├── Views/          <-- XAML files (The View)
+│   │   ├── Views/          <-- XAML files (The View: templates + bindings)
 │   │   ├── Styles/         <-- XAML styles
-│   │   ├── Presenters/     <-- UI Logic (The Presenter)
-│   └── Launcher/           <-- C# Launcher Project
+│   │   ├── ViewModels/     <-- Bindable state + commands (The ViewModel)
+│   │   ├── Presenters/     <-- Coordinators / UI services (jobs, timers, dialogs)
+│   └── Launcher/           <-- C# Launcher Project (+ Donut.Mvvm base types)
 ├── tests/                  <-- Pester Tests
 │   ├── Unit/
 │   └── Integration/
@@ -88,34 +92,69 @@ Runtime Data Location:
 
 ---
 
-## 2. Architecture: Model-View-Presenter (MVP)
+## 2. Architecture: MVP → MVVM
 
-The project adopts the **Passive View** variant of the MVP pattern.
+The project was first refactored to the **Passive View** variant of the MVP pattern,
+then migrated top-down to **MVVM** once the layers had settled. The engine —
+`Models/`, `Services/`, `Core/`, and the `AsyncJob` polling pump — was untouched by
+that migration; only how a drained result reaches the screen changed (set a
+view-model property instead of poking a control).
 
-### Why MVP?
-*   **Migration:** MVP is similar to the existing scripts. It allows logic to be moved from scripts to classes with minimal rewriting.
-*   **PowerShell Constraints:** MVVM requires `INotifyPropertyChanged` and complex data binding, which is error-prone in PowerShell classes. MVP avoids this by having the Presenter directly manipulate the View.
+### Why MVP first?
+*   **Migration:** MVP is similar to the original scripts. It allowed logic to be moved from scripts to classes with minimal rewriting.
+*   **PowerShell Constraints:** PowerShell classes cannot declare CLR events, so `INotifyPropertyChanged` cannot be implemented natively. MVP sidestepped this by having the Presenter directly manipulate the View.
+
+### The MVVM migration
+The event constraint is solved by two tiny C# bases (`src/Launcher/`, namespace
+`Donut.Mvvm`), compiled into `Donut.Launcher` for production and `Add-Type`-compiled
+by `Start-Donut.ps1` on the dev path:
+
+*   **`ObservableObject`** — implements `INotifyPropertyChanged`; PowerShell
+    view-model classes inherit it and call `Set(name, value)` (raises change
+    notification only when the value actually changes) or `Raise(name)`.
+*   **`RelayCommand`** — a minimal `ICommand` wrapping a PowerShell scriptblock, so
+    buttons/gestures bind to commands instead of `Add_Click` wiring.
+
+Every surface renders through bindings: the machine list is a virtualizing `ListBox`
+of `HostViewModel`s, the detail pane and overview strip bind to `SelectedMachine.*`,
+and the folders tree, AD finder dropdown, Logs tabs, toasts, dialogs, login window,
+and shell chrome all bind their own view-models. Presenters were **kept as
+coordinators/services**, not deleted: they own the services, the `AsyncJob` queue,
+the `DispatcherTimer`s, and the modal lifecycle, and they build the view-models and
+wire their commands.
+
+Deliberately still imperative (each is the standard MVVM answer, not a leftover):
+
+*   **`DialogPresenter`** stays a *dialog service* — showing a modal and returning a
+    result is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
+*   **`MainPresenter`** keeps lazy page construction (Config/Logs are built on first
+    navigation — a startup-cost win) and the rail width/label animations; the shell's
+    nav/rail/chrome *inputs* are bound commands on `MainViewModel`.
+*   **`ConfigPresenter`** keeps its data-driven form binder: every named control in a
+    command's option view maps 1:1 to a dcu-cli arg key, so a typed property per
+    field would restate the key list for no behaviour gain.
 
 ### The Layers
 1.  **Model Layer (`src/Models`, `src/Services`, `src/Core`)**:
     *   Represents the data, business logic, and infrastructure.
-    *   **Models**: The data models (e.g., `AppConfig`).
+    *   **Models**: The data models and pure mappers (e.g., `AppConfig`, `FleetStatus`).
     *   **Services**: Project-specific modules (e.g., `SelfUpdateService`).
     *   **Core**: General (reusable) modules (e.g., `NetworkProbe`).
 2.  **View Layer (`src/UI/Views`)**:
-    *   Passive XAML files. No code-behind logic.
-    *   Sole responsibility is structure and layout.
-3.  **Presenter Layer (`src/UI/Presenters`)**:
-    *   Loads the View.
-    *   Handles UI events (Clicks, etc.).
-    *   Calls the Service layer to get data.
-    *   Updates the View with the data.
+    *   XAML files: structure, layout, `DataTemplate`s, and bindings. No code-behind.
+3.  **ViewModel Layer (`src/UI/ViewModels`)**:
+    *   Bindable state (`ObservableObject` subclasses) + `RelayCommand`s.
+    *   Calls the pure Model mappers for its display decisions; WPF-free logic stays
+        unit-testable.
+4.  **Presenter Layer (`src/UI/Presenters`)**:
+    *   Coordinators/services: load views, own background jobs and timers, build the
+        view-models, wire commands, and run the imperative shell work listed above.
 
 ### Key Classes
 
 Many models are deliberately WPF-free **pure mappers/DTOs** (no UI, no I/O) so the
-decision/format logic is unit-tested off-domain; the presenter consumes the result
-and pokes the controls.
+decision/format logic is unit-tested off-domain; a view-model (or coordinator)
+consumes the result and exposes it to the bindings.
 
 #### Models (`src/Models/`)
 | Class | Purpose |
@@ -124,7 +163,9 @@ and pokes the controls.
 | `DeviceContext` | Remote device state: hostname, IP, online status, status message |
 | `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `Resolve`) |
 | `FleetStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
-| `DcuProgress` | Pure parser: a DCU output line → percent complete |
+| `DcuProgress` | Pure parser: a DCU output line → percent complete, plus the scan's milestone step (`N/5` beside the progress bar) |
+| `DcuLog` | Pure parser for dcu-cli's `-outputLog`: extracts the authoritative "return code: N" line and classifies it (only {0, 1, 5} are success/reboot; everything else is an error) |
+| `RemoteError` (exception hierarchy) | Typed, severity-tagged remote failures: offline / unresolvable / RPC blocked / DCU not installed / launch fault / **connection lost** (psexec transport codes 233, 64, ...) / **timed out** (watchdog); `RemoteFailure` re-derives the reason from a worker message that crossed the runspace boundary |
 | `ScanCacheDecision` | Pure rule: is a host's last scan still fresh enough to reuse (24h)? |
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
@@ -144,7 +185,7 @@ and pokes the controls.
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
 
 #### Services (`src/Services/`)
-All remote services subclass `RemoteJobService` (shared connectivity policy + worker-arg
+All remote services subclass `RemoteJobService` (shared worker-arg
 building); they only **prepare/parse** off the UI thread — the worker does the network I/O.
 
 | Class | Purpose |
@@ -161,19 +202,38 @@ building); they only **prepare/parse** off the UI thread — the worker does the
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
 | `ResourceService` | XAML resource dictionary loading |
 
-#### Presenters (`src/UI/Presenters/`)
+#### ViewModels (`src/UI/ViewModels/`)
+All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
+`RelayCommand`s wired by the owning presenter.
+
 | Class | Purpose |
 |-------|---------|
-| `MainPresenter` | Main window, navigation, view loading |
+| `HomeViewModel` | The Home page: `Machines` (bound to the virtualizing ListBox), `SelectedMachine`, and the AD finder's `SearchResults` |
+| `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress/step text, overview-strip facts, probed subtitle, folders tree, Run/Gather commands |
+| `FolderNodeViewModel` | Display-ready largest-folders tree node (pure, computed per report) |
+| `SearchRowViewModel` | AD finder dropdown row — section header or result, with Pick/Unlock commands (pure) |
+| `ConfigViewModel` | Config page chrome (SaveCommand); the option forms stay on the presenter's data-driven binder by design |
+| `LogsViewModel` / `LogTabViewModel` | Logs page: tab collection + per-tab text with tail-truncation ("Load full file") state |
+| `ToastViewModel` | One toast card (title/message/accent/IsClosing for the exit animation) |
+| `DialogViewModel` | One modal dialog's content (title/message/list/buttons + verdict commands) |
+| `LoginViewModel` | Login window content (output text + AuthCommand) |
+| `MainViewModel` | Shell: NavigateCommand, rail toggle, window chrome commands, ActivePage/IsRailCollapsed |
+
+#### Presenters (`src/UI/Presenters/`)
+Coordinators/services after the MVVM migration: they own the engine objects and
+build/wire the view-models (see [The MVVM migration](#the-mvvm-migration)).
+
+| Class | Purpose |
+|-------|---------|
+| `MainPresenter` | Composition root: main window, lazy page construction, rail animation, shell command targets |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management |
-| `ConfigPresenter` | Configuration UI, command selection, args persistence |
-| `LogsPresenter` | Log viewing, tab management, and clear functionality |
-| `LoginPresenter` | GitHub Device Flow authentication UI |
+| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management; sets `HostViewModel` state per pump tick |
+| `ConfigPresenter` | Command selection, the data-driven option-form binder, args persistence |
+| `LogsPresenter` | Log file I/O (enumerate, tail-read, load-full, clear) behind `LogsViewModel` |
+| `LoginPresenter` | GitHub Device Flow: poll timer + modal lifecycle behind `LoginViewModel` |
 | `UpdatePresenter` | Self-update check and prompt |
-| `DialogPresenter` | Confirmation dialogs, update/alert popups |
-| `ConnectionRow` | One machine row in the Home list (status dot, chip, progress, Run) |
-| `ToastService` | Transient success/info/warning/error toasts |
+| `DialogPresenter` | Dialog service: shows the modal `DialogWindow`, returns the verdict |
+| `ToastService` | Enqueues `ToastViewModel`s + owns the auto-dismiss/exit-animation timers |
 
 ---
 

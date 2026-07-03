@@ -35,6 +35,9 @@ enum RemoteFailureReason {
     RpcUnavailable
     ExecutionFailed
     DcuMissing
+    ProcessStartFailed
+    ConnectionLost
+    TimedOut
     Unknown
 }
 
@@ -83,6 +86,99 @@ class RemoteExecutionException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
         $this.ExitCode = $exitCode
     }
+
+    # Same, but with a decoded meaning appended (e.g. "exit code 3 - the system
+    # manufacturer is not Dell"), so a small DCU error code reads as its actual cause.
+    RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode, [string]$detail) : base(
+        $(if ([string]::IsNullOrWhiteSpace($detail)) { "$what failed on '$hostName' (exit code $exitCode)." }
+          else { "$what failed on '$hostName' (exit code $exitCode - $detail)." }),
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
+        $this.ExitCode = $exitCode
+    }
+}
+
+# The remote process (pwsh) failed to start / crashed during startup - a Windows NTSTATUS
+# fault (e.g. 0xC0000142 STATUS_DLL_INIT_FAILED), NOT a dcu-cli exit code, so DCU never
+# actually ran. Commonly session-0 desktop-heap exhaustion after repeated remote runs, or
+# AV/EDR interference; it often succeeds on retry. Carries the raw exit code.
+class RemoteProcessStartException : RemoteOperationException {
+    [int] $ExitCode
+
+    RemoteProcessStartException([string]$hostName, [string]$what, [int]$exitCode) : base(
+        "$what could not run on '$hostName': the remote process exited during startup ($([RemoteProcessStartException]::Describe($exitCode))). This is a Windows process-launch failure, not a DCU error - commonly session-0 desktop-heap exhaustion after repeated remote runs, or AV/EDR interference; it often succeeds on retry.",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ProcessStartFailed) {
+        $this.ExitCode = $exitCode
+    }
+
+    # Formats a process exit code as its unsigned NTSTATUS hex plus a known name when we
+    # have one (so "-1073741502" reads as "0xC0000142 STATUS_DLL_INIT_FAILED").
+    static [string] Describe([int]$exitCode) {
+        $hex = '0x{0:X8}' -f ([int64]$exitCode -band 0xFFFFFFFFL)
+        $known = @{
+            '0xC0000142' = 'STATUS_DLL_INIT_FAILED'
+            '0xC0000005' = 'STATUS_ACCESS_VIOLATION'
+            '0xC000012D' = 'STATUS_COMMITMENT_LIMIT'
+            '0xC0000017' = 'STATUS_NO_MEMORY'
+        }
+        if ($known.ContainsKey($hex)) { return "$hex $($known[$hex])" }
+        return "exit code $exitCode / $hex"
+    }
+}
+
+# psexec's connection to the host dropped mid-command - a Win32 transport error (e.g.
+# 233 ERROR_PIPE_NOT_CONNECTED, 64 ERROR_NETNAME_DELETED), NOT a dcu-cli exit code. The
+# classic trigger is applying a NETWORK driver (the update resets the NIC that psexec's
+# own SMB/named-pipe connection rides over), so psexec loses the pipe even though dcu-cli
+# completed on the host. Treated as a Warning because the update most likely applied - a
+# re-scan confirms it. Carries the raw exit code.
+class RemoteConnectionLostException : RemoteOperationException {
+    [int] $ExitCode
+
+    RemoteConnectionLostException([string]$hostName, [string]$what, [int]$exitCode) : base(
+        "$what on '$hostName' could not be confirmed: psexec lost its connection to the host ($([RemoteConnectionLostException]::Describe($exitCode))). This is a network/transport drop, not a DCU error - it typically happens when the update resets the network (e.g. a NIC/Ethernet driver), which severs psexec's own connection while dcu-cli finishes on the host. The update most likely applied; re-scan to confirm.",
+        $hostName, [ErrorLevel]::Warning, [RemoteFailureReason]::ConnectionLost) {
+        $this.ExitCode = $exitCode
+    }
+
+    # The Win32 codes psexec surfaces when its remote connection drops mid-command. None
+    # collide with dcu-cli's own codes (0-5, 1xx, 5xx, 1000s), so seeing one means the
+    # transport died, not that DCU reported it.
+    static [hashtable] $Codes = @{
+        64   = 'ERROR_NETNAME_DELETED'
+        109  = 'ERROR_BROKEN_PIPE'
+        121  = 'ERROR_SEM_TIMEOUT'
+        232  = 'ERROR_NO_DATA'
+        233  = 'ERROR_PIPE_NOT_CONNECTED'
+        1236 = 'ERROR_CONNECTION_ABORTED'
+    }
+
+    # True when an exit code is one of the known connection-lost transport codes.
+    static [bool] IsConnectionLost([int]$exitCode) {
+        return [RemoteConnectionLostException]::Codes.ContainsKey($exitCode)
+    }
+
+    # Formats a transport code with its Win32 name (so "233" reads as
+    # "code 233 ERROR_PIPE_NOT_CONNECTED").
+    static [string] Describe([int]$exitCode) {
+        $name = [RemoteConnectionLostException]::Codes[$exitCode]
+        if ($name) { return "code $exitCode $name" }
+        return "code $exitCode"
+    }
+}
+
+# The remote operation ran past its watchdog deadline and the local psexec client was
+# terminated so the worker (and its runspace) could be reclaimed - without this, a hung
+# psexec session (e.g. the shared-PSEXESVC teardown race, or a wedged remote process)
+# kept the job Running forever and its single-flight guard blocked any retry. NOTE: only
+# the LOCAL client is killed; the remote process may still be running on the host.
+class RemoteTimeoutException : RemoteOperationException {
+    [int] $TimeoutMinutes
+
+    RemoteTimeoutException([string]$hostName, [string]$what, [int]$timeoutMinutes) : base(
+        "$what on '$hostName' did not finish within $timeoutMinutes minutes - the psexec session was terminated. The remote process may still be running on the host; give it a moment to settle before retrying.",
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::TimedOut) {
+        $this.TimeoutMinutes = $timeoutMinutes
+    }
 }
 
 # Dell Command Update is not installed on the target, so there is nothing to drive.
@@ -102,6 +198,9 @@ class RemoteFailure {
         if ($message -match '(?i)could not resolve an ip|dns/ad')    { return [RemoteFailureReason]::Unresolvable }
         if ($message -match '(?i)rpc \(port 135\)')                  { return [RemoteFailureReason]::RpcUnavailable }
         if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
+        if ($message -match '(?i)process-launch failure|exited during startup') { return [RemoteFailureReason]::ProcessStartFailed }
+        if ($message -match '(?i)lost its connection to the host')    { return [RemoteFailureReason]::ConnectionLost }
+        if ($message -match '(?i)did not finish within')              { return [RemoteFailureReason]::TimedOut }
         if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }

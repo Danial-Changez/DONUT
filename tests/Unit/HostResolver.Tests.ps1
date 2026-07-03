@@ -84,12 +84,52 @@ Describe "HostResolver" {
             $r.NeedsResolve("PC-1") | Should -BeFalse
         }
 
+        It "ClearInFlight releases the latch so a failed resolve can be retried" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.MarkInFlight("PC-1")
+            $r.NeedsResolve("PC-1") | Should -BeFalse   # wedged while in flight
+            $r.ClearInFlight("PC-1")                    # a failed resolve releases it
+            $r.NeedsResolve("PC-1") | Should -BeTrue    # uncached again -> re-resolves
+        }
+
         It "caching clears the in-flight flag" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $r.MarkInFlight("PC-1")
             $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             $r.NeedsResolve("PC-1") | Should -BeFalse   # cached now
+        }
+    }
+
+    Context "IsVerdictStale (gather gate)" {
+        It "is false for an uncached host (nothing to distrust)" {
+            $r = New-Resolver
+            $r.IsVerdictStale("PC-1") | Should -BeFalse
+        }
+
+        It "is false for a freshly-cached verdict" {
+            $r = New-Resolver
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            $r.IsVerdictStale("PC-1") | Should -BeFalse
+        }
+
+        It "is true once the cached verdict ages past the TTL" {
+            $r = New-Resolver
+            $r.Ttl = [timespan]::FromMilliseconds(1)
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            Start-Sleep -Milliseconds 20
+            $r.IsVerdictStale("PC-1") | Should -BeTrue
+        }
+
+        It "does not depend on a DC or in-flight state (unlike NeedsResolve)" {
+            $r = New-Resolver
+            $r.Ttl = [timespan]::FromMilliseconds(1)
+            $r.CacheVerdict("PC-1", "10.0.0.5", $true)
+            Start-Sleep -Milliseconds 20
+            $r.MarkInFlight("PC-1")                 # NeedsResolve would be false here...
+            $r.NeedsResolve("PC-1")  | Should -BeFalse
+            $r.IsVerdictStale("PC-1") | Should -BeTrue   # ...but the verdict is still stale
         }
     }
 

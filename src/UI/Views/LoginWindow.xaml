@@ -97,6 +97,7 @@
                                    FontSize="40"
                                    Margin="0,0,0,8" />
                         <Button x:Name="btnGitHubAuth"
+                                Command="{Binding AuthCommand}"
                                 Cursor="Hand"
                                 ToolTip="Sign in with GitHub"
                                 Style="{DynamicResource circleImageButton}"
@@ -139,6 +140,7 @@
                                 Padding="0"
                                 Opacity="0.65">
                             <TextBox x:Name="Output"
+                                     Text="{Binding OutputText, Mode=OneWay}"
                                      TextWrapping="Wrap"
                                      TextAlignment="Center"
                                      AcceptsReturn="True"

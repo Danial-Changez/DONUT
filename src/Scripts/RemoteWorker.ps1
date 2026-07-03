@@ -5,9 +5,9 @@
 .DESCRIPTION
     Invoked on the runspace pool for each queued AsyncJob. Rebuilds the AppConfig
     — preferring the live in-memory Settings passed from the UI, else config.json,
-    else defaults — and hands off to ExecutionService.StartWorker, which asserts
-    reachability on this pool thread and dispatches by job kind (scan / apply /
-    inventory / disk / resolve).
+    else defaults — and hands off to ExecutionService.StartWorker, which dispatches
+    by job kind (scan / apply / inventory / disk / resolve); each phase gates its
+    own transport (bounded RPC/SMB port probes) before touching the target.
 
 .PARAMETER HostName
     Target machine to operate on.

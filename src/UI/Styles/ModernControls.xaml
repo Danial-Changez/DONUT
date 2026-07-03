@@ -713,7 +713,9 @@
     </Style>
 
     <Style x:Key="DiskTreeItem" TargetType="{x:Type TreeViewItem}">
-        <Setter Property="IsExpanded" Value="True" />
+        <!-- Roots start expanded, deeper levels collapsed (keeps the panel compact).
+             Depth comes from the bound FolderNodeViewModel. -->
+        <Setter Property="IsExpanded" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -786,5 +788,10 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Depth}" Value="0">
+                <Setter Property="IsExpanded" Value="True" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 </ResourceDictionary>

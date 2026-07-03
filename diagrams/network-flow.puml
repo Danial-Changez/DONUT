@@ -1,0 +1,241 @@
+@startuml network-flow
+title DONUT — Remote operation network routing (resolve -> reconnect -> update -> settle)
+' Code-grounded trace. Method names map 1:1 to source so each step is navigable.
+' Legend:  green note = bug fixed/hardened   |   tan note = concurrency/modal caveat
+
+skinparam maxMessageSize 260
+skinparam sequenceMessageAlign left
+skinparam noteFontSize 11
+skinparam ParticipantPadding 8
+skinparam BoxPadding 10
+
+actor Operator as OP
+
+box "UI thread (WPF dispatcher + ~200ms pump)" #F4F4FF
+  participant "HomePresenter\n(+ AsyncJobPresenter.PumpJobs)" as P
+  participant "HostResolver\n(in-memory cache + latch)" as R
+end box
+
+box "Runspace pool (background threads)" #F4FFF4
+  participant "AsyncJob\n(PowerShell.BeginInvoke)" as J
+  participant "ExecutionService\n(RemoteWorker.ps1)" as W
+  participant "NetworkProbe\n(DNS / RPC-135 / SMB-445)" as N
+end box
+
+box "Target environment" #FFF7F0
+  participant "Domain Controller\n(AD + DNS)" as DC
+  participant "Target host\n(admin share + dcu-cli)" as H
+end box
+
+== Phase 0 — Warm (startup, once) ==
+P -> J : Resolve{Warm}  +  Resolve{WarmRunspace}
+J -> W : StartWorker -> RunResolvePhase
+W -> N : GetActiveDomainController()
+N -> DC : Get-ADDomainController + TestServerOnline
+W -> W : WarmRuntimeAssemblies()\n(cold-load DNS/CIM/TCP/LDAP off the UI thread)
+J --> P : CompleteResolve -> Resolver.SetActiveDc(dc)
+note over P,R #E8F5E9
+  Warm loads the heavy assemblies + the worker class graph into EVERY
+  pool runspace so no job ever cold-loads under the process-wide CLR
+  loader lock (which stalls the WPF dispatcher = UI freeze).
+  [FIXED] the pool is now PINNED (min = max): its idle cleanup
+  (15 min) only reaps runspaces above min, so previously all but one
+  warmed runspace died after 15 idle minutes - and the next
+  CONCURRENT job (e.g. storage scan mid DCU-scan) landed on a fresh
+  cold runspace and froze the UI. Pinned, the warm holds for life.
+end note
+
+== Phase 1 — Resolve a host (start-early, on select) ==
+OP -> P : select row  (SelectHost)
+P -> R : NeedsResolve(host)? (DC known, not in-flight, uncached OR stale)
+alt needs resolve
+  P -> R : MarkInFlight(host)
+  P -> J : Resolve{Host, Dc}
+  J -> W : RunResolvePhase(Host)
+  W -> N : ResolveWith(host, dc)   (DNS A-record via the DC)
+  N -> DC : Resolve-DnsName -Server dc
+  W -> N : IsRpcAvailable(ip)  (TCP 135, bounded 2s)
+  N -> H : connect 135
+  J --> P : CompleteResolve
+  alt job Failed (HadErrors, e.g. DNS/RPC errored)
+    P -> R : ClearInFlight(host)
+    note right of R #E8F5E9
+      [FIXED] a failed resolve now RELEASES the single-flight latch.
+      Previously it leaked -> NeedsResolve stuck false forever ->
+      host wedged on "Resolving ... - run again in a moment".
+    end note
+  else job Completed
+    P -> R : CacheVerdict(host, ip, online)  (stamps CheckedAt for the 5-min TTL)
+    P -> P : RenderReachability + GatherInventoryIfOnline (selected host only)
+  end
+end
+
+== Phase 2 — Inventory (select / double-click) ==
+P -> P : StartInventory(host)
+P -> R : IsHostOnline(host) + IsVerdictStale(host)
+alt Offline
+  P -> P : skip ("host is offline")
+else Unknown OR stale 'Online'
+  P -> P : PrefetchIp(host)  (re-verify off-thread; re-gather when the fresh verdict lands)
+  note right of P #E8F5E9
+    [FIXED] gather no longer trusts an aged-out 'Online' verdict
+    (IsHostOnline ignored the TTL) -> avoids opening the freeze-prone
+    connect against a host that has since gone offline.
+  end note
+else fresh Online
+  P -> J : Inventory
+  J -> W : RunInventoryPhase
+  W -> N : IsRpcAvailable(ip) (2s gate)
+  W -> H : New-CimSession (DCOM, -OperationTimeoutSec 15)  -> Win32_* fast path
+  note right of W #E8F5E9
+    [FIXED] both CIM opens (inventory + the identity name query) are
+    bounded by -OperationTimeoutSec 15 - a box that died after the RPC
+    gate fails in seconds, not DCOM's multi-minute defaults.
+  end note
+  W -> H : psexec probe fallback (if CIM empty/blocked)
+  note right of W #E8F5E9
+    [FIXED] the probe psexec (also used by the WizTree disk scan) now
+    has the -n 60 connect timeout and classifies exit codes by cause
+    (launch fault / transport drop / real failure) like the dcu-cli path.
+  end note
+  note right of W #E8F5E9
+    [FIXED] every psexec launch uses a per-job-family service name
+    (-r DonutDcu / DonutDisk / DonutProbe): concurrent sessions to the
+    SAME host used to share one PSEXESVC, and when the first finished
+    it deleted the service under the second - which then hung forever.
+    A worker WATCHDOG also kills the local psexec client past a per-job
+    deadline (scan 30m / apply 120m / probe 10m / disk 20m) -> typed
+    RemoteTimeoutException instead of a forever-Running job that blocks
+    the single-flight guard.
+  end note
+  J --> P : CompleteInventory -> Store.UpsertInventory -> card
+end
+
+== Phase 3 — Run (scan / apply), "from where left off" ==
+OP -> P : Run  (StartProcess, active command)
+P -> R : IsHostOnline(host) + IsVerdictStale(host)
+alt Offline
+  P -> P : skip + toast ("host is offline")
+else Unknown OR stale 'Online'
+  P -> R : PendingRuns[host] = queued ; PrefetchIp (re-verify off-thread)
+  R --> P : CompleteResolve (fresh verdict) -> auto-StartProcess / skip-with-toast / drop-with-reason
+  note right of P #E8F5E9
+    [FIXED] a missing OR aged-out 'Online' verdict is re-verified first
+    and the run is QUEUED - it starts automatically once the fresh
+    verdict lands. Offline -> skipped with a toast; failed resolve ->
+    dropped with a reason. Never queued silently, no second Run click.
+  end note
+else fresh Online
+  alt scan cached < 24h (RecentScanIsFresh)  — resume, don't rescan
+    P -> P : reuse scan -> ProceedWithApply (skips Phase-1 rescan)
+  else fresh scan needed
+    P -> J : UpdateScan
+    P -> J : Resolve{Name}  (StartVerifyName — parallel identity check, applyUpdates mode only)
+    J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
+    W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
+    W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
+    W -> H : live-tail scan.log while psexec runs -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
+    W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report;\nSMB-gated with a brief retry - warns + skips instead of hanging)
+    J --> P : Complete(UpdateScan)
+  end
+end
+
+== Phase 4 — Apply pipeline (ProceedWithApply) ==
+P -> R : IdentityVerdict(host)  (from the parallel Name check)
+alt Mismatch  (the IP now answers as a different machine)
+  P -> P : ABORT apply + InvalidateResolved (drop IP, re-resolve)
+else Match OR Unknown
+  note right of P #E8F5E9
+    [HARDENED] the dialog now STATES the verdict ("identity verified
+    as X" / "not verified yet - proceed with care"), and it is
+    RE-CHECKED after the dialog closes (the pump keeps draining the
+    parallel name-check while it's open) - a late Mismatch aborts
+    before the destructive step. 'Unknown' proceeds by design.
+  end note
+  P -> P : parse report -> driver match -> ShowConfirmation (MODAL, + identity line)
+  note over P #FFF6E5
+    Modal opens inside the pump. IsModalOpen() then DEFERS other jobs'
+    completions to a later non-modal tick (avoids stacked dialogs).
+  end note
+  OP -> P : confirm
+  P -> R : re-check IdentityVerdict  (late Mismatch -> ABORT + re-resolve)
+  P -> J : UpdateApply
+  J -> W : RunApplyPhase -> InvokePsExec
+  W -> N : FindDcuCli -> IsSmbAvailable(ip)
+  W -> H : clear apply.log over C$ (controller-side, + freshness baseline)
+  W -> H : psexec: clear again remotely ; dcu-cli /applyUpdates (-outputLog apply.log)
+  W -> H : live-tail apply.log while psexec runs -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
+  note right of W #E8F5E9
+    [FIXED] the log is cleared from the CONTROLLER before psexec starts -
+    the remote-side clear only runs if the remote command does. A leftover
+    that can't be deleted stamps a LastWriteTimeUtc baseline (target-vs-
+    target, skew-immune), so a stale log from a previous run can never
+    "confirm" a run that never happened.
+  end note
+end
+
+== Phase 5 — Reconnect / recover (psexec exit code) ==
+H --> W : psexec exit code
+alt exit < 0  (NTSTATUS, e.g. 0xC0000142)
+  W -> J : throw RemoteProcessStartException  (remote pwsh never ran)
+else transport code  (233 PIPE_NOT_CONNECTED / 64 NETNAME_DELETED / ...)
+  note right of W #E8F5E9
+    [FIXED] a network-driver install resets the NIC that psexec's own
+    SMB pipe rides over -> psexec loses the pipe though dcu-cli finished.
+  end note
+  W -> H : ReadDcuReturnCode: retry <=5x, each gated by IsSmbAvailable (2s)
+  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init;\nonly trusted if written AFTER the pre-run baseline)
+  W -> W : DcuLog.ParseReturnCode (last "return code: N")
+  alt N in {0,1,5}   -> treat as completed (1/5 = reboot)
+    W --> J : return N
+  else N is a real DCU error
+    W -> J : throw RemoteExecutionException(N, decoded)
+  else log unreadable / unfinished
+    W -> J : throw RemoteConnectionLostException  (amber "Unconfirmed"; re-scan)
+  end
+else normal exit N
+  alt N in {0,1,5}
+    note right of W #E8F5E9
+      [FIXED] classification: ONLY {0,1,5} are success/reboot.
+      2 (unknown err), 3 (not Dell), 4 (not admin), 6/7/8, 100+, 500+
+      are ERRORS — they were previously swallowed as success.
+    end note
+    W --> J : return N   (RunApplyPhase sets RebootRequired = NeedsReboot(N))
+  else error
+    W -> J : throw RemoteExecutionException(N, DcuLog.DescribeReturnCode(N))
+  end
+end
+
+== Phase 6 — Settle / persist / notify ==
+J --> P : OnJobCompleted(job)
+alt UpdateApply Completed
+  P -> P : CheckForManualReboot(job) -> reads result.RebootRequired -> ManualRebootQueue
+  note right of P #E8F5E9
+    [FIXED] reboot detection previously watched a flag file nothing
+    writes + regex-matched a hashtable -> a reboot-required apply
+    always showed green "Completed" and never toasted.
+  end note
+end
+alt job Failed
+  P -> R : InvalidateResolved (drop IP + PrefetchIp) — ready to reconnect/retry
+  P -> P : ShowError toast
+end
+P -> P : SettleHost -> Store.Upsert(status, updateCount, reboot)
+note over P #F0F0F0
+  Card state: Completed(green) / RebootRequired(yellow) /
+  ConnectionLost(amber "Unconfirmed") / Offline(grey) / Failed(red)
+end note
+P -> P : AfterPump -> FlushSave (coalesced 1 write/batch)
+note right of P #E8F5E9
+  [FIXED] reboot-required is announced ONCE, per host, at apply
+  completion (toast + yellow card); SettleHost consumes the queue
+  entry after persisting it. The redundant batch notice - which
+  double-toasted and only fired when the whole batch drained - is gone.
+end note
+
+legend right
+  |= colour |= meaning |
+  |<#E8F5E9> green | bug fixed / hardened (all audit hotspots resolved) |
+  |<#FFF6E5> tan   | concurrency / modal note |
+endlegend
+@enduml

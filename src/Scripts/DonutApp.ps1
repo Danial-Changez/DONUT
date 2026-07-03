@@ -57,7 +57,13 @@ try {
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
-    [RunspaceManager]::Initialize(1, $throttleLimit)
+    # min = max PINS every runspace: the pool's idle cleanup (CleanupInterval, 15 min)
+    # only disposes runspaces ABOVE the minimum, so with min=1 all but one warmed
+    # runspace died after 15 idle minutes - and the next CONCURRENT job (e.g. a storage
+    # scan during a DCU scan) landed on a fresh COLD runspace, whose class-graph load
+    # under the process-wide CLR loader lock froze the UI. Pinned, the startup warm
+    # (WarmPool) covers every runspace for the app's lifetime.
+    [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
 
     $logger.LogInfo("Loading resources.")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
@@ -68,37 +74,30 @@ try {
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
 
-    # Build the main window ONCE, guarded. This is handed to the update presenter as the
-    # "while login is up" work, so the window (XAML load + runspace-pool warm) is built
-    # DURING the interactive device-flow sign-in and can be shown the instant it - and any
-    # update prompt - finishes. When a valid token means no login is shown, we build it
-    # right after the update check instead (below). Same hashtable ref either way, so the
-    # guard makes it build exactly once.
-    $mainHolder = @{ Presenter = $null }
-    $buildMain = {
-        if ($null -eq $mainHolder.Presenter) {
-            try {
-                $mainHolder.Presenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
-                $logger.LogInfo("Main window preloaded.")
-            }
-            catch { $logger.LogException("Main window preload failed", $_) }
-        }
-    }.GetNewClosure()
+    # Build the main window (and warm the runspace pool) BEFORE showing login. No window is
+    # on screen yet, so the pool warm's brief synchronous block is just a normal launch
+    # delay - not a frozen login window (which is what happened when the build ran during
+    # the login modal). Login + any update prompt then run, and the already-built,
+    # already-warmed window is shown the instant they finish.
+    $mainPresenter = $null
+    try {
+        $mainPresenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
+        $logger.LogInfo("Main window preloaded (runspace pool warmed).")
+    }
+    catch {
+        $logger.LogException("Main window preload failed", $_)
+    }
 
     try {
-        # Sign-in (if needed) + update check / prompt, all before the main window shows.
-        # The main window preloads during the login wait via $buildMain.
-        $updatePresenter.CheckAndPrompt($buildMain)
+        # Sign-in (if needed) + update check / prompt, before the main window shows.
+        $updatePresenter.CheckAndPrompt()
     }
     catch {
         $logger.LogException("Update check failed", $_)
     }
 
-    # Ensure the window is built (e.g. a valid token meant no login ran the builder), then
-    # show the already-warmed window instantly.
-    & $buildMain
-    if ($null -ne $mainHolder.Presenter) {
-        $mainHolder.Presenter.Show()
+    if ($null -ne $mainPresenter) {
+        $mainPresenter.Show()
     }
     else {
         $logger.LogError("Main window could not be built.")

@@ -21,6 +21,8 @@ group Prefetch IP (background)
 end
 
 group Prefetch inventory (background, if stale)
+    Presenter -> Resolver: IsHostOnline + IsVerdictStale?
+    note right of Presenter: Only a FRESH 'Online' verdict gathers.\nOffline -> skipped; unknown/stale -> re-verified\noff-thread first (CompleteResolve re-gathers).
     Presenter -> Presenter: InventoryIsStale("PC-01")?
     Presenter -> Inv: PrepareInventory("PC-01")
     Inv --> Presenter: worker args (CIM probe script)
@@ -33,8 +35,8 @@ activate Inv
 Inv --> Presenter: MachineInventory (model, battery, disk, uptime)
 deactivate Inv
 Presenter -> Store: UpsertInventory("PC-01", inv)
-Presenter -> Presenter: PopulateDetailCards()
-note right of Presenter: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested).
+Presenter -> Presenter: PopulateDetailCards() -> HostViewModel.ApplyInventory()
+note right of Presenter: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested);\nthe overview/detail bind to SelectedMachine.*.
 
 == On demand ==
 User -> Presenter: Click "Storage scan"
@@ -49,7 +51,7 @@ activate Disk
 Disk --> Presenter: DiskUsageReport (ranked folders)
 deactivate Disk
 Presenter -> Store: UpsertDiskUsage("PC-01", report)
-Presenter -> Presenter: RenderBigFolders()
-note right of Presenter: DiskUsageTree.BuildNested() nests folders\nby path containment -> TreeView render.
+Presenter -> Presenter: HostViewModel.ApplyFolders(report)
+note right of Presenter: FolderNodeViewModel.FromReport() maps\nDiskUsageTree.BuildNested() to display nodes;\nthe TreeView binds SelectedMachine.Folders.
 deactivate Presenter
 @enduml

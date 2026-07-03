@@ -9,6 +9,7 @@
         ResizeMode="NoResize"
         Background="{x:Null}">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <!-- Window-scoped ScrollViewer template: the stock template fills the
              corner where the vertical and horizontal scrollbars meet with a
              SystemColors-painted Rectangle, which shows up as a white box at the
@@ -121,31 +122,32 @@
             </StackPanel>
             
             <!-- Header -->
-            <TextBlock x:Name="txtHeader"
-                       Grid.Row="1"
-                       Text="Header"
+            <TextBlock Grid.Row="1"
+                       Text="{Binding Title}"
+                       Visibility="{Binding HasTitle, Converter={StaticResource BoolToVis}}"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        FontSize="24"
                        FontWeight="Bold"
                        HorizontalAlignment="Center"
                        Margin="0,8,0,0" />
-            
+
             <!-- Subheader -->
-            <TextBlock x:Name="txtSubHeader"
-                       Grid.Row="2"
-                       Text="Subheader text goes here."
+            <TextBlock Grid.Row="2"
+                       Text="{Binding Message}"
+                       Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        FontSize="16"
                        FontWeight="Normal"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
                        Margin="8,8,8,8"
-                       TextWrapping="Wrap"
-                       Visibility="Collapsed" />
-            
+                       TextWrapping="Wrap" />
+
             <!-- List Content -->
             <ListBox Grid.Row="3"
                      x:Name="lstContent"
+                     ItemsSource="{Binding ListItems}"
+                     Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
                      FontSize="16"
                      Foreground="{DynamicResource TitleTextPrimary}"
                      BorderThickness="0"
@@ -154,27 +156,28 @@
                      Padding="24,0"
                      MaxHeight="120"
                      Margin="0,0,0,2"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     Visibility="Collapsed" />
-            
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
             <!-- Buttons -->
             <StackPanel Grid.Row="4"
                         Orientation="Horizontal"
                         HorizontalAlignment="Center"
                         Margin="0,0,0,15">
                 <Button x:Name="btnPrimary"
-                        Content="OK"
+                        Content="{Binding PrimaryText}"
+                        Command="{Binding PrimaryCommand}"
                         Width="120"
                         Height="48"
                         Margin="0,8,8,0"
                         Style="{DynamicResource ModernButton}" />
                 <Button x:Name="btnSecondary"
-                        Content="Cancel"
+                        Content="{Binding SecondaryText}"
+                        Command="{Binding SecondaryCommand}"
+                        Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVis}}"
                         Width="120"
                         Height="48"
                         Margin="8,8,0,0"
-                        Style="{DynamicResource ModernButton}"
-                        Visibility="Collapsed" />
+                        Style="{DynamicResource ModernButton}" />
             </StackPanel>
         </Grid>
     </Border>

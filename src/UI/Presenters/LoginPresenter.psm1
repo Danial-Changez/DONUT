@@ -1,9 +1,11 @@
 using namespace System.Windows
 using namespace System.Windows.Threading
+using namespace Donut.Mvvm
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\LogService.psm1'
 using module '..\..\Models\DeviceFlowDecision.psm1'
+using module '..\ViewModels\LoginViewModel.psm1'
 
 <#
 .SYNOPSIS
@@ -20,6 +22,7 @@ class LoginPresenter {
     [ResourceService]$Resources
     [LogService]$Logger
     [Window]$LoginWindow
+    [LoginViewModel]$LoginVm
     [DispatcherTimer]$PollTimer
     [string]$DeviceCode
     [int]$Interval
@@ -32,24 +35,20 @@ class LoginPresenter {
     }
 
     [bool] ShowLogin() {
-        return $this.ShowLogin($null)
-    }
-
-    # $duringLogin (optional) runs on this window's dispatcher at Background priority, so
-    # it executes DURING the modal login wait - the caller passes the main-window preload
-    # so it's ready to show the instant sign-in finishes.
-    [bool] ShowLogin([scriptblock]$duringLogin) {
         $this.LoginWindow = $this.LoadXaml('LoginWindow.xaml')
 
-        # Find Controls
-        $btnGitHubAuth = $this.LoginWindow.FindName('btnGitHubAuth')
+        # Content VM: the output panel binds OutputText; the GitHub button binds
+        # AuthCommand. Window chrome (close/minimize/drag) stays event-wired.
+        $this.LoginVm = [LoginViewModel]::new()
+        $presenter = $this
+        $auth = { param($p) $presenter.StartAuthFlow() }.GetNewClosure()
+        $this.LoginVm.AuthCommand = [RelayCommand]::new([System.Action[object]]$auth)
+        $this.LoginWindow.DataContext = $this.LoginVm
+
         $btnClose = $this.LoginWindow.FindName('btnClose')
         $btnMinimize = $this.LoginWindow.FindName('btnMinimize')
         $panelControlBar = $this.LoginWindow.FindName('panelControlBar')
 
-        # Events
-        $presenter = $this
-        if ($btnGitHubAuth) { $btnGitHubAuth.Add_Click({ $presenter.StartAuthFlow() }.GetNewClosure()) }
         if ($btnClose) { $btnClose.Add_Click({ $presenter.LoginWindow.Close() }.GetNewClosure()) }
         if ($btnMinimize) { $btnMinimize.Add_Click({ $presenter.LoginWindow.WindowState = 'Minimized' }.GetNewClosure()) }
         if ($panelControlBar) {
@@ -61,14 +60,6 @@ class LoginPresenter {
         $this.LoginSuccess = $false
 
         $this.LoadImages()
-
-        # Queue the "while login is up" work (e.g. preloading the main window). At
-        # Background priority it runs once the login window has rendered and the modal
-        # loop is idle, so it overlaps the user's sign-in instead of delaying it.
-        if ($null -ne $duringLogin) {
-            $this.LoginWindow.Dispatcher.BeginInvoke(
-                [System.Windows.Threading.DispatcherPriority]::Background, [Action]$duringLogin) | Out-Null
-        }
 
         $this.LoginWindow.ShowDialog() | Out-Null
         return $this.LoginSuccess
@@ -102,15 +93,16 @@ class LoginPresenter {
     }
 
     [void] StartAuthFlow() {
+        # Re-entry guard: a second click starts a FRESH device flow. Stop the old
+        # poll first, or it keeps polling a dead device code and its failure would
+        # overwrite the new flow's code display.
+        if ($this.PollTimer -and $this.PollTimer.IsEnabled) { $this.PollTimer.Stop() }
         try {
             $response = $this.Service.InitiateDeviceFlow()
             $this.DeviceCode = $response.device_code
             $this.Interval = $response.interval
 
-            $output = $this.LoginWindow.FindName('Output')
-            if ($output) {
-                $output.Text = "Please visit:`n$($response.verification_uri)`n`nAnd enter code:`n$($response.user_code)"
-            }
+            $this.LoginVm.SetOutput("Please visit:`n$($response.verification_uri)`n`nAnd enter code:`n$($response.user_code)")
 
             Start-Process $response.verification_uri
 
@@ -121,8 +113,7 @@ class LoginPresenter {
             $this.PollTimer.Start()
         }
         catch {
-            $output = $this.LoginWindow.FindName('Output')
-            if ($output) { $output.Text = "Error starting flow: $_" }
+            $this.LoginVm.SetOutput("Error starting flow: $_")
         }
     }
 
@@ -144,8 +135,7 @@ class LoginPresenter {
                 $this.PollTimer.Interval = $this.PollTimer.Interval.Add([TimeSpan]::FromSeconds(5))
             }
             ([PollOutcome]::Failed) {
-                $output = $this.LoginWindow.FindName('Output')
-                if ($output) { $output.Text = $decision.Message }
+                $this.LoginVm.SetOutput($decision.Message)
                 $this.PollTimer.Stop()
             }
         }

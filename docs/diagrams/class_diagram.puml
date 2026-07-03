@@ -2,8 +2,9 @@
 title DONUT — Class Structure
 skinparam classAttributeIconSize 0
 
-' Each layer carries its own muted tint so the four packages read at a glance:
-'   Models = blue · Core = green · Services = violet · UI = amber
+' Each layer carries its own muted tint so the packages read at a glance:
+'   Models = blue · Core = green · Services = violet · Presenters = amber
+'   ViewModels = brown · Donut.Mvvm (C# bases) = olive
 package "Donut.Models" #15233B {
     class AppConfig {
         +SourceRoot: string
@@ -63,6 +64,31 @@ package "Donut.Models" #15233B {
 
     class DcuProgress {
         +{static} ParsePercent(line): double
+        +{static} ScanStepCount: int
+        +{static} ParseScanStep(line): int
+        +{static} ScanStepLabel(step): string
+    }
+
+    class DcuLog {
+        +{static} ParseReturnCode(logText): Hashtable
+        +{static} IsSuccess(code): bool
+        +{static} NeedsReboot(code): bool
+        +{static} DescribeReturnCode(code): string
+    }
+
+    class RemoteOperationException {
+        +HostName: string
+        +Level: string
+        +Reason: RemoteFailureReason
+    }
+    class RemoteConnectionLostException extends RemoteOperationException {
+        +{static} IsConnectionLost(exitCode): bool
+    }
+    class RemoteTimeoutException extends RemoteOperationException {
+        +TimeoutMinutes: int
+    }
+    class RemoteFailure {
+        +{static} ReasonFromMessage(message): RemoteFailureReason
     }
 
     class ScanCacheDecision {
@@ -149,6 +175,7 @@ package "Donut.Models" #15233B {
     class RecentConnection {
         +Hostname: string
         +LastSeen: string
+        +LastTouched: string
         +LastStatus: string
         +LastJobType: string
         +UpdateCount: int
@@ -161,6 +188,7 @@ package "Donut.Models" #15233B {
     class RecentConnectionsStore {
         +{static} Cap: int
         +Upsert(host, status, jobType, count, reboot): void
+        +Touch(host): void
         +UpsertInventory(host, inv): void
         +UpsertDiskUsage(host, report): void
         +Remove(host): void
@@ -194,9 +222,13 @@ package "Donut.Core" #102A20 {
 
     class NetworkProbe {
         +ResolveHost(hostname): IPAddress
+        +ResolveWith(hostname, dc): IPAddress
+        +ResolveComputerName(ip): string
         +CheckReverseDNS(ip, expectedName): bool
         +IsRpcAvailable(hostname): bool
+        +IsSmbAvailable(hostname): bool
         +IsOnline(hostname): bool
+        +GetActiveDomainController(): string
     }
 
     class AsyncJob {
@@ -241,7 +273,7 @@ package "Donut.Services" #221634 {
         #Config: AppConfig
         #Probe: NetworkProbe
         #Logger: LogService
-        +{static} AssertHostReachable(probe, logger, host): string
+        +{static} Fail(logger, exception): RemoteOperationException
         #BuildWorkerArgs(host, jobType, options): Hashtable
     }
 
@@ -260,10 +292,15 @@ package "Donut.Services" #221634 {
     class HostResolver {
         +Ttl: timespan
         +NeedsResolve(host): bool
-        +PrepareResolve(host): Hashtable
-        +PrepareWarmRunspace(): Hashtable
-        +Record(host, ip, online): void
-        +CachedIp(host): string
+        +IsVerdictStale(host): bool
+        +IsHostOnline(host): string
+        +CacheVerdict(host, ip, online): void
+        +GetCachedIp(host): string
+        +MarkInFlight(host) / ClearInFlight(host): void
+        +Invalidate(host): void
+        +PrepareWarm() / PrepareWarmRunspace(): Hashtable
+        +PrepareResolve(host) / PrepareName(host): Hashtable
+        +IdentityVerdict(host): string
     }
 
     class InventoryService {
@@ -287,13 +324,18 @@ package "Donut.Services" #221634 {
     }
 
     class ExecutionService {
-        +{static} StartWorker(host, jobType, options, config, ...): Hashtable
+        +{static} StartWorker(host, jobType, options, resolvedIp, config, ...): Hashtable
         +RunResolvePhase(device, options): Hashtable
         +RunScanPhase(device): Hashtable
         +RunApplyPhase(device, options): Hashtable
         +RunInventoryPhase(device, options): Hashtable
         +RunDiskScanPhase(device, options): Hashtable
-        +CopyRemoteArtifacts(host, ip): Hashtable
+        +InvokePsExec(parameters): int
+        +InvokeRemotePwsh(target, script, serviceName, maxMinutes): void
+        +ReadDcuReturnCode(ip, outputLog, baseline): Hashtable
+        -EmitNewDcuLogLines(remoteLog, seenChars): int
+        -ClearRemoteOutputLog(ip, outputLog): object
+        +CopyRemoteArtifacts(host): Hashtable
     }
 
     class DriverMatchingService {
@@ -372,7 +414,7 @@ package "Donut.UI.Presenters" #2B1A12 {
         +ProceedWithApply(host): bool
         +StartInventory(host, force): void
         +FindBigFolders(host): void
-        +RenderBigFolders(report): void
+        +PrefetchIp(host) / CompleteResolve(job): void
         +RunAdSearch(): void
         +WarmPool(): void
     }
@@ -397,22 +439,12 @@ package "Donut.UI.Presenters" #2B1A12 {
     class LoginPresenter {
         +ShowLogin(): bool
         -StartAuthFlow(): void
-        -OnPollTick(): void
+        -PollToken(): void
     }
 
     class UpdatePresenter {
         +CheckAndPrompt(): void
         -ShowUpdateWindow(release, localVer, remoteVer): void
-    }
-
-    class ConnectionRow {
-        +HostName: string
-        +RunAction: ScriptBlock
-        +SetIdleFrom(rc): void
-        +SetStatus(status): void
-        +SetPercent(percent): void
-        +SetReachability(state): void
-        +{static} IdleColorKey(lastStatus): string
     }
 
     class ToastService {
@@ -423,7 +455,105 @@ package "Donut.UI.Presenters" #2B1A12 {
     }
 }
 
+package "Donut.Mvvm (C#, src/Launcher)" #1F2A12 {
+    abstract class ObservableObject {
+        +Set(name, value): void
+        +Raise(name): void
+    }
+    class RelayCommand {
+        +Execute(parameter): void
+        +CanExecute(parameter): bool
+    }
+}
+
+package "Donut.UI.ViewModels" #3A2A12 {
+    class HomeViewModel {
+        +Machines: ObservableCollection<HostViewModel>
+        +SelectedMachine: HostViewModel
+        +SearchResults: ObservableCollection<object>
+        +SetSelected(vm): void
+    }
+
+    class HostViewModel {
+        +HostName / Subtitle / ChipText / StepText: string
+        +Percent: double
+        +ProgressVisible / ProgressIndeterminate: bool
+        +DotBrush / ChipForeground / ProgressBrush: Brush
+        +Ov* (overview facts): string
+        +Folders: FolderNodeViewModel[]
+        +RunCommand / GatherCommand: RelayCommand
+        +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
+        +ApplyInventory(inv) / ApplyFolders(report): void
+        +SetPercent(pct) / SetScanStep(text, pct): void
+        +SetReachability(state) / SetProbed(ip, iso): void
+    }
+
+    class FolderNodeViewModel {
+        +Label / SizeText / Path: string
+        +Depth: int
+        +IsRoot: bool
+        +Children: FolderNodeViewModel[]
+        +{static} FromReport(report): FolderNodeViewModel[]
+    }
+
+    class SearchRowViewModel {
+        +IsHeader / IsComputer / CanUnlock: bool
+        +Primary / Secondary / HeaderText: string
+        +PickCommand / UnlockCommand: RelayCommand
+        +{static} Header(text) / FromResult(r): SearchRowViewModel
+    }
+
+    class ToastViewModel {
+        +Title / Message: string
+        +Accent: Brush
+        +IsClosing: bool
+        +DismissCommand: RelayCommand
+    }
+
+    class DialogViewModel {
+        +Title / Message / ListItems
+        +PrimaryText / SecondaryText: string
+        +PrimaryCommand / SecondaryCommand: RelayCommand
+    }
+
+    class LogsViewModel {
+        +Tabs: ObservableCollection<LogTabViewModel>
+        +ClearCommand: RelayCommand
+    }
+    class LogTabViewModel {
+        +Header / Text / TruncationNote: string
+        +IsTruncated: bool
+        +LoadFullCommand: RelayCommand
+        +ShowFull(fullText): void
+    }
+
+    class ConfigViewModel {
+        +SaveCommand: RelayCommand
+    }
+    class LoginViewModel {
+        +OutputText: string
+        +AuthCommand: RelayCommand
+        +SetOutput(text): void
+    }
+    class MainViewModel {
+        +ActivePage: string
+        +IsRailCollapsed: bool
+        +NavigateCommand / ToggleRailCommand: RelayCommand
+        +Minimize/Maximize/CloseCommand: RelayCommand
+    }
+}
+
 ' --- inheritance ---------------------------------------------------------
+ObservableObject <|-- HomeViewModel
+ObservableObject <|-- HostViewModel
+ObservableObject <|-- ToastViewModel
+ObservableObject <|-- DialogViewModel
+ObservableObject <|-- LogsViewModel
+ObservableObject <|-- LogTabViewModel
+ObservableObject <|-- ConfigViewModel
+ObservableObject <|-- LoginViewModel
+ObservableObject <|-- MainViewModel
+
 RemoteJobService <|-- ScanService
 RemoteJobService <|-- RemoteUpdateService
 RemoteJobService <|-- HostResolver
@@ -445,7 +575,7 @@ HomePresenter --> HostResolver
 HomePresenter --> ActiveDirectoryService
 HomePresenter --> DialogPresenter
 HomePresenter --> RecentConnectionsStore
-HomePresenter --> ConnectionRow
+HomePresenter --> HomeViewModel
 HomePresenter --> ToastService
 HomePresenter --> HostListSource
 HomePresenter --> AsyncJob
@@ -477,9 +607,25 @@ HomePresenter ..> SystemInfoService
 
 FleetStatus ..> FleetState
 ScanCacheDecision ..> RecentConnection
-ConnectionRow ..> FleetStatus
-ConnectionRow ..> RecentConnection
-ConnectionRow ..> TimeFormat
+HomeViewModel --> HostViewModel
+HostViewModel ..> FleetStatus
+HostViewModel ..> RecentConnection
+HostViewModel ..> TimeFormat
+HostViewModel ..> InventoryFormat
+HostViewModel --> FolderNodeViewModel
+FolderNodeViewModel ..> DiskUsageTree
+HomePresenter ..> SearchRowViewModel
+MainPresenter --> MainViewModel
+ToastService --> ToastViewModel
+DialogPresenter --> DialogViewModel
+LogsPresenter --> LogsViewModel
+LogsViewModel --> LogTabViewModel
+LoginPresenter --> LoginViewModel
+ConfigPresenter --> ConfigViewModel
+ExecutionService ..> DcuLog
+ExecutionService ..> RemoteConnectionLostException
+ExecutionService ..> RemoteTimeoutException
+HomePresenter ..> RemoteFailure
 
 RecentConnectionsStore --> RecentConnection
 RecentConnection --> MachineInventory

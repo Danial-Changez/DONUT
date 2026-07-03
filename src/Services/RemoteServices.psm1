@@ -9,12 +9,13 @@ using module ".\DriverMatchingService.psm1"
     Base class + concrete services for preparing remote host operations.
 
 .DESCRIPTION
-    RemoteJobService is the shared base: it owns the connectivity policy
-    (AssertHostReachable: IsOnline -> ResolveHost -> IsRpcAvailable) and builds the
-    RemoteWorker.ps1 argument hashtable. ScanService prepares a DCU scan;
-    RemoteUpdateService prepares an update scan/apply and parses + counts the
-    resulting update report. The subclasses only PREPARE and PARSE off the UI
-    thread — the worker does the network I/O.
+    RemoteJobService is the shared base: it builds the RemoteWorker.ps1 argument
+    hashtable (BuildWorkerArgs) and owns the log-then-throw policy for typed
+    remote failures (Fail). ScanService prepares a DCU scan; RemoteUpdateService
+    prepares an update scan/apply and parses + counts the resulting update
+    report. The subclasses only PREPARE and PARSE off the UI thread — the worker
+    does the network I/O, gating each phase's transport itself (bounded RPC/SMB
+    port probes).
 
 .NOTES
     InventoryService, DiskUsageService and HostResolver also subclass
@@ -36,29 +37,6 @@ class RemoteJobService {
         $this.Config = $config
         $this.Probe = $probe
         $this.Logger = [LogService]::Coalesce($logger)
-    }
-
-    # Shared connectivity policy: IsOnline -> ResolveHost -> IsRpcAvailable,
-    # logging and throwing on the first failure. Returns the resolved IP (as a
-    # string) so callers can record it. Static so collaborators that hold a
-    # NetworkProbe + LogService (ExecutionService) can reuse the exact policy
-    # without duplicating it.
-    static [string] AssertHostReachable([NetworkProbe]$probe, [LogService]$logger, [string]$hostName) {
-        if (-not $probe.IsOnline($hostName)) {
-            throw [RemoteJobService]::Fail($logger, [HostOfflineException]::new($hostName))
-        }
-
-        $ip = $probe.ResolveHost($hostName)
-        if (-not $ip) {
-            throw [RemoteJobService]::Fail($logger, [HostUnresolvableException]::new($hostName))
-        }
-
-        if (-not $probe.IsRpcAvailable($hostName)) {
-            throw [RemoteJobService]::Fail($logger, [RpcUnavailableException]::new($hostName))
-        }
-
-        $logger.LogDebug("Host '$hostName' passed connectivity checks ($ip).")
-        return $ip.ToString()
     }
 
     # Logs a typed failure at its carried severity and returns it for the caller to

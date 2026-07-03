@@ -11,6 +11,13 @@
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot
+    # Cross-INSTANCE write lock. A per-instance Monitor (SyncRoot) cannot serialize the
+    # real contention: every worker runspace constructs its OWN LogService over the same
+    # Donut.log (StartWorker), so with concurrent jobs two instances would collide inside
+    # Add-Content (exclusive append handle) and silently LOSE lines - exactly when the
+    # log matters most. A named mutex is a kernel object shared by every instance (and
+    # runspace) in the session, keyed by the file path so different files don't contend.
+    hidden [System.Threading.Mutex] $FileMutex
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
     # Does not bind a file path; WriteLog must be overridden by the derived type.
@@ -24,6 +31,10 @@ class LogService {
         }
         $this.LogFilePath = Join-Path $logDirectory "Donut.log"
         $this.SyncRoot = [System.Object]::new()
+        $hash = [System.BitConverter]::ToString(
+            [System.Security.Cryptography.SHA1]::HashData(
+                [System.Text.Encoding]::UTF8.GetBytes($this.LogFilePath.ToLowerInvariant()))).Replace('-', '').Substring(0, 16)
+        $this.FileMutex = [System.Threading.Mutex]::new($false, "Local\DonutLog-$hash")
     }
 
     # Returns the supplied logger, or a NullLogService no-op when it is $null.
@@ -77,27 +88,30 @@ class LogService {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$level] $message"
 
-        # Simple thread safety for file write
-        [System.Threading.Monitor]::Enter($this.SyncRoot)
+        # Serialize against every other LogService instance writing this file (workers
+        # construct their own). BOUNDED wait so logging can never hang a thread: on a
+        # timeout, write anyway (worst case is the old best-effort behaviour). An
+        # abandoned mutex (a runspace died holding it) still grants ownership - proceed.
+        $owned = $false
+        if ($null -ne $this.FileMutex) {
+            try { $owned = $this.FileMutex.WaitOne(2000) }
+            catch [System.Threading.AbandonedMutexException] { $owned = $true }
+        }
         try {
-            Add-Content -Path $this.LogFilePath -Value $logEntry
+            Add-Content -Path $this.LogFilePath -Value $logEntry -ErrorAction SilentlyContinue
         }
         finally {
-            [System.Threading.Monitor]::Exit($this.SyncRoot)
+            if ($owned) { $this.FileMutex.ReleaseMutex() }
         }
     }
 
     [string[]] GetRecentLogs([int]$count) {
-        [System.Threading.Monitor]::Enter($this.SyncRoot)
-        try {
-            if (Test-Path $this.LogFilePath) {
-                return Get-Content -Path $this.LogFilePath -Tail $count
-            }
-            return @()
+        # Reads open the file shared; no need to hold the write mutex (a torn tail line
+        # in a live view is acceptable, a blocked reader is not).
+        if (Test-Path $this.LogFilePath) {
+            return Get-Content -Path $this.LogFilePath -Tail $count
         }
-        finally {
-            [System.Threading.Monitor]::Exit($this.SyncRoot)
-        }
+        return @()
     }
 }
 

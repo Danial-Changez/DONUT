@@ -55,6 +55,7 @@
             <Button x:Name="btnSaveConfig"
                     Grid.Row="3"
                     Content="Save Config"
+                    Command="{Binding SaveCommand}"
                     Style="{DynamicResource ModernButton}"
                     HorizontalAlignment="Center"
                     Margin="0,0,0,15" />

@@ -32,24 +32,16 @@ class UpdatePresenter {
     # Main Entry Point
     # -------------------------------------------------------------------------
 
+    # Runs sign-in (if needed) + the update check/prompt. Called after the main window is
+    # already built + pool-warmed (see DonutApp), so it only gates showing it.
     [void] CheckAndPrompt() {
-        $this.CheckAndPrompt($null)
-    }
-
-    # Runs sign-in (if needed) + the update check/prompt before the main window shows.
-    # $duringLogin is optional work to run WHILE the (interactive) device-flow login is
-    # up - the caller passes the main-window preload so it's built during the login wait
-    # and can be shown instantly afterwards. When no login is needed, $duringLogin is not
-    # run here (the caller runs it after this returns).
-    [void] CheckAndPrompt([scriptblock]$duringLogin) {
         $localVer = $this.Service.GetLocalVersion()
         $token = $this.Service.GetStoredToken()
 
-        # If no token, prompt for login - preloading the main window while the user
-        # completes the device flow.
+        # If no token, prompt for login.
         if ([string]::IsNullOrEmpty($token)) {
             $loginPresenter = [LoginPresenter]::new($this.Service, $this.Resources)
-            if (-not $loginPresenter.ShowLogin($duringLogin)) {
+            if (-not $loginPresenter.ShowLogin()) {
                 $this.Logger.LogInfo("Login cancelled or failed.")
                 return
             }

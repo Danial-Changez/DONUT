@@ -1,21 +1,22 @@
-using namespace System.Windows.Controls
+using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
+using module "..\ViewModels\LogTabViewModel.psm1"
+using module "..\ViewModels\LogsViewModel.psm1"
 
 <#
 .SYNOPSIS
-    Drives the Logs page: loads per-host log files into tabs and clears them.
+    Coordinator for the Logs page: file I/O behind a bound LogsViewModel.
 
 .DESCRIPTION
-    Reads the log files under %LOCALAPPDATA%\DONUT\logs into a tab each (plus a
-    Default tab) and clears them on request. Large files are tail-loaded (the last
-    TailBytes) with a "Load full file" button, so opening the tab never blocks on
-    reading a multi-MB log into a TextBox.
+    Reads the log files under the logs directory into LogTabViewModels (the TabControl
+    renders them via templates) and clears them on request. Large files are tail-loaded
+    (the last TailBytes) with a "Load full file" command, so opening the tab never
+    blocks on reading a multi-MB log into a TextBox.
 #>
 class LogsPresenter {
     [AppConfig] $Config
     [System.Windows.FrameworkElement] $ViewContent
-    [TabControl] $LogsTabControl
-    [Button] $ClearLogsButton
+    [LogsViewModel] $LogsVm
 
     # Files larger than this are tail-loaded (the last TailBytes) with a "Load full"
     # affordance, instead of reading the whole file into the TextBox up front.
@@ -29,121 +30,57 @@ class LogsPresenter {
     }
 
     [void] Initialize() {
-        $this.LogsTabControl = $this.ViewContent.FindName('LogsTabControl')
-        $this.ClearLogsButton = $this.ViewContent.FindName('btnClearLogs')
-
+        $this.LogsVm = [LogsViewModel]::new()
         $presenter = $this
-        if ($this.ClearLogsButton) {
-            $this.ClearLogsButton.Add_Click({ $presenter.ClearLogs() }.GetNewClosure())
-        }
+        $clear = { param($p) $presenter.ClearLogs() }.GetNewClosure()
+        $this.LogsVm.ClearCommand = [RelayCommand]::new([System.Action[object]]$clear)
+        $this.ViewContent.DataContext = $this.LogsVm
 
         $this.LoadLogs()
     }
 
+    # Repopulates the tab collection from the logs directory (newest file first).
     [void] LoadLogs() {
-        if (-not $this.LogsTabControl) { return }
-
-        $this.LogsTabControl.Items.Clear()
+        $this.LogsVm.Tabs.Clear()
 
         $logsDir = $this.Config.LogsPath
-        if (-not (Test-Path $logsDir)) {
-            $this.AddTab("No logs found", "No log files found.")
-            return
+        $logFiles = @()
+        if (Test-Path $logsDir) {
+            $logFiles = @(Get-ChildItem -Path $logsDir -File | Sort-Object LastWriteTime -Descending)
         }
 
-        $logFiles = @(Get-ChildItem -Path $logsDir -File | Sort-Object LastWriteTime -Descending)
-
         if ($logFiles.Count -eq 0) {
-            $this.AddTab("No logs found", "No log files found.")
+            $this.LogsVm.Tabs.Add([LogTabViewModel]::new('No logs found', 'No log files found.'))
             return
         }
 
         foreach ($file in $logFiles) {
             try {
-                $this.AddFileTab($file)
+                $this.LogsVm.Tabs.Add($this.BuildFileTab($file))
             } catch {
-                $this.AddTab($file.BaseName, "Error reading file: $_")
+                $this.LogsVm.Tabs.Add([LogTabViewModel]::new($file.BaseName, "Error reading file: $_"))
             }
         }
     }
 
-    # Simple text tab (used for status messages like "No logs found.").
-    [void] AddTab([string]$header, [string]$content) {
-        $tab = [TabItem]::new()
-        $tab.Header = $header
-        $tab.Content = $this.NewLogTextBox($content)
-        $this.LogsTabControl.Items.Add($tab)
-    }
-
-    # File-backed tab: full content for small files; a tail + "Load full file" bar for
-    # large ones, so the Logs tab opens instantly regardless of log size.
-    hidden [void] AddFileTab([System.IO.FileInfo]$file) {
-        $tab = [TabItem]::new()
-        $tab.Header = $file.BaseName
-        $path = $file.FullName
-
+    # Small files load whole; large ones start as a tail with a Load-full command that
+    # swaps in the complete text and hides the truncation bar.
+    hidden [LogTabViewModel] BuildFileTab([System.IO.FileInfo]$file) {
         if ($file.Length -le [LogsPresenter]::FullLoadThresholdBytes) {
-            $tab.Content = $this.NewLogTextBox($this.ReadFull($path))
-            $this.LogsTabControl.Items.Add($tab)
-            return
+            return [LogTabViewModel]::new($file.BaseName, $this.ReadFull($file.FullName))
         }
 
-        $tb = $this.NewLogTextBox($this.ReadTail($path, [LogsPresenter]::TailBytes))
-
-        $grid = [Grid]::new()
-        $r0 = [RowDefinition]::new(); $r0.Height = [System.Windows.GridLength]::Auto
-        $r1 = [RowDefinition]::new(); $r1.Height = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-        $grid.RowDefinitions.Add($r0); $grid.RowDefinitions.Add($r1)
-
-        $bar = [Border]::new()
-        $bar.Padding = [System.Windows.Thickness]::new(8, 4, 8, 6)
-        $panel = [StackPanel]::new()
-        $panel.Orientation = [System.Windows.Controls.Orientation]::Horizontal
-
-        $note = [TextBlock]::new()
+        $tab = [LogTabViewModel]::new($file.BaseName, $this.ReadTail($file.FullName, [LogsPresenter]::TailBytes))
+        $tab.IsTruncated = $true
         $sizeMb = [Math]::Round($file.Length / 1MB, 1)
-        $note.Text = "Showing the last $([int]([LogsPresenter]::TailBytes / 1KB)) KB of $sizeMb MB.  "
-        $note.Foreground = [System.Windows.Media.Brushes]::Gray
-        $note.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        [void]$panel.Children.Add($note)
+        $tab.TruncationNote = "Showing the last $([int]([LogsPresenter]::TailBytes / 1KB)) KB of $sizeMb MB."
 
-        $btn = [Button]::new()
-        $btn.Content = 'Load full file'
-        $btn.Padding = [System.Windows.Thickness]::new(8, 2, 8, 2)
-        $style = $this.LogsTabControl.TryFindResource('ButtonOutline')
-        if (-not $style) { $style = $this.LogsTabControl.TryFindResource('ModernButton') }
-        if ($style) { $btn.Style = $style }
-        [void]$panel.Children.Add($btn)
-
-        $bar.Child = $panel
-        [Grid]::SetRow($bar, 0)
-        [Grid]::SetRow($tb, 1)
-        [void]$grid.Children.Add($bar)
-        [void]$grid.Children.Add($tb)
-
-        # Load the whole file on demand, then hide the bar.
         $presenter = $this
-        $capturedPath = $path
-        $btn.Add_Click({
-            $tb.Text = $presenter.ReadFull($capturedPath)
-            $bar.Visibility = [System.Windows.Visibility]::Collapsed
-        }.GetNewClosure())
-
-        $tab.Content = $grid
-        $this.LogsTabControl.Items.Add($tab)
-    }
-
-    hidden [TextBox] NewLogTextBox([string]$content) {
-        $tb = [TextBox]::new()
-        $tb.Text = $content
-        $tb.IsReadOnly = $true
-        $tb.VerticalScrollBarVisibility = 'Auto'
-        $tb.HorizontalScrollBarVisibility = 'Auto'
-        $tb.FontFamily = [System.Windows.Media.FontFamily]::new('Consolas')
-        $tb.Background = [System.Windows.Media.Brushes]::Transparent
-        $tb.Foreground = [System.Windows.Media.Brushes]::White
-        $tb.BorderThickness = [System.Windows.Thickness]::new(0)
-        return $tb
+        $capturedPath = $file.FullName
+        $capturedTab = $tab
+        $load = { param($p) $capturedTab.ShowFull($presenter.ReadFull($capturedPath)) }.GetNewClosure()
+        $tab.LoadFullCommand = [RelayCommand]::new([System.Action[object]]$load)
+        return $tab
     }
 
     hidden [string] ReadFull([string]$path) {
