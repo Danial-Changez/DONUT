@@ -30,6 +30,7 @@ param(
     [Parameter(Mandatory)] [string] $Identity,
     [Parameter(Mandatory)] [string] $SiteServer,
     [Parameter(Mandatory)] [string] $SourceRoot,
+    [string] $Sam = '',
     [int] $TimeoutSec = 60
 )
 
@@ -37,4 +38,5 @@ $ErrorActionPreference = 'Stop'
 
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
+$svc.SamHint = $Sam
 $svc.RunLookupJson($Identity)

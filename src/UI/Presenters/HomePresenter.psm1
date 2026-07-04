@@ -888,8 +888,11 @@ class HomePresenter : AsyncJobPresenter {
             $ps.AddParameter('Identity', $identity) | Out-Null
             $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
             $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
+            # SAM hint: lets the child start the SCCM affinity query in parallel with
+            # its AD user read instead of waiting to resolve the SAM first.
+            $ps.AddParameter('Sam', [string]$r.SamAccountName) | Out-Null
             $handle = $ps.BeginInvoke()
-            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token; Key = $cacheKey; InfoSeen = 0 })
+            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token; Key = $cacheKey; InfoSeen = 0; StartedAt = [datetime]::UtcNow })
             $this.LensPollTimer.Start()
         }
         catch {
@@ -914,6 +917,8 @@ class HomePresenter : AsyncJobPresenter {
                     $job.InfoSeen = [int]$job.InfoSeen + 1
                     if ($rec.Tags -contains 'LensPartial') {
                         $this.LensVm.ApplyPartial([PersonLens]::FromJson([string]$rec.MessageData))
+                        # Partial 2 carries name-only device rows - make Add work on them.
+                        $this.WireLensDeviceCommands()
                     }
                 }
             }
@@ -928,6 +933,8 @@ class HomePresenter : AsyncJobPresenter {
             $lens = [PersonLens]::FromJson($json)
             $this.LensVm.Apply($lens)
             $this.WireLensDeviceCommands()
+            $lensMs = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            $this.Logger.LogInfo("Lens lookup for '$($job.Key)' completed in ${lensMs}ms ($($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)).")
 
             # Cache clean results (memory only; see LensCache) for instant TTL re-picks.
             if ($lens.Errors.Count -eq 0 -and $job.Key) {
