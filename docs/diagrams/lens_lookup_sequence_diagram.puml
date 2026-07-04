@@ -1,53 +1,61 @@
 @startuml Lens Lookup Sequence Diagram
-title User Lens — pick a person, see their devices (de-elevated)
+title User Lens — persistent de-elevated agent (pick a person, see their devices)
 
 actor Operator as OP
 participant "HomePresenter\n(coordinator)" as P
 participant "PersonLensViewModel\n(detail pane)" as VM
 participant "LensLookupWorker.ps1\n(pool, as admin)" as PW
 participant "Scheduled Task\n(interactive user, Limited)" as TASK
-participant "LensWorker.ps1\n(as the regular user)" as LW
+participant "LensAgent.ps1\n(persistent, regular user)" as AG
 participant "AD (Global Catalog)\n+ home domains" as AD
 participant "SCCM AdminService\n(REST)" as SCCM
+
+== App startup: warm the agent (parallel with DONUT boot) ==
+P -> PW : BeginInvoke(-WarmOnly)  on the runspace pool
+activate PW
+note right of PW
+  DONUT runs elevated as the admin account, which cannot read SCCM/BitLocker.
+  So the lookup must run as the interactive (regular) user - once, persistently.
+end note
+PW -> PW : EnsureAgent (mutex): find the interactive user,\nlock the %ProgramData%\\DONUT\\lens-agent ACL\n(SYSTEM / Administrators / interactive user),\nmint the session AES key (key.bin)
+PW -> TASK : register + start the task\n(conhost --headless so no console flashes)
+activate TASK
+TASK -> AG : run LensAgent.ps1 -ExchangeDir -ParentPid -SiteServer
+deactivate TASK
+activate AG
+AG -> AG : write heartbeat, then pre-warm\n(GC bind, ThreadJob, AdminService TLS/Kerberos)
+PW --> P : '' (agent ready) — reaped on first pick
+deactivate PW
+note over AG : agent now idle, beating every ~2s,\nexits when ParentPid dies / stop.flag appears
 
 == Pick a user in the AD finder ==
 OP -> P : click a USER row  (OnPickUser)
 activate P
-P -> VM : SetLoading(displayName)
-P -> VM : HomeVm.SetPerson(vm)  -> DetailMode = 'Person'
-note right of VM : detail pane switches to the Lens (loading)
-P -> PW : BeginInvoke(Identity, SiteServer, SourceRoot)  on the runspace pool
+P -> VM : SetLoading(displayName); DetailMode = 'Person'
+P -> PW : BeginInvoke(Identity, Sam, SiteServer)  on the pool
 deactivate P
-
-== De-elevate to the logged-on user ==
 activate PW
-note right of PW
-  DONUT runs elevated as the admin account, which cannot read SCCM/BitLocker.
-  So the lookup must run as the interactive (regular) user.
-end note
-PW -> PW : find the interactive user (explorer owner)\n+ lock the %ProgramData%\\DONUT\\lens-<guid> exchange dir's ACL\n(SYSTEM / Administrators / interactive user only)\n+ write a per-lookup AES key (key.bin)
-PW -> TASK : register + start a one-shot task\n(LogonType Interactive = logged-on token, no password; RunLevel Limited)
-activate TASK
-TASK -> LW : run LensWorker.ps1 -Identity -SiteServer -ResultPath -Sam
-deactivate TASK
-activate LW
+PW -> PW : EnsureAgent (already warm -> no-op)
+PW -> AG : write request-<id>.bin (AES, atomic)
+activate AG
 
 == Gather (as the regular user) ==
-LW ->> SCCM : affinity on a THREAD JOB at t=0 (the -Sam hint):\nendswith(UniqueUserName,'<SAM>') - the ONLY SCCM call\n(the /wmi route 404s richer filters)
-LW -> AD : GC-locate the user (forest-wide) -> bind home domain\n(runs in parallel with the affinity job)
-AD --> LW : UPN / SAM / email / manager / office
-LW -> LW : write partial-1.bin (directory facts,\nAES-encrypted, atomic tmp+rename)
-SCCM --> LW : ResourceName(s)  (exact-tail filtered)
-LW -> LW : write partial-2.bin (name-only device rows)
+AG ->> SCCM : affinity on a THREAD JOB at t=0 (the Sam hint):\nendswith(UniqueUserName,'<SAM>') - the ONLY SCCM call\n(the /wmi route 404s richer filters)
+AG -> AD : GC-locate the user (forest-wide) -> bind home domain\n(parallel with the affinity job)
+AD --> AG : UPN / SAM / email / manager / office
+AG -> AG : write partial-<id>-1.bin (directory facts)
+SCCM --> AG : ResourceName(s)  (exact-tail filtered)
+AG -> AG : write partial-<id>-2.bin (name-only device rows)
 loop each WSID
-  LW -> AD : GC-locate the computer -> OS + lastLogonTimestamp\n+ msFVE-RecoveryInformation (BitLocker)
+  AG -> AD : GC-locate the computer -> OS + lastLogonTimestamp\n+ msFVE-RecoveryInformation (BitLocker)
 end
-LW -> LW : write result.bin (AES-encrypted, atomic)
-deactivate LW
+AG -> AG : write result-<id>.bin (AES, atomic)
+deactivate AG
+note over AG : stays alive for the next pick
 
 == Return + render ==
-PW -> P : partials (100ms poll): decrypt partial-N.bin ->\nInformation stream 'LensPartial' -> ApplyPartial\n(person info, then device names, while details load)
-PW -> PW : decrypt result.bin\nunregister the task + delete the exchange dir
+PW -> P : partials (100ms poll): decrypt partial-<id>-N.bin ->\nInformation stream 'LensPartial' -> ApplyPartial\n(person info, then device names, while details load)
+PW -> PW : decrypt result-<id>.bin, delete this lookup's files
 PW --> P : JSON bundle
 deactivate PW
 activate P
@@ -56,7 +64,6 @@ P -> VM : Apply(lens)  (person fields + LensDeviceViewModels)
 P -> VM : wire each device's Reveal / Add command
 P -> P : cache the bundle in memory (15-min TTL;\nre-picks render instantly, dies with the app)
 deactivate P
-VM -> OP : Lens shows info + devices (BitLocker hidden until Reveal)
 
 == Act on a device ==
 OP -> VM : click "Add" on a device
@@ -65,4 +72,7 @@ activate P
 P -> P : EnsureRow + PrefetchIp + StartInventory + MoveRowToTop
 P -> OP : machine added to the list (toast); Lens stays open
 deactivate P
+
+== App close ==
+P -> AG : drop stop.flag; Stop/Unregister the task; purge lens-* dirs
 @enduml

@@ -22,7 +22,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
     [LensLookupWorker.ps1]
-    [LensWorker.ps1]
+    [LensAgent.ps1]
     [InstallWorker.ps1]
 }
 
@@ -118,9 +118,9 @@ database "%LOCALAPPDATA%\\DONUT" {
 [HomePresenter] ..> [DiskUsageService] : storage scan
 [HomePresenter] ..> [HostResolver] : prefetch IP
 [HomePresenter] ..> [ActiveDirectoryService] : live AD finder
-[HomePresenter] ..> [PersonLensViewModel] : user Lens (de-elevated lookup)
-[LensLookupWorker.ps1] ..> [PersonLensService] : de-elevates -> LensWorker
-[PersonLensService] ..> [LensWorker.ps1] : runs as the interactive user
+[HomePresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
+[LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
+[PersonLensService] ..> [LensAgent.ps1] : supervises (task) + request/response exchange
 [HomePresenter] ..> [AsyncJob] : queues
 [HomePresenter] ..> [RecentConnectionsStore] : persists
 [HomePresenter] ..> [ScanCacheDecision] : 24h reuse

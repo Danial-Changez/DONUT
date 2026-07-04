@@ -136,12 +136,14 @@ class HomePresenter : AsyncJobPresenter {
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
 
-    # User Lens: picking a user runs a de-elevated lookup (LensLookupWorker on the pool)
-    # and shows the result in the detail pane. Mirrors the search/unlock poll pattern.
+    # User Lens: picking a user runs a lookup over the persistent de-elevated agent
+    # (LensLookupWorker on the pool) and shows the result in the detail pane. Mirrors
+    # the search/unlock poll pattern.
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
+    [object]              $LensWarmJob      # startup agent warm-up @{ Ps; Handle }, reaped on first pick
     # Per-person result cache: identity -> @{ At; Json }. MEMORY ONLY (never written to
     # disk - it holds BitLocker keys), so it dies with the process.
     hidden [hashtable] $LensCache = @{}
@@ -320,6 +322,11 @@ class HomePresenter : AsyncJobPresenter {
         # per-forest binds are warm before the user types.
         $this.WarmAdSearch()
 
+        # Start the persistent de-elevated Lens agent now (fire-and-forget): as its own
+        # process it warms its AD/SCCM libraries in parallel with DONUT's startup, so even
+        # the first pick skips the task-registration + pwsh cold start.
+        $this.WarmLens()
+
         $this.StartWarm()
     }
 
@@ -410,6 +417,43 @@ class HomePresenter : AsyncJobPresenter {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
         foreach ($j in @($this.AdWarmJobs)) { try { $j.Ps.Dispose() } catch { } }
         $this.AdWarmJobs.Clear()
+    }
+
+    # Fire-and-forget: start the persistent de-elevated Lens agent on the pool (as admin),
+    # which registers the scheduled task and lets the agent pre-warm itself. Never blocks;
+    # the handle is reaped on the first pick (or at shutdown). Failures are logged when
+    # reaped, not here - a lookup would surface them anyway via EnsureAgent.
+    hidden [void] WarmLens() {
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            $ps.RunspacePool = [RunspaceManager]::GetPool()
+            $ps.AddCommand($worker) | Out-Null
+            $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
+            $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
+            $ps.AddParameter('WarmOnly', $true) | Out-Null
+            $handle = $ps.BeginInvoke()
+            $this.LensWarmJob = @{ Ps = $ps; Handle = $handle }
+        }
+        catch {
+            $this.Logger.LogException("Lens agent warm-up could not start", $_)
+        }
+    }
+
+    # Reap the startup agent warm job (logs its result: '' = started, else the reason).
+    hidden [void] ReapLensWarm() {
+        if ($null -eq $this.LensWarmJob) { return }
+        $job = $this.LensWarmJob
+        $this.LensWarmJob = $null
+        try {
+            if ($job.Handle.IsCompleted) {
+                $reason = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+                if ($reason) { $this.Logger.LogWarning("Lens agent warm-up: $reason") }
+                else { $this.Logger.LogInfo("Lens agent warmed and ready.") }
+            }
+            $job.Ps.Dispose()
+        }
+        catch { try { $job.Ps.Dispose() } catch { } }
     }
 
     # Resolve a host's IP in the background (single-flight). No-op until a DC is
@@ -859,6 +903,7 @@ class HomePresenter : AsyncJobPresenter {
         if ([string]::IsNullOrWhiteSpace($identity)) { return }
         $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName } else { $identity }
 
+        $this.ReapLensWarm()   # startup agent warm has served its purpose once a real pick runs
         $this.CloseSearchPopup()
         $this.LensVm.SetLoading($who)
         $this.HomeVm.SetPerson($this.LensVm)
@@ -980,12 +1025,18 @@ class HomePresenter : AsyncJobPresenter {
         $presenter = $this
         $w.Add_LocationChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
         $w.Add_SizeChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
-        # On close: persist any deferred recents, and purge every Lens exchange dir
-        # (they can hold encrypted BitLocker bundles - nothing may outlive the app).
+        # On close: persist any deferred recents, then stop the de-elevated Lens agent and
+        # purge every Lens exchange dir (they can hold encrypted BitLocker bundles - nothing
+        # may outlive the app). The agent also self-exits on its parent-PID watchdog; the
+        # stop.flag makes it quit immediately, and stop/unregister removes the task.
         $w.Add_Closing({
                 try { $presenter.Store.FlushSave() } catch { }
+                $lensRoot = Join-Path $env:ProgramData 'DONUT'
+                try { New-Item -ItemType File -Path (Join-Path $lensRoot 'lens-agent\stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
+                try { Stop-ScheduledTask -TaskName 'DONUT-LensAgent' -ErrorAction SilentlyContinue } catch { }
+                try { Unregister-ScheduledTask -TaskName 'DONUT-LensAgent' -Confirm:$false -ErrorAction SilentlyContinue } catch { }
                 try {
-                    Get-ChildItem -Path (Join-Path $env:ProgramData 'DONUT') -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
+                    Get-ChildItem -Path $lensRoot -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
                         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
                 } catch { }
             }.GetNewClosure())

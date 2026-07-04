@@ -292,46 +292,60 @@ RBAC-scoped to the regular account, not the admin one), and BitLocker recovery k
 **AD** under the computer object. Elevating does not grant the regular account's rights — a
 separate identity means a separate process.
 
-**Strategy — run the lookup de-elevated as the logged-on user:**
-- `LensLookupWorker.ps1` runs on the pool (as admin) and, via `PersonLensService.RunLookupJson`,
-  launches `LensWorker.ps1` as the **interactive user** using a one-shot **scheduled task**
-  (`LogonType Interactive` = the logged-on token, *no password*; `RunLevel Limited` =
-  medium integrity). `Shell.Application` was tried and rejected — it only de-elevates within
-  the *same* user, so it left the child in the admin context. The task action wraps pwsh in
-  `conhost.exe --headless`: a console app's window is created before `-WindowStyle Hidden`
-  can hide it, so an interactive-token task would otherwise flash a console on the desktop.
-- `LensWorker.ps1` (the de-elevated child) reads AD forest-wide via the **Global Catalog**
-  (`GC://…`, then binds each object's home domain) and SCCM via the **AdminService REST**
-  endpoint (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive), and writes the bundle to
-  a `%ProgramData%\DONUT\lens-<guid>` exchange folder shared with the elevated parent.
-- The parse (`PersonLens.FromJson`) is pure/tested; the de-elevation itself is the overridable
-  `RunLookupJson` seam. `HomePresenter` polls the pool job (like the AD search/unlock) and
-  populates the `PersonLensViewModel`. The `%5C` (backslash) gotcha in the SCCM query is
-  avoided by filtering on the forest-unique SAM (`endswith`) and exact-matching client-side.
+**Strategy — a persistent de-elevated agent:**
+- A single **`LensAgent.ps1`** runs de-elevated as the **interactive user** for the app's
+  whole lifetime, started via a **scheduled task** (`LogonType Interactive` = the logged-on
+  token, *no password*; `RunLevel Limited` = medium integrity; action wrapped in
+  `conhost.exe --headless` so no console window ever flashes). `Shell.Application` was
+  tried and rejected — it only de-elevates within the *same* user. `HomePresenter.WarmLens`
+  starts it on the pool at app startup (fire-and-forget, in parallel with the pool/AD
+  warm), so as its own process it pre-warms its AD/SCCM libraries while DONUT is still
+  booting — and even the **first** pick skips the per-lookup task registration + `pwsh`
+  cold start (~2–4 s) that the previous one-shot-task design paid every time.
+- `PersonLensService` is the agent's **supervisor + client**. `EnsureAgent` (mutex-guarded
+  so concurrent pool runspaces can't double-start) checks the agent's `heartbeat.txt` and
+  (re)registers the task if it's stale; `RunLookupJson` then drives one lookup over the
+  exchange. The agent self-exits when DONUT's process dies (a `-ParentPid` watchdog), when
+  a `stop.flag` appears, or when its heartbeat write fails (the dir was purged).
+- The agent reads AD forest-wide via the **Global Catalog** (`GC://…`, then binds each
+  object's home domain) and SCCM via the **AdminService REST** endpoint
+  (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive). The parse (`PersonLens.FromJson`)
+  is pure/tested; the agent/task I/O is the overridable `RunLookupJson` seam. The `%5C`
+  (backslash) gotcha in the SCCM query is avoided by filtering on the forest-unique SAM
+  (`endswith`) and exact-matching client-side.
+
+**The exchange protocol** (fixed `%ProgramData%\DONUT\lens-agent` dir): the parent drops
+`request-<id>.bin`; the agent answers `partial-<id>-1.bin` (directory facts),
+`partial-<id>-2.bin` (name-only device rows) and `result-<id>.bin`. Each side deletes what
+it consumed; the agent sweeps anything older than 10 minutes.
 
 **Securing the exchange (the bundle holds BitLocker recovery keys):**
 - The exchange folder's inherited ACL is **stripped** (ProgramData grants all local users
   read) down to SYSTEM / Administrators / the interactive user.
-- Every payload is **AES-256-CBC encrypted** with a per-lookup key (`key.bin`, 32-byte key +
-  16-byte IV, written by the parent; `PersonLensService.ProtectText`/`UnprotectText` are the
-  unit-tested twins of the child's inline encrypt). Nothing touches disk in the clear.
-- The folder is deleted in the lookup's `finally`; stale `lens-*` leftovers (crashed runs)
-  are swept before each lookup, and **all** are purged when the main window closes. The
-  per-person UI cache is **memory-only** (`HomePresenter.LensCache`, 15-min TTL), so it dies
-  with the process.
+- Every payload is **AES-256-CBC encrypted** with a **per-session key** minted when the
+  agent starts (`key.bin`, 32-byte key + 16-byte IV; `PersonLensService.ProtectText`/
+  `UnprotectText`/`WriteEncrypted` are the unit-tested twins of the agent's inline crypto).
+  Nothing touches disk in the clear. The ACL-locked dir is the real boundary; the key is
+  defense-in-depth.
+- On window close the parent drops `stop.flag`, **stops + unregisters** the task, and
+  deletes every `lens-*` dir; `EnsureAgent` also sweeps stale per-lookup dirs from older
+  builds. The per-person UI cache is **memory-only** (`HomePresenter.LensCache`, 15-min
+  TTL), so it dies with the process.
 
 **Keeping it fast:**
+- **The agent is already warm** — no task/`pwsh`/library cold start per pick, so a lookup
+  costs only query time (the exchange is a sub-millisecond file drop).
 - **One SCCM call total** — the affinity query (person → WSIDs). Everything per-device
-  (OS, `lastLogonTimestamp` as a coarse "last seen", BitLocker) is read from the
-  computer's AD object, which the worker GC-locates anyway. The AdminService `/wmi`
-  route's OData translator rejects richer filters (`or`, backslashes) with **404**, so
-  per-device SCCM detail queries were dropped rather than fought.
-- The affinity query runs on a **thread job in parallel** with the AD user read: the
-  finder row's SAM is passed down as a hint (`-Sam`), so the child doesn't wait for AD
-  to resolve it before asking SCCM.
-- The child writes **sequential partial bundles** which `RunLookupJson` streams to
-  `PollLens` on the Information stream (tag `LensPartial`): partial 1 = directory facts
-  (~1–2 s), partial 2 = name-only device rows the moment affinity answers; the per-device
+  (OS, `lastLogonTimestamp` as a coarse "last seen", BitLocker) is read from the computer's
+  AD object, which the agent GC-locates anyway. The AdminService `/wmi` route's OData
+  translator rejects richer filters (`or`, backslashes) with **404**, so per-device SCCM
+  detail queries were dropped rather than fought.
+- The affinity query runs on a **thread job in parallel** with the AD user read: the finder
+  row's SAM rides down as a hint (`-Sam`), so the agent doesn't wait for AD to resolve it
+  before asking SCCM.
+- The agent writes **sequential partial bundles** which `RunLookupJson` streams to
+  `PollLens` on the Information stream (tag `LensPartial`): partial 1 = directory facts,
+  partial 2 = name-only device rows the moment affinity answers; the per-device
   OS/last-logon/BitLocker reads fill in behind them in the final bundle.
 - Writes are atomic (`.tmp` + rename), the parent polls at 100 ms with no settle sleep, and
   the TTL cache makes re-picking the same person instant.

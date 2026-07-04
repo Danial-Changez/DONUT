@@ -5,7 +5,7 @@ using module "..\Core\TimeFormat.psm1"
     Pure DTOs for the user Lens: a person's directory facts + their SCCM devices.
 
 .DESCRIPTION
-    The bundle the de-elevated lens lookup returns (LensWorker -> JSON): the AD user
+    The bundle the de-elevated Lens agent returns (LensAgent -> JSON): the AD user
     fields (UPN, SAM, email, manager, office) and one LensDevice per SCCM primary-device,
     each carrying its OS, last domain logon, home domain, and BitLocker recovery keys
     (all read from the computer's AD object - SCCM only supplies the person->WSID
@@ -14,7 +14,7 @@ using module "..\Core\TimeFormat.psm1"
 
 .NOTES
     Transient (never cached in the recents store), so there is no ToHashtable round-trip -
-    only FromHashtable / FromJson for parsing the worker's output.
+    only FromHashtable / FromJson for parsing the agent's output.
 #>
 class LensBitLockerKey {
     [string] $Password = ''
