@@ -1,43 +1,44 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Proves Option A: from an ELEVATED (admin-account) context, drop down to the
-    interactive logged-in user and run the SCCM AdminService lookup as THAT user -
-    the split DONUT needs (psexec stays admin, the SCCM query runs as you).
+    Proves Option A end-to-end: from an ELEVATED (admin-account) context, drop to the
+    interactive user and, in that de-elevated child, find the AdminService query shape
+    that resolves a user to their WSID - the split DONUT needs (psexec stays admin, the
+    SCCM lookup runs as you).
 
 .DESCRIPTION
     Run this "as administrator" (entering your admin account, exactly as you launch
     DONUT). It then:
       1. Records the elevated parent identity (your admin account).
-      2. Finds the interactive user (the owner of explorer.exe = your regular account).
-      3. Spawns a HIDDEN child PowerShell as that interactive user via Shell.Application
-         ShellExecute - which routes through explorer (medium integrity), so the child
-         drops out of elevation and runs as you. No password, no token stored.
-      4. The child reports its own identity + integrity and calls the AdminService
-         (/wmi/SMS_UserMachineRelationship) with its own Kerberos ticket, writing the
-         result to a shared file the parent reads back.
+      2. Finds the interactive user (owner of explorer.exe = your regular account).
+      3. Spawns a HIDDEN child as that user via Shell.Application ShellExecute (routes
+         through explorer -> medium integrity), so the child drops out of elevation.
+      4. In the child, reports its identity + integrity AND tries several AdminService
+         /wmi/SMS_UserMachineRelationship query shapes, because a raw
+         "UniqueUserName eq 'DOMAIN\user'" filter 404s (the domain backslash encodes to
+         %5C, which IIS routing rejects). It tries the backslash filter, backslash-free
+         function filters (endswith / contains on the SAM), and a page-and-match
+         fallback, reporting which returns the mapping.
 
-    A PASS means: the child was NOT elevated, ran as the interactive user, AND the SCCM
-    call succeeded in that context - i.e. DONUT can stay elevated for psexec while a
-    de-elevated child does the ConfigMgr work. Everything is read-only.
+    PASS = the child was NOT elevated, ran as the interactive user, and at least one
+    query returned the user->WSID. That query is what DONUT will use. Read-only.
 
-    NOTE ON MECHANISM: this test uses Shell.Application (the simplest reliable
-    de-elevation). DONUT's shipped helper would use the CreateProcessWithTokenW token
-    API instead, for inline stdout capture - but the identity drop and SCCM access this
-    proves are identical.
+    MECHANISM NOTE: this uses Shell.Application (simplest reliable de-elevation). DONUT's
+    shipped helper will use the CreateProcessWithTokenW token API for inline stdout
+    capture - but the identity drop and SCCM access proven here are identical.
 
 .PARAMETER SiteServer
-    SMS Provider / AdminService host. Default 'sccm01.contoso.com'.
+    AdminService host. Default 'sccm01.contoso.com'.
 
 .PARAMETER UserName
-    Optional DOMAIN\user to resolve to a WSID in the child. Omitted = a top-1 read
-    (still proves the child can reach ConfigMgr).
+    DOMAIN\user to resolve (e.g. 'PRODUCTION\U0073097'). Without it, only the fallback
+    query runs (the filter-shape variants need a user to test).
 
 .PARAMETER TimeoutSec
-    How long the parent waits for the child's result file. Default 60.
+    How long the parent waits for the child's result. Default 60.
 
 .NOTES
-    Read-only. Run elevated (as your admin account) so there is something to de-elevate
+    Read-only. Run ELEVATED (as your admin account) so there is something to de-elevate
     FROM. The child runs hidden and silent.
 
 .EXAMPLE
@@ -57,22 +58,24 @@ function Warn([string]$m) { Write-Host "[WARN] $m" -ForegroundColor Yellow }
 function Fail([string]$m) { Write-Host "[FAIL] $m" -ForegroundColor Red }
 
 Write-Host ''
-Write-Host "De-elevation + SCCM test  -  AdminService on $SiteServer" -ForegroundColor White
+Write-Host "De-elevation + SCCM query test  -  AdminService on $SiteServer" -ForegroundColor White
 
 # --- 1. Parent identity + elevation -----------------------------------------------
-$me = [Security.Principal.WindowsIdentity]::GetCurrent()
-$parentUser = $me.Name
-$parentElevated = ([Security.Principal.WindowsPrincipal]$me).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-Info "Parent (this process): $parentUser  (elevated = $parentElevated)"
+$meId = [Security.Principal.WindowsIdentity]::GetCurrent()
+$parentElevated = ([Security.Principal.WindowsPrincipal]$meId).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+Info "Parent (this process): $($meId.Name)  (elevated = $parentElevated)"
 if (-not $parentElevated) {
-    Warn "This process is NOT elevated. The point is to de-elevate FROM an elevated context -"
-    Warn "re-run it 'as administrator' (entering your admin account, like you launch DONUT)."
+    Warn "This process is NOT elevated - the point is to de-elevate FROM an elevated context."
+    Warn "Re-run it 'as administrator' (entering your admin account, like you launch DONUT)."
+}
+if (-not $UserName) {
+    Warn "No -UserName given: only the fallback query runs. Pass -UserName 'DOMAIN\user' to test the filter shapes."
 }
 
 # --- 2. Interactive user (explorer owner) -----------------------------------------
 $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $explorer) {
-    Fail "No explorer.exe found - there is no interactive desktop session to de-elevate into (session 0?)."
+    Fail "No explorer.exe found - no interactive desktop session to de-elevate into (session 0?)."
     exit 1
 }
 $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner
@@ -80,8 +83,8 @@ $interactiveUser = "$($owner.Domain)\$($owner.User)"
 Info "Interactive user (de-elevation target): $interactiveUser"
 
 # --- 3. Shared exchange dir both accounts can read/write --------------------------
-# The admin parent's own %TEMP% lives under its profile, which the regular user can't
-# even traverse - so use a ProgramData subfolder and grant the interactive user rights.
+# The admin parent's %TEMP% is under its profile (the regular user can't traverse it),
+# so use a ProgramData subfolder and grant the interactive user rights on it.
 $dir = Join-Path $env:ProgramData ("DONUT\deelev-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 try {
@@ -99,9 +102,9 @@ $ok = $false
 
 try {
     # --- 4. Child script (runs as the interactive user) ---------------------------
-    # Single-quoted here-string: nothing is expanded by the parent. The child gets its
-    # values from param(); OData keywords are backtick-escaped so the CHILD sees literal
-    # $filter/$select/$top, while $base/$f/etc. are the child's own variables.
+    # Single-quoted here-string: the parent expands nothing. The child gets values from
+    # param(); OData keywords are backtick-escaped so the CHILD sees literal $filter/etc.,
+    # while ${base}/$sam/$Query are the child's own variables.
     $childBody = @'
 param([string]$ResultPath, [string]$SiteServer, [string]$UserName)
 if ($PSVersionTable.PSVersion.Major -lt 6) {
@@ -115,25 +118,53 @@ try {
     $o.Elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     $o.Integrity = ((whoami /groups) | Select-String 'Mandatory Level' | ForEach-Object { ($_.Line -split '\s{2,}')[0].Trim() }) -join '; '
 } catch { $o.IdentityError = $_.Exception.Message }
-try {
-    $base = "https://$SiteServer/AdminService"
-    if ($UserName) {
-        $f = [uri]::EscapeDataString("UniqueUserName eq '$UserName'")
-        $url = "$base/wmi/SMS_UserMachineRelationship?`$filter=$f&`$select=UniqueUserName,ResourceName"
-    } else {
-        $url = "$base/wmi/SMS_UserMachineRelationship?`$top=1"
+
+$base = "https://$SiteServer/AdminService/wmi/SMS_UserMachineRelationship"
+$sam = if ($UserName -match '\\') { $UserName.Split('\')[-1] } else { $UserName }
+
+function Invoke-AS([string]$Label, [string]$Query) {
+    $r = [ordered]@{ Label = $Label; Ok = $false; Status = 0; Result = '' }
+    try {
+        $p = @{ Uri = "${base}?$Query"; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        $resp = Invoke-RestMethod @p
+        $rows = @($resp.value)
+        $r.Ok = $true; $r.Status = 200
+        $r.Result = (($rows | ForEach-Object { "$($_.UniqueUserName)=$($_.ResourceName)" }) -join ', ')
+    } catch {
+        if ($_.Exception.Response) { $r.Status = [int]$_.Exception.Response.StatusCode }
+        $r.Result = $_.Exception.Message
     }
-    $p = @{ Uri = $url; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+    return [pscustomobject]$r
+}
+
+$variants = @()
+if ($UserName) {
+    $variants += Invoke-AS 'eq+backslash' ("`$filter=" + [uri]::EscapeDataString("UniqueUserName eq '$UserName'") + "&`$select=UniqueUserName,ResourceName")
+    $variants += Invoke-AS 'endswith'     ("`$filter=" + [uri]::EscapeDataString("endswith(UniqueUserName,'$sam')") + "&`$select=UniqueUserName,ResourceName")
+    $variants += Invoke-AS 'contains'     ("`$filter=" + [uri]::EscapeDataString("contains(UniqueUserName,'$sam')") + "&`$select=UniqueUserName,ResourceName")
+}
+
+# Guaranteed fallback: page server-side ($top is known to work), match client-side.
+$fb = [ordered]@{ Label = 'top+client'; Ok = $false; Status = 0; Result = '' }
+try {
+    $p = @{ Uri = "${base}?`$top=1000&`$select=UniqueUserName,ResourceName"; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     $resp = Invoke-RestMethod @p
-    $rows = @($resp.value)
-    $o.SccmOk = $true
-    $o.SccmCount = $rows.Count
-    $o.SccmRows = @($rows | ForEach-Object { [ordered]@{ User = $_.UniqueUserName; ResourceName = $_.ResourceName } })
+    $fb.Ok = $true; $fb.Status = 200
+    if ($sam) {
+        $hit = @($resp.value) | Where-Object { $_.UniqueUserName -like "*$sam" }
+        $fb.Result = (($hit | ForEach-Object { "$($_.UniqueUserName)=$($_.ResourceName)" }) -join ', ')
+    } else {
+        $fb.Result = "(page of $(@($resp.value).Count) rows; pass -UserName to match)"
+    }
 } catch {
-    $o.SccmOk = $false
-    $o.SccmError = $_.Exception.Message
+    if ($_.Exception.Response) { $fb.Status = [int]$_.Exception.Response.StatusCode }
+    $fb.Result = $_.Exception.Message
 }
+$variants += [pscustomobject]$fb
+
+$o.Variants = $variants
 $o.Finished = (Get-Date).ToString('o')
 $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UTF8
 '@
@@ -168,24 +199,26 @@ $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UT
     Write-Host '== Result ==' -ForegroundColor Cyan
     Info "Child ran as : $($res.User)  (elevated = $($res.Elevated))"
     Info "Child integ. : $($res.Integrity)"
-
     $deElevated = ($res.Elevated -eq $false)
-    if ($deElevated) {
-        Pass "De-elevation confirmed - the child is medium integrity, running as the interactive user."
-    } else {
-        Warn "Child came back ELEVATED - privileges were not dropped as expected."
+    if ($deElevated) { Pass "De-elevation confirmed - child is medium integrity, running as the interactive user." }
+    else { Warn "Child came back ELEVATED - privileges were not dropped as expected." }
+
+    Write-Host ''
+    Write-Host '== AdminService query shapes (tried inside the de-elevated child) ==' -ForegroundColor Cyan
+    $winner = $null
+    foreach ($v in $res.Variants) {
+        if ($v.Ok -and $v.Result -and $v.Result -notmatch '^\(page of') { $tag = 'PASS'; $col = 'Green'; if (-not $winner) { $winner = $v } }
+        elseif ($v.Ok) { $tag = 'EMPTY'; $col = 'Yellow' }
+        else { $tag = "FAIL $($v.Status)"; $col = 'Red' }
+        Write-Host ("  [{0,-7}] {1,-13} {2}" -f $tag, $v.Label, $v.Result) -ForegroundColor $col
     }
 
-    if ($res.SccmOk) {
-        if ($res.SccmCount -gt 0 -and $res.SccmRows) {
-            Pass "SCCM AdminService call succeeded as the de-elevated user:"
-            $res.SccmRows | ForEach-Object { Write-Host "         $($_.User)  ->  $($_.ResourceName)" }
-        } else {
-            Pass "SCCM AdminService call succeeded (query returned no rows)."
-        }
+    Write-Host ''
+    if ($winner) {
+        Pass "Working query for DONUT: '$($winner.Label)'  ->  $($winner.Result)"
         $ok = $deElevated
     } else {
-        Fail "SCCM call FAILED in the child: $($res.SccmError)"
+        Warn "No query returned the mapping - see the statuses above."
     }
 }
 finally {
