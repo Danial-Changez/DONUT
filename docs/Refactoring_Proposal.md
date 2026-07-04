@@ -237,7 +237,8 @@ build/wire the view-models (see [The MVVM migration](#the-mvvm-migration)).
 |-------|---------|
 | `MainPresenter` | Composition root: main window, lazy page construction, rail animation, shell command targets |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management; sets `HostViewModel` state per pump tick. Also drives the **user Lens**: picking a user runs the de-elevated lookup on the pool, populates the `PersonLensViewModel`, and switches the detail pane to Person mode |
+| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), job management; sets `HostViewModel` state per pump tick. Delegates the search-bar finder + Lens to `FinderPresenter` |
+| `FinderPresenter` | The search bar's live multi-forest AD finder (debounced per-forest fan-out + inline unlock) and the **user Lens** (agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via a duck-typed reference (a typed import would be a `using module` cycle) |
 | `ConfigPresenter` | Command selection, the data-driven option-form binder, args persistence |
 | `LogsPresenter` | Log file I/O (enumerate, tail-read, load-full, clear) behind `LogsViewModel` |
 | `LoginPresenter` | GitHub Device Flow: poll timer + modal lifecycle behind `LoginViewModel` |
@@ -298,7 +299,7 @@ separate identity means a separate process.
   whole lifetime, started via a **scheduled task** (`LogonType Interactive` = the logged-on
   token, *no password*; `RunLevel Limited` = medium integrity; action wrapped in
   `conhost.exe --headless` so no console window ever flashes). `Shell.Application` was
-  tried and rejected — it only de-elevates within the *same* user. `HomePresenter.WarmLens`
+  tried and rejected — it only de-elevates within the *same* user. `FinderPresenter.WarmLens`
   starts it on the pool at app startup (fire-and-forget, in parallel with the pool/AD
   warm), so as its own process it pre-warms its AD/SCCM libraries while DONUT is still
   booting — and even the **first** pick skips the per-lookup task registration + `pwsh`
@@ -332,7 +333,7 @@ it consumed; the agent sweeps anything older than 10 minutes.
   defense-in-depth.
 - On window close the parent drops `stop.flag`, **stops + unregisters** the task, and
   deletes every `lens-*` dir; `EnsureAgent` also sweeps stale per-lookup dirs from older
-  builds. The per-person UI cache is **memory-only** (`HomePresenter.LensCache`, 15-min
+  builds. The per-person UI cache is **memory-only** (`FinderPresenter.LensCache`, 15-min
   TTL), so it dies with the process.
 
 **Keeping it fast:**

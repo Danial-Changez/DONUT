@@ -428,8 +428,8 @@ package "Donut.UI.Presenters" #2B1A12 {
         -InventoryService: InventoryService
         -DiskUsageService: DiskUsageService
         -Resolver: HostResolver
-        -AdService: ActiveDirectoryService
         -Store: RecentConnectionsStore
+        -Finder: FinderPresenter
         -ScanCacheTtl: timespan
         +OnSearch(): void
         +RunAll(): void
@@ -440,8 +440,23 @@ package "Donut.UI.Presenters" #2B1A12 {
         +StartInventory(host, force): void
         +FindBigFolders(host): void
         +PrefetchIp(host) / CompleteResolve(job): void
-        +RunAdSearch(): void
+        +MoveRowToTop(host): void
         +WarmPool(): void
+    }
+
+    class FinderPresenter {
+        -AdService: ActiveDirectoryService
+        -LensVm: PersonLensViewModel
+        -LensCache: hashtable
+        -Home: object
+        +Initialize(): void
+        +WarmAdSearch() / WarmLens(): void
+        +RunAdSearch() / PollSearch(): void
+        +OnPickComputer(name): void
+        +OnUnlockUser(r) / PollUnlock(): void
+        +OnPickUser(r) / PollLens(): void
+        +OnAddDeviceToList(wsid): void
+        +OnAppClosing(): void
     }
 
     class ConfigPresenter {
@@ -611,12 +626,18 @@ HomePresenter --> RemoteUpdateService
 HomePresenter --> InventoryService
 HomePresenter --> DiskUsageService
 HomePresenter --> HostResolver
-HomePresenter --> ActiveDirectoryService
 HomePresenter --> DialogPresenter
 HomePresenter --> RecentConnectionsStore
 HomePresenter --> HomeViewModel
-HomePresenter --> PersonLensViewModel
-HomePresenter ..> PersonLens
+HomePresenter --> FinderPresenter
+FinderPresenter ..> HomePresenter : duck-typed back-ref
+FinderPresenter --> ActiveDirectoryService
+FinderPresenter --> PersonLensViewModel
+FinderPresenter --> HomeViewModel
+FinderPresenter --> DialogPresenter
+FinderPresenter --> ToastService
+FinderPresenter ..> PersonLens
+FinderPresenter ..> PersonLensService
 PersonLensService ..> PersonLens
 PersonLens --> LensDevice
 LensDevice --> LensBitLockerKey
@@ -660,7 +681,7 @@ HostViewModel ..> TimeFormat
 HostViewModel ..> InventoryFormat
 HostViewModel --> FolderNodeViewModel
 FolderNodeViewModel ..> DiskUsageTree
-HomePresenter ..> SearchRowViewModel
+FinderPresenter ..> SearchRowViewModel
 MainPresenter --> MainViewModel
 ToastService --> ToastViewModel
 DialogPresenter --> DialogViewModel

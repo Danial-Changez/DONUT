@@ -30,6 +30,7 @@ component "PowerShell Classes (src)" {
     package "Presenters (coordinators)" #2B1A12 {
         [MainPresenter]
         [HomePresenter]
+        [FinderPresenter]
         [ConfigPresenter]
         [LogsPresenter]
         [LoginPresenter]
@@ -117,8 +118,9 @@ database "%LOCALAPPDATA%\\DONUT" {
 [HomePresenter] ..> [InventoryService] : per-machine probe
 [HomePresenter] ..> [DiskUsageService] : storage scan
 [HomePresenter] ..> [HostResolver] : prefetch IP
-[HomePresenter] ..> [ActiveDirectoryService] : live AD finder
-[HomePresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
+[HomePresenter] ..> [FinderPresenter] : AD finder + user Lens
+[FinderPresenter] ..> [ActiveDirectoryService] : live AD finder
+[FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
 [LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
 [PersonLensService] ..> [LensAgent.ps1] : supervises (task) + request/response exchange
 [HomePresenter] ..> [AsyncJob] : queues
