@@ -148,11 +148,12 @@ class NetworkProbe {
 
     # --- Connectivity probes ---------------------------------------------------------
 
-    [bool] IsRpcAvailable([string]$hostName) {
-        # Test TCP port 135 (RPC Endpoint Mapper)
+    # Shared bounded (2s) TCP connect probe behind IsRpcAvailable/IsSmbAvailable. The two
+    # label params preserve each wrapper's exact log strings.
+    hidden [bool] IsPortOpen([string]$hostName, [int]$port, [string]$portDesc, [string]$checkLabel) {
         try {
             $client = [TcpClient]::new()
-            $result = $client.BeginConnect($hostName, 135, $null, $null)
+            $result = $client.BeginConnect($hostName, $port, $null, $null)
             $success = $result.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))
             if ($success) {
                 $client.EndConnect($result)
@@ -160,35 +161,24 @@ class NetworkProbe {
                 return $true
             }
             $client.Close()
-            $this.Logger.LogDebug("RPC endpoint mapper (port 135) not reachable on '$hostName'.")
+            $this.Logger.LogDebug("$portDesc (port $port) not reachable on '$hostName'.")
             return $false
         }
         catch {
-            $this.Logger.LogDebug("RPC availability check for '$hostName' failed: $($_.Exception.Message)")
+            $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)")
             return $false
         }
     }
 
+    # TCP 135 (RPC endpoint mapper) - what psexec/CIM need to connect.
+    [bool] IsRpcAvailable([string]$hostName) {
+        return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC')
+    }
+
+    # TCP 445 (SMB) = the admin share + psexec transport. An open 135 doesn't imply
+    # 445; when blocked, UNC ops hang with no timeout - so check it up front.
     [bool] IsSmbAvailable([string]$hostName) {
-        # TCP 445 (SMB) = the admin share + psexec transport. An open 135 doesn't imply
-        # 445; when blocked, UNC ops hang with no timeout - so check it up front.
-        try {
-            $client = [TcpClient]::new()
-            $result = $client.BeginConnect($hostName, 445, $null, $null)
-            $success = $result.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))
-            if ($success) {
-                $client.EndConnect($result)
-                $client.Close()
-                return $true
-            }
-            $client.Close()
-            $this.Logger.LogDebug("SMB (port 445) not reachable on '$hostName'.")
-            return $false
-        }
-        catch {
-            $this.Logger.LogDebug("SMB availability check for '$hostName' failed: $($_.Exception.Message)")
-            return $false
-        }
+        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
     }
 
     [bool] IsOnline([string]$hostName) {

@@ -85,6 +85,33 @@ class RecentConnectionsStore {
         $this.CacheValid = $false
     }
 
+    # The six-key "never run" entry shape shared by Touch/UpsertInventory/UpsertDiskUsage/SeedFrom.
+    hidden static [hashtable] NewBlankEntry([string]$name) {
+        return @{
+            hostname       = $name
+            lastSeen       = ''
+            lastStatus     = ''
+            lastJobType    = ''
+            updateCount    = 0
+            rebootRequired = $false
+        }
+    }
+
+    # Finds the raw stored entry by hostname (case-insensitive), or $null when untracked.
+    hidden [hashtable] FindEntry([string]$name) {
+        foreach ($e in $this.Entries()) {
+            if ([string]$e['hostname'] -eq $name) { return [hashtable]$e }
+        }
+        return $null
+    }
+
+    # The shared mutation tail: drop any same-host entry, put $entry at the head, persist.
+    hidden [void] CommitFront([hashtable]$entry, [string]$name) {
+        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
+        $this.SetEntries(@($entry) + $kept)
+        $this.Save()
+    }
+
     # Inserts or replaces (by hostname, case-insensitive) and stamps lastSeen=now.
     [void] Upsert([string]$hostname, [string]$status, [string]$jobType, [int]$updateCount, [bool]$rebootRequired) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
@@ -101,19 +128,14 @@ class RecentConnectionsStore {
 
         # Carry over what a run does NOT change (cached inventory/disk-usage, lastTouched);
         # replacing the entry without these silently loses the caches on every run.
-        $prev = $null
-        foreach ($e in $this.Entries()) {
-            if ([string]$e['hostname'] -eq $name) { $prev = [hashtable]$e; break }
-        }
+        $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
             foreach ($k in @('inventory', 'diskUsage', 'lastTouched')) {
                 if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
             }
         }
 
-        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
-        $this.SetEntries(@($entry) + $kept)
-        $this.Save()
+        $this.CommitFront($entry, $name)
     }
 
     # Stamps the host's last operator action so the next launch orders cards newest-first.
@@ -122,25 +144,11 @@ class RecentConnectionsStore {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
 
-        $entry = $null
-        foreach ($e in $this.Entries()) {
-            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
-        }
-        if ($null -eq $entry) {
-            $entry = @{
-                hostname       = $name
-                lastSeen       = ''
-                lastStatus     = ''
-                lastJobType    = ''
-                updateCount    = 0
-                rebootRequired = $false
-            }
-        }
+        $entry = $this.FindEntry($name)
+        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
         $entry['lastTouched'] = [datetime]::UtcNow.ToString('o')
 
-        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
-        $this.SetEntries(@($entry) + $kept)
-        $this.Save()
+        $this.CommitFront($entry, $name)
     }
 
     # Merges a fresh inventory probe onto the host's entry WITHOUT touching its scan/apply
@@ -150,28 +158,14 @@ class RecentConnectionsStore {
         if ($null -eq $inv) { return }
         $name = $hostname.Trim()
 
-        $entry = $null
-        foreach ($e in $this.Entries()) {
-            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
-        }
-        if ($null -eq $entry) {
-            $entry = @{
-                hostname       = $name
-                lastSeen       = ''
-                lastStatus     = ''
-                lastJobType    = ''
-                updateCount    = 0
-                rebootRequired = $false
-            }
-        }
+        $entry = $this.FindEntry($name)
+        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
 
         $invHash = $inv.ToHashtable()
         $invHash['probedAt'] = [datetime]::UtcNow.ToString('o')
         $entry['inventory'] = $invHash
 
-        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
-        $this.SetEntries(@($entry) + $kept)
-        $this.Save()
+        $this.CommitFront($entry, $name)
     }
 
     # Merges a fresh "biggest folders" scan onto the host's entry WITHOUT touching its
@@ -181,26 +175,12 @@ class RecentConnectionsStore {
         if ($null -eq $report) { return }
         $name = $hostname.Trim()
 
-        $entry = $null
-        foreach ($e in $this.Entries()) {
-            if ([string]$e['hostname'] -eq $name) { $entry = [hashtable]$e; break }
-        }
-        if ($null -eq $entry) {
-            $entry = @{
-                hostname       = $name
-                lastSeen       = ''
-                lastStatus     = ''
-                lastJobType    = ''
-                updateCount    = 0
-                rebootRequired = $false
-            }
-        }
+        $entry = $this.FindEntry($name)
+        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
 
         $entry['diskUsage'] = $report.ToHashtable()
 
-        $kept = @($this.Entries() | Where-Object { [string]$_['hostname'] -ne $name })
-        $this.SetEntries(@($entry) + $kept)
-        $this.Save()
+        $this.CommitFront($entry, $name)
     }
 
     # Removes an entry by hostname.
@@ -225,14 +205,7 @@ class RecentConnectionsStore {
             $name = $h.Trim()
             if ($seen.ContainsKey($name.ToLowerInvariant())) { continue }
             $seen[$name.ToLowerInvariant()] = $true
-            $entries += @{
-                hostname       = $name
-                lastSeen       = ''
-                lastStatus     = ''
-                lastJobType    = ''
-                updateCount    = 0
-                rebootRequired = $false
-            }
+            $entries += [RecentConnectionsStore]::NewBlankEntry($name)
         }
         $this.SetEntries($entries)
         $this.Save()

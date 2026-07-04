@@ -115,6 +115,21 @@ class PersonLensService {
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    # Full parent-side teardown on app close: stop.flag makes the agent exit now,
+    # stop/unregister removes the task, and the purge deletes every lens-* dir (bundles
+    # can hold BitLocker keys - nothing may outlive the app). All best-effort; keeps
+    # every parent-side literal in this one class.
+    static [void] StopAndPurgeAgent() {
+        $dir = [PersonLensService]::AgentDir()
+        try { New-Item -ItemType File -Path (Join-Path $dir 'stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
+        try { Stop-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -ErrorAction SilentlyContinue } catch { }
+        try { Unregister-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -Confirm:$false -ErrorAction SilentlyContinue } catch { }
+        try {
+            Get-ChildItem -Path (Split-Path $dir -Parent) -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        } catch { }
+    }
+
     # --- agent supervision -------------------------------------------------------
 
     # Ensures the persistent de-elevated agent is alive, (re)starting it when the

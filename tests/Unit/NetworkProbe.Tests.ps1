@@ -244,6 +244,23 @@ Describe "NetworkProbe" {
         }
     }
 
+    Context "IsSmbAvailable" {
+        It "Should return false for non-existent host" {
+            $probe = [NetworkProbe]::new()
+            $probe.IsSmbAvailable("non-existent-host-xyz-12345") | Should -Be $false
+        }
+
+        It "Should return a boolean for localhost" {
+            $probe = [NetworkProbe]::new()
+            $probe.IsSmbAvailable("127.0.0.1") | Should -BeOfType [bool]
+        }
+
+        It "Should handle empty hostname gracefully" {
+            $probe = [NetworkProbe]::new()
+            $probe.IsSmbAvailable("") | Should -Be $false
+        }
+    }
+
     Context "IsOnline" {
         It "Should return true for localhost" {
             $probe = [NetworkProbe]::new()

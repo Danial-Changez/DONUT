@@ -277,11 +277,11 @@ This section discusses how the refactor addresses the design choices and limitat
   - Arguments use `-key=value` format (not `/key`)
   - Boolean flags: `-silent` or `-reboot=enable`
 - **Remote Directory Setup:** Create `C:\temp\DONUT` on remote host before execution
-- **Exit Code Handling:** DCU CLI returns specific exit codes:
-  - `0`: Success
-  - `1`: Reboot required (logged, not treated as error)
-  - `2-5`: Various success states
-  - `500+`: Errors (throws exception)
+- **Exit Code Handling:** DCU CLI returns specific exit codes (see `DcuLog`):
+  - `0`: Success — the ONLY unconditional success
+  - `1` / `5`: Completed, but a reboot is required to finish (flagged, not an error)
+  - Everything else is a real failure — including the small codes (`2` unknown error,
+    `3` not a Dell system, `4` not admin, `6` another DCU instance, `7`/`8` unsupported)
 - **PsExec Arguments:** Use `-s` (SYSTEM), `-h` (elevated), `-accepteula`, with `pwsh -NoProfile -NonInteractive -c` for cleaner remote execution
 - **Headless launch:** psexec is started through `ProcessStartInfo` with `CreateNoWindow` (a *hidden* console), not `Start-Process -NoNewWindow`. DONUT is a window-subsystem GUI with no console of its own, so `-NoNewWindow` makes the OS spawn a **visible** console per psexec; those live for the whole scan/apply, and several at once sit in front of the WPF window and read as a frozen UI. A hidden console leaves psexec a *real* console — so its stdout is **not** redirected (redirecting it removed the console and caused remote `0xC0000142` init failures) — with no window. `ExecutionService.StartPsExecHidden` is the shared launcher.
 

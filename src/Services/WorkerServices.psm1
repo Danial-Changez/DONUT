@@ -386,6 +386,28 @@ class ExecutionService {
         return [System.Diagnostics.Process]::Start($psi)
     }
 
+    # Shared psexec watchdog: poll HasExited on a 1500ms tick (running the optional per-tick
+    # $onTick, e.g. the DCU log tail), kill + throw RemoteTimeoutException past the deadline,
+    # throw RemoteProcessStartException on a negative (NTSTATUS) exit - the remote process
+    # never ran the command - and return the raw exit code; classification stays with the caller.
+    hidden [int] WaitForRemoteProcess([System.Diagnostics.Process]$p, [string]$target, [string]$operation, [int]$maxMinutes, [scriptblock]$onTick) {
+        $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
+        while (-not $p.HasExited) {
+            if ([datetime]::UtcNow -gt $deadline) {
+                try { $p.Kill($true) } catch { }
+                throw [RemoteTimeoutException]::new($target, $operation, $maxMinutes)
+            }
+            Start-Sleep -Milliseconds 1500
+            if ($null -ne $onTick) { & $onTick }
+        }
+        $p.WaitForExit()   # flush the exit code after HasExited flips
+        $exitCode = [int]$p.ExitCode
+        if ($exitCode -lt 0) {
+            throw [RemoteProcessStartException]::new($target, $operation, $exitCode)
+        }
+        return $exitCode
+    }
+
     # Runs a pwsh script on the remote as SYSTEM, passed base64 via -EncodedCommand (no
     # psexec quoting hazards). $serviceName isolates its PSEXESVC; $maxMinutes = watchdog.
     [void] InvokeRemotePwsh([string]$target, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
@@ -409,22 +431,10 @@ class ExecutionService {
 
         $this.Logger.LogInfo("Executing remote probe on \\$target (service $serviceName, limit ${maxMinutes}m)")
         $p = [ExecutionService]::StartPsExecHidden($psexecArgs)
-        $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
-        while (-not $p.HasExited) {
-            if ([datetime]::UtcNow -gt $deadline) {
-                try { $p.Kill($true) } catch { }
-                throw [RemoteTimeoutException]::new($target, 'Remote probe', $maxMinutes)
-            }
-            Start-Sleep -Milliseconds 1500
-        }
-        $p.WaitForExit()
-        $exitCode = [int]$p.ExitCode
+        $exitCode = $this.WaitForRemoteProcess($p, $target, 'Remote probe', $maxMinutes, $null)
 
-        # Classify like InvokePsExec: negative = process-launch fault, Win32 transport code
-        # = psexec's pipe dropped mid-probe - neither means "the probe script failed".
-        if ($exitCode -lt 0) {
-            throw [RemoteProcessStartException]::new($target, 'Remote probe', $exitCode)
-        }
+        # Negative codes threw in the watchdog; a Win32 transport code means psexec's pipe
+        # dropped mid-probe - neither means "the probe script failed".
         if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
             throw [RemoteConnectionLostException]::new($target, 'Remote probe', $exitCode)
         }
@@ -433,16 +443,21 @@ class ExecutionService {
         }
     }
 
-    # Copies the inventory JSON the probe wrote on the remote back to the local
+    # Copies an artifact a probe/scan wrote in the remote working dir back to the local
     # reports dir; returns the local path. Reuses the job's already-resolved IP.
-    [string] CopyInventoryArtifact([string] $hostName) {
+    hidden [string] CopyBackArtifact([string]$hostName, [string]$remoteLeaf, [string]$localLeaf) {
         $ip = $this.ResolvedIpFor($hostName)
-        $remote = "\\$ip\C$\temp\DONUT\$hostName-inventory.json"
-        $local = Join-Path $this.LocalReportsDir "$hostName-inventory.json"
+        $remote = "\\$ip\C$\temp\DONUT\$remoteLeaf"
+        $local = Join-Path $this.LocalReportsDir $localLeaf
         if (Test-Path $remote) {
             Copy-Item -Path $remote -Destination $local -Force
         }
         return $local
+    }
+
+    # Copies the inventory JSON the probe wrote on the remote back locally.
+    [string] CopyInventoryArtifact([string] $hostName) {
+        return $this.CopyBackArtifact($hostName, "$hostName-inventory.json", "$hostName-inventory.json")
     }
 
     # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the CSV
@@ -512,16 +527,10 @@ class ExecutionService {
 '@
     }
 
-    # Copies the WizTree CSV the scan wrote on the remote back to the local
-    # reports dir; returns the local path. Mirrors CopyInventoryArtifact.
+    # Copies the WizTree CSV the scan wrote on the remote back locally (WizTree always
+    # exports the fixed name folders.csv; only the local copy is host-qualified).
     [string] CopyDiskUsageArtifact([string] $hostName) {
-        $ip = $this.ResolvedIpFor($hostName)
-        $remote = "\\$ip\C$\temp\DONUT\folders.csv"
-        $local = Join-Path $this.LocalReportsDir "$hostName-folders.csv"
-        if (Test-Path $remote) {
-            Copy-Item -Path $remote -Destination $local -Force
-        }
-        return $local
+        return $this.CopyBackArtifact($hostName, 'folders.csv', "$hostName-folders.csv")
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {
@@ -739,30 +748,17 @@ class ExecutionService {
         # Progress is tailed from the outputLog instead. See StartPsExecHidden.
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
         $p = [ExecutionService]::StartPsExecHidden($psexecArgs)
-        # Watchdog: a psexec session can hang forever (dead pipes, wedged remote process);
-        # past the deadline, kill the client so the job fails with a typed cause.
+        # Watchdog (WaitForRemoteProcess) with a per-tick outputLog tail. $tickState is a
+        # hashtable holder: GetNewClosure copies locals BY VALUE, so only a reference type
+        # lets the consumed-chars offset survive across ticks.
         $maxMinutes = if ($command -eq 'applyUpdates') { 120 } else { 30 }
-        $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
-        $seenChars = 0
-        while (-not $p.HasExited) {
-            if ([datetime]::UtcNow -gt $deadline) {
-                try { $p.Kill($true) } catch { }
-                throw [RemoteTimeoutException]::new($computer, "DCU /$command", $maxMinutes)
-            }
-            Start-Sleep -Milliseconds 1500
-            $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
-        }
-        $p.WaitForExit()   # flush the exit code after HasExited flips
-        $exitCode = [int]$p.ExitCode
+        $svc = $this
+        $tickState = @{ Seen = 0 }
+        $onTick = { $tickState.Seen = $svc.EmitNewDcuLogLines($remoteLogUnc, [int]$tickState.Seen) }.GetNewClosure()
+        $exitCode = $this.WaitForRemoteProcess($p, $computer, "DCU /$command", $maxMinutes, $onTick)
         # Final flush so the tail (e.g. "The program exited with return code: N") reaches
         # the detail terminal even when it landed between the last poll and exit.
-        $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
-
-        # Negative = Windows process-launch fault (NTSTATUS, e.g. 0xC0000142): the remote
-        # pwsh never ran dcu-cli, so it is NOT a DCU exit code.
-        if ($exitCode -lt 0) {
-            throw [RemoteProcessStartException]::new($computer, "DCU /$command", $exitCode)
-        }
+        $tickState.Seen = $this.EmitNewDcuLogLines($remoteLogUnc, [int]$tickState.Seen)
 
         # Win32 transport codes (233, 64, ...) mean the connection dropped mid-command while
         # dcu-cli finishes on the host - recover its authoritative code instead (see .NOTES).
