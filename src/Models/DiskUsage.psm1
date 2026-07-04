@@ -73,14 +73,8 @@ class DiskUsageReport {
 
 # Pure parser for WizTree's CSV export. Static, WPF-free, tested.
 class WizTreeCsv {
-    # Parses a WizTree folder export into a ranked DiskUsageReport.
-    #
-    # WizTree's CSV may lead with a banner/generator line before the real header
-    # row (which starts with "File Name"); folder paths are full and end with a
-    # trailing backslash, and the volume root itself ("C:\") is listed first as
-    # the whole-drive total. We locate the header, parse from there (ConvertFrom-Csv
-    # handles quoted paths containing commas), drop the volume root, rank by size
-    # descending, and cap at topN. Never throws: empty/garbage input -> empty report.
+    # Parses a WizTree export into a ranked DiskUsageReport: find the real header row
+    # ("File Name"), drop the volume-root total, rank by size, cap at topN. Never throws.
     static [DiskUsageReport] ParseTopFolders([string]$csvText, [int]$topN) {
         $report = [DiskUsageReport]::new()
         $report.ScannedAt = [datetime]::UtcNow.ToString('o')
@@ -123,9 +117,8 @@ class WizTreeCsv {
     }
 }
 
-# One node in the rendered folder tree: the original path + size, the display label
-# (segment relative to its shown parent), indent depth, and (for the nested view)
-# its child folders in size-ranked order.
+# One node in the rendered folder tree: path + size, the display label (segment relative
+# to its shown parent), indent depth, and size-ranked child folders.
 class FolderTreeNode {
     [string] $Path = ''
     [string] $Label = ''
@@ -134,10 +127,8 @@ class FolderTreeNode {
     [FolderTreeNode[]] $Children = @()
 }
 
-# Pure helper that arranges a flat, size-ranked folder list into a tree by path
-# containment: a folder nests under the deepest other listed folder that is a
-# prefix of it. Folders with no listed ancestor are roots. Within each level the
-# original (size-descending) order is preserved. Static, WPF-free, tested.
+# Pure helper arranging a flat, size-ranked folder list into a tree by path containment
+# (deepest listed prefix = parent; no ancestor = root). Static, WPF-free, tested.
 class DiskUsageTree {
     static [FolderTreeNode[]] Build([FolderUsage[]]$folders) {
         $items = @($folders | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })

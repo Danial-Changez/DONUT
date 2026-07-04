@@ -34,10 +34,8 @@ class FleetStatus {
         $this.IsBusy   = $isBusy
     }
 
-    # Maps a job's coordinates to a display status.
-    #   jobType        - 'Scan' | 'UpdateScan' | 'UpdateApply'
-    #   status         - 'Created' | 'Running' | 'Completed' | 'Failed'
-    #   rebootRequired - host flagged for a manual reboot after applying updates
+    # Maps a job's coordinates (jobType Scan/UpdateScan/UpdateApply, status Created/
+    # Running/Completed/Failed, rebootRequired) to a display status.
     static [FleetStatus] FromJob([string]$jobType, [string]$status, [bool]$rebootRequired) {
         switch ($status) {
             'Failed' {

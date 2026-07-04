@@ -16,11 +16,13 @@
     unit-testable without a live host. Returns the LAST return-code line, so it is
     correct whether dcu-cli overwrote or appended the file (the worker also clears
     the log before each run, so in practice only this run's lines are present).
+
+    Return-code reference:
+    https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
 #>
 class DcuLog {
-    # Extracts dcu-cli's final return code from its activity-log text. Returns
-    # @{ Found = $bool; Code = [int] } - Found is $false (Code 0) when no
-    # "return code: N" line is present (e.g. dcu-cli never finished writing it).
+    # Extracts dcu-cli's final return code from its activity-log text as @{ Found; Code };
+    # Found is $false when no "return code: N" line is present (dcu-cli never finished).
     static [hashtable] ParseReturnCode([string]$logText) {
         if ([string]::IsNullOrWhiteSpace($logText)) { return @{ Found = $false; Code = 0 } }
         # dcu-cli: "The program exited with return code: 0". Tolerate case/spacing and
@@ -31,10 +33,8 @@ class DcuLog {
         return @{ Found = $true; Code = [int]$last.Groups[1].Value }
     }
 
-    # dcu-cli's documented return codes. Only 0 is success; 1 and 5 mean a reboot is
-    # needed; EVERYTHING ELSE is an error (2/3/4 are NOT benign - a common trap, since
-    # they're small numbers). Reference:
-    # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
+    # dcu-cli's documented return codes: only 0 is success, 1/5 mean reboot needed, and
+    # EVERYTHING else is an error - 2/3/4 are NOT benign (reference in .NOTES).
     static [hashtable] $Meanings = @{
         0 = 'success'
         1 = 'reboot required'

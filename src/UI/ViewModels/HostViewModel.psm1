@@ -39,9 +39,8 @@ class HostViewModel : ObservableObject {
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
 
-    # Detail-header + overview-strip bindables (the detail pane / overview mirror the
-    # SELECTED machine, so they bind to SelectedMachine.* - populated from cached/gathered
-    # inventory via ApplyInventory, reusing the pure InventoryFormat mappers).
+    # Detail-header + overview-strip bindables: both mirror the SELECTED machine via
+    # SelectedMachine.*, populated from inventory by ApplyInventory (InventoryFormat mappers).
     [string] $DetailTitle = ''
     [string] $ProbedText = ''
     [string] $OvModel = '—'
@@ -105,9 +104,8 @@ class HostViewModel : ObservableObject {
         $this.Set('Percent', $pct)
     }
 
-    # Shows a scan milestone beside the bar ("2/5 scanning devices"). $pct additionally
-    # drives the bar for jobs with no percentage output (a scan); pass -1 to leave the
-    # bar alone (an apply, whose own percent lines drive it).
+    # Shows a scan milestone beside the bar ("2/5 scanning devices"); $pct also drives the
+    # bar for percent-less jobs (a scan), or -1 leaves it alone (an apply owns its bar).
     [void] SetScanStep([string]$text, [double]$pct) {
         $this.Set('StepText', $text)
         if ($pct -ge 0) { $this.SetPercent($pct) }
@@ -137,9 +135,8 @@ class HostViewModel : ObservableObject {
         if ($null -ne $rc.Inventory) { $this.ApplyInventory($rc.Inventory) }
     }
 
-    # Fills the overview-strip / probed bindables from an inventory probe (cached or fresh),
-    # reusing the pure InventoryFormat mappers. The overview binds to SelectedMachine.*, so
-    # this updates the UI whenever the selected host's inventory changes.
+    # Fills the overview-strip / probed bindables from an inventory probe (cached or
+    # fresh), reusing the pure InventoryFormat mappers.
     [void] ApplyInventory([MachineInventory]$inv) {
         if ($null -eq $inv) { return }
         $this.Set('OvModel', $(if ($inv.Model) { $inv.Model } else { '—' }))
@@ -176,10 +173,8 @@ class HostViewModel : ObservableObject {
         $this.Set('OvUpdates', "$count")
     }
 
-    # Rebuilds the largest-folders display tree from a (cached or fresh) disk report.
-    # Skips the rebuild when the SAME report instance is re-applied (e.g. re-selecting the
-    # host), so the TreeView keeps its expansion state. Null/empty clears the tree, which
-    # flips the "click Storage scan" hint back on via HasFolders.
+    # Rebuilds the largest-folders tree from a disk report; a re-applied SAME instance is
+    # skipped (TreeView keeps its expansion state), and null/empty clears back to the hint.
     [void] ApplyFolders([DiskUsageReport]$report) {
         if ($null -ne $report -and [object]::ReferenceEquals($this.FoldersSource, $report)) { return }
         $this.FoldersSource = $report

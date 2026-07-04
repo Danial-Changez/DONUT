@@ -11,12 +11,8 @@
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot
-    # Cross-INSTANCE write lock. A per-instance Monitor (SyncRoot) cannot serialize the
-    # real contention: every worker runspace constructs its OWN LogService over the same
-    # Donut.log (StartWorker), so with concurrent jobs two instances would collide inside
-    # Add-Content (exclusive append handle) and silently LOSE lines - exactly when the
-    # log matters most. A named mutex is a kernel object shared by every instance (and
-    # runspace) in the session, keyed by the file path so different files don't contend.
+    # Cross-INSTANCE write lock: every worker runspace builds its own LogService over the
+    # same Donut.log, so only a named (kernel) mutex keyed by path prevents lost lines.
     hidden [System.Threading.Mutex] $FileMutex
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
@@ -37,9 +33,8 @@ class LogService {
         $this.FileMutex = [System.Threading.Mutex]::new($false, "Local\DonutLog-$hash")
     }
 
-    # Returns the supplied logger, or a NullLogService no-op when it is $null.
-    # Collapses the repeated "logger or null-object" guard in collaborators'
-    # constructors to a single call.
+    # Returns the supplied logger, or a NullLogService no-op when $null - collapses the
+    # repeated "logger or null-object" constructor guard to one call.
     static [LogService] Coalesce([LogService]$logger) {
         if ($null -eq $logger) { return [NullLogService]::new() }
         return $logger
@@ -88,9 +83,7 @@ class LogService {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$level] $message"
 
-        # Serialize against every other LogService instance writing this file (workers
-        # construct their own). BOUNDED wait so logging can never hang a thread: on a
-        # timeout, write anyway (worst case is the old best-effort behaviour). An
+        # BOUNDED wait so logging can never hang a thread: on timeout write anyway, and an
         # abandoned mutex (a runspace died holding it) still grants ownership - proceed.
         $owned = $false
         if ($null -ne $this.FileMutex) {

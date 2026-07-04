@@ -12,6 +12,9 @@ using module "..\Models\PersonLens.psm1"
     LensWorker.ps1 DE-ELEVATED as the logged-on user via a one-shot scheduled task
     (RunLookupJson - the env-coupled seam, the cross-account de-elevation proven in
     tools/Test-DeElevatedSccm.ps1) and parses its JSON bundle into a typed PersonLens.
+    The child's result lands in a ProgramData exchange folder ACL'd to the interactive
+    user (the admin's own %TEMP% is unreachable to that account); the only elevated
+    action is registering the task.
 
 .NOTES
     Mirrors ActiveDirectoryService's seam pattern: the directory/task I/O is isolated in
@@ -47,11 +50,9 @@ class PersonLensService {
     }
 
     # --- env-coupled seam (overridden in tests) ---------------------------------
-    # Runs LensWorker.ps1 DE-ELEVATED as the interactive user via a one-shot scheduled
-    # task (LogonType Interactive = the logged-on token, no password; RunLevel Limited =
-    # medium integrity) and returns the raw JSON bundle. The task's result lands in a
-    # ProgramData exchange folder granted to the interactive user (the admin's own %TEMP%
-    # is unreachable to that account). The only elevated action is registering the task.
+
+    # Runs LensWorker.ps1 DE-ELEVATED via a one-shot scheduled task (Interactive logon =
+    # the logged-on token, RunLevel Limited) and returns the raw JSON bundle; see .DESCRIPTION.
     [string] RunLookupJson([string]$identity) {
         $lensWorker = Join-Path $this.SourceRoot 'Scripts\LensWorker.ps1'
         if (-not (Test-Path -LiteralPath $lensWorker)) {
@@ -80,9 +81,8 @@ class PersonLensService {
                 return [PersonLensService]::ErrorBundle("Could not grant $interactiveUser on the exchange folder: $($_.Exception.Message)")
             }
 
-            # Resolve pwsh.exe via PATH ($PID / the host process are unreliable here: $PID
-            # isn't accessible in a class method, and in production the host is
-            # Donut.Launcher.exe, not pwsh). PowerShell 7 is a prerequisite, so it's on PATH.
+            # Resolve pwsh.exe via PATH: $PID isn't accessible in a class method, and the
+            # production host is Donut.Launcher.exe anyway. PowerShell 7 is a prerequisite.
             $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
             $pwshPath = if ($cmd) { [string]$cmd.Source } else { '' }
             if (-not $pwshPath) { return [PersonLensService]::ErrorBundle('Could not resolve pwsh.exe to run the de-elevated child.') }

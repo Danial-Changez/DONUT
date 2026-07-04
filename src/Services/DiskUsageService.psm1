@@ -26,17 +26,14 @@ class DiskUsageService : RemoteJobService {
 
     DiskUsageService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Returns worker args for the disk-usage scan (no network — the worker asserts
-    # reachability on the pool thread). The worker resolves the bundled
-    # wiztree64.exe from SourceRoot, so Options only carries the row cap.
-    # Dispatches on the "DiskScan" worker token.
+    # Returns worker args for the "DiskScan" job (no network here - the worker gates
+    # reachability itself and resolves wiztree64.exe); Options only carries the row cap.
     [hashtable] PrepareDiskScan([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "DiskScan", @{ TopN = [DiskUsageService]::TopN })
     }
 
-    # Reads the compact top-N JSON the worker wrote (the heavy CSV parse already
-    # ran off the UI thread in ExecutionService.ParseAndCacheFolders, so this stays
-    # cheap on the dispatcher thread). Returns $null when missing/unparseable.
+    # Reads the compact top-N JSON the worker wrote (the heavy CSV parse already ran on
+    # the pool thread), so this is cheap on the dispatcher. $null when missing/unparseable.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-folders.json"
         if (-not (Test-Path $reportPath)) { return $null }

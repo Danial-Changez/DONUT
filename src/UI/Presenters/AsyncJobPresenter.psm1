@@ -37,12 +37,8 @@ class AsyncJobPresenter {
     [void] PumpJobs() {
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
 
-        # A modal dialog runs a nested message loop that re-fires this timer. While one is
-        # open we still poll + stream output (so background jobs keep updating, not
-        # freezing), but DEFER terminal completion work - which may itself open a dialog -
-        # to a later tick. Otherwise a second dialog stacks on the first and deadlocks the
-        # UI. AfterPump (overview refresh + reboot notice) can also open a dialog, so it's
-        # deferred too.
+        # A modal's nested message loop re-fires this timer: keep polling/streaming, but
+        # DEFER completion work + AfterPump (both can open a dialog; stacking deadlocks).
         $modal = $this.IsModalOpen()
 
         $processedAny = $false
@@ -58,9 +54,8 @@ class AsyncJobPresenter {
                 if ($modal) { continue }   # leave the finished job for a later, non-modal tick
                 $this.OnJobCompleted($job)
                 $job.Cleanup()
-                # Re-fetch the index: OnJobCompleted may append jobs (e.g. an
-                # apply phase), but never reorders/removes earlier entries, so
-                # the original index still points at this finished job.
+                # OnJobCompleted may append jobs but never reorders/removes earlier
+                # entries, so the original index still points at this finished job.
                 $this.ActiveJobs.RemoveAt($i)
             }
         }

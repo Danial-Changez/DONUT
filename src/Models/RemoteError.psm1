@@ -97,10 +97,8 @@ class RemoteExecutionException : RemoteOperationException {
     }
 }
 
-# The remote process (pwsh) failed to start / crashed during startup - a Windows NTSTATUS
-# fault (e.g. 0xC0000142 STATUS_DLL_INIT_FAILED), NOT a dcu-cli exit code, so DCU never
-# actually ran. Commonly session-0 desktop-heap exhaustion after repeated remote runs, or
-# AV/EDR interference; it often succeeds on retry. Carries the raw exit code.
+# The remote process (pwsh) failed to start / crashed during startup - an NTSTATUS fault
+# (e.g. 0xC0000142), NOT a dcu-cli exit code; often transient (see the message text).
 class RemoteProcessStartException : RemoteOperationException {
     [int] $ExitCode
 
@@ -125,12 +123,8 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
-# psexec's connection to the host dropped mid-command - a Win32 transport error (e.g.
-# 233 ERROR_PIPE_NOT_CONNECTED, 64 ERROR_NETNAME_DELETED), NOT a dcu-cli exit code. The
-# classic trigger is applying a NETWORK driver (the update resets the NIC that psexec's
-# own SMB/named-pipe connection rides over), so psexec loses the pipe even though dcu-cli
-# completed on the host. Treated as a Warning because the update most likely applied - a
-# re-scan confirms it. Carries the raw exit code.
+# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...), NOT a
+# dcu-cli code. Classic trigger: a NETWORK driver reset the NIC. Warning: likely applied.
 class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
 
@@ -140,9 +134,8 @@ class RemoteConnectionLostException : RemoteOperationException {
         $this.ExitCode = $exitCode
     }
 
-    # The Win32 codes psexec surfaces when its remote connection drops mid-command. None
-    # collide with dcu-cli's own codes (0-5, 1xx, 5xx, 1000s), so seeing one means the
-    # transport died, not that DCU reported it.
+    # The Win32 codes psexec surfaces on a mid-command drop. None collide with dcu-cli's
+    # own codes (0-5, 1xx, 5xx, 1000s), so seeing one means the transport died.
     static [hashtable] $Codes = @{
         64   = 'ERROR_NETNAME_DELETED'
         109  = 'ERROR_BROKEN_PIPE'
@@ -166,11 +159,8 @@ class RemoteConnectionLostException : RemoteOperationException {
     }
 }
 
-# The remote operation ran past its watchdog deadline and the local psexec client was
-# terminated so the worker (and its runspace) could be reclaimed - without this, a hung
-# psexec session (e.g. the shared-PSEXESVC teardown race, or a wedged remote process)
-# kept the job Running forever and its single-flight guard blocked any retry. NOTE: only
-# the LOCAL client is killed; the remote process may still be running on the host.
+# The operation ran past its watchdog and the LOCAL psexec client was killed so the worker
+# could be reclaimed (no forever-Running job); the remote process may still be running.
 class RemoteTimeoutException : RemoteOperationException {
     [int] $TimeoutMinutes
 
@@ -188,9 +178,8 @@ class DcuNotInstalledException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::DcuMissing) {}
 }
 
-# Re-derives the failure reason from a worker error message. Pure + WPF-free so the
-# presenter can pick a card state without depending on the exception type surviving
-# the runspace boundary. Matches the stable phrases the exceptions above emit.
+# Re-derives the failure reason from a worker error message (the exception type doesn't
+# survive the runspace boundary); matches the stable phrases the exceptions above emit.
 class RemoteFailure {
     static [RemoteFailureReason] ReasonFromMessage([string]$message) {
         if ([string]::IsNullOrWhiteSpace($message)) { return [RemoteFailureReason]::Unknown }
