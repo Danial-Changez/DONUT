@@ -35,6 +35,7 @@ using module "..\..\Models\AdSearchResult.psm1"
 using module "..\..\Models\ScanCacheDecision.psm1"
 using module "..\..\Models\RemoteError.psm1"
 using module "..\..\Models\PersonLens.psm1"
+using module "..\..\Services\PersonLensService.psm1"
 
 <#
 .SYNOPSIS
@@ -1026,19 +1027,10 @@ class HomePresenter : AsyncJobPresenter {
         $w.Add_LocationChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
         $w.Add_SizeChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
         # On close: persist any deferred recents, then stop the de-elevated Lens agent and
-        # purge every Lens exchange dir (they can hold encrypted BitLocker bundles - nothing
-        # may outlive the app). The agent also self-exits on its parent-PID watchdog; the
-        # stop.flag makes it quit immediately, and stop/unregister removes the task.
+        # purge every Lens exchange dir (StopAndPurgeAgent owns the teardown + its literals).
         $w.Add_Closing({
                 try { $presenter.Store.FlushSave() } catch { }
-                $lensRoot = Join-Path $env:ProgramData 'DONUT'
-                try { New-Item -ItemType File -Path (Join-Path $lensRoot 'lens-agent\stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
-                try { Stop-ScheduledTask -TaskName 'DONUT-LensAgent' -ErrorAction SilentlyContinue } catch { }
-                try { Unregister-ScheduledTask -TaskName 'DONUT-LensAgent' -Confirm:$false -ErrorAction SilentlyContinue } catch { }
-                try {
-                    Get-ChildItem -Path $lensRoot -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
-                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                } catch { }
+                try { [PersonLensService]::StopAndPurgeAgent() } catch { }
             }.GetNewClosure())
     }
 
