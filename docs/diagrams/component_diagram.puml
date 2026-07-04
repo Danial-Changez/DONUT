@@ -21,6 +21,8 @@ component "Scripts (src/Scripts)" #2A2410 {
     [RemoteWorker.ps1]
     [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
+    [LensLookupWorker.ps1]
+    [LensWorker.ps1]
     [InstallWorker.ps1]
 }
 
@@ -46,6 +48,8 @@ component "PowerShell Classes (src)" {
         [ToastViewModel]
         [DialogViewModel]
         [LoginViewModel]
+        [PersonLensViewModel]
+        [LensDeviceViewModel]
     }
     package "Services" #221634 {
         [ScanService]
@@ -54,6 +58,7 @@ component "PowerShell Classes (src)" {
         [DiskUsageService]
         [HostResolver]
         [ActiveDirectoryService]
+        [PersonLensService]
         [ExecutionService]
         [DriverMatchingService]
         [SelfUpdateService]
@@ -113,6 +118,9 @@ database "%LOCALAPPDATA%\\DONUT" {
 [HomePresenter] ..> [DiskUsageService] : storage scan
 [HomePresenter] ..> [HostResolver] : prefetch IP
 [HomePresenter] ..> [ActiveDirectoryService] : live AD finder
+[HomePresenter] ..> [PersonLensViewModel] : user Lens (de-elevated lookup)
+[LensLookupWorker.ps1] ..> [PersonLensService] : de-elevates -> LensWorker
+[PersonLensService] ..> [LensWorker.ps1] : runs as the interactive user
 [HomePresenter] ..> [AsyncJob] : queues
 [HomePresenter] ..> [RecentConnectionsStore] : persists
 [HomePresenter] ..> [ScanCacheDecision] : 24h reuse

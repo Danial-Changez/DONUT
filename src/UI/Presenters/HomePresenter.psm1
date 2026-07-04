@@ -19,6 +19,7 @@ using module ".\ToastService.psm1"
 using module "..\ViewModels\HostViewModel.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module "..\ViewModels\SearchRowViewModel.psm1"
+using module "..\ViewModels\PersonLensViewModel.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -33,6 +34,7 @@ using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\AdSearchResult.psm1"
 using module "..\..\Models\ScanCacheDecision.psm1"
 using module "..\..\Models\RemoteError.psm1"
+using module "..\..\Models\PersonLens.psm1"
 
 <#
 .SYNOPSIS
@@ -121,6 +123,13 @@ class HomePresenter : AsyncJobPresenter {
     [bool]            $SuppressSearch = $false
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
+
+    # User Lens: picking a user runs a de-elevated lookup (LensLookupWorker on the pool)
+    # and shows the result in the detail pane. Mirrors the search/unlock poll pattern.
+    [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
+    [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
+    [DispatcherTimer]     $LensPollTimer
+    [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
     [System.Windows.Window] $HostWindow    # parent window; hooked so the popup tracks moves/resizes
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
@@ -209,6 +218,14 @@ class HomePresenter : AsyncJobPresenter {
         $this.UnlockPollTimer = [DispatcherTimer]::new()
         $this.UnlockPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
         $this.UnlockPollTimer.Add_Tick({ $presenter.PollUnlock() }.GetNewClosure())
+
+        # User Lens lookup: one shared VM (reused per pick) + a poll timer for the
+        # de-elevated LensLookupWorker running on the pool.
+        $this.LensVm = [PersonLensViewModel]::new()
+        $this.LensJobs = [List[hashtable]]::new()
+        $this.LensPollTimer = [DispatcherTimer]::new()
+        $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+        $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
 
         $this.Initialize()
     }
@@ -769,6 +786,10 @@ class HomePresenter : AsyncJobPresenter {
             $items.Add([SearchRowViewModel]::Header('USERS'))
             foreach ($u in $users) {
                 $vm = [SearchRowViewModel]::FromResult($u)
+                # Clicking a user row opens the Lens (its directory + SCCM devices).
+                $capU = $u
+                $pickU = { param($p) $presenter.OnPickUser($capU) }.GetNewClosure()
+                $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pickU)
                 if ($vm.CanUnlock) {
                     $unlock = { param($p) $presenter.OnUnlockUser($u) }.GetNewClosure()
                     $vm.UnlockCommand = [RelayCommand]::new([System.Action[object]]$unlock)
@@ -842,6 +863,90 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
         if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
+    }
+
+    # ===================== User Lens (person -> devices) =====================
+
+    # A user was picked in the finder: show the Lens in the detail pane (loading), then
+    # run the de-elevated lookup on the pool. UPN is the best identity (LensWorker resolves
+    # it forest-wide via the GC); fall back to DOMAIN\SAM or SAM.
+    [void] OnPickUser([object]$r) {
+        if ($null -eq $r) { return }
+        $identity =
+            if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName }
+            elseif (-not [string]::IsNullOrWhiteSpace($r.Domain) -and -not [string]::IsNullOrWhiteSpace($r.SamAccountName)) { "$($r.Domain)\$($r.SamAccountName)" }
+            else { [string]$r.SamAccountName }
+        if ([string]::IsNullOrWhiteSpace($identity)) { return }
+        $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName } else { $identity }
+
+        $this.CloseSearchPopup()
+        $this.LensVm.SetLoading($who)
+        $this.HomeVm.SetPerson($this.LensVm)
+
+        # Newest pick wins: bump the token and drop any in-flight lookup.
+        $this.LensToken++
+        $token = $this.LensToken
+        foreach ($j in @($this.LensJobs)) { try { $j.Ps.Dispose() } catch { } }
+        $this.LensJobs.Clear()
+
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            $ps.RunspacePool = [RunspaceManager]::GetPool()
+            $ps.AddCommand($worker) | Out-Null
+            $ps.AddParameter('Identity', $identity) | Out-Null
+            $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
+            $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
+            $handle = $ps.BeginInvoke()
+            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
+            $this.LensPollTimer.Start()
+        }
+        catch {
+            $this.Logger.LogException("Lens lookup could not start for $identity", $_)
+            $this.LensVm.SetLoading($who)
+            $this.LensVm.Set('IsLoading', $false)
+            $this.LensVm.Set('HasError', $true)
+            $this.LensVm.Set('StatusText', "Could not start the lookup: $_")
+        }
+    }
+
+    # Poll the in-flight lens lookup; on completion parse the JSON bundle, populate the
+    # Lens VM, and wire each device's "add to machine list" command. Stale picks discarded.
+    [void] PollLens() {
+        foreach ($job in @($this.LensJobs)) {
+            if (-not $job.Handle.IsCompleted) { continue }
+            $json = ''
+            try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
+            catch { $this.Logger.LogException("Lens lookup failed", $_) }
+            try { $job.Ps.Dispose() } catch { }
+            [void]$this.LensJobs.Remove($job)
+            if ($job.Token -ne $this.LensToken) { continue }   # a newer pick supersedes this
+
+            $lens = [PersonLens]::FromJson($json)
+            $this.LensVm.Apply($lens)
+
+            # Wire each device's Add command to drop its WSID into the machine list.
+            $presenter = $this
+            foreach ($dev in $this.LensVm.Devices) {
+                $capName = [string]$dev.Name
+                $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
+                $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
+            }
+        }
+        if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
+    }
+
+    # A Lens device was added: drop its WSID into the machine list as a run target,
+    # reusing the Add/pick flow (row + IP prefetch + inventory + move-to-top). The Lens
+    # stays open so more devices can be added.
+    [void] OnAddDeviceToList([string]$wsid) {
+        if ([string]::IsNullOrWhiteSpace($wsid)) { return }
+        $this.EnsureRow($wsid)
+        $this.PrefetchIp($wsid)
+        $this.StartInventory($wsid, $true)
+        $this.MoveRowToTop($wsid)
+        $this.UpdateEmptyHint()
+        if ($this.Toasts) { $this.Toasts.ShowInfo($wsid, "Added $wsid to the machine list.") }
     }
 
     [void] CloseSearchPopup() {
@@ -1394,8 +1499,8 @@ class HomePresenter : AsyncJobPresenter {
         # before the operator double-clicks to gather inventory or hits Run.
         $this.PrefetchIp($hostName)
 
-        if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Collapsed }
-        if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Visible }
+        # Detail-pane visibility is binding-driven now (HomeVm.DetailMode): SetSelected set
+        # it to 'Machine' before we got here, so the machine-detail panel is already shown.
         # The detail header binds to SelectedMachine.DetailTitle / ProbedText - no poke.
 
         if ($this.DetailLog) {
@@ -1439,8 +1544,8 @@ class HomePresenter : AsyncJobPresenter {
     # (The ListBox selected visual clears itself when its SelectedItem goes null.)
     [void] ClearSelection() {
         $this.SelectedHost = $null
-        if ($this.DetailContent) { $this.DetailContent.Visibility = [System.Windows.Visibility]::Collapsed }
-        if ($this.DetailEmptyHint) { $this.DetailEmptyHint.Visibility = [System.Windows.Visibility]::Visible }
+        # Visibility is binding-driven (HomeVm.DetailMode); SetSelected($null) put it back
+        # to 'Empty' before we got here (unless a Lens is showing, which it leaves alone).
         $this.UpdateOverviewTiles()
     }
 

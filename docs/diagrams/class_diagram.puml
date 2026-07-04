@@ -172,6 +172,25 @@ package "Donut.Models" #15233B {
         +{static} IsDisabledFromUac(uac): bool
     }
 
+    class PersonLens {
+        +Upn / Sam / DisplayName / Email: string
+        +Manager / Office: string
+        +Devices: LensDevice[]
+        +Errors: string[]
+        +{static} FromHashtable(h) / FromJson(json): PersonLens
+    }
+    class LensDevice {
+        +Name / Model / LastSync / Domain / Note: string
+        +BitLockerKeys: LensBitLockerKey[]
+        +HasBitLocker(): bool
+    }
+    class LensBitLockerKey {
+        +Password / Created: string
+    }
+    class LensFormat {
+        +{static} SyncLabel(iso): string
+    }
+
     class RecentConnection {
         +Hostname: string
         +LastSeen: string
@@ -321,6 +340,12 @@ package "Donut.Services" #221634 {
         +UnlockUser(user): bool
         #QueryDirectory(domain, filter, props, max): Hashtable[]
         #InvokeUnlock(sam, domain): void
+    }
+
+    class PersonLensService {
+        +SiteServer / SourceRoot: string
+        +Lookup(identity): PersonLens
+        +RunLookupJson(identity): string
     }
 
     class ExecutionService {
@@ -503,6 +528,18 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +{static} Header(text) / FromResult(r): SearchRowViewModel
     }
 
+    class PersonLensViewModel {
+        +Upn / Sam / Email / Manager / Office: string
+        +IsLoading / HasError / HasDevices: bool
+        +Devices: ObservableCollection<LensDeviceViewModel>
+        +SetLoading(who) / Apply(lens): void
+    }
+    class LensDeviceViewModel {
+        +Name / Model / LastSyncText / BitLockerText: string
+        +HasBitLocker / IsBitLockerRevealed: bool
+        +RevealCommand / AddCommand: RelayCommand
+    }
+
     class ToastViewModel {
         +Title / Message: string
         +Accent: Brush
@@ -553,6 +590,8 @@ ObservableObject <|-- LogTabViewModel
 ObservableObject <|-- ConfigViewModel
 ObservableObject <|-- LoginViewModel
 ObservableObject <|-- MainViewModel
+ObservableObject <|-- PersonLensViewModel
+ObservableObject <|-- LensDeviceViewModel
 
 RemoteJobService <|-- ScanService
 RemoteJobService <|-- RemoteUpdateService
@@ -576,6 +615,13 @@ HomePresenter --> ActiveDirectoryService
 HomePresenter --> DialogPresenter
 HomePresenter --> RecentConnectionsStore
 HomePresenter --> HomeViewModel
+HomePresenter --> PersonLensViewModel
+HomePresenter ..> PersonLens
+PersonLensService ..> PersonLens
+PersonLens --> LensDevice
+LensDevice --> LensBitLockerKey
+PersonLensViewModel --> LensDeviceViewModel
+LensDeviceViewModel ..> LensFormat
 HomePresenter --> ToastService
 HomePresenter --> HostListSource
 HomePresenter --> AsyncJob
