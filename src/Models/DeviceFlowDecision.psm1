@@ -25,9 +25,8 @@ class DeviceFlowDecision {
         $this.Outcome = $outcome
     }
 
-    # Maps a PollForToken result (a PSCustomObject with a Status field) to the
-    # next poll-loop action. A $null result is treated as "keep polling" (a
-    # transient network hiccup), matching the service's retry intent.
+    # Maps a PollForToken result (Status field) to the next poll-loop action. A $null
+    # result means "keep polling" (transient network hiccup), matching the retry intent.
     static [DeviceFlowDecision] FromPollResult([object]$result) {
         if ($null -eq $result) {
             return [DeviceFlowDecision]::new([PollOutcome]::KeepPolling)

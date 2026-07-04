@@ -20,18 +20,15 @@ class InventoryService : RemoteJobService {
 
     InventoryService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Returns worker args carrying the probe script (no network — the worker
-    # asserts reachability on the pool thread, so selecting an offline host never
-    # blocks the UI). The worker dispatches on the "Inventory" token (a worker
-    # string, distinct from the [JobKind]::Inventory enum the UI tags the job with).
+    # Returns worker args carrying the probe script (no network here - the worker gates
+    # reachability). "Inventory" is the worker token, distinct from [JobKind]::Inventory.
     [hashtable] PrepareInventory([string]$hostName) {
         $script = [InventoryService]::BuildProbeScript($hostName)
         return $this.BuildWorkerArgs($hostName, "Inventory", @{ ScriptText = $script })
     }
 
-    # Reads the copied-back inventory JSON into a typed MachineInventory.
-    # Returns $null when the file is missing or unparseable (mirrors
-    # RemoteUpdateService.ParseUpdateReport).
+    # Reads the copied-back inventory JSON into a typed MachineInventory; $null when
+    # missing or unparseable (mirrors RemoteUpdateService.ParseUpdateReport).
     [MachineInventory] ParseInventory([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-inventory.json"
         if (-not (Test-Path $reportPath)) { return $null }
@@ -47,11 +44,8 @@ class InventoryService : RemoteJobService {
         }
     }
 
-    # Generates the remote probe script. It gathers identity / battery health /
-    # disk / uptime (each call independently guarded so one failure never aborts
-    # the probe) and writes <host>-inventory.json to C:\temp\DONUT on the target.
-    # The host name is substituted into the filename at generation time so the
-    # script needs no parameters and can be run via -EncodedCommand.
+    # Generates the remote probe script: identity / battery / disk / uptime (each query
+    # guarded), written to <host>-inventory.json. Host name is baked in, so no parameters.
     static [string] BuildProbeScript([string]$hostName) {
         $template = @'
 $ErrorActionPreference = 'SilentlyContinue'
@@ -82,10 +76,8 @@ try {
     $inv.biosVersion = $bios.SMBIOSBIOSVersion
 } catch { }
 
-# Battery design/health live in root\wmi (not root\cimv2). Get-CimInstance crashes
-# when it serializes ALL properties of BatteryStaticData (a corrupt datetime
-# field), so we request ONLY the numeric capacity property via -Property, which
-# bypasses the bug and reads reliably as SYSTEM in session 0.
+# Battery classes live in root\wmi (not root\cimv2). Request ONLY the numeric capacity
+# via -Property: serializing ALL of BatteryStaticData crashes on a corrupt datetime field.
 try {
     $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }

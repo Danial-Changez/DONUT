@@ -37,9 +37,8 @@ class ConfigPresenter {
         $this.MainCommandComboBox = $this.ViewContent.FindName('MainCommandComboBox')
         $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
 
-        # Page VM: the Save button binds SaveCommand (replaces the Click wiring). The
-        # command combo's SelectionChanged stays an event - it's view navigation (which
-        # option form is shown), not data.
+        # Page VM: Save binds SaveCommand; the command combo's SelectionChanged stays an
+        # event - it's view navigation (which option form shows), not data.
         $this.ConfigVm = [ConfigViewModel]::new()
         $presenter = $this
         $save = { param($p) $presenter.OnSave() }.GetNewClosure()

@@ -80,10 +80,8 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
-    # Releases the single-flight latch WITHOUT caching a verdict. Must be called when a
-    # resolve fails or never starts, otherwise the host stays "in flight" forever and
-    # NeedsResolve never lets it be re-resolved (it wedges on "run again in a moment").
-    # (CacheVerdict already clears the latch on a successful resolve.)
+    # Releases the single-flight latch WITHOUT caching a verdict - required when a resolve
+    # fails or never starts, or the host stays "in flight" forever and wedges.
     [void] ClearInFlight([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $this.InFlight.Remove($hostName.Trim())
@@ -96,9 +94,8 @@ class HostResolver : RemoteJobService {
         $this.IpCache.Remove($hostName.Trim())
     }
 
-    # True when we can and should (re)resolve now: a DC is known, no resolve is in
-    # flight (single-flight), and the host is either uncached or its verdict has
-    # aged past the TTL.
+    # True when we can and should (re)resolve now: a DC is known, nothing is in flight
+    # (single-flight), and the host is uncached or its verdict aged past the TTL.
     [bool] NeedsResolve([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
         if (-not $this.HasActiveDc()) { return $false }
@@ -109,11 +106,8 @@ class HostResolver : RemoteJobService {
         return ($age -gt $this.Ttl)
     }
 
-    # True when a CACHED verdict has aged past the TTL. Unlike NeedsResolve this ignores
-    # DC/in-flight state and an uncached host (returns $false) - it answers only "is the
-    # verdict we already hold too old to trust?". The gather gate uses it so an aged-out
-    # 'Online' is re-validated (off-thread) before we open the freeze-prone CIM/psexec
-    # connect against a host that may since have gone offline.
+    # True when a CACHED verdict aged past the TTL; unlike NeedsResolve it ignores
+    # DC/in-flight state and uncached hosts - only "is the verdict too old to trust?".
     [bool] IsVerdictStale([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
         $name = $hostName.Trim()

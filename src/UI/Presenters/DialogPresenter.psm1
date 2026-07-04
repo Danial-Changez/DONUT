@@ -39,9 +39,8 @@ class DialogPresenter {
             # Apply Resources
             $this.Resources.ApplyResourcesToWindow($this.Window)
             
-            # Bind Standard Events. Capture $self: inside a WPF event handler $this
-            # is rebound to the sender (the button), NOT this DialogPresenter, so the
-            # handlers must close over $self or they silently no-op (dead buttons).
+            # Bind standard events; handlers must close over $self ($this rebinds to the
+            # sender inside a WPF handler - see .NOTES) or the buttons silently die.
             $self = $this
 
             $btnClose = $this.Window.FindName("btnClose")
@@ -86,10 +85,8 @@ class DialogPresenter {
         return $this.ShowModal()
     }
 
-    # Builds the dialog's content view-model: which parts show (Has* flags) and the
-    # two button commands. Primary resolves the dialog $true, secondary $false; an
-    # empty secondary text means a single-button (alert-style) dialog. Commands close
-    # over $self because $this rebinds to the sender inside WPF callbacks.
+    # Builds the dialog's content view-model: Has* flags for which parts show, plus the
+    # button commands (primary resolves $true, secondary $false; empty secondary = alert).
     hidden [DialogViewModel] NewVm([string]$title, [string]$message, [string[]]$listItems, [string]$primaryText, [string]$secondaryText) {
         $vm = [DialogViewModel]::new()
         $vm.Title = $title
@@ -123,9 +120,8 @@ class DialogPresenter {
         return $this.Result
     }
 
-    # Parents the dialog to the main window (or, if there isn't one yet, makes it
-    # topmost) so it reliably appears in front and grabs focus instead of opening
-    # behind the main window. Must be called before ShowDialog().
+    # Parents the dialog to the main window (or makes it topmost when there isn't one yet)
+    # so it opens in front with focus. Must be called before ShowDialog().
     hidden [void] PrepareToShow() {
         if ($null -eq $this.Window) { return }
 

@@ -56,17 +56,13 @@ class RecentConnectionsStore {
     hidden [object]    $ConfigManager   # duck-typed; may be $null in tests
     static [int] $Cap = 50
 
-    # Save coalescing: with DeferSave on, mutations mark PendingSave instead of
-    # writing config.json; FlushSave() performs the single deferred write. The UI
-    # turns this on and flushes once per drained batch, so a "Run all" no longer
-    # serializes the whole config on every host completion.
+    # Save coalescing: with DeferSave on, mutations mark PendingSave and FlushSave()
+    # performs the single deferred write (the UI flushes once per drained batch).
     [bool]   $DeferSave = $false
     hidden [bool] $PendingSave = $false
 
-    # Cached typed view, rebuilt lazily and invalidated on any mutation (all of which
-    # funnel through SetEntries). Without this, GetAll/GetByHost rebuilt every
-    # RecentConnection (+ nested inventory/disk) and re-sorted on each call - and the
-    # UI reads them every ~200ms tick. $Index maps lower(hostname) -> entry for O(1) lookup.
+    # Cached typed view, rebuilt lazily, invalidated by any mutation (all funnel through
+    # SetEntries) - the UI reads every ~200ms tick. $Index = lower(hostname) -> entry, O(1).
     hidden [RecentConnection[]] $Cache
     hidden [hashtable] $Index
     hidden [bool] $CacheValid = $false
@@ -103,9 +99,8 @@ class RecentConnectionsStore {
             rebootRequired = [bool]$rebootRequired
         }
 
-        # Carry over what a run does NOT change: the cached inventory/disk-usage and
-        # the last operator-action stamp. Replacing the entry without these silently
-        # loses the caches on every completed run.
+        # Carry over what a run does NOT change (cached inventory/disk-usage, lastTouched);
+        # replacing the entry without these silently loses the caches on every run.
         $prev = $null
         foreach ($e in $this.Entries()) {
             if ([string]$e['hostname'] -eq $name) { $prev = [hashtable]$e; break }
@@ -121,11 +116,8 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Stamps the host's last operator action (Add / Run / gather / storage scan),
-    # creating a minimal entry for a not-yet-tracked host, so the next launch
-    # orders cards newest-action-first - mirroring the session's move-to-top.
-    # Deliberately does NOT stamp lastSeen: that means "last run", and drives both
-    # the card's relative-time subtitle and the 24h scan-reuse rule.
+    # Stamps the host's last operator action so the next launch orders cards newest-first.
+    # Deliberately does NOT stamp lastSeen: that means "last run" (subtitle + 24h scan reuse).
     [void] Touch([string]$hostname) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
@@ -151,9 +143,8 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Merges a fresh inventory probe onto the host's entry (creating one if the
-    # host isn't tracked yet) WITHOUT touching its scan/apply status fields.
-    # Stamps the cache with the controller's probe time for "last probed ...".
+    # Merges a fresh inventory probe onto the host's entry WITHOUT touching its scan/apply
+    # status fields; stamps the controller's probe time for "last probed ...".
     [void] UpsertInventory([string]$hostname, [MachineInventory]$inv) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         if ($null -eq $inv) { return }
@@ -183,9 +174,8 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Merges a fresh "biggest folders" scan onto the host's entry (creating one if
-    # the host isn't tracked yet) WITHOUT touching its scan/apply status fields.
-    # Mirrors UpsertInventory.
+    # Merges a fresh "biggest folders" scan onto the host's entry WITHOUT touching its
+    # scan/apply status fields. Mirrors UpsertInventory.
     [void] UpsertDiskUsage([string]$hostname, [DiskUsageReport]$report) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         if ($null -eq $report) { return }
@@ -248,9 +238,8 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Typed entries, most-recent-activity first (see RecencyKey; blank stamps sort
-    # oldest), capped. Cached until the next mutation, so repeated per-tick reads
-    # don't rebuild + re-sort every time.
+    # Typed entries, most-recent-activity first (RecencyKey; blank stamps sort oldest),
+    # capped, and cached until the next mutation so per-tick reads don't rebuild.
     [RecentConnection[]] GetAll() {
         $this.EnsureCache()
         return $this.Cache
@@ -265,9 +254,8 @@ class RecentConnectionsStore {
         return $null
     }
 
-    # A card's ordering key: the most recent of "last operator action" (lastTouched)
-    # and "last run" (lastSeen), so both acting on a card and completing a run float
-    # it toward the top of the next launch.
+    # A card's ordering key: the most recent of lastTouched (operator action) and
+    # lastSeen (last run), so either floats the card toward the top of the next launch.
     hidden static [datetime] RecencyKey([RecentConnection]$rc) {
         $touched = [RecentConnectionsStore]::ParseSeen($rc.LastTouched)
         $seen = [RecentConnectionsStore]::ParseSeen($rc.LastSeen)

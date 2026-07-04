@@ -40,9 +40,8 @@ class ActiveDirectoryService {
         $p = $prefix.Trim()
         $seen = [System.Collections.Generic.HashSet[string]]::new()
 
-        # One filter for computers + users so each forest is bound + queried ONCE per
-        # search (halves the LDAP round-trips and binds vs a query per kind). Each row's
-        # kind is recovered from objectCategory in MapRow.
+        # One combined computers+users filter, so each forest is bound + queried ONCE per
+        # search (halves the LDAP round-trips); MapRow recovers the kind from objectCategory.
         $filter = [AdFilter]::CombinedFilter($p)
         $props = @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
                    'userAccountControl', 'msDS-User-Account-Control-Computed',
@@ -82,8 +81,9 @@ class ActiveDirectoryService {
     }
 
     # --- pure mapping (exercised via Search in tests) ---------------------------
-    # Kind is recovered from objectCategory (CN=Computer,... vs CN=Person,...) since the
-    # combined filter returns both kinds in one result set.
+
+    # Kind comes from objectCategory (CN=Computer vs CN=Person), since the combined
+    # filter returns both kinds in one result set.
     hidden [AdSearchResult] MapRow([string]$domain, [hashtable]$row) {
         if ($null -eq $row) { return $null }
         $isComputer = ([string]$row['objectCategory']) -match '(?i)CN=Computer'
@@ -105,9 +105,8 @@ class ActiveDirectoryService {
 
     # --- env-coupled seams (overridden in tests) --------------------------------
 
-    # Runs an LDAP search against one forest, returning rows as property
-    # hashtables. DirectorySearcher (not the AD module) keeps this fast and
-    # importable into a background runspace without loading RSAT per query.
+    # Runs an LDAP search against one forest, returning rows as property hashtables.
+    # DirectorySearcher (not the AD module) keeps this fast and RSAT-free.
     hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter, [string[]]$props, [int]$max) {
         Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")

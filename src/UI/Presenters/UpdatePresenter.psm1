@@ -28,10 +28,6 @@ class UpdatePresenter {
         $this.Dialog = [DialogPresenter]::new($resources)
     }
 
-    # -------------------------------------------------------------------------
-    # Main Entry Point
-    # -------------------------------------------------------------------------
-
     # Runs sign-in (if needed) + the update check/prompt. Called after the main window is
     # already built + pool-warmed (see DonutApp), so it only gates showing it.
     [void] CheckAndPrompt() {
@@ -63,9 +59,7 @@ class UpdatePresenter {
         }
     }
 
-    # -------------------------------------------------------------------------
-    # Update UI
-    # -------------------------------------------------------------------------
+    # --- Update UI ---------------------------------------------------------------
 
     [void] ShowUpdateWindow($Release, $LocalVer, $RemoteVer) {
         $isRollback = ($LocalVer -gt $RemoteVer)

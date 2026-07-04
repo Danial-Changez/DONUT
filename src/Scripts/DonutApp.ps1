@@ -57,12 +57,8 @@ try {
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
-    # min = max PINS every runspace: the pool's idle cleanup (CleanupInterval, 15 min)
-    # only disposes runspaces ABOVE the minimum, so with min=1 all but one warmed
-    # runspace died after 15 idle minutes - and the next CONCURRENT job (e.g. a storage
-    # scan during a DCU scan) landed on a fresh COLD runspace, whose class-graph load
-    # under the process-wide CLR loader lock froze the UI. Pinned, the startup warm
-    # (WarmPool) covers every runspace for the app's lifetime.
+    # min = max PINS every runspace: idle cleanup only disposes above the minimum, so
+    # min=1 let warmed runspaces die and later jobs cold-load under the loader lock (UI freeze).
     [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
 
     $logger.LogInfo("Loading resources.")
@@ -74,11 +70,8 @@ try {
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
 
-    # Build the main window (and warm the runspace pool) BEFORE showing login. No window is
-    # on screen yet, so the pool warm's brief synchronous block is just a normal launch
-    # delay - not a frozen login window (which is what happened when the build ran during
-    # the login modal). Login + any update prompt then run, and the already-built,
-    # already-warmed window is shown the instant they finish.
+    # Build the main window (and warm the pool) BEFORE showing login: with no window on
+    # screen the synchronous warm is just launch delay, not a frozen login modal.
     $mainPresenter = $null
     try {
         $mainPresenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)

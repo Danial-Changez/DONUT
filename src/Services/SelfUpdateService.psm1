@@ -29,9 +29,7 @@ class SelfUpdateService {
         $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
     }
 
-    # -------------------------------------------------------------------------
-    # Token Management (DPAPI)
-    # -------------------------------------------------------------------------
+    # --- Token Management (DPAPI) --------------------------------------------
 
     [string] GetStoredToken() {
         if (-not (Test-Path $this.TokenFile)) { return $null }
@@ -43,9 +41,7 @@ class SelfUpdateService {
             $json = [Text.Encoding]::UTF8.GetString($decrypted)
             $data = $json | ConvertFrom-Json
             
-            # Check if expired or needs refresh? 
-            # For simplicity, we just return the access_token. 
-            # Real implementation might check expiry and refresh.
+            # Returned as-is: no expiry check / refresh (kept simple deliberately).
             return $data.access_token
         }
         catch {
@@ -65,9 +61,7 @@ class SelfUpdateService {
         [IO.File]::WriteAllBytes($this.TokenFile, $encrypted)
     }
 
-    # -------------------------------------------------------------------------
-    # Device Flow
-    # -------------------------------------------------------------------------
+    # --- Device Flow -----------------------------------------------------------
 
     [PSCustomObject] InitiateDeviceFlow() {
         $body = @{
@@ -78,12 +72,8 @@ class SelfUpdateService {
         return $response
     }
 
-    # Polls GitHub's device-flow token endpoint once and returns a discriminated
-    # result describing what the caller should do next:
-    #   Status = 'authorized' -> AccessToken/TokenData populated, stop polling
-    #   Status = 'pending'    -> keep polling at the current interval
-    #   Status = 'slow_down'  -> back off (increase interval) and keep polling
-    #   Status = 'error'      -> Error populated, stop polling
+    # Polls GitHub's device-flow token endpoint once; Status tells the caller what next:
+    # 'authorized' (token populated) / 'pending' / 'slow_down' (back off) / 'error' (stop).
     [PSCustomObject] PollForToken([string]$DeviceCode) {
         $body = @{
             client_id   = $this.ClientId
@@ -114,9 +104,7 @@ class SelfUpdateService {
         }
     }
 
-    # -------------------------------------------------------------------------
-    # Release Management
-    # -------------------------------------------------------------------------
+    # --- Release Management ------------------------------------------------------
 
     [PSCustomObject] GetLatestRelease([string]$Token) {
         $headers = @{

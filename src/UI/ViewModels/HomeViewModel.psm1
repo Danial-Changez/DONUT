@@ -24,9 +24,8 @@ class HomeViewModel : ObservableObject {
     [ObservableCollection[HostViewModel]] $Machines
     [HostViewModel] $SelectedMachine
 
-    # AD finder dropdown rows (SearchRowViewModel headers + results, one flat list).
-    # The popup's ItemsControl binds ItemsSource here; the presenter repopulates it
-    # per render (UI thread only, like Machines).
+    # AD finder dropdown rows (headers + results, one flat list); the popup's ItemsControl
+    # binds here and the presenter repopulates per render (UI thread only, like Machines).
     [ObservableCollection[object]] $SearchResults
 
     # Detail-pane mode + the Lens shown in Person mode (a PersonLensViewModel; typed
@@ -39,9 +38,8 @@ class HomeViewModel : ObservableObject {
         $this.SearchResults = [ObservableCollection[object]]::new()
     }
 
-    # Programmatic selection: raises so the bound ListBox.SelectedItem follows (which then
-    # fires SelectionChanged, so the presenter's select side-effects run uniformly).
-    # Selecting a machine switches the detail pane to Machine mode and drops any open Lens.
+    # Programmatic selection: raises so the bound ListBox.SelectedItem follows (its
+    # SelectionChanged then runs the presenter's side-effects uniformly). Machine mode drops any open Lens.
     [void] SetSelected([HostViewModel]$vm) {
         $this.Set('SelectedMachine', $vm)
         if ($null -ne $vm) {

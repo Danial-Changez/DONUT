@@ -61,11 +61,8 @@ class AppConfig {
     }
 
     hidden [hashtable] MergeWithDefaults([hashtable]$userSettings) {
-        # Deep clone so we never mutate the shared static Defaults, and so the
-        # merged result never aliases the caller's hashtables. The latter also
-        # makes the merge safe to run on an already-merged config (e.g. the
-        # worker rebuilding AppConfig from the UI's live Settings): source and
-        # target args are guaranteed to be different objects.
+        # Deep clone so the shared static Defaults are never mutated and the result never
+        # aliases the caller's hashtables (safe to re-merge an already-merged config).
         $merged = [AppConfig]::DeepClone([AppConfig]::Defaults)
         if ($null -eq $userSettings) { return $merged }
 
@@ -219,12 +216,8 @@ class AppConfig {
             }
             # String values with content
             elseif ($val -is [string]) {
-                # Quote values containing a space OR a comma. The command runs
-                # remotely as  pwsh -c "<cmd>"  (PsExec strips its own quoting), so
-                # SINGLE-quote the value: double quotes would close that outer -c
-                # string in PsExec, and a bare comma is PowerShell's array operator.
-                # PowerShell consumes the single quotes, so dcu-cli still receives
-                # -key=value (e.g. -updateDeviceCategory=audio,video,network).
+                # SINGLE-quote values with a space/comma (double quotes would close the remote
+                # pwsh -c wrapper; a bare comma is the array operator). pwsh strips the quotes.
                 if ($val -match '[\s,]') {
                     $escaped = $val -replace "'", "''"
                     $argList.Add("-$key='$escaped'") | Out-Null

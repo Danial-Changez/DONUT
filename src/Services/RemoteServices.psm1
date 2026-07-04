@@ -65,9 +65,8 @@ class RemoteJobService {
                 HostName   = $hostName
                 JobType    = $jobType
                 Options    = $options
-                # Seeded by the presenter (AttachResolvedIp) before Start, when a
-                # pre-resolved IP is cached. A dedicated arg, never an Options key, so it
-                # can't leak onto a dcu-cli command line.
+                # Seeded by the presenter (AttachResolvedIp) before Start. A dedicated
+                # arg, never an Options key, so it can't leak onto a dcu-cli command line.
                 ResolvedIp = ''
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
@@ -87,9 +86,8 @@ class ScanService : RemoteJobService {
 
     ScanService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Builds the worker args only (no network). Reachability + reverse-DNS are
-    # asserted by the worker on the runspace-pool thread (RunScanPhase), so the UI
-    # thread never blocks on an offline/slow host.
+    # Builds the worker args only (no network) - the worker asserts reachability on the
+    # pool thread, so the UI thread never blocks on an offline/slow host.
     [hashtable] PrepareScan([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }
@@ -119,11 +117,9 @@ class RemoteUpdateService : RemoteJobService {
         if (-not (Test-Path $reportPath)) { return $null }
 
         try {
-            # Cache the parsed doc keyed by the file's last-write time, so the repeated
-            # calls in one apply flow (fresh-check -> proceed -> settle) don't re-read +
-            # re-parse the XML on the UI thread. A new scan writes a newer file, which
-            # misses the cache and re-parses.
-            $ticks = (Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
+            # Cache the parsed doc keyed by last-write time: one apply flow's repeated calls
+            # don't re-parse on the UI thread, while a new scan's newer file misses the cache.
+            $ticks =(Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
             $cached = $this.ReportCache[$hostName]
             if ($null -ne $cached -and $cached.Ticks -eq $ticks) { return $cached.Xml }
 

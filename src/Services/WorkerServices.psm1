@@ -23,6 +23,29 @@ using module "..\Models\DcuLog.psm1"
 .NOTES
     Runs entirely off the WPF dispatcher, in a pool runspace. Holds the
     NetworkProbe + DriverMatchingService + LogService it needs to do the work.
+
+    Transport rules this file is built around:
+    - UNC and CIM operations have no usable timeout, so every share/WMI touch is
+      gated by a bounded port probe first (RPC 135 for psexec/CIM, SMB 445 for
+      admin-share I/O) - otherwise an offline or firewalled host hangs the pool
+      thread forever.
+    - Concurrent psexec sessions sharing one PSEXESVC hang when the first ends and
+      deletes the service, so each job family runs under its own -r service name
+      (DonutDcu / DonutDisk / DonutProbe).
+    - psexec exit codes are classified: negative = Windows process-launch fault
+      (NTSTATUS); Win32 transport codes = the connection dropped mid-command (the
+      classic trigger is applying a NETWORK driver, which resets the NIC psexec
+      rides over). On a drop, dcu-cli's authoritative return code is recovered from
+      its outputLog, trusted only if written strictly after the pre-run clear's
+      freshness baseline ($null = log was cleared, a LastWriteTimeUtc = locked
+      leftover so only strictly-newer counts, [datetime]::MaxValue = never trust).
+    - dcu-cli return codes: only 0 is success, 1/5 mean done-but-reboot, and the
+      other small codes are real failures (see DcuLog). Reference:
+      https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
+    - Live progress rides dcu-cli's -outputLog, tailed over the admin share into
+      the Information stream while psexec runs.
+    - GatherRemoteInventory, ReadDcuReturnCode and WarmRuntimeAssemblies are
+      overridable seams so unit tests run without a network.
 #>
 class ExecutionService {
     [LogService] $Logger
@@ -33,9 +56,8 @@ class ExecutionService {
     [string] $ToolsDir
     [string] $LocalLogsDir
     [string] $LocalReportsDir
-    # Per-job resolved IP. Seeded from a pre-resolved IP (HostResolver) when one is
-    # supplied, else filled in by the first ResolvedIpFor() call - so a job resolves
-    # the host 0 or 1 times, never on the hot path when it was prefetched.
+    # Per-job resolved IP: seeded from HostResolver's prefetch when supplied, else
+    # filled by the first ResolvedIpFor() call - a job resolves the host at most once.
     [string] $JobIp = ''
 
     ExecutionService(
@@ -73,9 +95,8 @@ class ExecutionService {
         $localMatcher = [DriverMatchingService]::new($localLogger)
         $service = [ExecutionService]::new($localLogger, $localProbe, $localMatcher, $Config, $SourceRoot, $LogsDir, $ReportsDir)
 
-        # Use the pre-resolved IP (warmed in the background on selection) when the
-        # presenter threaded one through, so the worker skips DNS on the hot path. It's a
-        # dedicated argument, never an Options key, so it can't leak into a dcu-cli line.
+        # The pre-resolved IP (warmed on selection) rides a dedicated argument - never an
+        # Options key - so the worker skips DNS yet it can't leak into a dcu-cli line.
         if (-not [string]::IsNullOrWhiteSpace($ResolvedIp)) {
             $service.JobIp = $ResolvedIp
         }
@@ -104,13 +125,8 @@ class ExecutionService {
         }
     }
 
-    # Background resolution run on the pool (not the UI thread). 'Warm' discovers a
-    # live domain controller (+ list) once at startup; 'Host' freshly resolves a
-    # single host against that already-known DC (cheap, no AD module) AND probes
-    # reachability, returning a verdict { Ip; Online }. A fresh forward-resolve is
-    # authoritative, so it self-heals a changed/reassigned IP; RPC (TCP 135) is
-    # exactly what psexec needs, so it doubles as the online check. The result
-    # rides back on the AsyncJob's Result and is cached by HostResolver.
+    # Pool-side resolution. 'Warm' discovers the live DC list once at startup; 'Host' fresh-
+    # resolves one host (changed IPs self-heal) + probes RPC 135 -> { Ip; Online } for HostResolver.
     [hashtable] RunResolvePhase([DeviceContext] $device, [hashtable] $options) {
         $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
 
@@ -120,19 +136,15 @@ class ExecutionService {
             return @{ Mode = 'Warm'; ActiveDc = [string]$dc; DomainControllers = @($this.Probe.GetDomainControllers()) }
         }
 
-        # Running this job forced RemoteWorker.ps1 to load the full worker module graph
-        # into its pool runspace; WarmRuntimeAssemblies then cold-loads the heavy runtime
-        # assemblies (DNS, CIM/DCOM, TCP). Both happen here during the synchronous
-        # pre-warm so a later scan/inventory never cold-loads them under the loader lock
-        # (which freezes the UI).
+        # This job already forced RemoteWorker.ps1's module graph into the runspace; warming
+        # the runtime assemblies too means later jobs never cold-load under the loader lock.
         if ($mode -eq 'WarmRunspace') {
             $this.WarmRuntimeAssemblies()
             return @{ Mode = 'WarmRunspace' }
         }
 
-        # Identity check: ask the box at $ip for its own name. Runs as its own pool
-        # job (its own thread), in parallel with - and never touching - the dcu-cli
-        # scan, so it adds no latency to the bottleneck.
+        # Identity check: ask the box at $ip for its own name. Its own pool job, parallel
+        # to - and never touching - the dcu-cli scan, so it adds no latency there.
         if ($mode -eq 'Name') {
             $ip = if ($null -ne $options) { [string]$options.Ip } else { '' }
             $actual = $this.Probe.ResolveComputerName($ip)
@@ -148,13 +160,8 @@ class ExecutionService {
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
-    # Cold-loads the heavy runtime assemblies the worker uses - DNS resolution, CIM/DCOM,
-    # TCP sockets, and LDAP (System.DirectoryServices, used by the AD finder) - against
-    # localhost, so the FIRST real probe/search doesn't load them under the process-wide
-    # CLR loader lock and freeze the UI. Best-effort: only the load matters, not the
-    # results. System.DirectoryServices is a process-wide assembly load, so warming it in
-    # any one runspace primes every runspace's first AD search. Overridable so unit tests
-    # skip the local I/O.
+    # Cold-loads the heavy runtime assemblies (DNS, TCP, CIM/DCOM, LDAP) against localhost so
+    # the FIRST real probe never loads them under the CLR loader lock (a UI freeze). Best-effort.
     [void] WarmRuntimeAssemblies() {
         try { Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction SilentlyContinue | Out-Null } catch { }
         try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() } catch { }
@@ -171,10 +178,8 @@ class ExecutionService {
     # if present, otherwise resolves via the AD-authoritative path and memoizes it.
     hidden [string] ResolvedIpFor([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($this.JobIp)) {
-            # Every job start is supposed to thread the pre-resolved IP through
-            # (AttachResolvedIp), so landing here means a caller skipped it and this
-            # worker is about to do the SLOW full AD resolve (DC discovery + DNS) on
-            # its pool thread. Allowed, but flag it - it's a routing bug upstream.
+            # Job starts are supposed to thread the prefetched IP through (AttachResolvedIp):
+            # landing here means the SLOW full AD resolve - allowed, but a routing bug upstream.
             $this.Logger.LogWarning("[$hostName] No pre-resolved IP was threaded to this job - falling back to a full AD resolve on the worker (slow path).")
             $ip = $this.Probe.ResolveHost($hostName)
             if (-not $ip) {
@@ -195,10 +200,8 @@ class ExecutionService {
         }
         $scanArgs = $this.Config.BuildDcuArgs('scan', $remoteOverrides)
         
-        # If no updateDeviceCategory specified, default to all categories.
-        # Single-quote the comma list so it survives the remote `pwsh -c` wrapper
-        # (a bare comma is PowerShell's array operator and breaks parsing); the
-        # remote PowerShell strips the quotes, so dcu-cli gets the plain list.
+        # Default to all categories. Single-quote the comma list so it survives the remote
+        # `pwsh -c` wrapper (a bare comma is PowerShell's array operator); pwsh strips the quotes.
         if ($scanArgs -notmatch '-updateDeviceCategory') {
             $scanArgs += " -updateDeviceCategory='audio,video,network,storage,input,chipset,others'"
         }
@@ -223,12 +226,8 @@ class ExecutionService {
     [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
 
-        # Merge runtime options, but ONLY keys that are real dcu-cli options for this
-        # command. The job's Options bag also carries control data - notably ResolvedIp,
-        # the pre-resolved IP seed AttachResolvedIp threads through - which must NEVER
-        # reach the command line: dcu-cli rejects an unknown -ResolvedIp=<ip> with 105
-        # (invalid option syntax). /scan never hit this because it doesn't merge Options
-        # into its args.
+        # Merge ONLY keys that are real dcu-cli options for this command: the Options bag
+        # also carries control data (e.g. ResolvedIp) that dcu-cli rejects with 105.
         $remoteOverrides = @{
             outputLog = 'C:\temp\DONUT\apply.log'
         }
@@ -258,25 +257,20 @@ class ExecutionService {
         return $artifact
     }
 
-    # Gathers a machine's inventory. Fast path: query WMI directly over a remote DCOM
-    # CIM session (no psexec deploy, no pwsh cold-start, no SMB copy) and write the
-    # JSON locally. If that can't connect, fall back to the proven psexec+pwsh probe.
+    # Inventory. Fast path: query WMI over a remote DCOM CIM session (no psexec deploy,
+    # no SMB copy); if that can't connect, fall back to the proven psexec+pwsh probe.
     [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
         $ip = $this.ResolvedIpFor($device.HostName)
 
-        # Bounded reachability gate (TCP 135, ~2s) so an offline host fails in seconds
-        # instead of hanging minutes on the unbounded CIM/psexec connect. This is only
-        # IsRpcAvailable - NOT the Test-Connection/ResolveHost combo that stalled a cold
-        # runspace - and the socket/CIM assemblies are pre-warmed, so it can't cold-load.
+        # Bounded RPC gate (TCP 135, ~2s) so an offline host fails in seconds instead of
+        # hanging minutes on the unbounded CIM/psexec connect.
         if (-not $this.Probe.IsRpcAvailable($ip)) {
             throw [RemoteJobService]::Fail($this.Logger, [HostOfflineException]::new($device.HostName))
         }
 
-        # Fast path: gather over a remote CIM/DCOM session. A null result (session
-        # wouldn't open), an all-null/unusable result (DCOM answered but WMI gave
-        # nothing), or a thrown error all count as failure and fall through to the
-        # psexec probe.
+        # Fast path: a null result (no session), an all-null result (WMI gave nothing),
+        # or a throw all count as failure and fall through to the psexec probe.
         $inv = $null
         try {
             $inv = $this.GatherRemoteInventory($ip)
@@ -303,10 +297,8 @@ class ExecutionService {
         return @{ InventoryPath = $localPath }
     }
 
-    # A CIM gather only "succeeded" if it produced at least one identifying fact.
-    # An all-null result means DCOM answered but WMI handed back nothing useful, so
-    # the caller should fall back to the psexec probe. Pure + static, so it is
-    # unit-tested without a live host.
+    # A CIM gather "succeeded" only if it produced at least one identifying fact; all-null
+    # means WMI handed back nothing useful. Pure + static, so unit-tested without a host.
     static [bool] IsUsableInventory([hashtable]$inv) {
         if ($null -eq $inv) { return $false }
         foreach ($key in @('model', 'serviceTag', 'biosVersion', 'totalSpaceBytes', 'lastBootTime')) {
@@ -318,18 +310,14 @@ class ExecutionService {
         return $false
     }
 
-    # Queries the host's WMI directly over a DCOM CIM session (same RPC transport
-    # psexec uses) and returns the inventory hashtable - mirrors the probe script's
-    # projected queries, including the battery -Property serialization bypass. Each
-    # query is guarded so one missing field never aborts; returns $null only when the
-    # session itself can't open (caller falls back). Overridable so tests fake it.
+    # Queries the host's WMI over a DCOM CIM session, mirroring the probe script's
+    # projected queries. Each query is guarded; returns $null only when the session won't open.
     [hashtable] GatherRemoteInventory([string]$ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return $null }
         $session = $null
         try {
-            # -OperationTimeoutSec bounds the session's operations (incl. its connection
-            # test) so a box that answered the RPC gate but died mid-open (e.g. rebooting)
-            # can't hang the worker on DCOM's own multi-minute defaults.
+            # -OperationTimeoutSec bounds the session ops so a box that died mid-open
+            # (e.g. rebooting) can't hang the worker on DCOM's multi-minute defaults.
             $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -OperationTimeoutSec 15 -ErrorAction Stop
         }
         catch {
@@ -381,12 +369,8 @@ class ExecutionService {
         return $inv
     }
 
-    # Runs an arbitrary pwsh script on the remote as SYSTEM. The script is passed
-    # base64-encoded (UTF-16LE) via -EncodedCommand, which removes all psexec
-    # command-line quoting hazards (unlike the dcu-cli '-c "..."' path).
-    # $target may be a host name or an IP - psexec accepts either. $serviceName gives
-    # the session its own remote PSEXESVC (see InvokePsExec: shared-name sessions hang
-    # when the first one ends and deletes the service); $maxMinutes is the watchdog.
+    # Runs a pwsh script on the remote as SYSTEM, passed base64 via -EncodedCommand (no
+    # psexec quoting hazards). $serviceName isolates its PSEXESVC; $maxMinutes = watchdog.
     [void] InvokeRemotePwsh([string]$target, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
         $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptText)
         $encoded = [Convert]::ToBase64String($bytes)
@@ -419,9 +403,8 @@ class ExecutionService {
         $p.WaitForExit()
         $exitCode = [int]$p.ExitCode
 
-        # Classify like InvokePsExec: a negative code is a Windows process-launch fault
-        # and a Win32 transport code means psexec's pipe dropped mid-probe - neither is
-        # "the probe script failed", so name the real cause.
+        # Classify like InvokePsExec: negative = process-launch fault, Win32 transport code
+        # = psexec's pipe dropped mid-probe - neither means "the probe script failed".
         if ($exitCode -lt 0) {
             throw [RemoteProcessStartException]::new($target, 'Remote probe', $exitCode)
         }
@@ -445,17 +428,14 @@ class ExecutionService {
         return $local
     }
 
-    # Deploys the bundled WizTree binary to the target, runs a fast MFT folder
-    # scan as SYSTEM (exporting a size-sorted CSV), and copies the CSV back. This
-    # is the only place DONUT pushes a file TO the target (every other probe only
-    # copies artifacts back); the exe is left in C:\temp\DONUT for reuse.
+    # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the CSV
+    # back. The only place DONUT pushes a file TO the target; the exe stays for reuse.
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
 
         $ip = $this.ResolvedIpFor($device.HostName)
-        # Gate SMB (445) first, bounded ~2s: DeployWizTree copies the exe over the admin
-        # share, and a blocked 445 (which RPC/135 reachability does NOT rule out) makes that
-        # UNC copy hang forever with no timeout - the same trap FindDcuCli guards for dcu-cli.
+        # Gate SMB (445) first: DeployWizTree copies over the admin share, and a blocked 445
+        # (which RPC/135 reachability does NOT rule out) makes that UNC copy hang forever.
         if (-not $this.Probe.IsSmbAvailable($ip)) {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
             throw [RpcUnavailableException]::new($ip)
@@ -467,10 +447,8 @@ class ExecutionService {
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
     }
 
-    # Parses the (potentially large) WizTree CSV here on the worker/pool thread and
-    # writes a compact top-N JSON, so the UI thread only ever reads a tiny file.
-    # (Parsing the raw CSV with ConvertFrom-Csv on the dispatcher thread froze the
-    # UI for ~1s; the heavy work belongs off the STA thread.)
+    # Parses the (potentially large) WizTree CSV on the pool thread and writes a compact
+    # top-N JSON, so the UI thread only reads a tiny file (a raw parse there froze the UI ~1s).
     [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [hashtable]$options) {
         $topN = 12
         if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
@@ -509,10 +487,8 @@ class ExecutionService {
         }
     }
 
-    # The remote command that runs WizTree headlessly: a fast MFT scan of C:,
-    # folders only, sorted by size, exported to CSV. Isolated in one place so a
-    # pure-PowerShell fallback (if session-0 GUI invocation proves unreliable) is
-    # a single-method swap with no change to the parser/cache/UI.
+    # The headless WizTree command: fast MFT scan of C:, folders only, size-sorted CSV.
+    # Isolated here so a pure-PowerShell fallback would be a single-method swap.
     static [string] BuildScanCommand() {
         return @'
 & 'C:\temp\DONUT\wiztree64.exe' "C:" /export="C:\temp\DONUT\folders.csv" /admin=1 /exportfolders=1 /exportfiles=0 /sortby=1 /exportmaxdepth=4 | Out-Null
@@ -544,12 +520,8 @@ class ExecutionService {
         # scan's report is never read and the pending-updates count stays 0.
         $localReport = Join-Path $this.LocalReportsDir "$hostName-Updates.xml"
 
-        # This runs right after the dcu-cli run - exactly the window where an applied
-        # NIC driver may have just reset the adapter. Wait briefly (bounded 2s probes)
-        # for the share to come back instead of running unbounded UNC ops against it
-        # (the known forever-hang pattern FindDcuCli / the disk scan gate). Non-fatal:
-        # artifacts are diagnostics + the pending count, and a completed apply must not
-        # be reported failed because its log couldn't be copied.
+        # An applied NIC driver may have just reset the adapter: wait briefly (bounded probes)
+        # for the share. Non-fatal - a completed apply must not fail over a lost log copy.
         $smbUp = $false
         for ($attempt = 1; $attempt -le 4; $attempt++) {
             if ($this.Probe.IsSmbAvailable($ip)) { $smbUp = $true; break }
@@ -564,10 +536,8 @@ class ExecutionService {
             Copy-Item -Path $remoteLog -Destination $localLog -Force
         }
 
-        # DCU names its scan report inconsistently across versions (Report.xml,
-        # DCUApplicableUpdates.xml, ...), so don't guess a single name - copy the NEWEST
-        # *.xml the scan left at the top of the remote DONUT folder. That is the report.
-        # (Top level only: DCU writes it there, and a recursive UNC enumeration can stall.)
+        # DCU names its report inconsistently across versions, so copy the NEWEST top-level
+        # *.xml instead of guessing a name (recursive UNC enumeration can stall).
         $report = $null
         try {
             $report = Get-ChildItem -Path $remoteDir -Filter '*.xml' -File -ErrorAction Stop |
@@ -592,13 +562,8 @@ class ExecutionService {
         return @{ Log = $localLog; Report = $localReport }
     }
 
-    # Tails the run's outputLog over the admin share: emits every COMPLETE line beyond
-    # $seenChars to the Information stream (the pump drains it into the detail terminal
-    # and parses scan steps / percentages from it) and returns the new consumed offset.
-    # Only whole lines are consumed - a partially-written tail line is left for the next
-    # poll, so a line is never emitted twice or split in half. Best-effort by design:
-    # any read error (share busy, NIC resetting) just returns the old offset and the
-    # next poll retries; progress display must never affect the run itself.
+    # Tails the run's outputLog into the Information stream, whole lines only (a mid-write
+    # tail line waits for the next poll). Best-effort: read errors return the old offset.
     hidden [int] EmitNewDcuLogLines([string]$remoteLog, [int]$seenChars) {
         if ([string]::IsNullOrWhiteSpace($remoteLog)) { return $seenChars }
         try {
@@ -630,20 +595,8 @@ class ExecutionService {
         return "\\$ip\$drive`$\$rest"                # \\ip\C$\temp\DONUT\apply.log
     }
 
-    # Clears the run's outputLog over the admin share BEFORE psexec starts. The remote-side
-    # clear (inside the psexec command) only runs if the remote pwsh actually executes - so
-    # if the connection drops during psexec's handshake, a PREVIOUS run's log would survive
-    # and ReadDcuReturnCode could "confirm" a run that never happened from its old
-    # "return code: 0". Returns the freshness baseline for ReadDcuReturnCode:
-    #   $null                 - the log is gone (any log found later is this run's)
-    #   a LastWriteTimeUtc    - a leftover couldn't be deleted (e.g. locked); only a log
-    #                           written STRICTLY after this stamp is trusted. Both stamps
-    #                           come from the target's filesystem, so controller clock skew
-    #                           can't bite.
-    #   [datetime]::MaxValue  - a leftover exists but couldn't even be statted: never trust
-    #                           the log this run (fall back to the unconfirmed path).
-    # SMB is known-good here: FindDcuCli gated port 445 and touched the same share just
-    # before this runs.
+    # Clears the run's outputLog BEFORE psexec starts, so a previous run's log can never
+    # "confirm" a run that never happened. Returns the freshness baseline (see .NOTES).
     hidden [object] ClearRemoteOutputLog([string]$ip, [string]$outputLog) {
         $remote = [ExecutionService]::ToAdminShare($ip, $outputLog)
         if (-not $remote) { return $null }
@@ -665,16 +618,8 @@ class ExecutionService {
         }
     }
 
-    # Reads dcu-cli's authoritative return code back from its outputLog over the admin
-    # share, used to recover the real result after psexec loses its connection mid-command.
-    # Retries briefly because the classic trigger - installing a NETWORK driver - drops the
-    # share for a few seconds while the NIC re-initialises. $baseline is
-    # ClearRemoteOutputLog's verdict: only a log written after it is trusted, so a stale
-    # log from a previous run can never confirm a run that never happened. Returns
-    # DcuLog.ParseReturnCode's { Found; Code }; Found is $false when the log can't be
-    # read, is stale, or has no return-code line (dcu-cli didn't finish). Also copies the
-    # log back locally for the detail panel. Overridable so unit tests don't touch the
-    # network.
+    # Recovers dcu-cli's authoritative return code from its outputLog after psexec drops
+    # mid-command; retries briefly, returns { Found; Code }, trusts only logs newer than $baseline.
     [hashtable] ReadDcuReturnCode([string]$ip, [string]$outputLog, [object]$baseline) {
         if ([string]::IsNullOrWhiteSpace($outputLog)) { return @{ Found = $false; Code = 0 } }
 
@@ -684,14 +629,11 @@ class ExecutionService {
 
         for ($attempt = 1; $attempt -le 5; $attempt++) {
             try {
-                # Gate on SMB (445) first, bounded ~2s: a Test-Path/Get-Content against a UNC
-                # path whose share is still down (the NIC hasn't finished re-initialising)
-                # blocks with no timeout, so probe the port before touching the share.
+                # Gate SMB (445, ~2s) first: touching a UNC path while the share is still
+                # down (NIC re-initialising) blocks with no timeout.
                 if (($this.Probe.IsSmbAvailable($ip)) -and (Test-Path -LiteralPath $remote)) {
-                    # Freshness gate: only trust a log written AFTER the pre-run clear's
-                    # baseline. A file at/before it is the PREVIOUS run's leftover (the
-                    # connection died before the remote command ran) - keep waiting in
-                    # case this run's dcu-cli is still coming up, but never confirm from it.
+                    # Trust only a log written AFTER the pre-run clear's baseline: an older
+                    # file is the previous run's leftover - keep waiting, never confirm from it.
                     $stale = $false
                     if ($null -ne $baseline) {
                         $item = Get-Item -LiteralPath $remote -ErrorAction Stop
@@ -705,9 +647,8 @@ class ExecutionService {
                             $this.Logger.LogInfo("[$ip] Recovered dcu-cli return code $($parsed.Code) from $outputLog after a dropped connection.")
                             return $parsed
                         }
-                        # File is there but has no return-code line yet: dcu-cli may still
-                        # be writing (or the connection dropped before it finished) - wait
-                        # and retry.
+                        # Present but no return-code line yet: dcu-cli may still be
+                        # writing - wait and retry.
                     }
                 }
             }
@@ -722,8 +663,7 @@ class ExecutionService {
     }
 
     # Runs dcu-cli via psexec and returns the effective dcu-cli return code (0 = done,
-    # 1/5 = done + reboot needed). Throws on any real failure. The caller (RunApplyPhase)
-    # uses the code to flag a needed reboot.
+    # 1/5 = done + reboot needed, used by RunApplyPhase). Throws on any real failure.
     [int] InvokePsExec([hashtable] $parameters) {
         $computer = $parameters.ComputerName
         $command = $parameters.Command
@@ -739,29 +679,22 @@ class ExecutionService {
         # Stop any existing DCU process first to avoid conflicts.
         $outputLog = [string]$parameters.OutputLog
 
-        # Clear the outputLog from the CONTROLLER side too, and capture the freshness
-        # baseline. The remote-side clear below only happens if the remote command runs;
-        # without this, a connection lost during psexec's handshake leaves a stale log
-        # that would falsely "confirm" a run that never happened.
+        # Clear the outputLog from the CONTROLLER side too (the remote-side clear only runs
+        # if the remote command does) and capture the freshness baseline (see .NOTES).
         $logBaseline = $this.ClearRemoteOutputLog($ip, $outputLog)
 
         $stopCmd = "Stop-Process -Name 'DellCommandUpdate' -Force -ErrorAction SilentlyContinue"
         $mkdirCmd = "New-Item -Path 'C:\temp\DONUT' -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null"
-        # Clear this run's outputLog first, so whatever it holds afterward is THIS run's
-        # output - dcu-cli's own return-code line is then unambiguous when we have to read
-        # it back after a dropped connection (regardless of whether dcu-cli appends or
-        # overwrites, which Dell doesn't document).
+        # Remote-side clear too, so whatever the outputLog holds afterward is THIS run's
+        # output (Dell doesn't document whether dcu-cli appends or overwrites).
         $clearCmd = if (-not [string]::IsNullOrWhiteSpace($outputLog)) {
             "Remove-Item -LiteralPath '$outputLog' -Force -ErrorAction SilentlyContinue"
         } else { '' }
         $dcuCmd = "& '$dcuPath' /$command $argsString"
         $remoteCmd = if ($clearCmd) { "$stopCmd; $mkdirCmd; $clearCmd; $dcuCmd" } else { "$stopCmd; $mkdirCmd; $dcuCmd" }
 
-        # PsExec Arguments. -r gives this job FAMILY its own remote service name:
-        # concurrent psexec sessions to the same host otherwise share one PSEXESVC, and
-        # when the first session ends psexec STOPS AND DELETES that service under the
-        # second one - whose client then hangs forever on dead pipes. Distinct names
-        # (DonutDcu / DonutDisk / DonutProbe) make concurrent job kinds independent.
+        # -r gives this job family its own remote service name, so concurrent job kinds
+        # never share (and tear down) each other's PSEXESVC (see .NOTES).
         $psexecArgs = @(
             '-accepteula',
             '-nobanner',
@@ -777,28 +710,18 @@ class ExecutionService {
             "`"$remoteCmd`""
         )
 
-        # Log the EXACT command line (psexec flags + the remote 'pwsh -c "..."' wrapper that
-        # runs dcu-cli) to BOTH the app log and the job's detail panel, so a CLI/syntax
-        # failure (e.g. DCU 105) can be read straight from it - and the command corrected by
-        # hand if needed. This is the literal argument list Start-Process receives, in order.
+        # Log the EXACT argument list to both the app log and the detail panel, so a CLI
+        # failure (e.g. DCU 105) can be read - and the command re-run by hand - straight from it.
         $cmdLine = "psexec.exe $($psexecArgs -join ' ')"
         $this.Logger.LogInfo("Executing: $cmdLine")
         Write-Information "Executing: $cmdLine"
 
-        # Run psexec in a console (no stdout redirect) - the reliable launch path; psexec's
-        # own console shows its live output. Diagnostics come from the command logged above
-        # and the exit code below. (An earlier file-redirect to capture DCU's progress
-        # removed that console and is a suspected cause of remote 0xC0000142 init failures.)
-        # Progress comes from a DIFFERENT channel: dcu-cli appends milestones/percentages
-        # to its -outputLog as it runs, so while psexec runs we tail that file over the
-        # admin share and emit each new line to the Information stream. The pump drains it
-        # per tick, so the detail terminal streams live and the card gets scan steps /
-        # apply percentages - without touching psexec's console or stdout.
+        # No stdout redirect - psexec keeps its console (an earlier file-redirect is a
+        # suspected cause of remote 0xC0000142); progress is tailed from the outputLog instead.
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
         $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
-        # Watchdog: a psexec session can hang forever (dead pipes after a transport race,
-        # a wedged remote process). Past the deadline, kill the local client so the worker
-        # is reclaimed and the job fails with a typed cause instead of Running forever.
+        # Watchdog: a psexec session can hang forever (dead pipes, wedged remote process);
+        # past the deadline, kill the client so the job fails with a typed cause.
         $maxMinutes = if ($command -eq 'applyUpdates') { 120 } else { 30 }
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         $seenChars = 0
@@ -816,19 +739,14 @@ class ExecutionService {
         # the detail terminal even when it landed between the last poll and exit.
         $seenChars = $this.EmitNewDcuLogLines($remoteLogUnc, $seenChars)
 
-        # A negative exit code is a Windows process-launch/crash fault (NTSTATUS 0xC000xxxx,
-        # e.g. 0xC0000142 STATUS_DLL_INIT_FAILED) - the remote pwsh never ran dcu-cli - so
-        # surface it as its own cause, not as a DCU exit code (DCU returns small non-negatives).
+        # Negative = Windows process-launch fault (NTSTATUS, e.g. 0xC0000142): the remote
+        # pwsh never ran dcu-cli, so it is NOT a DCU exit code.
         if ($exitCode -lt 0) {
             throw [RemoteProcessStartException]::new($computer, "DCU /$command", $exitCode)
         }
 
-        # psexec transport codes (e.g. 233 ERROR_PIPE_NOT_CONNECTED, 64 ERROR_NETNAME_DELETED)
-        # mean psexec's connection to the host dropped mid-command - NOT a dcu-cli exit code.
-        # The classic trigger is /applyUpdates installing a NETWORK driver, which resets the
-        # NIC that psexec's own SMB pipe rides over: psexec loses the pipe while dcu-cli
-        # finishes on the host. dcu-cli's own return code is authoritative, so recover it
-        # from the outputLog (which we cleared before the run) instead of guessing.
+        # Win32 transport codes (233, 64, ...) mean the connection dropped mid-command while
+        # dcu-cli finishes on the host - recover its authoritative code instead (see .NOTES).
         if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
             $dcu = $this.ReadDcuReturnCode($ip, $outputLog, $logBaseline)
             if ($dcu.Found) {
@@ -846,11 +764,8 @@ class ExecutionService {
             throw [RemoteConnectionLostException]::new($computer, "DCU /$command", $exitCode)
         }
 
-        # dcu-cli return codes: ONLY 0 is success; 1 and 5 mean "done, but reboot to
-        # finish". Everything else is an error - and 2/3/4/6/7/8 are the trap: they're
-        # small numbers but real failures (2 unknown error, 3 not a Dell system, 4 not
-        # admin), NOT benign. Reference:
-        # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
+        # ONLY 0 is success; 1/5 mean done-but-reboot. The other small codes (2/3/4/6/7/8)
+        # are REAL failures, not benign (see the reference in .NOTES).
         if (-not [DcuLog]::IsSuccess($exitCode)) {
             # Carry the full argument string (a syntax error, DCU 105, needs the exact
             # command) plus the decoded meaning so the error reads as its actual cause.
@@ -864,9 +779,8 @@ class ExecutionService {
     }
 
     [string] FindDcuCli([string]$ip) {
-        # The lookup below probes the admin share over SMB (445). If that port is blocked
-        # - which IsHostOnline (RPC/135) does NOT rule out - Test-Path blocks with no
-        # timeout and the job spins forever. Check it first and fail fast with a reason.
+        # Gate SMB (445) first: Test-Path against the admin share blocks with no timeout
+        # when 445 is filtered - which RPC/135 reachability does NOT rule out.
         if (-not $this.Probe.IsSmbAvailable($ip)) {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot locate dcu-cli or run psexec.")
             throw [RpcUnavailableException]::new($ip)

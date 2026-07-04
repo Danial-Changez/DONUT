@@ -79,9 +79,8 @@ class MachineInventory {
 
 # Pure formatting/derivation for the detail-panel cards. Static, WPF-free, tested.
 class InventoryFormat {
-    # Battery health as a percentage of original design capacity: how much the
-    # battery still holds at full charge vs. when new. Returns -1 ("no data") when
-    # either capacity is missing/zero. Clamped to 0..100.
+    # Battery health: full-charge capacity as a % of design capacity, clamped 0..100.
+    # Returns -1 ("no data") when either capacity is missing/zero.
     static [int] BatteryHealthPercent([double]$design, [double]$fullCharge) {
         if ($design -le 0 -or $fullCharge -le 0) { return -1 }
         $pct = [int][Math]::Round(($fullCharge / $design) * 100.0)

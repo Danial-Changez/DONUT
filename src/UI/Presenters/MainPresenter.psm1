@@ -61,9 +61,8 @@ class MainPresenter {
             throw "MainWindow.xaml not found at $xamlPath"
         }
 
-        # Load XAML. Read through a stream we explicitly dispose so the view file
-        # isn't left locked for the app's lifetime (an XmlReader/XamlReader holds
-        # the handle otherwise, blocking edits to the .xaml on disk).
+        # Load XAML through a stream we explicitly dispose, so the .xaml file isn't
+        # left locked (and uneditable on disk) for the app's lifetime.
         try {
             $stream = [System.IO.File]::OpenRead($xamlPath)
             try {
@@ -131,19 +130,16 @@ class MainPresenter {
 
         $this.Views = @{}
 
-        # Home View & Presenter (the default page - built eagerly). Config and Logs are
-        # built lazily on first navigation (EnsureView), so startup doesn't pay for the
-        # Logs presenter reading every log file when the user may never open that tab.
-        $homeView = $this.LoadView("HomeView.xaml")
+        # Home is the default page, built eagerly; Config and Logs build lazily on first
+        # navigation (EnsureView) so startup never pays for tabs the user may not open.
+        $homeView =$this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
             $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
         }
 
-        # Shell view-model: navigation, rail toggle, and window chrome are bound
-        # commands (MainWindow.xaml). The presenter stays the coordinator - the
-        # commands call back into it for the shell work that is imperative by design:
-        # lazy page construction, the rail animations, and the header swap.
+        # Shell view-model: navigation / rail / window chrome are bound commands that call
+        # back into the presenter for the imperative shell work (lazy pages, animations).
         $presenter = $this
         $this.MainVm = [MainViewModel]::new()
         $nav = { param($p) $presenter.NavigateTo([string]$p) }.GetNewClosure()
@@ -216,9 +212,8 @@ class MainPresenter {
         return $null
     }
 
-    # Builds a page's view + presenter the first time it's needed (Home is built at
-    # startup; Config/Logs are deferred here so their construction cost - notably the
-    # Logs presenter reading every log file - isn't paid until the tab is opened).
+    # Builds a page's view + presenter on first navigation (Home builds at startup), so
+    # construction cost - notably Logs reading every log file - waits for the tab open.
     hidden [void] EnsureView([string]$viewName) {
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) { return }
 

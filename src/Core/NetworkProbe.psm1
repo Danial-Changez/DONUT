@@ -109,10 +109,8 @@ class NetworkProbe {
         }
     }
 
-    # Resolves a host against an ALREADY-KNOWN domain controller, skipping DC
-    # discovery (no AD module, just one Resolve-DnsName). Used by the background
-    # pre-resolve path, which warms the active DC once at startup and then resolves
-    # individual hosts cheaply. Returns $null (logged) on any failure.
+    # Resolves a host against an ALREADY-KNOWN DC (one Resolve-DnsName, no discovery) -
+    # the cheap background pre-resolve path. Returns $null (logged) on any failure.
     [IPAddress] ResolveWith([string]$hostName, [string]$dc) {
         if ([string]::IsNullOrWhiteSpace($dc)) {
             $this.Logger.LogError("ResolveWith for '$hostName': no domain controller supplied.")
@@ -172,9 +170,8 @@ class NetworkProbe {
     }
 
     [bool] IsSmbAvailable([string]$hostName) {
-        # Test TCP port 445 (SMB) - the admin share ($C$) and psexec transport. RPC (135)
-        # being open doesn't imply 445 is; when it's blocked, a host-side Test-Path over
-        # the admin share (and psexec itself) hangs with no timeout, so check it up front.
+        # TCP 445 (SMB) = the admin share + psexec transport. An open 135 doesn't imply
+        # 445; when blocked, UNC ops hang with no timeout - so check it up front.
         try {
             $client = [TcpClient]::new()
             $result = $client.BeginConnect($hostName, 445, $null, $null)
@@ -204,10 +201,8 @@ class NetworkProbe {
         }
     }
 
-    # Asks the machine AT an IP for its own computer name (the identity check used
-    # before a destructive Apply). Queries WMI over DCOM - the same RPC transport
-    # psexec uses - so it works wherever a run would, and runs on its own thread,
-    # never the dcu-cli path. Returns '' (logged) if it can't be determined.
+    # Asks the machine AT an IP for its own name (the identity check gating a destructive
+    # Apply), via WMI over DCOM - psexec's transport. Returns '' (logged) on failure.
     [string] ResolveComputerName([string]$ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
         try {

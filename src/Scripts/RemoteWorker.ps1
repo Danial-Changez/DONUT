@@ -60,9 +60,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 try {
-    # Prefer the live config object sent from the UI so the run reflects exactly
-    # what the user configured. config.json is only persistence: fall back to it
-    # (or to defaults) when no Settings were supplied.
+    # Prefer the live config sent from the UI (config.json is only persistence);
+    # fall back to it, or to defaults, when no Settings were supplied.
     $config = if ($Settings) {
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, $Settings)
     } elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
