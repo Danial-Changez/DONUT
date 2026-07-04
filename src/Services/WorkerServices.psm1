@@ -369,6 +369,23 @@ class ExecutionService {
         return $inv
     }
 
+    # Launches psexec.exe headless and returns the Process for the caller's watchdog loop.
+    # CreateNoWindow gives psexec a HIDDEN console: no window ever appears, so concurrent
+    # runs never allocate the visible consoles that (from this window-subsystem GUI) would
+    # sit in front of the WPF UI for the whole run and read as a frozen app. UseShellExecute
+    # off with NO stdout redirect keeps psexec a real console - a file-redirect removed it
+    # and is the suspected cause of remote 0xC0000142 init failures. The args are space-
+    # joined exactly as the logged command line, so the delicate psexec/DCU quoting is
+    # unchanged (this mirrors the old branch's known-good CreateNoWindow launch).
+    hidden static [System.Diagnostics.Process] StartPsExecHidden([string[]]$psexecArgs) {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = 'psexec.exe'
+        $psi.Arguments = ($psexecArgs -join ' ')
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        return [System.Diagnostics.Process]::Start($psi)
+    }
+
     # Runs a pwsh script on the remote as SYSTEM, passed base64 via -EncodedCommand (no
     # psexec quoting hazards). $serviceName isolates its PSEXESVC; $maxMinutes = watchdog.
     [void] InvokeRemotePwsh([string]$target, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
@@ -391,7 +408,7 @@ class ExecutionService {
         )
 
         $this.Logger.LogInfo("Executing remote probe on \\$target (service $serviceName, limit ${maxMinutes}m)")
-        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
+        $p = [ExecutionService]::StartPsExecHidden($psexecArgs)
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         while (-not $p.HasExited) {
             if ([datetime]::UtcNow -gt $deadline) {
@@ -716,10 +733,12 @@ class ExecutionService {
         $this.Logger.LogInfo("Executing: $cmdLine")
         Write-Information "Executing: $cmdLine"
 
-        # No stdout redirect - psexec keeps its console (an earlier file-redirect is a
-        # suspected cause of remote 0xC0000142); progress is tailed from the outputLog instead.
+        # Headless launch (hidden console, no stdout redirect): no window means concurrent
+        # runs never steal foreground from the WPF UI, while psexec keeps a real console
+        # (a file-redirect removed it and is a suspected cause of remote 0xC0000142).
+        # Progress is tailed from the outputLog instead. See StartPsExecHidden.
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
-        $p = Start-Process -FilePath 'psexec.exe' -ArgumentList $psexecArgs -NoNewWindow -PassThru
+        $p = [ExecutionService]::StartPsExecHidden($psexecArgs)
         # Watchdog: a psexec session can hang forever (dead pipes, wedged remote process);
         # past the deadline, kill the client so the job fails with a typed cause.
         $maxMinutes = if ($command -eq 'applyUpdates') { 120 } else { 30 }
