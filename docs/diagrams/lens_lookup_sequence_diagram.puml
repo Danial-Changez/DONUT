@@ -2,7 +2,7 @@
 title User Lens — persistent de-elevated agent (pick a person, see their devices)
 
 actor Operator as OP
-participant "HomePresenter\n(coordinator)" as P
+participant "FinderPresenter\n(coordinator)" as P
 participant "PersonLensViewModel\n(detail pane)" as VM
 participant "LensLookupWorker.ps1\n(pool, as admin)" as PW
 participant "Scheduled Task\n(interactive user, Limited)" as TASK

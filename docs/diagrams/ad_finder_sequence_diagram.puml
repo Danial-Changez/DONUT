@@ -2,7 +2,7 @@
 title Home Search Bar — Live AD Finder + Unlock
 
 actor User
-participant "HomePresenter" as Presenter
+participant "FinderPresenter" as Presenter
 participant "DispatcherTimer\n(debounce / poll)" as Timer
 participant "AdSearchWorker.ps1\n(per forest)" as Worker
 participant "ActiveDirectoryService" as AD
