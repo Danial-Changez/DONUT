@@ -45,7 +45,7 @@ Describe "PersonLensService" {
         $lens.Errors[0] | Should -Be 'boom'
     }
 
-    Context "exchange crypto (format shared with LensWorker.ps1)" {
+    Context "exchange crypto (format shared with LensAgent.ps1)" {
 
         It "NewKeyIv returns 48 bytes (32 key + 16 IV) and differs per call" {
             $a = [PersonLensService]::NewKeyIv()
@@ -75,6 +75,22 @@ Describe "PersonLensService" {
             $out = $null
             try { $out = [PersonLensService]::UnprotectText($blob, $keyIv) } catch { $out = $null }
             $out | Should -Not -Be $json
+        }
+
+        It "WriteEncrypted lands an atomic file the agent format decrypts (no plaintext on disk)" {
+            $keyIv = [PersonLensService]::NewKeyIv()
+            $path = Join-Path ([IO.Path]::GetTempPath()) ("lens-wire-" + [guid]::NewGuid().ToString('N') + ".bin")
+            $json = '{ "identity": "jane@corp.com", "sam": "U0001", "siteServer": "s" }'
+            try {
+                [PersonLensService]::WriteEncrypted($path, $json, $keyIv)
+                Test-Path -LiteralPath "$path.tmp" | Should -BeFalse   # rename cleaned the tmp up
+                $blob = [IO.File]::ReadAllBytes($path)
+                [System.Text.Encoding]::UTF8.GetString($blob) | Should -Not -Match 'jane@corp.com'
+                [PersonLensService]::UnprotectText($blob, $keyIv) | Should -Be $json
+            }
+            finally {
+                Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 }
