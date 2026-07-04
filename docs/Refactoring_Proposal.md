@@ -123,6 +123,13 @@ coordinators/services**, not deleted: they own the services, the `AsyncJob` queu
 the `DispatcherTimer`s, and the modal lifecycle, and they build the view-models and
 wire their commands.
 
+> **On the `*Presenter` name.** The classes keep their original names for continuity,
+> but post-MVVM their role is **coordinator / UI-service**, not MVP passive-view
+> presenter — they no longer poke controls. A rename to `*Coordinator`/`*Service` would
+> be purely cosmetic churn across the UI layer (and half-doing it, e.g. only
+> `DialogPresenter`, would read worse than leaving them), so the name is retained by
+> choice. `ToastService` is the one already carrying the accurate suffix.
+
 Deliberately still imperative (each is the standard MVVM answer, not a leftover):
 
 *   **`DialogPresenter`** stays a *dialog service* — showing a modal and returning a
@@ -170,6 +177,7 @@ consumes the result and exposes it to the bindings.
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
+| `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their SCCM devices + BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last-synced" formatting |
 | `RecentConnection` / `RecentConnectionsStore` | Persisted "recent machines" backing the Home list (status, counts, cached inventory + disk usage) |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
@@ -197,6 +205,7 @@ building); they only **prepare/parse** off the UI thread — the worker does the
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select) |
 | `ActiveDirectoryService` | Live multi-forest AD search (computers + users) and account unlock |
+| `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [De-elevating for SCCM/BitLocker](#de-elevating-the-user-lens)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `SystemInfoService` | Local machine facts (identity, domain, battery) for the title bar |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
@@ -212,6 +221,7 @@ All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
 | `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress/step text, overview-strip facts, probed subtitle, folders tree, Run/Gather commands |
 | `FolderNodeViewModel` | Display-ready largest-folders tree node (pure, computed per report) |
 | `SearchRowViewModel` | AD finder dropdown row — section header or result, with Pick/Unlock commands (pure) |
+| `PersonLensViewModel` / `LensDeviceViewModel` | The user Lens shown in the detail pane: person fields + a device collection, each device with a Reveal-BitLocker toggle and an Add-to-machine-list command |
 | `ConfigViewModel` | Config page chrome (SaveCommand); the option forms stay on the presenter's data-driven binder by design |
 | `LogsViewModel` / `LogTabViewModel` | Logs page: tab collection + per-tab text with tail-truncation ("Load full file") state |
 | `ToastViewModel` | One toast card (title/message/accent/IsClosing for the exit animation) |
@@ -227,7 +237,7 @@ build/wire the view-models (see [The MVVM migration](#the-mvvm-migration)).
 |-------|---------|
 | `MainPresenter` | Composition root: main window, lazy page construction, rail animation, shell command targets |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management; sets `HostViewModel` state per pump tick |
+| `HomePresenter` | Add/scan/apply, per-machine detail (inventory + storage scan), live AD finder, job management; sets `HostViewModel` state per pump tick. Also drives the **user Lens**: picking a user runs the de-elevated lookup on the pool, populates the `PersonLensViewModel`, and switches the detail pane to Person mode |
 | `ConfigPresenter` | Command selection, the data-driven option-form binder, args persistence |
 | `LogsPresenter` | Log file I/O (enumerate, tail-read, load-full, clear) behind `LogsViewModel` |
 | `LoginPresenter` | GitHub Device Flow: poll timer + modal lifecycle behind `LoginViewModel` |
@@ -273,6 +283,29 @@ This section discusses how the refactor addresses the design choices and limitat
   - `2-5`: Various success states
   - `500+`: Errors (throws exception)
 - **PsExec Arguments:** Use `-s` (SYSTEM), `-h` (elevated), `-accepteula`, with `pwsh -NoProfile -NonInteractive -c` for cleaner remote execution
+
+### De-elevating the user Lens
+**Challenge:** DONUT runs **elevated as an admin account** (required for the psexec/CIM
+remote work), but the user Lens data is only readable by the operator's **regular account**:
+the person→device mapping and hardware inventory come from **SCCM** (its AdminService is
+RBAC-scoped to the regular account, not the admin one), and BitLocker recovery keys sit in
+**AD** under the computer object. Elevating does not grant the regular account's rights — a
+separate identity means a separate process.
+
+**Strategy — run the lookup de-elevated as the logged-on user:**
+- `LensLookupWorker.ps1` runs on the pool (as admin) and, via `PersonLensService.RunLookupJson`,
+  launches `LensWorker.ps1` as the **interactive user** using a one-shot **scheduled task**
+  (`LogonType Interactive` = the logged-on token, *no password*; `RunLevel Limited` =
+  medium integrity). `Shell.Application` was tried and rejected — it only de-elevates within
+  the *same* user, so it left the child in the admin context.
+- `LensWorker.ps1` (the de-elevated child) reads AD forest-wide via the **Global Catalog**
+  (`GC://…`, then binds each object's home domain) and SCCM via the **AdminService REST**
+  endpoint (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive), and writes the bundle as
+  JSON to a `%ProgramData%\DONUT` exchange folder that the task grants the interactive user.
+- The parse (`PersonLens.FromJson`) is pure/tested; the de-elevation itself is the overridable
+  `RunLookupJson` seam. `HomePresenter` polls the pool job (like the AD search/unlock) and
+  populates the `PersonLensViewModel`. The `%5C` (backslash) gotcha in the SCCM query is
+  avoided by filtering on the forest-unique SAM (`endswith`) and exact-matching client-side.
 
 ### The `InstallWorker.ps1` Script
 **Challenge:** This script is copied to `%LOCALAPPDATA%` and runs independently to handle updates/rollbacks.

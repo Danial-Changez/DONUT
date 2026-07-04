@@ -23,6 +23,8 @@ class AppConfig {
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
         domains = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
+        adminServiceHost = 'sccm01.contoso.com'
         commands = @{
             scan = @{
                 args = @{
@@ -160,6 +162,13 @@ class AppConfig {
             if ($list.Count -gt 0) { return $list }
         }
         return @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+    }
+
+    # SCCM AdminService host for the user Lens device lookup. Falls back to the org default.
+    [string] GetAdminServiceHost() {
+        $val = [string]$this.GetSetting('adminServiceHost', $null)
+        if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
+        return 'sccm01.contoso.com'
     }
 
     [int] GetThrottleLimit() {

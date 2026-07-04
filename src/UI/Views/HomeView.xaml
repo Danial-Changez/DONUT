@@ -137,12 +137,12 @@
                     <Border.Style>
                       <Style TargetType="Border">
                         <Setter Property="Background" Value="Transparent" />
+                        <!-- All result rows are clickable now: computers pick into the bar,
+                             users open the Lens (both wired to PickCommand). -->
+                        <Setter Property="Cursor" Value="Hand" />
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding IsHeader}" Value="True">
                             <Setter Property="Visibility" Value="Collapsed" />
-                          </DataTrigger>
-                          <DataTrigger Binding="{Binding IsComputer}" Value="True">
-                            <Setter Property="Cursor" Value="Hand" />
                           </DataTrigger>
                           <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
@@ -210,7 +210,18 @@
   </Grid>
 
   <!-- ============= Overview strip: mirrors the SELECTED remote machine ============= -->
+  <!-- Machine-only: collapse it while the Lens (a user) is shown in the detail pane. -->
   <Grid Grid.Row="1" Margin="0,0,0,18">
+    <Grid.Style>
+      <Style TargetType="Grid">
+        <Setter Property="Visibility" Value="Visible" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding DetailMode}" Value="Person">
+            <Setter Property="Visibility" Value="Collapsed" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+    </Grid.Style>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="*" />
       <ColumnDefinition Width="*" />
@@ -413,15 +424,37 @@
     <!-- ============================ Detail pane ============================ -->
     <Border x:Name="DetailPane" Grid.Column="2" CornerRadius="10" Padding="2"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+      <!-- Three modes, switched by HomeVm.DetailMode: Empty hint / Machine detail / user Lens. -->
       <Grid Margin="14,12,14,12">
         <!-- Empty state -->
         <TextBlock x:Name="DetailEmptyHint"
-                   Text="Select a machine to view its details."
+                   Text="Select a machine, or search a person to open their Lens."
                    Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="14"
-                   TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40" />
+                   TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DetailMode}" Value="Empty">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
 
-        <!-- Content (shown once a machine is selected) -->
-        <Grid x:Name="DetailContent" Visibility="Collapsed">
+        <!-- Content (shown when a machine is selected) -->
+        <Grid x:Name="DetailContent">
+          <Grid.Style>
+            <Style TargetType="Grid">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DetailMode}" Value="Machine">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <!-- Folders + log split the remaining height equally, so a window resize
@@ -534,6 +567,180 @@
                        TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="6" />
             </Grid>
           </Border>
+        </Grid>
+
+        <!-- ===== User Lens: directory info + SCCM devices (shown when a user is picked) ===== -->
+        <Grid x:Name="LensPanel">
+          <Grid.Style>
+            <Style TargetType="Grid">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DetailMode}" Value="Person">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <!-- Visibility (above) stays on HomeVm.DetailMode; the content binds the person VM. -->
+          <Grid DataContext="{Binding SelectedPerson}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,10">
+              <TextBlock Text="{Binding DisplayName}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+                         Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding Upn}" FontFamily="Montserrat" FontSize="11.5"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <!-- Loading / error status -->
+            <TextBlock Grid.Row="1" Text="{Binding StatusText}" FontFamily="Montserrat" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,0,0,10">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
+                  <Setter Property="Visibility" Value="Visible" />
+                  <Style.Triggers>
+                    <Trigger Property="Text" Value="">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </Trigger>
+                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                      <Setter Property="Foreground" Value="{DynamicResource AccentOrange}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+
+            <!-- User information -->
+            <Grid Grid.Row="2" Margin="0,0,0,14">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
+                <TextBlock Text="EMAIL" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock Text="{Binding Email}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                <TextBlock Text="MANAGER" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock Text="{Binding Manager}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
+                <TextBlock Text="SAM" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock Text="{Binding Sam}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1">
+                <TextBlock Text="OFFICE" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
+                <TextBlock Text="{Binding Office}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
+              </StackPanel>
+            </Grid>
+
+            <!-- Devices -->
+            <Grid Grid.Row="3">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Text="DEVICES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Devices}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
+                              Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontFamily="Montserrat" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                              <Run Text="{Binding Model}" /><Run Text="   ·   " /><Run Text="{Binding LastSyncText}" />
+                            </TextBlock>
+                            <!-- BitLocker key: hidden until revealed (a recovery secret) -->
+                            <TextBlock Text="{Binding BitLockerText}" FontFamily="Consolas" FontSize="12"
+                                       Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}" />
+                            <!-- Note when there's no BitLocker / device not found -->
+                            <TextBlock Text="{Binding Note}" FontFamily="Montserrat" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" TextWrapping="Wrap" Margin="0,4,0,0">
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Setter Property="Visibility" Value="Visible" />
+                                  <Style.Triggers>
+                                    <Trigger Property="Text" Value="">
+                                      <Setter Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Wrapped so visibility can trigger (HasBitLocker &amp; not yet revealed)
+                                 without restyling the themed button, whose style is a runtime
+                                 (merged-dictionary) DynamicResource. -->
+                            <ContentControl Margin="0,0,6,0">
+                              <ContentControl.Style>
+                                <Style TargetType="ContentControl">
+                                  <Setter Property="Visibility" Value="Collapsed" />
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasBitLocker}" Value="True">
+                                      <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsBitLockerRevealed}" Value="True">
+                                      <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </ContentControl.Style>
+                              <Button Content="Reveal key" Command="{Binding RevealCommand}"
+                                      Style="{DynamicResource ButtonOutline}" FontSize="11" Height="28" />
+                            </ContentControl>
+                            <Button Content="Add" Command="{Binding AddCommand}"
+                                    Style="{DynamicResource ButtonPrimary}" FontSize="11" Height="28" Padding="14,4"
+                                    ToolTip="Add this machine to the list" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <!-- Empty-devices hint (only once loaded with no devices) -->
+              <TextBlock Grid.Row="1" Text="No SCCM devices for this user."
+                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
+                         HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                      <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                          <Condition Binding="{Binding HasDevices}" Value="False" />
+                          <Condition Binding="{Binding IsLoading}" Value="False" />
+                          <Condition Binding="{Binding HasError}" Value="False" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="Visibility" Value="Visible" />
+                      </MultiDataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </Grid>
+          </Grid>
         </Grid>
       </Grid>
     </Border>

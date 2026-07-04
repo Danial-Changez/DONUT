@@ -1,0 +1,42 @@
+using namespace Donut.Mvvm
+using module "..\..\Models\PersonLens.psm1"
+
+<#
+.SYNOPSIS
+    One device row in the user Lens: a person's SCCM machine + its BitLocker key.
+
+.DESCRIPTION
+    Renders a LensDevice - name, model, relative last-sync - with the BitLocker recovery
+    key hidden until revealed (it's a recovery secret). RevealCommand is self-wired (pure
+    UI state: flips IsBitLockerRevealed); AddCommand is wired by HomePresenter to drop the
+    WSID into the machine list. Inherits ObservableObject so the reveal updates live.
+#>
+class LensDeviceViewModel : ObservableObject {
+    [string] $Name = ''
+    [string] $Model = ''
+    [string] $LastSyncText = ''
+    [string] $Domain = ''
+    [string] $BitLockerText = ''          # the joined keys; shown only once revealed
+    [bool]   $HasBitLocker = $false
+    [bool]   $IsBitLockerRevealed = $false
+    [string] $Note = ''
+    [object] $RevealCommand               # RelayCommand: reveal the BitLocker key(s)
+    [object] $AddCommand                  # RelayCommand: add the WSID to the machine list (presenter-wired)
+
+    LensDeviceViewModel([LensDevice]$d) {
+        if ($null -ne $d) {
+            $this.Name = $d.Name
+            $this.Model = $d.Model
+            $this.Domain = $d.Domain
+            $this.Note = $d.Note
+            $this.LastSyncText = [LensFormat]::SyncLabel($d.LastSync)
+            $this.HasBitLocker = $d.HasBitLocker()
+            $this.BitLockerText = (@($d.BitLockerKeys | ForEach-Object {
+                        if ($_.Created) { "$($_.Password)  ($($_.Created))" } else { $_.Password }
+                    }) -join "`n")
+        }
+        $self = $this
+        $reveal = { param($p) $self.Set('IsBitLockerRevealed', $true) }.GetNewClosure()
+        $this.RevealCommand = [RelayCommand]::new([System.Action[object]]$reveal)
+    }
+}
