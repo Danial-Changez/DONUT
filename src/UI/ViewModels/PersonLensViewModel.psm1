@@ -42,8 +42,9 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('HasDevices', $false)
     }
 
-    # Applies the mid-flight PARTIAL bundle (directory facts only): the scalars land
-    # early while the device crawl continues, so the loading state stays on.
+    # Applies a mid-flight PARTIAL bundle: partial 1 carries the directory facts,
+    # partial 2 adds name-only device rows (details still loading), so both land
+    # early while the crawl continues. The loading state stays on until Apply.
     [void] ApplyPartial([PersonLens]$lens) {
         if ($null -eq $lens -or -not $this.IsLoading) { return }
         if ($lens.Upn) { $this.Set('Upn', $lens.Upn) }
@@ -52,7 +53,15 @@ class PersonLensViewModel : ObservableObject {
         if ($lens.Email) { $this.Set('Email', $lens.Email) }
         if ($lens.Manager) { $this.Set('Manager', $lens.Manager) }
         if ($lens.Office) { $this.Set('Office', $lens.Office) }
-        $this.Set('StatusText', 'Looking up devices…')
+        if ($lens.Devices.Count -gt 0) {
+            $this.Devices.Clear()
+            foreach ($d in $lens.Devices) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
+            $this.Set('HasDevices', $true)
+            $this.Set('StatusText', 'Loading device details…')
+        }
+        else {
+            $this.Set('StatusText', 'Looking up devices…')
+        }
     }
 
     # Maps a resolved PersonLens onto the VM. AddCommand per device is wired by the caller

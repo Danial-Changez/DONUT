@@ -324,9 +324,13 @@ separate identity means a separate process.
   computer's AD object, which the worker GC-locates anyway. The AdminService `/wmi`
   route's OData translator rejects richer filters (`or`, backslashes) with **404**, so
   per-device SCCM detail queries were dropped rather than fought.
-- The child writes an early **partial bundle** (directory facts) which `RunLookupJson`
-  streams to `PollLens` on the Information stream (tag `LensPartial`), so the pane fills
-  with the person's info in ~1–2 s while the SCCM/BitLocker crawl finishes.
+- The affinity query runs on a **thread job in parallel** with the AD user read: the
+  finder row's SAM is passed down as a hint (`-Sam`), so the child doesn't wait for AD
+  to resolve it before asking SCCM.
+- The child writes **sequential partial bundles** which `RunLookupJson` streams to
+  `PollLens` on the Information stream (tag `LensPartial`): partial 1 = directory facts
+  (~1–2 s), partial 2 = name-only device rows the moment affinity answers; the per-device
+  OS/last-logon/BitLocker reads fill in behind them in the final bundle.
 - Writes are atomic (`.tmp` + rename), the parent polls at 100 ms with no settle sleep, and
   the TTL cache makes re-picking the same person instant.
 

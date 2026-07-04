@@ -31,6 +31,7 @@ class PersonLensService {
     [LogService] $Logger
     [string]     $SiteServer
     [string]     $SourceRoot
+    [string]     $SamHint = ''    # finder-supplied SAM so the child can start SCCM affinity early
     [int]        $TimeoutSec = 60
 
     PersonLensService([string]$siteServer, [string]$sourceRoot) {
@@ -121,7 +122,6 @@ class PersonLensService {
         $dir = Join-Path $env:ProgramData ("DONUT\lens-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
         $resultPath = Join-Path $dir 'result.bin'
-        $partialPath = Join-Path $dir 'partial.bin'
         $taskName = $null
         try {
             # Strip the inherited ACL (ProgramData grants all local users read!) down to
@@ -152,7 +152,7 @@ class PersonLensService {
             if (-not $pwshPath) { return [PersonLensService]::ErrorBundle('Could not resolve pwsh.exe to run the de-elevated child.') }
 
             $taskName = 'DONUT-Lens-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-            $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Identity "{1}" -SiteServer "{2}" -ResultPath "{3}"' -f $lensWorker, $identity, $this.SiteServer, $resultPath
+            $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Identity "{1}" -SiteServer "{2}" -ResultPath "{3}" -Sam "{4}"' -f $lensWorker, $identity, $this.SiteServer, $resultPath, $this.SamHint
             $action = New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
             $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
             $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
@@ -161,17 +161,20 @@ class PersonLensService {
             Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 
             # 100ms poll; the child's writes are atomic (tmp + rename), so no settle wait.
-            # When the partial (directory facts) lands, stream it to the presenter on the
-            # Information stream - the same channel the DCU workers use for live output.
+            # The child emits SEQUENTIAL partials (partial-1 = directory facts, partial-2 =
+            # name-only device rows); stream each to the presenter on the Information
+            # stream - the same channel the DCU workers use for live output.
             $deadline = (Get-Date).AddSeconds($this.TimeoutSec)
-            $partialSent = $false
+            $partialIndex = 1
             while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
-                if (-not $partialSent -and (Test-Path -LiteralPath $partialPath)) {
-                    $partialSent = $true
+                $partialPath = Join-Path $dir ("partial-{0}.bin" -f $partialIndex)
+                if (Test-Path -LiteralPath $partialPath) {
+                    $partialIndex++
                     try {
                         Write-Information -MessageData ([PersonLensService]::UnprotectText([IO.File]::ReadAllBytes($partialPath), $keyIv)) -Tags 'LensPartial'
                     }
                     catch { }
+                    continue   # check for the next partial before sleeping
                 }
                 Start-Sleep -Milliseconds 100
             }

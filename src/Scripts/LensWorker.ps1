@@ -2,21 +2,22 @@
 <#
 .SYNOPSIS
     De-elevated inner worker for the user Lens: resolves a person to their directory
-    facts + SCCM devices + BitLocker keys, and writes the bundle encrypted.
+    facts + SCCM-assigned devices + BitLocker keys, and writes the bundle encrypted.
 
 .DESCRIPTION
     Runs as the INTERACTIVE (regular) user - launched by LensLookupWorker via a
     de-elevated scheduled task - because SCCM (AdminService) and BitLocker (AD) are
     readable only by that account, while DONUT itself runs elevated as the admin
-    account. The pipeline (validated in tools/Get-PersonLens.ps1):
-      1. AD user, forest-wide via the Global Catalog then home-domain bind:
-         UPN / SAM / displayName / mail / manager / office. Written out immediately
-         as a PARTIAL bundle so the UI can show the directory facts early.
-      2. SCCM affinity: endswith(UniqueUserName,'<SAM>') -> WSID(s) (exact-tail filtered).
-         This is the ONLY SCCM call - everything per-device comes from AD (the /wmi
-         route's OData translator rejects richer filters, answering 404).
-      3. Per WSID, from the GC-located computer's AD object: operatingSystem,
-         lastLogonTimestamp (coarse "last seen"), and the msFVE-* BitLocker children.
+    account. Pipeline, ordered for perceived speed:
+      1. The SCCM affinity query (person -> WSIDs) starts on a THREAD JOB as soon as
+         a SAM is known - the finder's -Sam hint lets it run in parallel with the AD
+         user read. It is the ONLY SCCM call (the /wmi route's OData translator
+         rejects richer filters, answering 404).
+      2. AD user, forest-wide via the Global Catalog then home-domain bind; written
+         out immediately as partial 1 so the UI shows the directory facts early.
+      3. When affinity lands, name-only device rows go out as partial 2; then each
+         WSID's AD object supplies operatingSystem, lastLogonTimestamp and the
+         msFVE-* BitLocker children for the final bundle.
 
 .PARAMETER Identity
     UPN / DOMAIN\SAM / bare SAM / display name to resolve.
@@ -25,8 +26,12 @@
     SCCM AdminService host (e.g. sccm01.contoso.com).
 
 .PARAMETER ResultPath
-    File to write the encrypted bundle to; 'partial' + 'key' siblings are derived from
-    its folder (the ACL-locked exchange dir PersonLensService created).
+    File to write the encrypted bundle to; 'partial-N' + 'key' siblings are derived
+    from its folder (the ACL-locked exchange dir PersonLensService created).
+
+.PARAMETER Sam
+    Optional sAMAccountName hint from the finder row, so the affinity query can start
+    before the AD user read resolves it.
 
 .NOTES
     Read-only against AD/SCCM. Uses raw LDAP/DirectorySearcher (no AD module) + the
@@ -42,7 +47,8 @@
 param(
     [Parameter(Mandatory)] [string] $Identity,
     [Parameter(Mandatory)] [string] $SiteServer,
-    [Parameter(Mandatory)] [string] $ResultPath
+    [Parameter(Mandatory)] [string] $ResultPath,
+    [string] $Sam = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -52,7 +58,6 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 }
 
 $exchangeDir = Split-Path -Parent $ResultPath
-$partialPath = Join-Path $exchangeDir 'partial.bin'
 $script:KeyIv = $null
 try { $script:KeyIv = [IO.File]::ReadAllBytes((Join-Path $exchangeDir 'key.bin')) } catch { }
 
@@ -79,6 +84,13 @@ function Write-LensBundle([string]$path, [string]$json) {
     Move-Item -LiteralPath $tmp -Destination $path -Force
 }
 
+# Sequential partials (partial-1.bin, partial-2.bin, ...) the parent streams to the UI.
+$script:PartialSeq = 0
+function Write-LensPartial([hashtable]$b) {
+    $script:PartialSeq++
+    try { Write-LensBundle (Join-Path $exchangeDir ("partial-{0}.bin" -f $script:PartialSeq)) ($b | ConvertTo-Json -Depth 6) } catch { }
+}
+
 $forestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 function Find-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
@@ -89,18 +101,26 @@ function Find-Gc([string]$Filter) {
     return $s.FindOne()
 }
 
-# AdminService /wmi query as the current (regular) user, reusing ONE web session so the
-# Kerberos handshake + TCP connect are paid once, not per call. ${Class} MUST be braced:
-# '?' is a valid variable-name char, so "$Class?" would drop the class from the URL.
-$script:SccmSession = $null
-function Get-Sccm([string]$Class, [string]$Filter, [string]$Select) {
-    $rel = "wmi/${Class}?`$filter=" + [uri]::EscapeDataString($Filter) + $(if ($Select) { "&`$select=$Select" } else { '' })
-    $p = @{ Uri = "https://$SiteServer/AdminService/$rel"; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+# The SCCM affinity query, self-contained so it can run on a thread job in parallel
+# with the AD user read. endswith on the forest-unique SAM is the only filter shape
+# this AdminService accepts (eq + backslash, or-ed filters, etc. all answer 404).
+$script:AffinityScript = {
+    param($server, $samValue)
+    $p = @{
+        Uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
+              [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
+              "&`$select=UniqueUserName,ResourceName"
+        UseDefaultCredentials = $true; ErrorAction = 'Stop'
+    }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
-    if ($script:SccmSession) { $p.WebSession = $script:SccmSession } else { $p.SessionVariable = 'freshSession' }
-    $r = Invoke-RestMethod @p
-    if (-not $script:SccmSession -and $freshSession) { $script:SccmSession = $freshSession }
-    return @($r.value)
+    return @((Invoke-RestMethod @p).value)
+}
+
+$script:AffinityJob = $null
+function Start-AffinityJob([string]$samValue) {
+    if ($script:AffinityJob -or [string]::IsNullOrWhiteSpace($samValue)) { return }
+    try { $script:AffinityJob = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $SiteServer, $samValue }
+    catch { $script:AffinityJob = $null }   # ThreadJob unavailable -> inline fallback below
 }
 
 $bundle = [ordered]@{
@@ -108,12 +128,22 @@ $bundle = [ordered]@{
     devices = @(); errors = @()
 }
 
+# Start affinity NOW when the SAM is already trustworthy: the finder's hint, a
+# DOMAIN\SAM identity, or a bare SAM (no '@'/space). A UPN/display-name identity
+# waits for the AD read to resolve it.
+$samGuess =
+    if ($Sam) { $Sam }
+    elseif ($Identity -match '\\') { $Identity.Split('\')[-1] }
+    elseif ($Identity -notmatch '[@\s]') { $Identity }
+    else { '' }
+Start-AffinityJob $samGuess
+
 # --- AD user (forest-wide GC -> home-domain bind) ---------------------------------
-$sam = if ($Identity -match '\\') { $Identity.Split('\')[-1] } else { $Identity }
+$sam = $samGuess
 $uFilter =
     if ($Identity -match '@') { "(&(objectClass=user)(userPrincipalName=$Identity))" }
     elseif ($Identity -match '\s') { "(&(objectClass=user)(displayName=$Identity))" }
-    else { "(&(objectClass=user)(sAMAccountName=$sam))" }
+    else { "(&(objectClass=user)(sAMAccountName=$samGuess))" }
 try {
     $uHit = Find-Gc $uFilter
     if (-not $uHit) { throw "no AD user matched '$Identity'." }
@@ -135,20 +165,42 @@ catch {
     $bundle.errors += "AD user: $($_.Exception.Message)"
 }
 
-# Partial bundle (directory facts, no devices yet): the parent streams it to the UI so
-# the pane fills in ~1-2s while the slower SCCM/BitLocker crawl continues below.
-try { Write-LensBundle $partialPath ($bundle | ConvertTo-Json -Depth 6) } catch { }
+# Partial 1 (directory facts): the parent streams it to the UI so the pane fills in
+# ~1-2s while the affinity/BitLocker work continues below.
+Write-LensPartial $bundle
 
-# --- SCCM user -> WSID(s) ---------------------------------------------------------
+# UPN/display-name pick: the SAM only became known from the AD read - start affinity now.
+Start-AffinityJob $sam
+
+# --- SCCM user -> WSID(s): collect the parallel affinity result --------------------
 $wsids = @()
 if ($sam) {
+    $rows = $null
     try {
-        $rows = Get-Sccm 'SMS_UserMachineRelationship' "endswith(UniqueUserName,'$sam')" 'UniqueUserName,ResourceName'
-        $wsids = @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } | ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
+        if ($script:AffinityJob) {
+            if (Wait-Job -Job $script:AffinityJob -Timeout 45) { $rows = Receive-Job -Job $script:AffinityJob -ErrorAction Stop }
+            else { throw 'timed out after 45s.' }
+        }
+        else {
+            $rows = & $script:AffinityScript $SiteServer $sam
+        }
     }
     catch {
-        $bundle.errors += "SCCM affinity: $($_.Exception.Message)"
+        $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): $($_.Exception.Message)"
     }
+    finally {
+        if ($script:AffinityJob) { Remove-Job -Job $script:AffinityJob -Force -ErrorAction SilentlyContinue }
+    }
+    $wsids = @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } | ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
+}
+
+# Partial 2 (name-only device rows) so the devices appear the moment affinity lands;
+# the per-WSID AD reads below fill in OS / last-logon / BitLocker behind them.
+if ($wsids.Count -gt 0) {
+    $bundle.devices = @($wsids | ForEach-Object {
+            [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''; note = 'loading details…'; bitLockerKeys = @() }
+        })
+    Write-LensPartial $bundle
 }
 
 # --- Per WSID: OS / last-logon / BitLocker, all from the computer's AD object --------
