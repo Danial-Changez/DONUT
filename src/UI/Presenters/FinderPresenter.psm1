@@ -130,19 +130,25 @@ class FinderPresenter {
         [PersonLensService]::StopAndPurgeAgent()
     }
 
+    # Starts a worker script on the shared pool and returns the job envelope the poll
+    # loops expect (@{ Ps; Handle }; call sites append their own keys). Throws on
+    # failure - each call site keeps its own catch/log/toast behavior.
+    hidden [hashtable] StartPoolScript([string]$scriptPath, [hashtable]$parameters) {
+        $ps = [System.Management.Automation.PowerShell]::Create()
+        $ps.RunspacePool = [RunspaceManager]::GetPool()
+        $ps.AddCommand($scriptPath) | Out-Null
+        foreach ($k in $parameters.Keys) { $ps.AddParameter($k, $parameters[$k]) | Out-Null }
+        return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
+    }
+
     # Fire-and-forget AD-finder warm: one throwaway search per forest primes the worker
     # graph + each forest's LDAP bind. Never blocks; handles reaped by the first real search.
     [void] WarmAdSearch() {
         $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
         foreach ($domain in $this.AdService.Domains) {
             try {
-                $ps = [System.Management.Automation.PowerShell]::Create()
-                $ps.RunspacePool = [RunspaceManager]::GetPool()
-                $ps.AddCommand($worker) | Out-Null
-                $ps.AddParameter('Domains', @($domain)) | Out-Null
-                $ps.AddParameter('Prefix', 'zzz') | Out-Null   # throwaway: warms the bind, results discarded
-                $handle = $ps.BeginInvoke()
-                $this.AdWarmJobs.Add(@{ Ps = $ps; Handle = $handle })
+                # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
+                $this.AdWarmJobs.Add($this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
             }
             catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
@@ -165,14 +171,11 @@ class FinderPresenter {
     [void] WarmLens() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = [RunspaceManager]::GetPool()
-            $ps.AddCommand($worker) | Out-Null
-            $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
-            $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
-            $ps.AddParameter('WarmOnly', $true) | Out-Null
-            $handle = $ps.BeginInvoke()
-            $this.LensWarmJob = @{ Ps = $ps; Handle = $handle }
+            $this.LensWarmJob = $this.StartPoolScript($worker, @{
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    WarmOnly   = $true
+                })
         }
         catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
@@ -242,13 +245,9 @@ class FinderPresenter {
         $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
         foreach ($domain in $this.AdService.Domains) {
             try {
-                $ps = [System.Management.Automation.PowerShell]::Create()
-                $ps.RunspacePool = [RunspaceManager]::GetPool()
-                $ps.AddCommand($worker) | Out-Null
-                $ps.AddParameter('Domains', @($domain)) | Out-Null
-                $ps.AddParameter('Prefix', $prefix) | Out-Null
-                $handle = $ps.BeginInvoke()
-                $this.SearchJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
+                $job = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = $prefix })
+                $job.Token = $token
+                $this.SearchJobs.Add($job)
             }
             catch {
                 $this.Logger.LogException("AD search could not start for '$domain'", $_)
@@ -350,13 +349,9 @@ class FinderPresenter {
         # toast the result when the pool job completes.
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdUnlockWorker.ps1'
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = [RunspaceManager]::GetPool()
-            $ps.AddCommand($worker) | Out-Null
-            $ps.AddParameter('Sam', [string]$r.SamAccountName) | Out-Null
-            $ps.AddParameter('Domain', [string]$r.Domain) | Out-Null
-            $handle = $ps.BeginInvoke()
-            $this.UnlockJobs.Add(@{ Ps = $ps; Handle = $handle; Upn = $upn })
+            $job = $this.StartPoolScript($worker, @{ Sam = [string]$r.SamAccountName; Domain = [string]$r.Domain })
+            $job.Upn = $upn
+            $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()
             if ($this.Toasts) { $this.Toasts.ShowInfo("Unlocking...", $upn) }
         }
@@ -420,17 +415,19 @@ class FinderPresenter {
 
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = [RunspaceManager]::GetPool()
-            $ps.AddCommand($worker) | Out-Null
-            $ps.AddParameter('Identity', $identity) | Out-Null
-            $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
-            $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
-            # SAM hint: lets the child start the SCCM affinity query in parallel with
+            # Sam hint: lets the child start the SCCM affinity query in parallel with
             # its AD user read instead of waiting to resolve the SAM first.
-            $ps.AddParameter('Sam', [string]$r.SamAccountName) | Out-Null
-            $handle = $ps.BeginInvoke()
-            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token; Key = $cacheKey; InfoSeen = 0; StartedAt = [datetime]::UtcNow })
+            $job = $this.StartPoolScript($worker, @{
+                    Identity   = $identity
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    Sam        = [string]$r.SamAccountName
+                })
+            $job.Token = $token
+            $job.Key = $cacheKey
+            $job.InfoSeen = 0
+            $job.StartedAt = [datetime]::UtcNow
+            $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()
         }
         catch {
