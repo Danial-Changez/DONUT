@@ -142,6 +142,10 @@ class HomePresenter : AsyncJobPresenter {
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
+    # Per-person result cache: identity -> @{ At; Json }. MEMORY ONLY (never written to
+    # disk - it holds BitLocker keys), so it dies with the process.
+    hidden [hashtable] $LensCache = @{}
+    [timespan] $LensCacheTtl = [timespan]::FromMinutes(15)
     [System.Windows.Window] $HostWindow    # parent window; hooked so the popup tracks moves/resizes
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
@@ -859,6 +863,17 @@ class HomePresenter : AsyncJobPresenter {
         $this.LensVm.SetLoading($who)
         $this.HomeVm.SetPerson($this.LensVm)
 
+        # Session cache: re-picking the same person within the TTL renders instantly
+        # instead of re-running the de-elevated lookup.
+        $cacheKey = $identity.ToLowerInvariant()
+        $cached = $this.LensCache[$cacheKey]
+        if ($null -ne $cached -and ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
+            $this.LensToken++   # stales any in-flight lookup; its late result is discarded
+            $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
+            $this.WireLensDeviceCommands()
+            return
+        }
+
         # Newest pick wins: bump the token and drop any in-flight lookup.
         $this.LensToken++
         $token = $this.LensToken
@@ -874,7 +889,7 @@ class HomePresenter : AsyncJobPresenter {
             $ps.AddParameter('SiteServer', $this.Config.GetAdminServiceHost()) | Out-Null
             $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
             $handle = $ps.BeginInvoke()
-            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token })
+            $this.LensJobs.Add(@{ Ps = $ps; Handle = $handle; Token = $token; Key = $cacheKey; InfoSeen = 0 })
             $this.LensPollTimer.Start()
         }
         catch {
@@ -886,10 +901,22 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # Poll the in-flight lens lookup; on completion parse the JSON bundle, populate the
-    # Lens VM, and wire each device's "add to machine list" command. Stale picks discarded.
+    # Poll the in-flight lens lookup: mid-flight, stream any 'LensPartial' Information
+    # record into the VM; on completion parse the bundle, populate, wire, and cache.
     [void] PollLens() {
         foreach ($job in @($this.LensJobs)) {
+            # The partial (directory facts) arrives on the Information stream before the
+            # SCCM/BitLocker crawl finishes - apply it so the pane fills early.
+            if ($job.Token -eq $this.LensToken) {
+                $stream = $job.Ps.Streams.Information
+                while ([int]$job.InfoSeen -lt $stream.Count) {
+                    $rec = $stream[[int]$job.InfoSeen]
+                    $job.InfoSeen = [int]$job.InfoSeen + 1
+                    if ($rec.Tags -contains 'LensPartial') {
+                        $this.LensVm.ApplyPartial([PersonLens]::FromJson([string]$rec.MessageData))
+                    }
+                }
+            }
             if (-not $job.Handle.IsCompleted) { continue }
             $json = ''
             try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
@@ -900,16 +927,24 @@ class HomePresenter : AsyncJobPresenter {
 
             $lens = [PersonLens]::FromJson($json)
             $this.LensVm.Apply($lens)
+            $this.WireLensDeviceCommands()
 
-            # Wire each device's Add command to drop its WSID into the machine list.
-            $presenter = $this
-            foreach ($dev in $this.LensVm.Devices) {
-                $capName = [string]$dev.Name
-                $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
-                $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
+            # Cache clean results (memory only; see LensCache) for instant TTL re-picks.
+            if ($lens.Errors.Count -eq 0 -and $job.Key) {
+                $this.LensCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
             }
         }
         if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
+    }
+
+    # Wires each Lens device's Add command to drop its WSID into the machine list.
+    hidden [void] WireLensDeviceCommands() {
+        $presenter = $this
+        foreach ($dev in $this.LensVm.Devices) {
+            $capName = [string]$dev.Name
+            $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
+            $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
+        }
     }
 
     # A Lens device was added: drop its WSID into the machine list via the Add/pick flow
@@ -938,8 +973,15 @@ class HomePresenter : AsyncJobPresenter {
         $presenter = $this
         $w.Add_LocationChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
         $w.Add_SizeChanged({ $presenter.RepositionSearchPopup() }.GetNewClosure())
-        # Persist any deferred recents on close (safety net beyond the per-batch flush).
-        $w.Add_Closing({ try { $presenter.Store.FlushSave() } catch { } }.GetNewClosure())
+        # On close: persist any deferred recents, and purge every Lens exchange dir
+        # (they can hold encrypted BitLocker bundles - nothing may outlive the app).
+        $w.Add_Closing({
+                try { $presenter.Store.FlushSave() } catch { }
+                try {
+                    Get-ChildItem -Path (Join-Path $env:ProgramData 'DONUT') -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
+                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                } catch { }
+            }.GetNewClosure())
     }
 
     # Nudges the open popup's offset to force WPF to recompute its placement

@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     De-elevated inner worker for the user Lens: resolves a person to their directory
-    facts + SCCM devices + BitLocker keys, and writes the bundle as JSON.
+    facts + SCCM devices + BitLocker keys, and writes the bundle encrypted.
 
 .DESCRIPTION
     Runs as the INTERACTIVE (regular) user - launched by LensLookupWorker via a
@@ -10,11 +10,12 @@
     readable only by that account, while DONUT itself runs elevated as the admin
     account. The pipeline (validated in tools/Get-PersonLens.ps1):
       1. AD user, forest-wide via the Global Catalog then home-domain bind:
-         UPN / SAM / displayName / mail / manager / office.
+         UPN / SAM / displayName / mail / manager / office. Written out immediately
+         as a PARTIAL bundle so the UI can show the directory facts early.
       2. SCCM affinity: endswith(UniqueUserName,'<SAM>') -> WSID(s) (exact-tail filtered).
-      3. Per WSID: model + last hardware-sync (SCCM), BitLocker keys (AD msFVE-* children,
+      3. All WSIDs at once (three batched queries, one shared web session): ResourceID,
+         model, last hardware-sync. Then per WSID: BitLocker keys (AD msFVE-* children,
          home domain located via the GC).
-    The bundle is written to -ResultPath as JSON matching the PersonLens DTO shape.
 
 .PARAMETER Identity
     UPN / DOMAIN\SAM / bare SAM / display name to resolve.
@@ -23,11 +24,18 @@
     SCCM AdminService host (e.g. sccm01.contoso.com).
 
 .PARAMETER ResultPath
-    File to write the JSON bundle to (read back by LensLookupWorker over the exchange dir).
+    File to write the encrypted bundle to; 'partial' + 'key' siblings are derived from
+    its folder (the ACL-locked exchange dir PersonLensService created).
 
 .NOTES
     Read-only against AD/SCCM. Uses raw LDAP/DirectorySearcher (no AD module) + the
     AdminService REST endpoint (no ConfigMgr module / PSDrive).
+
+    The bundle contains BitLocker recovery keys, so it never touches disk in the clear:
+    payloads are AES-256-CBC (PKCS7) over the UTF-8 JSON, keyed by the per-lookup
+    key.bin (32-byte key + 16-byte IV) the parent wrote into the exchange dir. Writes
+    are atomic (write .tmp, rename) so the parent never reads a half-written file.
+    MUST match PersonLensService.ProtectText/UnprotectText.
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +50,33 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 }
 
+$exchangeDir = Split-Path -Parent $ResultPath
+$partialPath = Join-Path $exchangeDir 'partial.bin'
+$script:KeyIv = $null
+try { $script:KeyIv = [IO.File]::ReadAllBytes((Join-Path $exchangeDir 'key.bin')) } catch { }
+
 function Get-Cn([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
+
+# AES-256-CBC over the UTF-8 JSON (format documented in .NOTES), written atomically.
+# No key = plaintext fallback so the parent still gets a readable error bundle.
+function Write-LensBundle([string]$path, [string]$json) {
+    $bytes =
+        if ($script:KeyIv -and $script:KeyIv.Length -eq 48) {
+            $aes = [System.Security.Cryptography.Aes]::Create()
+            try {
+                $aes.Key = [byte[]]($script:KeyIv[0..31])
+                $aes.IV = [byte[]]($script:KeyIv[32..47])
+                $enc = $aes.CreateEncryptor()
+                $plain = [Text.Encoding]::UTF8.GetBytes($json)
+                $enc.TransformFinalBlock($plain, 0, $plain.Length)
+            }
+            finally { $aes.Dispose() }
+        }
+        else { [Text.Encoding]::UTF8.GetBytes($json) }
+    $tmp = "$path.tmp"
+    [IO.File]::WriteAllBytes($tmp, $bytes)
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+}
 
 $forestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 function Find-Gc([string]$Filter) {
@@ -54,13 +88,18 @@ function Find-Gc([string]$Filter) {
     return $s.FindOne()
 }
 
-# AdminService /wmi query as the current (regular) user. ${Class} MUST be braced:
+# AdminService /wmi query as the current (regular) user, reusing ONE web session so the
+# Kerberos handshake + TCP connect are paid once, not per call. ${Class} MUST be braced:
 # '?' is a valid variable-name char, so "$Class?" would drop the class from the URL.
+$script:SccmSession = $null
 function Get-Sccm([string]$Class, [string]$Filter, [string]$Select) {
     $rel = "wmi/${Class}?`$filter=" + [uri]::EscapeDataString($Filter) + $(if ($Select) { "&`$select=$Select" } else { '' })
     $p = @{ Uri = "https://$SiteServer/AdminService/$rel"; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
-    return @((Invoke-RestMethod @p).value)
+    if ($script:SccmSession) { $p.WebSession = $script:SccmSession } else { $p.SessionVariable = 'freshSession' }
+    $r = Invoke-RestMethod @p
+    if (-not $script:SccmSession -and $freshSession) { $script:SccmSession = $freshSession }
+    return @($r.value)
 }
 
 $bundle = [ordered]@{
@@ -95,6 +134,10 @@ catch {
     $bundle.errors += "AD user: $($_.Exception.Message)"
 }
 
+# Partial bundle (directory facts, no devices yet): the parent streams it to the UI so
+# the pane fills in ~1-2s while the slower SCCM/BitLocker crawl continues below.
+try { Write-LensBundle $partialPath ($bundle | ConvertTo-Json -Depth 6) } catch { }
+
 # --- SCCM user -> WSID(s) ---------------------------------------------------------
 $wsids = @()
 if ($sam) {
@@ -107,24 +150,38 @@ if ($sam) {
     }
 }
 
-# --- Per WSID: model + last-sync (SCCM) and BitLocker (AD) -------------------------
+# --- SCCM device details, batched: 3 queries TOTAL (or-ed filters), not 3 per WSID ---
+$ridByName = @{}; $modelByRid = @{}; $syncByRid = @{}
+if ($wsids.Count -gt 0) {
+    try {
+        $nameFilter = (@($wsids | ForEach-Object { "Name eq '$_'" }) -join ' or ')
+        foreach ($row in (Get-Sccm 'SMS_R_System' $nameFilter 'ResourceID,Name')) {
+            if ($row.Name -and -not $ridByName.ContainsKey([string]$row.Name)) { $ridByName[[string]$row.Name] = $row.ResourceID }
+        }
+        if ($ridByName.Count -gt 0) {
+            $ridFilter = (@($ridByName.Values | ForEach-Object { "ResourceID eq $_" }) -join ' or ')
+            foreach ($row in (Get-Sccm 'SMS_G_System_COMPUTER_SYSTEM' $ridFilter 'ResourceID,Model')) {
+                $modelByRid[[string]$row.ResourceID] = [string]$row.Model
+            }
+            foreach ($row in (Get-Sccm 'SMS_G_System_WORKSTATION_STATUS' $ridFilter 'ResourceID,LastHWScan')) {
+                $syncByRid[[string]$row.ResourceID] = [string]$row.LastHWScan
+            }
+        }
+    }
+    catch {
+        $bundle.errors += "SCCM device detail: $($_.Exception.Message)"
+    }
+}
+
+# --- Per WSID: fold in the batched SCCM facts and read BitLocker (AD) ---------------
 $devices = [System.Collections.Generic.List[object]]::new()
 foreach ($wsid in $wsids) {
     $dev = [ordered]@{ name = $wsid; model = ''; lastSync = ''; domain = ''; note = ''; bitLockerKeys = @() }
 
-    # SCCM ResourceID (Name eq - no backslash), then model + last hardware-sync.
-    try {
-        $sys = Get-Sccm 'SMS_R_System' "Name eq '$wsid'" 'ResourceID,Name'
-        $rid = if ($sys -and $sys.Count -gt 0) { $sys[0].ResourceID } else { $null }
-        if ($rid) {
-            $cs = Get-Sccm 'SMS_G_System_COMPUTER_SYSTEM' "ResourceID eq $rid" 'Model'
-            if ($cs -and $cs.Count -gt 0) { $dev.model = [string]$cs[0].Model }
-            $ws = Get-Sccm 'SMS_G_System_WORKSTATION_STATUS' "ResourceID eq $rid" 'LastHWScan'
-            if ($ws -and $ws.Count -gt 0) { $dev.lastSync = [string]$ws[0].LastHWScan }
-        }
-    }
-    catch {
-        $dev.note = "SCCM device detail: $($_.Exception.Message)"
+    $rid = $ridByName[$wsid]
+    if ($null -ne $rid) {
+        if ($modelByRid.ContainsKey([string]$rid)) { $dev.model = $modelByRid[[string]$rid] }
+        if ($syncByRid.ContainsKey([string]$rid)) { $dev.lastSync = $syncByRid[[string]$rid] }
     }
 
     # BitLocker (AD): GC-locate the computer forest-wide, bind its home domain, read the
@@ -157,10 +214,9 @@ $bundle.devices = $devices.ToArray()
 
 # --- Emit --------------------------------------------------------------------------
 try {
-    $bundle | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UTF8
+    Write-LensBundle $ResultPath ($bundle | ConvertTo-Json -Depth 6)
 }
 catch {
     # Last resort: write a minimal error bundle so the caller never hangs on a missing file.
-    (@{ errors = @("LensWorker could not write the result: $($_.Exception.Message)") } | ConvertTo-Json) |
-        Set-Content -LiteralPath $ResultPath -Encoding UTF8 -ErrorAction SilentlyContinue
+    try { Write-LensBundle $ResultPath (@{ errors = @("LensWorker could not write the result: $($_.Exception.Message)") } | ConvertTo-Json) } catch { }
 }
