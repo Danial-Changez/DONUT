@@ -300,12 +300,33 @@ separate identity means a separate process.
   the *same* user, so it left the child in the admin context.
 - `LensWorker.ps1` (the de-elevated child) reads AD forest-wide via the **Global Catalog**
   (`GC://…`, then binds each object's home domain) and SCCM via the **AdminService REST**
-  endpoint (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive), and writes the bundle as
-  JSON to a `%ProgramData%\DONUT` exchange folder that the task grants the interactive user.
+  endpoint (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive), and writes the bundle to
+  a `%ProgramData%\DONUT\lens-<guid>` exchange folder shared with the elevated parent.
 - The parse (`PersonLens.FromJson`) is pure/tested; the de-elevation itself is the overridable
   `RunLookupJson` seam. `HomePresenter` polls the pool job (like the AD search/unlock) and
   populates the `PersonLensViewModel`. The `%5C` (backslash) gotcha in the SCCM query is
   avoided by filtering on the forest-unique SAM (`endswith`) and exact-matching client-side.
+
+**Securing the exchange (the bundle holds BitLocker recovery keys):**
+- The exchange folder's inherited ACL is **stripped** (ProgramData grants all local users
+  read) down to SYSTEM / Administrators / the interactive user.
+- Every payload is **AES-256-CBC encrypted** with a per-lookup key (`key.bin`, 32-byte key +
+  16-byte IV, written by the parent; `PersonLensService.ProtectText`/`UnprotectText` are the
+  unit-tested twins of the child's inline encrypt). Nothing touches disk in the clear.
+- The folder is deleted in the lookup's `finally`; stale `lens-*` leftovers (crashed runs)
+  are swept before each lookup, and **all** are purged when the main window closes. The
+  per-person UI cache is **memory-only** (`HomePresenter.LensCache`, 15-min TTL), so it dies
+  with the process.
+
+**Keeping it fast:**
+- One shared AdminService **web session** (single Kerberos handshake + kept-alive
+  connection) and **batched** device queries — three `or`-filtered calls total
+  (`SMS_R_System`, `COMPUTER_SYSTEM`, `WORKSTATION_STATUS`) instead of three per device.
+- The child writes an early **partial bundle** (directory facts) which `RunLookupJson`
+  streams to `PollLens` on the Information stream (tag `LensPartial`), so the pane fills
+  with the person's info in ~1–2 s while the SCCM/BitLocker crawl finishes.
+- Writes are atomic (`.tmp` + rename), the parent polls at 100 ms with no settle sleep, and
+  the TTL cache makes re-picking the same person instant.
 
 ### The `InstallWorker.ps1` Script
 **Challenge:** This script is copied to `%LOCALAPPDATA%` and runs independently to handle updates/rollbacks.

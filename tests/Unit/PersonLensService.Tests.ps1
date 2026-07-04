@@ -44,4 +44,37 @@ Describe "PersonLensService" {
         $lens.Errors.Count | Should -Be 1
         $lens.Errors[0] | Should -Be 'boom'
     }
+
+    Context "exchange crypto (format shared with LensWorker.ps1)" {
+
+        It "NewKeyIv returns 48 bytes (32 key + 16 IV) and differs per call" {
+            $a = [PersonLensService]::NewKeyIv()
+            $b = [PersonLensService]::NewKeyIv()
+            $a.Length | Should -Be 48
+            [Convert]::ToBase64String($a) | Should -Not -Be ([Convert]::ToBase64String($b))
+        }
+
+        It "round-trips a bundle through ProtectText/UnprotectText" {
+            $keyIv = [PersonLensService]::NewKeyIv()
+            $json = '{ "sam": "U1", "devices": [ { "bitLockerKeys": [ { "password": "111-222-333" } ] } ] }'
+            $blob = [PersonLensService]::ProtectText($json, $keyIv)
+            [PersonLensService]::UnprotectText($blob, $keyIv) | Should -Be $json
+        }
+
+        It "never leaks the plaintext (BitLocker key) into the ciphertext" {
+            $keyIv = [PersonLensService]::NewKeyIv()
+            $blob = [PersonLensService]::ProtectText('{ "password": "111-222-333-444" }', $keyIv)
+            [System.Text.Encoding]::UTF8.GetString($blob) | Should -Not -Match '111-222-333-444'
+        }
+
+        It "tampered ciphertext never yields the original text" {
+            $keyIv = [PersonLensService]::NewKeyIv()
+            $json = '{ "sam": "U1" }'
+            $blob = [PersonLensService]::ProtectText($json, $keyIv)
+            $blob[0] = $blob[0] -bxor 0xFF
+            $out = $null
+            try { $out = [PersonLensService]::UnprotectText($blob, $keyIv) } catch { $out = $null }
+            $out | Should -Not -Be $json
+        }
+    }
 }

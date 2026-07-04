@@ -25,7 +25,7 @@ note right of PW
   DONUT runs elevated as the admin account, which cannot read SCCM/BitLocker.
   So the lookup must run as the interactive (regular) user.
 end note
-PW -> PW : find the interactive user (explorer owner)\n+ ACL a %ProgramData%\\DONUT exchange folder
+PW -> PW : find the interactive user (explorer owner)\n+ lock the %ProgramData%\\DONUT\\lens-<guid> exchange dir's ACL\n(SYSTEM / Administrators / interactive user only)\n+ write a per-lookup AES key (key.bin)
 PW -> TASK : register + start a one-shot task\n(LogonType Interactive = logged-on token, no password; RunLevel Limited)
 activate TASK
 TASK -> LW : run LensWorker.ps1 -Identity -SiteServer -ResultPath
@@ -35,23 +35,26 @@ activate LW
 == Gather (as the regular user) ==
 LW -> AD : GC-locate the user (forest-wide) -> bind home domain
 AD --> LW : UPN / SAM / email / manager / office
-LW -> SCCM : endswith(UniqueUserName,'<SAM>')  -> WSID(s)
+LW -> LW : write partial.bin (directory facts,\nAES-encrypted, atomic tmp+rename)
+LW -> SCCM : endswith(UniqueUserName,'<SAM>')  -> WSID(s)\n(one shared web session for every call)
 SCCM --> LW : ResourceName(s)  (exact-tail filtered)
+LW -> SCCM : 3 batched queries (or-ed filters):\nResourceIDs, models, last hardware-syncs
 loop each WSID
-  LW -> SCCM : model + last hardware-sync (by ResourceID)
   LW -> AD : GC-locate the computer -> msFVE-RecoveryInformation (BitLocker)
 end
-LW -> LW : write the JSON bundle to ResultPath
+LW -> LW : write result.bin (AES-encrypted, atomic)
 deactivate LW
 
 == Return + render ==
-PW -> PW : read result.json (poll)\nunregister the task + clean up
+PW -> P : partial (100ms poll): decrypt partial.bin ->\nInformation stream 'LensPartial' -> ApplyPartial\n(person info shows while devices load)
+PW -> PW : decrypt result.bin\nunregister the task + delete the exchange dir
 PW --> P : JSON bundle
 deactivate PW
 activate P
 P -> P : PollLens: PersonLens.FromJson(json)
 P -> VM : Apply(lens)  (person fields + LensDeviceViewModels)
 P -> VM : wire each device's Reveal / Add command
+P -> P : cache the bundle in memory (15-min TTL;\nre-picks render instantly, dies with the app)
 deactivate P
 VM -> OP : Lens shows info + devices (BitLocker hidden until Reveal)
 
