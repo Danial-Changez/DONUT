@@ -57,16 +57,20 @@ function Invoke-AS([string]$Rel) {
     return Invoke-RestMethod @p
 }
 function AS-Value([string]$Class, [string]$Filter, [string]$Select) {
-    # /wmi query; returns the .value array or $null on error (with the error noted).
+    # /wmi query; returns the .value array or $null on error (with the URL + status noted).
+    $rel = "wmi/$Class?`$filter=" + [uri]::EscapeDataString($Filter) + $(if ($Select) { "&`$select=$Select" } else { '' })
     try {
-        $f = [uri]::EscapeDataString($Filter)
-        $r = Invoke-AS ("wmi/$Class?`$filter=$f" + $(if ($Select) { "&`$select=$Select" } else { '' }))
-        return @($r.value)
+        return @((Invoke-AS $rel).value)
     } catch {
         $code = 0
         if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch { } }
-        $hint = if ($code -eq 401 -or $code -eq 403) { '  <- 401/403: this identity lacks ConfigMgr RBAC. Are you running as your ADMIN account? Run as your regular user.' } else { '' }
-        Bad "  ${Class}: HTTP $code - $($_.Exception.Message)$hint"
+        $hint = switch ($code) {
+            { $_ -eq 401 -or $_ -eq 403 } { '  <- this identity lacks ConfigMgr RBAC (admin account?). Run as your regular user.' }
+            404 { '  <- 404 usually means the class is RBAC-hidden for this identity (admin account?); check the Run-as line. If you ARE the regular user, send me the URL below.' }
+            default { '' }
+        }
+        Bad "  ${Class}: HTTP $code$hint"
+        Note "    URL: https://$SiteServer/AdminService/$rel"
         return $null
     }
 }
