@@ -58,7 +58,9 @@ function Invoke-AS([string]$Rel) {
 }
 function AS-Value([string]$Class, [string]$Filter, [string]$Select) {
     # /wmi query; returns the .value array or $null on error (with the URL + status noted).
-    $rel = "wmi/$Class?`$filter=" + [uri]::EscapeDataString($Filter) + $(if ($Select) { "&`$select=$Select" } else { '' })
+    # ${Class} MUST be braced: '?' is a valid variable-name char (cf. $?), so "$Class?"
+    # would parse as a variable named 'Class?' (empty) and drop the class from the URL.
+    $rel = "wmi/${Class}?`$filter=" + [uri]::EscapeDataString($Filter) + $(if ($Select) { "&`$select=$Select" } else { '' })
     try {
         return @((Invoke-AS $rel).value)
     } catch {
