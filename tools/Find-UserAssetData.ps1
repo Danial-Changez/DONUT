@@ -63,7 +63,10 @@ function AS-Value([string]$Class, [string]$Filter, [string]$Select) {
         $r = Invoke-AS ("wmi/$Class?`$filter=$f" + $(if ($Select) { "&`$select=$Select" } else { '' }))
         return @($r.value)
     } catch {
-        Bad "  ${Class}: $($_.Exception.Message)"
+        $code = 0
+        if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch { } }
+        $hint = if ($code -eq 401 -or $code -eq 403) { '  <- 401/403: this identity lacks ConfigMgr RBAC. Are you running as your ADMIN account? Run as your regular user.' } else { '' }
+        Bad "  ${Class}: HTTP $code - $($_.Exception.Message)$hint"
         return $null
     }
 }
