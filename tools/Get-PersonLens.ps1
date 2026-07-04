@@ -48,7 +48,7 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 }
 
-function CN-Of([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
+function Get-Cn([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
 
 # Forest-wide (Global Catalog) search: finds an object in ANY of the domains at once.
 $forestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
@@ -85,15 +85,16 @@ try {
     $uHit = Find-GC $uFilter
     if (-not $uHit) { throw "no AD user matched '$Identity'." }
     $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"   # binds home domain
-    $bundle.SamAccountName = [string]$user.Properties['samaccountname'][0]
-    $bundle.DisplayName    = [string]$user.Properties['displayname'][0]
-    $mgrDn = [string]$user.Properties['manager'][0]
-    if ($mgrDn) { $bundle.Manager = CN-Of $mgrDn }
-    $office = @()
-    foreach ($k in 'physicaldeliveryofficename', 'streetaddress', 'l', 'st', 'postalcode') {
+    $bundle.SamAccountName = [string]$user.Properties['samaccountname'][0]        # <- AD sAMAccountName (the SCCM key)
+    $bundle.DisplayName    = [string]$user.Properties['displayname'][0]           # <- AD displayName
+    $mgrDn = [string]$user.Properties['manager'][0]                               # <- AD manager (a DN)
+    if ($mgrDn) { $bundle.Manager = Get-Cn $mgrDn }                               #    -> CN of that DN
+    $office = @()                                                                 # <- AD physicalDeliveryOfficeName
+    foreach ($k in 'physicaldeliveryofficename', 'streetaddress', 'l', 'st', 'postalcode') {  #    + streetAddress + l + st + postalCode
         $v = [string]$user.Properties[$k][0]; if ($v) { $office += $v }
     }
     $bundle.Office = ($office -join ', ')
+    # <- AD msDS-PrincipalName (constructed; the 'DOMAIN\SAM' the ADUC pre-Win2000 box shows).
     try { $user.RefreshCache(@('msDS-PrincipalName')); $bundle.PrincipalName = [string]$user.Properties['msds-principalname'][0] } catch { }
     if ($bundle.SamAccountName) { $sam = $bundle.SamAccountName }   # authoritative SAM
 } catch {
@@ -105,6 +106,7 @@ $wsids = @()
 if ($sam) {
     try {
         $rows = Invoke-AS 'SMS_UserMachineRelationship' "endswith(UniqueUserName,'$sam')" 'UniqueUserName,ResourceName'
+        # WSID <- SCCM SMS_UserMachineRelationship.ResourceName (client-filtered to the exact SAM tail).
         $wsids = @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } | ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
     } catch {
         $bundle.Errors += "SCCM affinity: $($_.Exception.Message)"
@@ -125,6 +127,7 @@ foreach ($wsid in $wsids) {
         'msfve-recoverypassword', 'whencreated' | ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
         $keys = @($bl.FindAll())
         if ($keys.Count -gt 0) {
+            # BitLocker key <- AD msFVE-RecoveryInformation.msFVE-RecoveryPassword (child objects of the computer).
             $comp.BitLocker = @($keys | ForEach-Object {
                     [pscustomobject]@{ Password = [string]$_.Properties['msfve-recoverypassword'][0]; Created = [string]$_.Properties['whencreated'][0] }
                 })
@@ -143,23 +146,30 @@ if ($AsJson) {
     return
 }
 
-function H([string]$t) { Write-Host ''; Write-Host $t -ForegroundColor Cyan }
-H "Person"
-Write-Host ("  {0}  ({1})   {2}" -f $bundle.DisplayName, $bundle.SamAccountName, $bundle.PrincipalName)
-Write-Host ("  Manager : {0}" -f $bundle.Manager)
-Write-Host ("  Office  : {0}" -f $bundle.Office)
-H "Computers ($($bundle.Computers.Count))"
-if ($bundle.Computers.Count -eq 0) { Write-Host "  (no primary device / affinity rows for this user)" -ForegroundColor DarkGray }
+# Renamed from 'H' - that collides with the built-in alias 'h' (Get-History), and
+# aliases outrank functions in command lookup, so 'H "x"' ran Get-History.
+function Hdr([string]$t) { Write-Host ''; Write-Host $t -ForegroundColor Cyan }
+
+# Each line is  "Field : value   [<- exact source field]"  so the DONUT wiring is explicit.
+Hdr 'Person'
+Write-Host ("  Name       : {0}   [<- AD displayName]" -f $bundle.DisplayName)
+Write-Host ("  SAM        : {0}   [<- AD sAMAccountName]" -f $bundle.SamAccountName)
+Write-Host ("  DOMAIN\SAM : {0}   [<- AD msDS-PrincipalName]" -f $bundle.PrincipalName)
+Write-Host ("  Manager    : {0}   [<- AD manager (CN of the DN)]" -f $bundle.Manager)
+Write-Host ("  Office     : {0}   [<- AD physicalDeliveryOfficeName + streetAddress + l + st + postalCode]" -f $bundle.Office)
+
+Hdr "Computers ($($bundle.Computers.Count))   [WSID <- SCCM SMS_UserMachineRelationship.ResourceName]"
+if ($bundle.Computers.Count -eq 0) { Write-Host "  (no primary-device affinity rows for this user)" -ForegroundColor DarkGray }
 foreach ($c in $bundle.Computers) {
-    Write-Host ("  {0}   [{1}]" -f $c.Wsid, $c.Domain) -ForegroundColor White
+    Write-Host ("  {0}   home domain: {1}   [<- AD computer DN]" -f $c.Wsid, $c.Domain) -ForegroundColor White
     if ($c.BitLocker.Count -gt 0) {
-        foreach ($k in $c.BitLocker) { Write-Host ("      BitLocker: {0}   ({1})" -f $k.Password, $k.Created) -ForegroundColor Green }
+        foreach ($k in $c.BitLocker) { Write-Host ("      BitLocker : {0}   ({1})   [<- AD msFVE-RecoveryInformation.msFVE-RecoveryPassword]" -f $k.Password, $k.Created) -ForegroundColor Green }
     } else {
         Write-Host ("      {0}" -f $c.Note) -ForegroundColor DarkGray
     }
 }
 if ($bundle.Errors.Count -gt 0) {
-    H "Errors"
+    Hdr "Errors"
     $bundle.Errors | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
 }
 Write-Host ''
