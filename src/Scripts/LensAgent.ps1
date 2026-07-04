@@ -23,9 +23,11 @@
     The agent deletes each request once read; the parent deletes the responses it
     consumed; anything older than 10 minutes is swept as abandoned.
 
-    Exits when stop.flag appears, the parent process dies, or the heartbeat write
-    fails (the exchange dir was deleted). heartbeat.txt is touched every ~2s so
-    EnsureAgent can detect a dead agent and restart it.
+    Exits when stop.flag appears, the parent process dies, or the exchange dir is
+    deleted. heartbeat.txt is touched every ~2s from a BACKGROUND thread (not the serve
+    loop), so a lookup in progress never lets the beat go stale - otherwise EnsureAgent's
+    15s staleness check would tear a busy agent down mid-lookup. A genuinely gone agent
+    still stops beating, so EnsureAgent can still detect and restart it.
 
 .PARAMETER ExchangeDir
     The ACL-locked %ProgramData%\DONUT\lens-agent dir PersonLensService created.
@@ -280,8 +282,7 @@ try {
 
 $script:ForestNc = ''
 try { $script:ForestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0] } catch { }
-try { $null = Find-Gc '(objectClass=domain)' } catch { }              # bind the GC once
-try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
+try { $null = Find-Gc '(objectClass=domain)' } catch { }              # bind the GC once (ThreadJob imported above)
 if ($SiteServer) {
     # Throwaway affinity primes TLS + Kerberos to the AdminService (result discarded).
     try { $null = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $SiteServer, 'zzz-donut-warm' } catch { }

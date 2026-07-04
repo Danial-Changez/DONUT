@@ -283,6 +283,7 @@ This section discusses how the refactor addresses the design choices and limitat
   - `2-5`: Various success states
   - `500+`: Errors (throws exception)
 - **PsExec Arguments:** Use `-s` (SYSTEM), `-h` (elevated), `-accepteula`, with `pwsh -NoProfile -NonInteractive -c` for cleaner remote execution
+- **Headless launch:** psexec is started through `ProcessStartInfo` with `CreateNoWindow` (a *hidden* console), not `Start-Process -NoNewWindow`. DONUT is a window-subsystem GUI with no console of its own, so `-NoNewWindow` makes the OS spawn a **visible** console per psexec; those live for the whole scan/apply, and several at once sit in front of the WPF window and read as a frozen UI. A hidden console leaves psexec a *real* console — so its stdout is **not** redirected (redirecting it removed the console and caused remote `0xC0000142` init failures) — with no window. `ExecutionService.StartPsExecHidden` is the shared launcher.
 
 ### De-elevating the user Lens
 **Challenge:** DONUT runs **elevated as an admin account** (required for the psexec/CIM
@@ -303,10 +304,12 @@ separate identity means a separate process.
   booting — and even the **first** pick skips the per-lookup task registration + `pwsh`
   cold start (~2–4 s) that the previous one-shot-task design paid every time.
 - `PersonLensService` is the agent's **supervisor + client**. `EnsureAgent` (mutex-guarded
-  so concurrent pool runspaces can't double-start) checks the agent's `heartbeat.txt` and
-  (re)registers the task if it's stale; `RunLookupJson` then drives one lookup over the
-  exchange. The agent self-exits when DONUT's process dies (a `-ParentPid` watchdog), when
-  a `stop.flag` appears, or when its heartbeat write fails (the dir was purged).
+  so concurrent pool runspaces can't double-start) treats a `heartbeat.txt` older than 15 s
+  as a dead agent and re-registers the task; `RunLookupJson` then drives one lookup over the
+  exchange. The agent beats from a **background thread** (not the serve loop), so a lookup in
+  flight — which blocks the serve loop for tens of seconds — never lets the beat go stale and
+  get the busy agent torn down mid-lookup. It self-exits when DONUT's process dies (a
+  `-ParentPid` watchdog), when a `stop.flag` appears, or when the exchange dir is purged.
 - The agent reads AD forest-wide via the **Global Catalog** (`GC://…`, then binds each
   object's home domain) and SCCM via the **AdminService REST** endpoint
   (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive). The parse (`PersonLens.FromJson`)
