@@ -258,6 +258,26 @@ $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
+# Beat + parent/stop watchdog on a BACKGROUND thread. A lookup blocks the serve loop for
+# its whole duration (tens of seconds), so beating from that loop would let the heartbeat
+# go stale mid-lookup - and EnsureAgent (15s staleness = dead) would then tear this live
+# agent down mid-lookup, stranding the request. A dedicated beater keeps a busy agent
+# looking alive. Best-effort: without ThreadJob the serve loop beats between lookups.
+try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
+$script:HeartbeatJob = $null
+try {
+    $script:HeartbeatJob = Start-ThreadJob -ScriptBlock {
+        param($beatPath, $stopPath, $parentPid)
+        while ($true) {
+            try { [IO.File]::WriteAllText($beatPath, [datetime]::UtcNow.ToString('o')) } catch { break }   # dir gone
+            if ([IO.File]::Exists($stopPath)) { break }
+            try { $null = [System.Diagnostics.Process]::GetProcessById($parentPid) }
+            catch { try { [IO.File]::WriteAllText($stopPath, 'parent-exited') } catch { }; break }   # DONUT closed
+            Start-Sleep -Seconds 2
+        }
+    } -ArgumentList $heartbeatPath, $stopPath, $ParentPid
+} catch { $script:HeartbeatJob = $null }
+
 $script:ForestNc = ''
 try { $script:ForestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0] } catch { }
 try { $null = Find-Gc '(objectClass=domain)' } catch { }              # bind the GC once
@@ -272,16 +292,22 @@ $lastBeat = [datetime]::MinValue
 $lastParentCheck = [datetime]::MinValue
 while ($true) {
     if (Test-Path -LiteralPath $stopPath) { break }
+    if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }   # dir purged out from under us -> exit
 
     $now = [datetime]::UtcNow
-    if (($now - $lastBeat).TotalSeconds -ge 2) {
-        $lastBeat = $now
-        try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
-        catch { break }   # exchange dir gone (parent purged it) -> exit
-    }
-    if (($now - $lastParentCheck).TotalSeconds -ge 3) {
-        $lastParentCheck = $now
-        if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }   # DONUT closed
+    # The background heartbeat job owns the beat + parent watchdog; only beat from the serve
+    # loop as the no-ThreadJob fallback, so the two never race on heartbeat.txt (a concurrent
+    # write could throw and be misread as "the dir vanished").
+    if (-not $script:HeartbeatJob) {
+        if (($now - $lastBeat).TotalSeconds -ge 2) {
+            $lastBeat = $now
+            try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
+            catch { break }   # exchange dir gone (parent purged it) -> exit
+        }
+        if (($now - $lastParentCheck).TotalSeconds -ge 3) {
+            $lastParentCheck = $now
+            if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }   # DONUT closed
+        }
     }
 
     $requests = @(Get-ChildItem -Path $ExchangeDir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
@@ -309,3 +335,5 @@ while ($true) {
 
     Start-Sleep -Milliseconds 150
 }
+
+if ($script:HeartbeatJob) { Remove-Job -Job $script:HeartbeatJob -Force -ErrorAction SilentlyContinue }
