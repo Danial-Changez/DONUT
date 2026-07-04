@@ -26,7 +26,7 @@ activate AG
 AG -> AG : write heartbeat, then pre-warm\n(GC bind, ThreadJob, AdminService TLS/Kerberos)
 PW --> P : '' (agent ready) — reaped on first pick
 deactivate PW
-note over AG : agent now idle, beating every ~2s,\nexits when ParentPid dies / stop.flag appears
+note over AG : agent idle; a BACKGROUND thread beats every ~2s\n(so a busy lookup never looks dead), exits when\nParentPid dies / stop.flag appears / dir purged
 
 == Pick a user in the AD finder ==
 OP -> P : click a USER row  (OnPickUser)
