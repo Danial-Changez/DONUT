@@ -297,7 +297,9 @@ separate identity means a separate process.
   launches `LensWorker.ps1` as the **interactive user** using a one-shot **scheduled task**
   (`LogonType Interactive` = the logged-on token, *no password*; `RunLevel Limited` =
   medium integrity). `Shell.Application` was tried and rejected — it only de-elevates within
-  the *same* user, so it left the child in the admin context.
+  the *same* user, so it left the child in the admin context. The task action wraps pwsh in
+  `conhost.exe --headless`: a console app's window is created before `-WindowStyle Hidden`
+  can hide it, so an interactive-token task would otherwise flash a console on the desktop.
 - `LensWorker.ps1` (the de-elevated child) reads AD forest-wide via the **Global Catalog**
   (`GC://…`, then binds each object's home domain) and SCCM via the **AdminService REST**
   endpoint (`-UseDefaultCredentials`, no ConfigMgr module/PSDrive), and writes the bundle to

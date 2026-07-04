@@ -153,7 +153,17 @@ class PersonLensService {
 
             $taskName = 'DONUT-Lens-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
             $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Identity "{1}" -SiteServer "{2}" -ResultPath "{3}" -Sam "{4}"' -f $lensWorker, $identity, $this.SiteServer, $resultPath, $this.SamHint
-            $action = New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
+            # pwsh is a console app: its window is created BEFORE -WindowStyle Hidden can
+            # hide it, so an interactive-token task flashes a console on the desktop.
+            # conhost --headless runs it on a pseudoconsole with no window at all.
+            $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
+            $action =
+                if (Test-Path -LiteralPath $conhost) {
+                    New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "{0}" {1}' -f $pwshPath, $argline)
+                }
+                else {
+                    New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
+                }
             $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
             $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
             $task = New-ScheduledTask -Action $action -Principal $principal -Settings $settings
