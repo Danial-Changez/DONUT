@@ -7,7 +7,7 @@ using module "..\Models\PersonLens.psm1"
     running the lookup de-elevated as the interactive user.
 
 .DESCRIPTION
-    DONUT runs elevated as the admin account, but the Lens data (SCCM affinity/model +
+    DONUT runs elevated as the admin account, but the Lens data (SCCM affinity +
     BitLocker) is readable only by the operator's regular account. Lookup() runs
     LensWorker.ps1 DE-ELEVATED as the logged-on user via a one-shot scheduled task
     (RunLookupJson - the env-coupled seam, the cross-account de-elevation proven in

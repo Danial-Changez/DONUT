@@ -12,9 +12,9 @@ Describe "PersonLens" {
   "manager": "John Smith",
   "office": "SPRINGFIELD, ON, 100 MAIN STREET",
   "devices": [
-    { "name": "WS-1", "model": "Latitude 5330", "lastSync": "2026-07-03T10:00:00Z", "domain": "prod.contoso.com",
+    { "name": "WS-1", "os": "Windows 11 Enterprise", "lastLogon": "2026-07-03T10:00:00Z", "domain": "prod.contoso.com",
       "bitLockerKeys": [ { "password": "111-222", "created": "2026-05-01T00:00:00Z" }, { "password": "333-444", "created": "" } ] },
-    { "name": "WS-2", "model": "", "lastSync": "", "domain": "forest-b.contoso.com", "note": "BitLocker not escrowed to AD",
+    { "name": "WS-2", "os": "", "lastLogon": "", "domain": "forest-b.contoso.com", "note": "BitLocker not escrowed to AD",
       "bitLockerKeys": [] }
   ],
   "errors": []
@@ -33,13 +33,14 @@ Describe "PersonLens" {
             $p.Office      | Should -Be 'SPRINGFIELD, ON, 100 MAIN STREET'
         }
 
-        It "maps each device with its model, sync, domain and BitLocker keys" {
+        It "maps each device with its OS, last logon, domain and BitLocker keys" {
             $p = [PersonLens]::FromJson($script:bundleJson)
             $p.Devices.Count | Should -Be 2
 
             $d0 = $p.Devices[0]
             $d0.Name   | Should -Be 'WS-1'
-            $d0.Model  | Should -Be 'Latitude 5330'
+            $d0.Os     | Should -Be 'Windows 11 Enterprise'
+            $d0.LastLogon | Should -Match '2026'
             $d0.Domain | Should -Be 'prod.contoso.com'
             $d0.HasBitLocker() | Should -BeTrue
             $d0.BitLockerKeys.Count | Should -Be 2
@@ -92,16 +93,16 @@ Describe "PersonLens" {
         }
     }
 
-    Context "LensFormat.SyncLabel" {
-        It "reads blank as 'never synced'" {
-            [LensFormat]::SyncLabel('') | Should -Be 'never synced'
+    Context "LensFormat.LogonLabel" {
+        It "reads blank as 'no logon recorded'" {
+            [LensFormat]::LogonLabel('') | Should -Be 'no logon recorded'
         }
-        It "reads the epoch/min-value (never inventoried) as 'never synced'" {
-            [LensFormat]::SyncLabel('0001-01-01T00:00:00') | Should -Be 'never synced'
+        It "reads the epoch/min-value as 'no logon recorded'" {
+            [LensFormat]::LogonLabel('0001-01-01T00:00:00') | Should -Be 'no logon recorded'
         }
-        It "renders a real timestamp as a relative 'synced ...'" {
+        It "renders a real timestamp as a relative 'seen ...'" {
             $recent = ([datetime]::UtcNow.AddMinutes(-5)).ToString('o')
-            [LensFormat]::SyncLabel($recent) | Should -BeLike 'synced *'
+            [LensFormat]::LogonLabel($recent) | Should -BeLike 'seen *'
         }
     }
 }

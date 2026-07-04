@@ -13,9 +13,10 @@
          UPN / SAM / displayName / mail / manager / office. Written out immediately
          as a PARTIAL bundle so the UI can show the directory facts early.
       2. SCCM affinity: endswith(UniqueUserName,'<SAM>') -> WSID(s) (exact-tail filtered).
-      3. All WSIDs at once (three batched queries, one shared web session): ResourceID,
-         model, last hardware-sync. Then per WSID: BitLocker keys (AD msFVE-* children,
-         home domain located via the GC).
+         This is the ONLY SCCM call - everything per-device comes from AD (the /wmi
+         route's OData translator rejects richer filters, answering 404).
+      3. Per WSID, from the GC-located computer's AD object: operatingSystem,
+         lastLogonTimestamp (coarse "last seen"), and the msFVE-* BitLocker children.
 
 .PARAMETER Identity
     UPN / DOMAIN\SAM / bare SAM / display name to resolve.
@@ -150,47 +151,33 @@ if ($sam) {
     }
 }
 
-# --- SCCM device details, batched: 3 queries TOTAL (or-ed filters), not 3 per WSID ---
-$ridByName = @{}; $modelByRid = @{}; $syncByRid = @{}
-if ($wsids.Count -gt 0) {
-    try {
-        $nameFilter = (@($wsids | ForEach-Object { "Name eq '$_'" }) -join ' or ')
-        foreach ($row in (Get-Sccm 'SMS_R_System' $nameFilter 'ResourceID,Name')) {
-            if ($row.Name -and -not $ridByName.ContainsKey([string]$row.Name)) { $ridByName[[string]$row.Name] = $row.ResourceID }
-        }
-        if ($ridByName.Count -gt 0) {
-            $ridFilter = (@($ridByName.Values | ForEach-Object { "ResourceID eq $_" }) -join ' or ')
-            foreach ($row in (Get-Sccm 'SMS_G_System_COMPUTER_SYSTEM' $ridFilter 'ResourceID,Model')) {
-                $modelByRid[[string]$row.ResourceID] = [string]$row.Model
-            }
-            foreach ($row in (Get-Sccm 'SMS_G_System_WORKSTATION_STATUS' $ridFilter 'ResourceID,LastHWScan')) {
-                $syncByRid[[string]$row.ResourceID] = [string]$row.LastHWScan
-            }
-        }
-    }
-    catch {
-        $bundle.errors += "SCCM device detail: $($_.Exception.Message)"
-    }
-}
-
-# --- Per WSID: fold in the batched SCCM facts and read BitLocker (AD) ---------------
+# --- Per WSID: OS / last-logon / BitLocker, all from the computer's AD object --------
 $devices = [System.Collections.Generic.List[object]]::new()
 foreach ($wsid in $wsids) {
-    $dev = [ordered]@{ name = $wsid; model = ''; lastSync = ''; domain = ''; note = ''; bitLockerKeys = @() }
+    $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''; note = ''; bitLockerKeys = @() }
 
-    $rid = $ridByName[$wsid]
-    if ($null -ne $rid) {
-        if ($modelByRid.ContainsKey([string]$rid)) { $dev.model = $modelByRid[[string]$rid] }
-        if ($syncByRid.ContainsKey([string]$rid)) { $dev.lastSync = $syncByRid[[string]$rid] }
-    }
-
-    # BitLocker (AD): GC-locate the computer forest-wide, bind its home domain, read the
-    # msFVE-RecoveryInformation children.
+    # GC-locate the computer forest-wide, then read from its home-domain object.
     try {
         $cHit = Find-Gc "(&(objectClass=computer)(cn=$wsid))"
         if ($cHit) {
             $compDn = [string]$cHit.Properties['distinguishedname'][0]
             $dev.domain = (($compDn -split ',' | Where-Object { $_ -match '^DC=' } | ForEach-Object { $_.Substring(3) }) -join '.')
+
+            # OS + last domain logon (lastLogonTimestamp: replicated, up to ~14 days
+            # coarse - good enough for "which of these machines is current").
+            $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
+            $cs.SearchScope = 'Base'
+            $cs.Filter = '(objectClass=*)'
+            'operatingsystem', 'lastlogontimestamp' | ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
+            $c = $cs.FindOne()
+            if ($c) {
+                if ($c.Properties['operatingsystem'].Count -gt 0) { $dev.os = [string]$c.Properties['operatingsystem'][0] }
+                if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
+                    $ft = [int64]$c.Properties['lastlogontimestamp'][0]
+                    if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
+                }
+            }
+
             $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
             $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
             'msfve-recoverypassword', 'whencreated' | ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }

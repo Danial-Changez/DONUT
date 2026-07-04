@@ -36,11 +36,10 @@ activate LW
 LW -> AD : GC-locate the user (forest-wide) -> bind home domain
 AD --> LW : UPN / SAM / email / manager / office
 LW -> LW : write partial.bin (directory facts,\nAES-encrypted, atomic tmp+rename)
-LW -> SCCM : endswith(UniqueUserName,'<SAM>')  -> WSID(s)\n(one shared web session for every call)
+LW -> SCCM : endswith(UniqueUserName,'<SAM>')  -> WSID(s)\n(the ONLY SCCM call - the /wmi route 404s richer filters)
 SCCM --> LW : ResourceName(s)  (exact-tail filtered)
-LW -> SCCM : 3 batched queries (or-ed filters):\nResourceIDs, models, last hardware-syncs
 loop each WSID
-  LW -> AD : GC-locate the computer -> msFVE-RecoveryInformation (BitLocker)
+  LW -> AD : GC-locate the computer -> OS + lastLogonTimestamp\n+ msFVE-RecoveryInformation (BitLocker)
 end
 LW -> LW : write result.bin (AES-encrypted, atomic)
 deactivate LW
