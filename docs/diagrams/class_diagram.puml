@@ -180,7 +180,7 @@ package "Donut.Models" #15233B {
         +{static} FromHashtable(h) / FromJson(json): PersonLens
     }
     class LensDevice {
-        +Name / Model / LastSync / Domain / Note: string
+        +Name / Os / LastLogon / Domain / Note: string
         +BitLockerKeys: LensBitLockerKey[]
         +HasBitLocker(): bool
     }
@@ -188,7 +188,7 @@ package "Donut.Models" #15233B {
         +Password / Created: string
     }
     class LensFormat {
-        +{static} SyncLabel(iso): string
+        +{static} LogonLabel(iso): string
     }
 
     class RecentConnection {
@@ -535,7 +535,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +SetLoading(who) / Apply(lens): void
     }
     class LensDeviceViewModel {
-        +Name / Model / LastSyncText / BitLockerText: string
+        +Name / Os / LastSeenText / BitLockerText: string
         +HasBitLocker / IsBitLockerRevealed: bool
         +RevealCommand / AddCommand: RelayCommand
     }

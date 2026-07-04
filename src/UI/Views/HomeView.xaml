@@ -668,7 +668,7 @@
                             <TextBlock Text="{Binding Name}" FontFamily="Montserrat" FontSize="13.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
                             <TextBlock FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
-                              <Run Text="{Binding Model}" /><Run Text="   ·   " /><Run Text="{Binding LastSyncText}" />
+                              <Run Text="{Binding Os}" /><Run Text="   ·   " /><Run Text="{Binding LastSeenText}" />
                             </TextBlock>
                             <!-- BitLocker key: hidden until revealed (a recovery secret) -->
                             <TextBlock Text="{Binding BitLockerText}" FontFamily="Consolas" FontSize="12"

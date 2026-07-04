@@ -177,7 +177,7 @@ consumes the result and exposes it to the bindings.
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
-| `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their SCCM devices + BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last-synced" formatting |
+| `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
 | `RecentConnection` / `RecentConnectionsStore` | Persisted "recent machines" backing the Home list (status, counts, cached inventory + disk usage) |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
@@ -319,9 +319,11 @@ separate identity means a separate process.
   with the process.
 
 **Keeping it fast:**
-- One shared AdminService **web session** (single Kerberos handshake + kept-alive
-  connection) and **batched** device queries — three `or`-filtered calls total
-  (`SMS_R_System`, `COMPUTER_SYSTEM`, `WORKSTATION_STATUS`) instead of three per device.
+- **One SCCM call total** — the affinity query (person → WSIDs). Everything per-device
+  (OS, `lastLogonTimestamp` as a coarse "last seen", BitLocker) is read from the
+  computer's AD object, which the worker GC-locates anyway. The AdminService `/wmi`
+  route's OData translator rejects richer filters (`or`, backslashes) with **404**, so
+  per-device SCCM detail queries were dropped rather than fought.
 - The child writes an early **partial bundle** (directory facts) which `RunLookupJson`
   streams to `PollLens` on the Information stream (tag `LensPartial`), so the pane fills
   with the person's info in ~1–2 s while the SCCM/BitLocker crawl finishes.

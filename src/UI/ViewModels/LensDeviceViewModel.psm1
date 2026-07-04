@@ -6,15 +6,16 @@ using module "..\..\Models\PersonLens.psm1"
     One device row in the user Lens: a person's SCCM machine + its BitLocker key.
 
 .DESCRIPTION
-    Renders a LensDevice - name, model, relative last-sync - with the BitLocker recovery
-    key hidden until revealed (it's a recovery secret). RevealCommand is self-wired (pure
-    UI state: flips IsBitLockerRevealed); AddCommand is wired by HomePresenter to drop the
-    WSID into the machine list. Inherits ObservableObject so the reveal updates live.
+    Renders a LensDevice - name, OS, relative last domain logon - with the BitLocker
+    recovery key hidden until revealed (it's a recovery secret). RevealCommand is
+    self-wired (pure UI state: flips IsBitLockerRevealed); AddCommand is wired by
+    HomePresenter to drop the WSID into the machine list. Inherits ObservableObject
+    so the reveal updates live.
 #>
 class LensDeviceViewModel : ObservableObject {
     [string] $Name = ''
-    [string] $Model = ''
-    [string] $LastSyncText = ''
+    [string] $Os = ''
+    [string] $LastSeenText = ''
     [string] $Domain = ''
     [string] $BitLockerText = ''          # the joined keys; shown only once revealed
     [bool]   $HasBitLocker = $false
@@ -26,10 +27,10 @@ class LensDeviceViewModel : ObservableObject {
     LensDeviceViewModel([LensDevice]$d) {
         if ($null -ne $d) {
             $this.Name = $d.Name
-            $this.Model = $d.Model
+            $this.Os = $d.Os
             $this.Domain = $d.Domain
             $this.Note = $d.Note
-            $this.LastSyncText = [LensFormat]::SyncLabel($d.LastSync)
+            $this.LastSeenText = [LensFormat]::LogonLabel($d.LastLogon)
             $this.HasBitLocker = $d.HasBitLocker()
             $this.BitLockerText = (@($d.BitLockerKeys | ForEach-Object {
                         if ($_.Created) { "$($_.Password)  ($($_.Created))" } else { $_.Password }
