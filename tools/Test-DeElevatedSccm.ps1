@@ -23,9 +23,13 @@
     PASS = the child was NOT elevated, ran as the interactive user, and at least one
     query returned the user->WSID. That query is what DONUT will use. Read-only.
 
-    MECHANISM NOTE: this uses Shell.Application (simplest reliable de-elevation). DONUT's
-    shipped helper will use the CreateProcessWithTokenW token API for inline stdout
-    capture - but the identity drop and SCCM access proven here are identical.
+    MECHANISM NOTE: de-elevation is done with a one-shot scheduled task whose principal
+    is the interactive user (LogonType Interactive = their logged-on token, no password;
+    RunLevel Limited = de-elevated). This is required because you elevate as a SEPARATE
+    admin account - the simpler Shell.Application trick only de-elevates within the SAME
+    user, so it left the child in the admin context. DONUT's shipped helper can use this
+    same task approach or the CreateProcessWithTokenW token API; the identity drop and
+    SCCM access proven here are identical.
 
 .PARAMETER SiteServer
     AdminService host. Default 'sccm01.contoso.com'.
@@ -99,6 +103,7 @@ try {
 $childPath  = Join-Path $dir 'child.ps1'
 $resultPath = Join-Path $dir 'result.json'
 $ok = $false
+$taskName = $null
 
 try {
     # --- 4. Child script (runs as the interactive user) ---------------------------
@@ -170,15 +175,24 @@ $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UT
 '@
     Set-Content -LiteralPath $childPath -Value $childBody -Encoding UTF8
 
-    # --- 5. Launch hidden as the interactive user via Shell.Application ------------
+    # --- 5. Launch as the interactive user via a de-elevated one-shot task ---------
+    # A scheduled task whose principal is the interactive user (LogonType Interactive =
+    # their logged-on token, no password; RunLevel Limited = de-elevated) - this crosses
+    # the account boundary that Shell.Application could not (you elevate as a separate
+    # admin account, so the shell-COM child stayed elevated in the admin context).
     $pwshPath = (Get-Process -Id $PID).Path
     if (-not $pwshPath) { $pwshPath = (Get-Command pwsh -ErrorAction SilentlyContinue).Source }
     if (-not $pwshPath) { throw "Could not resolve the host PowerShell (pwsh.exe) path to relaunch." }
 
-    Info "Launching hidden child as $interactiveUser (Shell.Application -> explorer -> medium integrity)..."
+    Info "Registering a de-elevated one-shot task as $interactiveUser (Interactive token, RunLevel Limited)..."
     $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -ResultPath "{1}" -SiteServer "{2}" -UserName "{3}"' -f $childPath, $resultPath, $SiteServer, $UserName
-    $shell = New-Object -ComObject Shell.Application
-    $shell.ShellExecute($pwshPath, $argline, '', 'open', 0)   # 0 = SW_HIDE
+    $taskName  = 'DONUT-DeElevTest-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $action    = New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
+    $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    $task      = New-ScheduledTask -Action $action -Principal $principal -Settings $settings
+    Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
+    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 
     # --- 6. Wait for the child's result -------------------------------------------
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
@@ -187,7 +201,7 @@ $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UT
     }
     if (-not (Test-Path -LiteralPath $resultPath)) {
         Warn "No result within $TimeoutSec s. The de-elevated child never wrote back - likely the"
-        Warn "shell COM launch was blocked by policy, or the exchange-folder grant failed."
+        Warn "task couldn't start as $interactiveUser (not logged on?), or the exchange-folder grant failed."
         Fail "De-elevation could not be confirmed."
         return
     }
@@ -222,6 +236,7 @@ $o | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding UT
     }
 }
 finally {
+    if ($taskName) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
