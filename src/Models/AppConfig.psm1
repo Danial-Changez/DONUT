@@ -15,39 +15,39 @@ class AppConfig {
     [string] $ReportsPath
     [hashtable] $Settings
 
-    # Default configuration structure
-    # Reference: https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
+    # DCU option reference:
+    # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
     static [hashtable] $Defaults = @{
-        activeCommand = 'scan'
-        throttleLimit = 8
+        activeCommand    = 'scan'
+        throttleLimit    = 8
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
-        domains = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        domains          = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
         adminServiceHost = 'sccm01.contoso.com'
-        commands = @{
-            scan = @{
+        commands         = @{
+            scan         = @{
                 args = @{
                     silent               = $false
                     report               = ''      # Path for XML report, e.g., 'C:\temp\DONUT'
-                    outputLog            = ''      # Path for log file, e.g., 'C:\temp\DONUT\scan.log'
+                    outputLog            = ''      # log file path, e.g. C:\temp\DONUT\scan.log
                     updateSeverity       = ''      # security,critical,recommended,optional
                     updateType           = ''      # bios,firmware,driver,application,others
                     updateDeviceCategory = ''      # audio,video,network,storage,input,chipset,others
-                    catalogLocation      = ''      # Custom catalog path
+                    catalogLocation      = ''      # custom catalog path
                 }
             }
             applyUpdates = @{
                 args = @{
                     silent               = $false
-                    reboot               = $false  # enable/disable - auto reboot after updates
-                    autoSuspendBitLocker = $true   # enable/disable - suspend BitLocker for BIOS updates
-                    forceupdate          = $false  # enable/disable - override pause during calls
-                    outputLog            = ''      # Path for log file
+                    reboot               = $false  # auto reboot after updates
+                    autoSuspendBitLocker = $true   # suspend BitLocker for BIOS updates
+                    forceupdate          = $false  # override pause during calls
+                    outputLog            = ''      # log file path
                     updateSeverity       = ''      # security,critical,recommended,optional
                     updateType           = ''      # bios,firmware,driver,application,others
                     updateDeviceCategory = ''      # audio,video,network,storage,input,chipset,others
-                    catalogLocation      = ''      # Custom catalog path
+                    catalogLocation      = ''      # custom catalog path
                 }
             }
         }
@@ -68,25 +68,27 @@ class AppConfig {
 
         foreach ($key in @($userSettings.Keys)) {
             if ($key -eq 'commands' -and $userSettings[$key] -is [hashtable]) {
-                # Deep merge commands
                 if (-not $merged.ContainsKey('commands')) { $merged['commands'] = @{} }
                 foreach ($cmd in @($userSettings[$key].Keys)) {
                     $userCmd = $userSettings[$key][$cmd]
                     if (-not $merged['commands'].ContainsKey($cmd)) {
                         if ($userCmd -is [hashtable]) {
                             $merged['commands'][$cmd] = [AppConfig]::DeepClone($userCmd)
-                        } else {
+                        }
+                        else {
                             $merged['commands'][$cmd] = $userCmd
                         }
-                    } elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and $userCmd['args'] -is [hashtable]) {
-                        # Merge args (snapshot the keys so we never enumerate a
-                        # collection we're writing into)
+                    }
+                    elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
+                        $userCmd['args'] -is [hashtable]) {
+                        # Snapshot the keys - never enumerate a collection being written to.
                         foreach ($argKey in @($userCmd['args'].Keys)) {
                             $merged['commands'][$cmd]['args'][$argKey] = $userCmd['args'][$argKey]
                         }
                     }
                 }
-            } else {
+            }
+            else {
                 $merged[$key] = $userSettings[$key]
             }
         }
@@ -101,7 +103,8 @@ class AppConfig {
             $v = $source[$k]
             if ($v -is [hashtable]) {
                 $copy[$k] = [AppConfig]::DeepClone($v)
-            } else {
+            }
+            else {
                 $copy[$k] = $v
             }
         }
@@ -121,7 +124,6 @@ class AppConfig {
     }
 
     [string] GetActiveCommand() {
-        # Modern: use 'activeCommand' field
         if ($null -ne $this.Settings -and $this.Settings.ContainsKey('activeCommand')) {
             return $this.Settings['activeCommand']
         }
@@ -133,8 +135,8 @@ class AppConfig {
     }
 
     [hashtable] GetCommandArgs([string]$command) {
-        if ($null -ne $this.Settings -and 
-            $this.Settings.ContainsKey('commands') -and 
+        if ($null -ne $this.Settings -and
+            $this.Settings.ContainsKey('commands') -and
             $this.Settings['commands'].ContainsKey($command) -and
             $this.Settings['commands'][$command].ContainsKey('args')) {
             return $this.Settings['commands'][$command]['args']
@@ -145,8 +147,12 @@ class AppConfig {
     [void] SetCommandArg([string]$command, [string]$argName, [object]$value) {
         if ($null -eq $this.Settings) { $this.Settings = @{} }
         if (-not $this.Settings.ContainsKey('commands')) { $this.Settings['commands'] = @{} }
-        if (-not $this.Settings['commands'].ContainsKey($command)) { $this.Settings['commands'][$command] = @{ args = @{} } }
-        if (-not $this.Settings['commands'][$command].ContainsKey('args')) { $this.Settings['commands'][$command]['args'] = @{} }
+        if (-not $this.Settings['commands'].ContainsKey($command)) {
+            $this.Settings['commands'][$command] = @{ args = @{} }
+        }
+        if (-not $this.Settings['commands'][$command].ContainsKey('args')) {
+            $this.Settings['commands'][$command]['args'] = @{}
+        }
         $this.Settings['commands'][$command]['args'][$argName] = $value
     }
 
@@ -155,7 +161,8 @@ class AppConfig {
     [string[]] GetDomains() {
         $val = $this.GetSetting('domains', $null)
         if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
-            $list = @($val | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            $list = @($val | ForEach-Object { [string]$_ } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($list.Count -gt 0) { return $list }
         }
         return @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
@@ -181,11 +188,10 @@ class AppConfig {
         $this.SetSetting('throttleLimit', $limit)
     }
 
-    # DCU CLI format: -option=value (not /option)
+    # Builds the dcu-cli argument string; DCU's format is -option=value (not /option).
     [string] BuildDcuArgs([string]$command, [hashtable]$overrides) {
         $cmdArgs = $this.GetCommandArgs($command)
-        
-        # Apply any runtime overrides
+
         if ($null -ne $overrides) {
             foreach ($key in $overrides.Keys) {
                 $cmdArgs[$key] = $overrides[$key]
@@ -193,40 +199,40 @@ class AppConfig {
         }
 
         $argList = [System.Collections.ArrayList]::new()
-        
+
         foreach ($key in $cmdArgs.Keys) {
             $val = $cmdArgs[$key]
-            
-            # Skip empty/null values
+
             if ($null -eq $val -or ($val -is [string] -and [string]::IsNullOrWhiteSpace($val))) {
                 continue
             }
-            
+
             # Boolean flags use enable/disable format
             if ($val -is [bool]) {
                 if ($val -eq $true) {
                     # Some flags are just present (like -silent), others need =enable
                     if ($key -in @('silent')) {
                         $argList.Add("-$key") | Out-Null
-                    } else {
+                    }
+                    else {
                         $argList.Add("-$key=enable") | Out-Null
                     }
                 }
-                # $false means don't include the flag (or use =disable if explicitly needed)
+                # $false means the flag is simply omitted.
             }
-            # String values with content
             elseif ($val -is [string]) {
-                # SINGLE-quote values with a space/comma (double quotes would close the remote
-                # pwsh -c wrapper; a bare comma is the array operator). pwsh strips the quotes.
+                # Single-quote values with a space/comma (double quotes would close the
+                # remote pwsh -c wrapper; a bare comma is the array operator).
                 if ($val -match '[\s,]') {
                     $escaped = $val -replace "'", "''"
                     $argList.Add("-$key='$escaped'") | Out-Null
-                } else {
+                }
+                else {
                     $argList.Add("-$key=$val") | Out-Null
                 }
             }
         }
-        
+
         return $argList -join ' '
     }
 }

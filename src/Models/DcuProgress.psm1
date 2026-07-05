@@ -33,7 +33,7 @@ class DcuProgress {
         return $value
     }
 
-    # --- Scan-phase steps ---------------------------------------------------------
+    # --- Scan-phase steps ---
 
     # A dcu-cli scan emits no percentages but walks fixed milestone lines; mapping them
     # to step numbers gives a real "N/5" progression instead of an anonymous spinner.
@@ -45,10 +45,10 @@ class DcuProgress {
     static [int] ParseScanStep([string]$line) {
         if ([string]::IsNullOrWhiteSpace($line)) { return 0 }
         if ($line -match '(?i)checking for application component updates') { return 2 }
-        if ($line -match '(?i)checking for updates')                       { return 1 }
-        if ($line -match '(?i)scanning system devices')                    { return 3 }
-        if ($line -match '(?i)determining available updates')              { return 4 }
-        if ($line -match '(?i)check for updates completed')                { return 5 }
+        if ($line -match '(?i)checking for updates') { return 1 }
+        if ($line -match '(?i)scanning system devices') { return 3 }
+        if ($line -match '(?i)determining available updates') { return 4 }
+        if ($line -match '(?i)check for updates completed') { return 5 }
         return 0
     }
 

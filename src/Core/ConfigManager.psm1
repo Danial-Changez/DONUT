@@ -72,7 +72,8 @@ class ConfigManager {
         }
         else {
             $this.Logger.LogInfo("No configuration found at $($this.ConfigPath); writing defaults.")
-            $this.SaveConfig((New-Object AppConfig $this.SourceRoot, $this.LogsPath, $this.ReportsPath, @{}))
+            $this.SaveConfig((New-Object AppConfig $this.SourceRoot, $this.LogsPath,
+                    $this.ReportsPath, @{}))
         }
 
         return (New-Object AppConfig $this.SourceRoot, $this.LogsPath, $this.ReportsPath, $settings)

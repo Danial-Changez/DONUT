@@ -48,44 +48,53 @@ class FinderPresenter {
 
     # AD live-search (search-bar dropdown: computers + locked-out users)
     [ActiveDirectoryService] $AdService
-    [object]          $SearchPopup        # System.Windows.Controls.Primitives.Popup (rows render via binding)
+    # System.Windows.Controls.Primitives.Popup; its rows render via binding.
+    [object]          $SearchPopup
     [DispatcherTimer] $SearchDebounce
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
     [List[hashtable]] $AdWarmJobs          # one-shot startup AD warm jobs (results discarded)
-    [List[object]]    $SearchResults       # accumulated rows for the current token (forests stream in)
+    # Accumulated rows for the current token (forests stream in).
+    [List[object]]    $SearchResults
     [HashSet[string]] $SearchSeen          # dedupe keys (Kind|Domain|Sam) for the current token
     [bool]            $SuppressSearch = $false
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
 
-    # User Lens: picking a user runs a lookup over the persistent de-elevated agent
-    # (LensLookupWorker on the pool) and shows the result in the detail pane. Mirrors
-    # the search/unlock poll pattern.
+    # User Lens: a pick runs LensLookupWorker over the persistent de-elevated agent;
+    # mirrors the search/unlock poll pattern.
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
-    [object]              $LensWarmJob      # startup agent warm-up @{ Ps; Handle }, reaped on first pick
-    # Per-person result cache: identity -> @{ At; Json }. MEMORY ONLY (never written to
-    # disk - it holds BitLocker keys), so it dies with the process.
+    # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
+    [object]              $LensWarmJob
+    # Per-person result cache: identity -> @{ At; Json }. Memory only - it holds
+    # BitLocker keys, so it must never be written to disk.
     hidden [hashtable] $LensCache = @{}
     [timespan] $LensCacheTtl = [timespan]::FromMinutes(15)
 
-    FinderPresenter([AppConfig]$config, [System.Windows.FrameworkElement]$view, [HomeViewModel]$homeVm, [LogService]$logger, [ToastService]$toasts, [DialogPresenter]$dialogs, [object]$home) {
+    FinderPresenter(
+        [AppConfig]$config,
+        [System.Windows.FrameworkElement]$view,
+        [HomeViewModel]$homeVm,
+        [LogService]$logger,
+        [ToastService]$toasts,
+        [DialogPresenter]$dialogs,
+        [object]$homePresenter
+    ) {
         $this.Config = $config
         $this.ViewContent = $view
         $this.HomeVm = $homeVm
         $this.Logger = $logger
         $this.Toasts = $toasts
         $this.DialogPresenter = $dialogs
-        $this.Home = $home
+        $this.Home = $homePresenter
 
         $presenter = $this
 
-        # AD live-finder: debounce typing, run the search on the runspace pool,
-        # poll for completion (newest result wins).
+        # AD live-finder: debounce typing, search on the pool, poll for completion.
         $this.AdService = [ActiveDirectoryService]::new($this.Config.GetDomains(), $this.Logger)
         $this.SearchJobs = [List[hashtable]]::new()
         $this.AdWarmJobs = [List[hashtable]]::new()
@@ -102,8 +111,7 @@ class FinderPresenter {
         $this.UnlockPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
         $this.UnlockPollTimer.Add_Tick({ $presenter.PollUnlock() }.GetNewClosure())
 
-        # User Lens lookup: one shared VM (reused per pick) + a poll timer for the
-        # de-elevated LensLookupWorker running on the pool.
+        # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
@@ -120,12 +128,14 @@ class FinderPresenter {
         $presenter = $this
         if ($this.SearchBar) {
             $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
-            $this.SearchBar.Add_PreviewKeyDown({ param($s, $e) if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() } }.GetNewClosure())
+            $this.SearchBar.Add_PreviewKeyDown({
+                    param($s, $e)
+                    if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() }
+                }.GetNewClosure())
         }
     }
 
-    # App is closing: stop the de-elevated Lens agent and purge every Lens exchange dir
-    # (StopAndPurgeAgent owns the teardown + its literals). Called from the window hook.
+    # App closing: stop the de-elevated Lens agent and purge every Lens exchange dir.
     [void] OnAppClosing() {
         [PersonLensService]::StopAndPurgeAgent()
     }
@@ -141,14 +151,15 @@ class FinderPresenter {
         return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
     }
 
-    # Fire-and-forget AD-finder warm: one throwaway search per forest primes the worker
-    # graph + each forest's LDAP bind. Never blocks; handles reaped by the first real search.
+    # Fire-and-forget warm: one throwaway search per forest primes the worker graph
+    # + each forest's LDAP bind. Never blocks; reaped by the first real search.
     [void] WarmAdSearch() {
         $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
         foreach ($domain in $this.AdService.Domains) {
             try {
                 # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
-                $this.AdWarmJobs.Add($this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
+                $this.AdWarmJobs.Add(
+                    $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
             }
             catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
@@ -156,18 +167,15 @@ class FinderPresenter {
         }
     }
 
-    # Dispose the startup AD warm jobs (their results are never read). By the first real
-    # search they've done their job - loaded the graph and bound each forest.
+    # Disposes the startup AD warm jobs; their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
         foreach ($j in @($this.AdWarmJobs)) { try { $j.Ps.Dispose() } catch { } }
         $this.AdWarmJobs.Clear()
     }
 
-    # Fire-and-forget: start the persistent de-elevated Lens agent on the pool (as admin),
-    # which registers the scheduled task and lets the agent pre-warm itself. Never blocks;
-    # the handle is reaped on the first pick (or at shutdown). Failures are logged when
-    # reaped, not here - a lookup would surface them anyway via EnsureAgent.
+    # Fire-and-forget: start the persistent de-elevated Lens agent on the pool. Never
+    # blocks; the handle is reaped on the first pick, and failures are logged then.
     [void] WarmLens() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
@@ -198,14 +206,15 @@ class FinderPresenter {
         catch { try { $job.Ps.Dispose() } catch { } }
     }
 
-    # ===================== AD live search (search-bar dropdown) =====================
+    # --- AD live search (search-bar dropdown) ---
 
     # Restart the debounce window on each keystroke; close the dropdown when the
     # prefix is too short to search.
     [void] OnSearchTextChanged() {
         if ($this.SuppressSearch) { return }
         $text = if ($this.SearchBar) { $this.SearchBar.Text } else { '' }
-        if ([string]::IsNullOrWhiteSpace($text) -or $text.Trim().Length -lt $this.AdService.MinPrefix) {
+        if ([string]::IsNullOrWhiteSpace($text) -or
+            $text.Trim().Length -lt $this.AdService.MinPrefix) {
             $this.SearchDebounce.Stop()
             $this.AbortSearch()
             $this.CloseSearchPopup()
@@ -233,15 +242,15 @@ class FinderPresenter {
         $prefix = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
         if ($prefix.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
 
-        # Drop still-in-flight jobs from the previous keystroke so a new search doesn't
-        # stack behind stale ones (the token guard already discards their late results).
+        # Drop in-flight jobs from the previous keystroke so a new search doesn't
+        # stack behind stale ones.
         $this.AbortSearch()
 
         $this.SearchToken++
         $token = $this.SearchToken
 
-        # Fan out one job per forest and render hits as each lands (PollSearch), instead
-        # of waiting on the sum of all forests' LDAP round-trips.
+        # Fan out one job per forest and render hits as each lands, instead of
+        # waiting on the sum of all forests' LDAP round-trips.
         $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
         foreach ($domain in $this.AdService.Domains) {
             try {
@@ -286,8 +295,8 @@ class FinderPresenter {
         $users = @($results | Where-Object { $_.Kind -eq 'User' })
 
         $presenter = $this
-        # ($items, not $rows/$searchResults: a local colliding case-insensitively with a
-        # property breaks assignment inside PS class methods.)
+        # $items, not $rows/$searchResults: a local colliding case-insensitively with
+        # a property breaks assignment inside PS class methods.
         $items = [System.Collections.Generic.List[object]]::new()
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
@@ -326,7 +335,10 @@ class FinderPresenter {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
         $this.CloseSearchPopup()
         $this.SuppressSearch = $true
-        if ($this.SearchBar) { $this.SearchBar.Text = $name; $this.SearchBar.CaretIndex = $name.Length }
+        if ($this.SearchBar) {
+            $this.SearchBar.Text = $name
+            $this.SearchBar.CaretIndex = $name.Length
+        }
         $this.SuppressSearch = $false
         # Start-early: a picked computer is about to be run - warm its IP now.
         $this.Home.PrefetchIp($name)
@@ -336,7 +348,8 @@ class FinderPresenter {
     [void] OnUnlockUser([object]$r) {
         $this.CloseSearchPopup()
         if ($null -eq $r) { return }
-        $upn = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
+        $upn = if ([string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.SamAccountName }
+        else { [string]$r.UserPrincipalName }
 
         $confirmed = $this.DialogPresenter.ShowConfirmation(
             "Unlock account",
@@ -349,7 +362,8 @@ class FinderPresenter {
         # toast the result when the pool job completes.
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdUnlockWorker.ps1'
-            $job = $this.StartPoolScript($worker, @{ Sam = [string]$r.SamAccountName; Domain = [string]$r.Domain })
+            $job = $this.StartPoolScript($worker,
+                @{ Sam = [string]$r.SamAccountName; Domain = [string]$r.Domain })
             $job.Upn = $upn
             $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()
@@ -366,7 +380,10 @@ class FinderPresenter {
         foreach ($job in @($this.UnlockJobs)) {
             if (-not $job.Handle.IsCompleted) { continue }
             $ok = $false
-            try { $res = @($job.Ps.EndInvoke($job.Handle)); $ok = [bool]($res | Select-Object -Last 1) }
+            try {
+                $res = @($job.Ps.EndInvoke($job.Handle))
+                $ok = [bool]($res | Select-Object -Last 1)
+            }
             catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
             try { $job.Ps.Dispose() } catch { }
             [void]$this.UnlockJobs.Remove($job)
@@ -378,18 +395,22 @@ class FinderPresenter {
         if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
     }
 
-    # ===================== User Lens (person -> devices) =====================
+    # --- User Lens (person -> devices) ---
 
     # A user was picked: show the Lens loading in the detail pane, then run the de-elevated
     # lookup on the pool. UPN is the best identity; falls back to DOMAIN\SAM or SAM.
     [void] OnPickUser([object]$r) {
         if ($null -eq $r) { return }
         $identity =
-            if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName }
-            elseif (-not [string]::IsNullOrWhiteSpace($r.Domain) -and -not [string]::IsNullOrWhiteSpace($r.SamAccountName)) { "$($r.Domain)\$($r.SamAccountName)" }
-            else { [string]$r.SamAccountName }
+        if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName }
+        elseif (-not [string]::IsNullOrWhiteSpace($r.Domain) -and
+            -not [string]::IsNullOrWhiteSpace($r.SamAccountName)) {
+            "$($r.Domain)\$($r.SamAccountName)"
+        }
+        else { [string]$r.SamAccountName }
         if ([string]::IsNullOrWhiteSpace($identity)) { return }
-        $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName } else { $identity }
+        $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName }
+        else { $identity }
 
         $this.ReapLensWarm()   # startup agent warm has served its purpose once a real pick runs
         $this.CloseSearchPopup()
@@ -400,7 +421,8 @@ class FinderPresenter {
         # instead of re-running the de-elevated lookup.
         $cacheKey = $identity.ToLowerInvariant()
         $cached = $this.LensCache[$cacheKey]
-        if ($null -ne $cached -and ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
+        if ($null -ne $cached -and
+            ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
             $this.LensToken++   # stales any in-flight lookup; its late result is discarded
             $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
             $this.WireLensDeviceCommands()

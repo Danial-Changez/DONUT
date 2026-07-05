@@ -40,12 +40,12 @@ class ActiveDirectoryService {
         $p = $prefix.Trim()
         $seen = [System.Collections.Generic.HashSet[string]]::new()
 
-        # One combined computers+users filter, so each forest is bound + queried ONCE per
-        # search (halves the LDAP round-trips); MapRow recovers the kind from objectCategory.
+        # One combined computers+users filter, so each forest is bound + queried once
+        # per search (halves the LDAP round-trips); MapRow recovers the kind.
         $filter = [AdFilter]::CombinedFilter($p)
         $props = @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
-                   'userAccountControl', 'msDS-User-Account-Control-Computed',
-                   'distinguishedName', 'objectCategory')
+            'userAccountControl', 'msDS-User-Account-Control-Computed',
+            'distinguishedName', 'objectCategory')
 
         foreach ($domain in $this.Domains) {
             try {
@@ -66,7 +66,8 @@ class ActiveDirectoryService {
 
     # Unlocks a locked-out user against its home domain. Returns success.
     [bool] UnlockUser([AdSearchResult]$user) {
-        if ($null -eq $user -or $user.Kind -ne 'User' -or [string]::IsNullOrWhiteSpace($user.SamAccountName)) {
+        if ($null -eq $user -or $user.Kind -ne 'User' -or
+            [string]::IsNullOrWhiteSpace($user.SamAccountName)) {
             return $false
         }
         try {
@@ -80,7 +81,7 @@ class ActiveDirectoryService {
         }
     }
 
-    # --- pure mapping (exercised via Search in tests) ---------------------------
+    # --- Pure mapping (exercised via Search in tests) ---
 
     # Kind comes from objectCategory (CN=Computer vs CN=Person), since the combined
     # filter returns both kinds in one result set.
@@ -98,16 +99,18 @@ class ActiveDirectoryService {
         if (-not $isComputer) {
             $r.UserPrincipalName = [string]$row['userPrincipalName']
             $r.DisplayName = [string]$row['displayName']
-            $r.LockedOut = [AdFilter]::IsLockedFromComputed($row['msDS-User-Account-Control-Computed'])
+            $r.LockedOut = [AdFilter]::IsLockedFromComputed(
+                $row['msDS-User-Account-Control-Computed'])
         }
         return $r
     }
 
-    # --- env-coupled seams (overridden in tests) --------------------------------
+    # --- Env-coupled seams (overridden in tests) ---
 
     # Runs an LDAP search against one forest, returning rows as property hashtables.
     # DirectorySearcher (not the AD module) keeps this fast and RSAT-free.
-    hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter, [string[]]$props, [int]$max) {
+    hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter,
+        [string[]]$props, [int]$max) {
         Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)

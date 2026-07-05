@@ -45,7 +45,12 @@ class MainPresenter {
     hidden static [double] $RailExpandedWidth = 250
     hidden static [double] $RailCollapsedWidth = 72
 
-    MainPresenter([AppConfig] $config, [ConfigManager] $configManager, [NetworkProbe] $networkProbe, [ResourceService] $resources) {
+    MainPresenter(
+        [AppConfig] $config,
+        [ConfigManager] $configManager,
+        [NetworkProbe] $networkProbe,
+        [ResourceService] $resources
+    ) {
         $this.Config = $config
         $this.ConfigManager = $configManager
         $this.NetworkProbe = $networkProbe
@@ -56,7 +61,7 @@ class MainPresenter {
 
     [void] Initialize() {
         $xamlPath = Join-Path $this.Config.SourceRoot "UI\Views\MainWindow.xaml"
-        
+
         if (-not (Test-Path $xamlPath)) {
             throw "MainWindow.xaml not found at $xamlPath"
         }
@@ -84,7 +89,9 @@ class MainPresenter {
                     $msg += "`nRoot Cause: $($_.Exception.InnerException.InnerException.Message)"
                 }
             }
-            [System.Windows.Forms.MessageBox]::Show($msg, "XAML Load Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+            [System.Windows.Forms.MessageBox]::Show($msg, "XAML Load Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error)
             throw $msg
         }
 
@@ -94,35 +101,30 @@ class MainPresenter {
             $this.Logger.LogWarning("No resources merged into MainWindow.")
         }
 
-        # Find Controls
         $this.Controls = @{}
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
-        
+
         $this.LoadImages()
-        
-        # Navigation Buttons
+
         $this.Controls['btnHome'] = $this.Window.FindName("btnHome")
         $this.Controls['btnConfig'] = $this.Window.FindName("btnConfig")
         $this.Controls['btnLogs'] = $this.Window.FindName("btnLogs")
 
-        # Collapsible rail
         $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
         $this.Controls['btnRailToggle'] = $this.Window.FindName("btnRailToggle")
-        # The logo doubles as the toggle button (its image swaps on collapse),
-        # so it is NOT part of the fading label set.
+        # The logo doubles as the toggle button, so it's not part of the fading labels.
         $this.Controls['railLabels'] = @(
             $this.Window.FindName("lblHome"),
             $this.Window.FindName("lblConfig"),
             $this.Window.FindName("lblLogs")
         ) | Where-Object { $_ }
 
-        # Toast overlay service (shared with sub-presenters that need notifications)
+        # Toast overlay, shared with sub-presenters that need notifications.
         $toastHost = $this.Window.FindName("toastHost")
         if ($toastHost) {
             $this.ToastService = [ToastService]::new($toastHost)
         }
-        
-        # Headers
+
         $this.Headers = @{}
         $this.Headers['Home'] = $this.Window.FindName("headerHome")
         $this.Headers['Config'] = $this.Window.FindName("headerConfig")
@@ -130,16 +132,17 @@ class MainPresenter {
 
         $this.Views = @{}
 
-        # Home is the default page, built eagerly; Config and Logs build lazily on first
-        # navigation (EnsureView) so startup never pays for tabs the user may not open.
-        $homeView =$this.LoadView("HomeView.xaml")
+        # Home is the default page, built eagerly; Config and Logs build lazily on
+        # first navigation so startup never pays for tabs the user may not open.
+        $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
-            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView, $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
+            $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView,
+                $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
         }
 
-        # Shell view-model: navigation / rail / window chrome are bound commands that call
-        # back into the presenter for the imperative shell work (lazy pages, animations).
+        # Shell view-model: navigation / rail / window chrome are bound commands that
+        # call back into the presenter for the imperative shell work.
         $presenter = $this
         $this.MainVm = [MainViewModel]::new()
         $nav = { param($p) $presenter.NavigateTo([string]$p) }.GetNewClosure()
@@ -149,29 +152,27 @@ class MainPresenter {
         $min = { param($p) $presenter.Window.WindowState = 'Minimized' }.GetNewClosure()
         $this.MainVm.MinimizeCommand = [RelayCommand]::new([System.Action[object]]$min)
         $max = { param($p)
-            if ($presenter.Window.WindowState -eq 'Maximized') { $presenter.Window.WindowState = 'Normal' }
+            if ($presenter.Window.WindowState -eq 'Maximized') {
+                $presenter.Window.WindowState = 'Normal'
+            }
             else { $presenter.Window.WindowState = 'Maximized' }
         }.GetNewClosure()
         $this.MainVm.MaximizeCommand = [RelayCommand]::new([System.Action[object]]$max)
         $close = { param($p) $presenter.Window.Close() }.GetNewClosure()
         $this.MainVm.CloseCommand = [RelayCommand]::new([System.Action[object]]$close)
-        # Pages set their own DataContext (HomeVm/LogsVm/ConfigVm), so the shell's
-        # context never leaks into them.
+        # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
-        # Drag Move
-        $this.Window.Add_MouseLeftButtonDown({ 
-            if ($_.ButtonState -eq 'Pressed') { $presenter.Window.DragMove() } 
-        }.GetNewClosure())
+        $this.Window.Add_MouseLeftButtonDown({
+                if ($_.ButtonState -eq 'Pressed') { $presenter.Window.DragMove() }
+            }.GetNewClosure())
 
-        # Shutdown on Close
-        $this.Window.Add_Closed({ 
-            if ([System.Windows.Application]::Current) {
-                [System.Windows.Application]::Current.Shutdown() 
-            }
-        }.GetNewClosure())
+        $this.Window.Add_Closed({
+                if ([System.Windows.Application]::Current) {
+                    [System.Windows.Application]::Current.Shutdown()
+                }
+            }.GetNewClosure())
 
-        # Default Navigation
         $this.NavigateTo('Home')
     }
 
@@ -196,8 +197,7 @@ class MainPresenter {
         $path = Join-Path $this.Config.SourceRoot "UI\Views\$fileName"
         if (Test-Path $path) {
             try {
-                # Stream is disposed so the view file isn't left locked while the
-                # app runs (see Initialize).
+                # Stream disposed so the view file isn't left locked (see Initialize).
                 $stream = [System.IO.File]::OpenRead($path)
                 try {
                     return [System.Windows.Markup.XamlReader]::Load($stream)
@@ -205,15 +205,16 @@ class MainPresenter {
                 finally {
                     $stream.Dispose()
                 }
-            } catch {
+            }
+            catch {
                 $this.Logger.LogException("Failed to load view $fileName", $_)
             }
         }
         return $null
     }
 
-    # Builds a page's view + presenter on first navigation (Home builds at startup), so
-    # construction cost - notably Logs reading every log file - waits for the tab open.
+    # Builds a page's view + presenter on first navigation, so construction cost -
+    # notably Logs reading every log file - waits for the tab open.
     hidden [void] EnsureView([string]$viewName) {
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) { return }
 
@@ -241,20 +242,20 @@ class MainPresenter {
             # Gentle fade-in transition on view switch.
             $content = $this.Controls['contentMain']
             if ($content) {
-                $fade = [System.Windows.Media.Animation.DoubleAnimation]::new(0, 1, [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180)))
+                $fade = [System.Windows.Media.Animation.DoubleAnimation]::new(
+                    0, 1, [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180)))
                 $content.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
             }
 
-            # Refresh presenter state when navigating
             if ($viewName -eq 'Home' -and $this.HomePresenter) {
                 $this.HomePresenter.UpdateSearchButtonLabel()
             }
         }
-        
-        # Toggle header visibility
+
         foreach ($headerKey in $this.Headers.Keys) {
             if ($this.Headers[$headerKey]) {
-                $this.Headers[$headerKey].Visibility = if ($headerKey -eq $viewName) { 'Visible' } else { 'Collapsed' }
+                $this.Headers[$headerKey].Visibility = if ($headerKey -eq $viewName) { 'Visible' }
+                else { 'Collapsed' }
             }
         }
 
@@ -275,14 +276,16 @@ class MainPresenter {
         if ($logo) {
             if ($this.RailCollapsed) {
                 if ($this.DonutIcon) { $logo.Source = $this.DonutIcon }
-            } elseif ($this.LogoImage) {
+            }
+            elseif ($this.LogoImage) {
                 $logo.Source = $this.LogoImage
             }
         }
 
         $targetWidth = if ($this.RailCollapsed) {
             [MainPresenter]::RailCollapsedWidth
-        } else {
+        }
+        else {
             [MainPresenter]::RailExpandedWidth
         }
         $targetOpacity = if ($this.RailCollapsed) { 0.0 } else { 1.0 }
@@ -291,15 +294,12 @@ class MainPresenter {
         $ease = [System.Windows.Media.Animation.QuadraticEase]::new()
         $ease.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseInOut
 
-        # Animate the rail width.
         $widthAnim = [System.Windows.Media.Animation.DoubleAnimation]::new()
         $widthAnim.To = $targetWidth
         $widthAnim.Duration = $duration
         $widthAnim.EasingFunction = $ease
         $sidebar.BeginAnimation([System.Windows.FrameworkElement]::WidthProperty, $widthAnim)
 
-        # Fade the text labels. Labels collapse out faster than they fade in so
-        # they don't appear before the rail has room for them.
         foreach ($label in $this.Controls['railLabels']) {
             $fade = [System.Windows.Media.Animation.DoubleAnimation]::new()
             $fade.To = $targetOpacity
@@ -313,17 +313,20 @@ class MainPresenter {
             try {
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Run($this.Window)
-                } else {
+                }
+                else {
                     $this.Window.ShowDialog() | Out-Null
                 }
-            } catch {
+            }
+            catch {
                 $this.Logger.LogException("Show failed", $_)
                 if ($_.Exception.InnerException) {
                     $this.Logger.LogError("Inner Exception: $($_.Exception.InnerException.Message)")
                 }
                 throw
             }
-        } else {
+        }
+        else {
             $this.Logger.LogError("MainWindow is null.")
         }
     }

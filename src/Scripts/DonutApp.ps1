@@ -43,7 +43,7 @@ try {
     $configManager = [ConfigManager]::new($srcRoot)
     $global:AppConfig = $configManager.LoadConfig()
 
-    foreach ($folder in @("logs","reports")) {
+    foreach ($folder in @("logs", "reports")) {
         $path = Join-Path (Split-Path $configManager.ConfigPath -Parent) $folder
         if (-not (Test-Path $path)) { New-Item -Path $path -ItemType Directory -Force | Out-Null }
     }
@@ -57,8 +57,8 @@ try {
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
-    # min = max PINS every runspace: idle cleanup only disposes above the minimum, so
-    # min=1 let warmed runspaces die and later jobs cold-load under the loader lock (UI freeze).
+    # min = max pins every runspace: idle cleanup only disposes above the minimum, so
+    # min=1 let warmed runspaces die and later jobs cold-load under the loader lock.
     [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
 
     $logger.LogInfo("Loading resources.")
@@ -70,11 +70,12 @@ try {
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
 
-    # Build the main window (and warm the pool) BEFORE showing login: with no window on
-    # screen the synchronous warm is just launch delay, not a frozen login modal.
+    # Build the main window (and warm the pool) before showing login: with no window
+    # on screen the synchronous warm is just launch delay, not a frozen login modal.
     $mainPresenter = $null
     try {
-        $mainPresenter = [MainPresenter]::new($global:AppConfig, $configManager, $networkProbe, $resourceService)
+        $mainPresenter = [MainPresenter]::new(
+            $global:AppConfig, $configManager, $networkProbe, $resourceService)
         $logger.LogInfo("Main window preloaded (runspace pool warmed).")
     }
     catch {
@@ -95,7 +96,7 @@ try {
     else {
         $logger.LogError("Main window could not be built.")
     }
-    
+
 }
 catch {
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }

@@ -29,7 +29,9 @@ class AdSearchResult {
     # Best label for the dropdown: UPN for users (fallback sam), name for computers.
     [string] Label() {
         if ($this.Kind -eq 'User') {
-            if (-not [string]::IsNullOrWhiteSpace($this.UserPrincipalName)) { return $this.UserPrincipalName }
+            if (-not [string]::IsNullOrWhiteSpace($this.UserPrincipalName)) {
+                return $this.UserPrincipalName
+            }
             return $this.SamAccountName
         }
         return $this.Name
@@ -48,12 +50,12 @@ class AdFilter {
         $sb = [System.Text.StringBuilder]::new()
         foreach ($ch in $text.ToCharArray()) {
             switch ($ch) {
-                '\'        { [void]$sb.Append('\5c') }
-                '*'        { [void]$sb.Append('\2a') }
-                '('        { [void]$sb.Append('\28') }
-                ')'        { [void]$sb.Append('\29') }
-                ([char]0)  { [void]$sb.Append('\00') }
-                default    { [void]$sb.Append($ch) }
+                '\' { [void]$sb.Append('\5c') }
+                '*' { [void]$sb.Append('\2a') }
+                '(' { [void]$sb.Append('\28') }
+                ')' { [void]$sb.Append('\29') }
+                ([char]0) { [void]$sb.Append('\00') }
+                default { [void]$sb.Append($ch) }
             }
         }
         return $sb.ToString()

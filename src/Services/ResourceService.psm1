@@ -28,7 +28,7 @@ class ResourceService {
     [void] LoadGlobalResources() {
         if (-not [System.Windows.Application]::Current) {
             try {
-                # Use New-Object with ErrorAction Stop to ensure it's catchable
+                # -ErrorAction Stop so a construction failure is catchable.
                 $app = New-Object System.Windows.Application -ErrorAction Stop
                 $app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
                 $this.Logger.LogDebug("Created WPF Application. ShutdownMode: $($app.ShutdownMode)")
@@ -37,7 +37,7 @@ class ResourceService {
                 $this.Logger.LogWarning("Unable to create WPF Application object (one may already exist in this AppDomain on another thread): $($_.Exception.Message)")
             }
         }
-        
+
         if ([System.Windows.Application]::Current) {
             if ([System.Windows.Application]::Current.ShutdownMode -ne [System.Windows.ShutdownMode]::OnExplicitShutdown) {
                 [System.Windows.Application]::Current.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
@@ -58,20 +58,18 @@ class ResourceService {
     # Applies loaded styles to a specific window (needed for XamlReader loaded windows)
     [void] ApplyResourcesToWindow([Window]$window) {
         if ([System.Windows.Application]::Current) {
-            # Merge dictionaries from App.Current to Window
             foreach ($dict in [System.Windows.Application]::Current.Resources.MergedDictionaries) {
                 $window.Resources.MergedDictionaries.Add($dict)
             }
         }
         else {
-            # Fallback if App.Current isn't set
             $this.LoadStylesInto($window.Resources)
         }
     }
 
     hidden [void] LoadStylesInto([ResourceDictionary]$targetDictionary) {
         $stylesPath = Join-Path $this.SourceRoot 'UI\Styles'
-        
+
         if (-not (Test-Path $stylesPath)) {
             $this.Logger.LogWarning("Styles folder not found at $stylesPath")
             return
@@ -85,7 +83,7 @@ class ResourceService {
                 $stream = [System.IO.File]::OpenRead($_.FullName)
                 $dict = [System.Windows.Markup.XamlReader]::Load($stream, $context)
                 $stream.Close()
-                
+
                 $targetDictionary.MergedDictionaries.Add($dict)
             }
             catch {

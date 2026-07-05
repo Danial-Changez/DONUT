@@ -48,7 +48,8 @@ class RemoteOperationException : System.Exception {
     [ErrorLevel]          $Level
     [RemoteFailureReason] $Reason
 
-    RemoteOperationException([string]$message, [string]$hostName, [ErrorLevel]$level, [RemoteFailureReason]$reason) : base($message) {
+    RemoteOperationException([string]$message, [string]$hostName,
+        [ErrorLevel]$level, [RemoteFailureReason]$reason) : base($message) {
         $this.HostName = $hostName
         $this.Level = $level
         $this.Reason = $reason
@@ -89,16 +90,17 @@ class RemoteExecutionException : RemoteOperationException {
 
     # Same, but with a decoded meaning appended (e.g. "exit code 3 - the system
     # manufacturer is not Dell"), so a small DCU error code reads as its actual cause.
-    RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode, [string]$detail) : base(
+    RemoteExecutionException([string]$hostName, [string]$what,
+        [int]$exitCode, [string]$detail) : base(
         $(if ([string]::IsNullOrWhiteSpace($detail)) { "$what failed on '$hostName' (exit code $exitCode)." }
-          else { "$what failed on '$hostName' (exit code $exitCode - $detail)." }),
+            else { "$what failed on '$hostName' (exit code $exitCode - $detail)." }),
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
         $this.ExitCode = $exitCode
     }
 }
 
-# The remote process (pwsh) failed to start / crashed during startup - an NTSTATUS fault
-# (e.g. 0xC0000142), NOT a dcu-cli exit code; often transient (see the message text).
+# The remote process (pwsh) failed to start / crashed during startup - an NTSTATUS
+# fault (e.g. 0xC0000142), not a dcu-cli exit code; often transient.
 class RemoteProcessStartException : RemoteOperationException {
     [int] $ExitCode
 
@@ -123,8 +125,8 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
-# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...), NOT a
-# dcu-cli code. Classic trigger: a NETWORK driver reset the NIC. Warning: likely applied.
+# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...),
+# not a dcu-cli code. Classic trigger: a network driver reset the NIC.
 class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
 
@@ -183,14 +185,20 @@ class DcuNotInstalledException : RemoteOperationException {
 class RemoteFailure {
     static [RemoteFailureReason] ReasonFromMessage([string]$message) {
         if ([string]::IsNullOrWhiteSpace($message)) { return [RemoteFailureReason]::Unknown }
-        if ($message -match '(?i)offline or unreachable')            { return [RemoteFailureReason]::Offline }
-        if ($message -match '(?i)could not resolve an ip|dns/ad')    { return [RemoteFailureReason]::Unresolvable }
-        if ($message -match '(?i)rpc \(port 135\)')                  { return [RemoteFailureReason]::RpcUnavailable }
-        if ($message -match '(?i)is not installed on')               { return [RemoteFailureReason]::DcuMissing }
-        if ($message -match '(?i)process-launch failure|exited during startup') { return [RemoteFailureReason]::ProcessStartFailed }
-        if ($message -match '(?i)lost its connection to the host')    { return [RemoteFailureReason]::ConnectionLost }
-        if ($message -match '(?i)did not finish within')              { return [RemoteFailureReason]::TimedOut }
-        if ($message -match '(?i)\(exit code')                       { return [RemoteFailureReason]::ExecutionFailed }
+        if ($message -match '(?i)offline or unreachable') { return [RemoteFailureReason]::Offline }
+        if ($message -match '(?i)could not resolve an ip|dns/ad') {
+            return [RemoteFailureReason]::Unresolvable
+        }
+        if ($message -match '(?i)rpc \(port 135\)') { return [RemoteFailureReason]::RpcUnavailable }
+        if ($message -match '(?i)is not installed on') { return [RemoteFailureReason]::DcuMissing }
+        if ($message -match '(?i)process-launch failure|exited during startup') {
+            return [RemoteFailureReason]::ProcessStartFailed
+        }
+        if ($message -match '(?i)lost its connection to the host') {
+            return [RemoteFailureReason]::ConnectionLost
+        }
+        if ($message -match '(?i)did not finish within') { return [RemoteFailureReason]::TimedOut }
+        if ($message -match '(?i)\(exit code') { return [RemoteFailureReason]::ExecutionFailed }
         return [RemoteFailureReason]::Unknown
     }
 }

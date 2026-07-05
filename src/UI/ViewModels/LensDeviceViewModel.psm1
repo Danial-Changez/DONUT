@@ -22,7 +22,8 @@ class LensDeviceViewModel : ObservableObject {
     [bool]   $IsBitLockerRevealed = $false
     [string] $Note = ''
     [object] $RevealCommand               # RelayCommand: reveal the BitLocker key(s)
-    [object] $AddCommand                  # RelayCommand: add the WSID to the machine list (presenter-wired)
+    # RelayCommand: add the WSID to the machine list (presenter-wired).
+    [object] $AddCommand
 
     LensDeviceViewModel([LensDevice]$d) {
         if ($null -ne $d) {

@@ -48,13 +48,14 @@ class HostListSource {
                     ForEach-Object { if ($null -ne $_) { $_.Trim() } } |
                     Where-Object { $_ }
             )
-        } catch {
+        }
+        catch {
             Write-Warning "Failed to load WSID.txt: $_"
             return @()
         }
     }
 
-    # --- Overridable seams (raw filesystem; faked in unit tests) ----------------------
+    # --- Overridable seams (raw filesystem; faked in unit tests) ---
 
     hidden [bool] PathExists([string]$path) {
         return [bool](Test-Path $path)

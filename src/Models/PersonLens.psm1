@@ -82,7 +82,8 @@ class PersonLens {
             if ($null -ne $d) { $devList.Add([LensDevice]::FromHashtable([hashtable]$d)) }
         }
         $p.Devices = $devList.ToArray()
-        $p.Errors = @(@($h['errors']) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
+        $p.Errors = @(@($h['errors']) | Where-Object { $null -ne $_ } |
+                ForEach-Object { [string]$_ })
         return $p
     }
 
@@ -111,7 +112,8 @@ class LensFormat {
         if ([string]::IsNullOrWhiteSpace($iso)) { return 'no logon recorded' }
         $dt = [datetime]::MinValue
         $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
-        if ([datetime]::TryParse($iso, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$dt) -and $dt -gt [datetime]::MinValue) {
+        if ([datetime]::TryParse($iso, [System.Globalization.CultureInfo]::InvariantCulture,
+                $styles, [ref]$dt) -and $dt -gt [datetime]::MinValue) {
             return "seen $([TimeFormat]::Relative($dt))"
         }
         return 'no logon recorded'

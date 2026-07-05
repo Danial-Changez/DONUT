@@ -131,7 +131,8 @@ class FolderTreeNode {
 # (deepest listed prefix = parent; no ancestor = root). Static, WPF-free, tested.
 class DiskUsageTree {
     static [FolderTreeNode[]] Build([FolderUsage[]]$folders) {
-        $items = @($folders | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
+        $items = @($folders |
+                Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
         if ($items.Count -eq 0) { return @() }
 
         # parent[i] = index of the deepest other item whose path is a prefix of items[i].
@@ -158,7 +159,8 @@ class DiskUsageTree {
             while ($cur -ge 0) { $d++; $cur = $parent[$cur] }
             $depth[$i] = $d
             $pIdx = $parent[$i]
-            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) } else { $items[$i].Path }
+            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) }
+            else { $items[$i].Path }
             if ([string]::IsNullOrEmpty($lbl)) { $lbl = $items[$i].Path }
             $label[$i] = $lbl
         }
@@ -167,14 +169,17 @@ class DiskUsageTree {
         $children = @{}
         for ($i = 0; $i -lt $items.Count; $i++) {
             $k = $parent[$i]
-            if (-not $children.ContainsKey($k)) { $children[$k] = [System.Collections.Generic.List[int]]::new() }
+            if (-not $children.ContainsKey($k)) {
+                $children[$k] = [System.Collections.Generic.List[int]]::new()
+            }
             $children[$k].Add($i)
         }
 
         # DFS from the roots, preserving input (size-ranked) order.
         $out = [System.Collections.Generic.List[FolderTreeNode]]::new()
         $stack = [System.Collections.Generic.Stack[int]]::new()
-        $roots = if ($children.ContainsKey(-1)) { $children[-1] } else { [System.Collections.Generic.List[int]]::new() }
+        $roots = if ($children.ContainsKey(-1)) { $children[-1] }
+        else { [System.Collections.Generic.List[int]]::new() }
         for ($r = $roots.Count - 1; $r -ge 0; $r--) { $stack.Push($roots[$r]) }
 
         while ($stack.Count -gt 0) {
@@ -197,10 +202,11 @@ class DiskUsageTree {
         return $out.ToArray()
     }
 
-    # Same containment logic as Build, but returns the ROOT nodes with their Children
+    # Same containment logic as Build, but returns the root nodes with their Children
     # populated (size-ranked order preserved at every level) for a real TreeView render.
     static [FolderTreeNode[]] BuildNested([FolderUsage[]]$folders) {
-        $items = @($folders | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
+        $items = @($folders |
+                Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
         if ($items.Count -eq 0) { return @() }
 
         # parent[i] = index of the deepest other item whose path is a prefix of items[i].
@@ -225,7 +231,8 @@ class DiskUsageTree {
             $d = 0; $cur = $parent[$i]
             while ($cur -ge 0) { $d++; $cur = $parent[$cur] }
             $pIdx = $parent[$i]
-            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) } else { $items[$i].Path }
+            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) }
+            else { $items[$i].Path }
             if ([string]::IsNullOrEmpty($lbl)) { $lbl = $items[$i].Path }
 
             $n = [FolderTreeNode]::new()

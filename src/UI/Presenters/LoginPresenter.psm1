@@ -50,11 +50,13 @@ class LoginPresenter {
         $panelControlBar = $this.LoginWindow.FindName('panelControlBar')
 
         if ($btnClose) { $btnClose.Add_Click({ $presenter.LoginWindow.Close() }.GetNewClosure()) }
-        if ($btnMinimize) { $btnMinimize.Add_Click({ $presenter.LoginWindow.WindowState = 'Minimized' }.GetNewClosure()) }
+        if ($btnMinimize) {
+            $btnMinimize.Add_Click({ $presenter.LoginWindow.WindowState = 'Minimized' }.GetNewClosure())
+        }
         if ($panelControlBar) {
             $panelControlBar.Add_MouseLeftButtonDown({
-                if ($_.ButtonState -eq 'Pressed') { $presenter.LoginWindow.DragMove() }
-            }.GetNewClosure())
+                    if ($_.ButtonState -eq 'Pressed') { $presenter.LoginWindow.DragMove() }
+                }.GetNewClosure())
         }
 
         $this.LoginSuccess = $false
@@ -67,8 +69,7 @@ class LoginPresenter {
 
     [void] LoadImages() {
         $assetsPath = Join-Path (Split-Path $this.Resources.SourceRoot -Parent) "assets\Images"
-        
-        # Background
+
         $bgPath = Join-Path $assetsPath "background.jpeg"
         if (Test-Path $bgPath) {
             $bgBrush = $this.LoginWindow.FindName("Background")
@@ -79,7 +80,6 @@ class LoginPresenter {
             }
         }
 
-        # GitHub Button
         $ghPath = Join-Path $assetsPath "GitHub.png"
         if (Test-Path $ghPath) {
             $btn = $this.LoginWindow.FindName("btnGitHubAuth")
@@ -93,8 +93,8 @@ class LoginPresenter {
     }
 
     [void] StartAuthFlow() {
-        # Re-entry guard: a second click starts a FRESH device flow, so stop the old poll
-        # first or its dead-code failure would overwrite the new flow's code display.
+        # Re-entry guard: a second click starts a fresh device flow, so stop the old
+        # poll first or its dead-code failure would overwrite the new code display.
         if ($this.PollTimer -and $this.PollTimer.IsEnabled) { $this.PollTimer.Stop() }
         try {
             $response = $this.Service.InitiateDeviceFlow()
@@ -151,10 +151,9 @@ class LoginPresenter {
             $reader = [System.Xml.XmlReader]::Create($xamlPath)
             $window = [System.Windows.Markup.XamlReader]::Load($reader)
             $reader.Close()
-            
-            # Apply resources using the service
+
             $this.Resources.ApplyResourcesToWindow($window)
-            
+
             return $window
         }
         catch {

@@ -18,7 +18,8 @@ class InventoryService : RemoteJobService {
 
     InventoryService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
 
-    InventoryService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
+    InventoryService([AppConfig] $config, [NetworkProbe] $probe,
+        [LogService] $logger) : base($config, $probe, $logger) {}
 
     # Returns worker args carrying the probe script (no network here - the worker gates
     # reachability). "Inventory" is the worker token, distinct from [JobKind]::Inventory.

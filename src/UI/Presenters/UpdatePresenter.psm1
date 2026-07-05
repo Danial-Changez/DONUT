@@ -34,7 +34,6 @@ class UpdatePresenter {
         $localVer = $this.Service.GetLocalVersion()
         $token = $this.Service.GetStoredToken()
 
-        # If no token, prompt for login.
         if ([string]::IsNullOrEmpty($token)) {
             $loginPresenter = [LoginPresenter]::new($this.Service, $this.Resources)
             if (-not $loginPresenter.ShowLogin()) {
@@ -59,12 +58,13 @@ class UpdatePresenter {
         }
     }
 
-    # --- Update UI ---------------------------------------------------------------
+    # --- Update UI ---
 
     [void] ShowUpdateWindow($Release, $LocalVer, $RemoteVer) {
         $isRollback = ($LocalVer -gt $RemoteVer)
-        $result = $this.Dialog.ShowUpdatePrompt($LocalVer.ToString(), $RemoteVer.ToString(), $isRollback)
-        
+        $result = $this.Dialog.ShowUpdatePrompt($LocalVer.ToString(), $RemoteVer.ToString(),
+            $isRollback)
+
         if ($result) {
             $this.PerformUpdate($Release)
         }
@@ -77,37 +77,36 @@ class UpdatePresenter {
 
             $token = $this.Service.GetStoredToken()
             $stage = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT"
-            
-            # Show progress? For now, just blocking call (UI might freeze, ideally async)
-            # Since we are closing the update window before this, it's fine if it blocks briefly before app closes.
-            
+
+            # Blocking download is acceptable here: the update window is already
+            # closed and the app shuts down right after applying.
             $msiPath = $this.Service.DownloadAsset($token, $asset, $stage)
-            
-            # Verify Checksum
+
             $checksumAsset = $this.Service.GetReleaseAsset($Release, '*.sha256')
             if ($checksumAsset) {
                 $checksumPath = $this.Service.DownloadAsset($token, $checksumAsset, $stage)
                 $content = Get-Content $checksumPath -Raw
                 $expectedHash = ($content -split '\s+')[0].Trim()
-                
+
                 if (-not $this.Service.VerifyFileHash($msiPath, $expectedHash)) {
                     throw "SHA-256 hash mismatch. Update aborted."
                 }
-            } else {
+            }
+            else {
                 $this.Logger.LogWarning("No checksum file found. Skipping verification.")
             }
 
             $localVer = $this.Service.GetLocalVersion()
             $remoteVer = [version]$Release.tag_name
             $isRollback = ($localVer -gt $remoteVer)
-            
+
             $this.Service.ApplyUpdate($msiPath, $isRollback, $this.Resources.SourceRoot)
-            
-            # Close the main app
+
             [System.Windows.Application]::Current.Shutdown()
         }
         catch {
-            [System.Windows.MessageBox]::Show("Update Failed: $_", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            [System.Windows.MessageBox]::Show("Update Failed: $_", "Error",
+                [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
         }
     }
 }

@@ -39,8 +39,8 @@ class HostViewModel : ObservableObject {
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
 
-    # Detail-header + overview-strip bindables: both mirror the SELECTED machine via
-    # SelectedMachine.*, populated from inventory by ApplyInventory (InventoryFormat mappers).
+    # Detail-header + overview-strip bindables: both mirror the selected machine via
+    # SelectedMachine.*, populated from inventory by ApplyInventory.
     [string] $DetailTitle = ''
     [string] $ProbedText = ''
     [string] $OvModel = '—'
@@ -73,7 +73,7 @@ class HostViewModel : ObservableObject {
         $this.DotBrush = [HostViewModel]::BrushFor('BodyTextTertiary')
     }
 
-    # ---- Live job status (running / terminal), from a pure FleetStatus ----
+    # --- Live job status (running / terminal), from a pure FleetStatus ---
     [void] ApplyStatus([FleetStatus]$status) {
         $this.SetDotKey($status.ColorKey)
         $this.SetChipKey($status.ColorKey)
@@ -111,7 +111,7 @@ class HostViewModel : ObservableObject {
         if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
-    # ---- Idle (persisted) state, from a stored RecentConnection ----
+    # --- Idle (persisted) state, from a stored RecentConnection ---
     [void] ApplyIdle([RecentConnection]$rc) {
         $this.IdleStatus = $rc.LastStatus
         $this.Set('ProgressVisible', $false)
@@ -120,7 +120,8 @@ class HostViewModel : ObservableObject {
 
         $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
             'never run'
-        } else {
+        }
+        else {
             [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
@@ -145,10 +146,11 @@ class HostViewModel : ObservableObject {
         $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
         $this.Set('OvBattery', [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health))
         $this.Set('OvBatterySub', $(
-            if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
-                $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
-                "$($inv.ChargePercent)% - $state"
-            } else { '' }))
+                if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
+                    $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
+                    "$($inv.ChargePercent)% - $state"
+                }
+                else { '' }))
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
         $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)))
@@ -164,17 +166,18 @@ class HostViewModel : ObservableObject {
             "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
         }
         $this.Set('ProbedText', $(
-            if (-not [string]::IsNullOrWhiteSpace($this.CachedIp)) {
-                if ($probed) { "$($this.CachedIp)  ·  $probed" } else { $this.CachedIp }
-            } else { $probed }))
+                if (-not [string]::IsNullOrWhiteSpace($this.CachedIp)) {
+                    if ($probed) { "$($this.CachedIp)  ·  $probed" } else { $this.CachedIp }
+                }
+                else { $probed }))
     }
 
     [void] SetPendingUpdates([int]$count) {
         $this.Set('OvUpdates', "$count")
     }
 
-    # Rebuilds the largest-folders tree from a disk report; a re-applied SAME instance is
-    # skipped (TreeView keeps its expansion state), and null/empty clears back to the hint.
+    # Rebuilds the largest-folders tree from a disk report; a re-applied same instance
+    # is skipped (TreeView keeps its expansion state), and null/empty clears to the hint.
     [void] ApplyFolders([DiskUsageReport]$report) {
         if ($null -ne $report -and [object]::ReferenceEquals($this.FoldersSource, $report)) { return }
         $this.FoldersSource = $report
@@ -188,16 +191,18 @@ class HostViewModel : ObservableObject {
     [void] SetReachability([string]$state) {
         $this.Reachability = $state
         switch ($state) {
-            'Online'  { $this.SetDotKey('AccentGreen') }
+            'Online' { $this.SetDotKey('AccentGreen') }
             'Offline' { $this.SetDotKey('AccentRed') }
-            default   { }
+            default { }
         }
         $this.ApplyChip()
         $this.ApplySubtitle()
-        $this.Set('DetailTitle', $(if ($state -eq 'Offline') { "$($this.HostName)  -  offline" } else { $this.HostName }))
+        $title = if ($state -eq 'Offline') { "$($this.HostName)  -  offline" }
+        else { $this.HostName }
+        $this.Set('DetailTitle', $title)
     }
 
-    # ---- internal composition helpers ----
+    # --- Internal composition helpers ---
 
     hidden [void] ApplyChip() {
         $status = if ($this.Reachability -eq 'Offline') { 'Offline' } else { $this.IdleStatus }
@@ -212,8 +217,11 @@ class HostViewModel : ObservableObject {
 
     hidden [void] ApplySubtitle() {
         if ($this.Reachability -eq 'Offline') {
-            $this.Set('Subtitle', $(if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' } else { "$($this.BaseSubtitle)  ·  offline" }))
-        } else {
+            $sub = if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' }
+            else { "$($this.BaseSubtitle)  ·  offline" }
+            $this.Set('Subtitle', $sub)
+        }
+        else {
             $this.Set('Subtitle', $this.BaseSubtitle)
         }
     }
@@ -238,12 +246,12 @@ class HostViewModel : ObservableObject {
 
     static [string] IdleColorKey([string]$lastStatus) {
         switch ($lastStatus) {
-            'Completed'      { return 'AccentGreen' }
-            'Failed'         { return 'AccentRed' }
+            'Completed' { return 'AccentGreen' }
+            'Failed' { return 'AccentRed' }
             'RebootRequired' { return 'AccentYellow' }
             'ConnectionLost' { return 'AccentOrange' }
-            'Offline'        { return 'AccentRed' }
-            default          { return 'BodyTextTertiary' }
+            'Offline' { return 'AccentRed' }
+            default { return 'BodyTextTertiary' }
         }
         return 'BodyTextTertiary'
     }
@@ -252,7 +260,7 @@ class HostViewModel : ObservableObject {
         switch ($lastStatus) {
             'RebootRequired' { return 'Reboot required' }
             'ConnectionLost' { return 'Unconfirmed' }
-            default          { return $lastStatus }
+            default { return $lastStatus }
         }
         return $lastStatus
     }

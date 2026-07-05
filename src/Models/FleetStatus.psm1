@@ -42,20 +42,24 @@ class FleetStatus {
                 return [FleetStatus]::new([FleetState]::Failed, 'Failed', 'AccentRed', $false)
             }
             'Created' {
-                return [FleetStatus]::new([FleetState]::Queued, 'Queued', 'BodyTextTertiary', $false)
+                return [FleetStatus]::new([FleetState]::Queued, 'Queued',
+                    'BodyTextTertiary', $false)
             }
             'Running' {
                 if ($jobType -eq 'UpdateApply') {
-                    return [FleetStatus]::new([FleetState]::Updating, 'Updating…', 'AccentPurple', $true)
+                    return [FleetStatus]::new([FleetState]::Updating, 'Updating…',
+                        'AccentPurple', $true)
                 }
                 # Scan and UpdateScan are both "scanning" from the user's view.
                 return [FleetStatus]::new([FleetState]::Scanning, 'Scanning…', 'AccentCyan', $true)
             }
             'Completed' {
                 if ($rebootRequired) {
-                    return [FleetStatus]::new([FleetState]::RebootRequired, 'Reboot required', 'AccentYellow', $false)
+                    return [FleetStatus]::new([FleetState]::RebootRequired, 'Reboot required',
+                        'AccentYellow', $false)
                 }
-                return [FleetStatus]::new([FleetState]::Completed, 'Completed', 'AccentGreen', $false)
+                return [FleetStatus]::new([FleetState]::Completed, 'Completed',
+                    'AccentGreen', $false)
             }
         }
 

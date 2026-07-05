@@ -20,7 +20,8 @@ class AsyncJob {
     [JobStatus] $Status
     [ConcurrentQueue[string]] $Logs
     [object] $Result
-    [string] $FailureMessage = ''   # first error text when Status is Failed (survives the runspace boundary)
+    # First error text when Status is Failed (survives the runspace boundary).
+    [string] $FailureMessage = ''
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
@@ -71,7 +72,8 @@ class AsyncJob {
         if ($this.AsyncResult.IsCompleted) {
             try {
                 $this.Result = $this.PowerShell.EndInvoke($this.AsyncResult)
-                $this.Status = if ($this.PowerShell.HadErrors) { [JobStatus]::Failed } else { [JobStatus]::Completed }
+                $this.Status = if ($this.PowerShell.HadErrors) { [JobStatus]::Failed }
+                else { [JobStatus]::Completed }
 
                 if ($this.PowerShell.HadErrors) {
                     if ($this.PowerShell.Streams.Error.Count -gt 0) {
@@ -94,7 +96,6 @@ class AsyncJob {
             }
         }
 
-        # Drain output streams
         $this.DrainStream($this.PowerShell.Streams.Information)
         $this.DrainStream($this.PowerShell.Streams.Verbose)
         $this.DrainStream($this.PowerShell.Streams.Warning)

@@ -70,7 +70,8 @@ class RecentConnectionsStore {
     RecentConnectionsStore([AppConfig]$config, [object]$configManager) {
         $this.Config = $config
         $this.ConfigManager = $configManager
-        if (-not $this.Config.Settings.ContainsKey('recentHosts') -or $null -eq $this.Config.Settings['recentHosts']) {
+        if (-not $this.Config.Settings.ContainsKey('recentHosts') -or
+            $null -eq $this.Config.Settings['recentHosts']) {
             $this.Config.Settings['recentHosts'] = @()
         }
     }
@@ -113,7 +114,8 @@ class RecentConnectionsStore {
     }
 
     # Inserts or replaces (by hostname, case-insensitive) and stamps lastSeen=now.
-    [void] Upsert([string]$hostname, [string]$status, [string]$jobType, [int]$updateCount, [bool]$rebootRequired) {
+    [void] Upsert([string]$hostname, [string]$status, [string]$jobType,
+        [int]$updateCount, [bool]$rebootRequired) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
 
@@ -126,8 +128,8 @@ class RecentConnectionsStore {
             rebootRequired = [bool]$rebootRequired
         }
 
-        # Carry over what a run does NOT change (cached inventory/disk-usage, lastTouched);
-        # replacing the entry without these silently loses the caches on every run.
+        # Carry over what a run does not change (cached inventory/disk-usage,
+        # lastTouched); replacing the entry without these silently loses the caches.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
             foreach ($k in @('inventory', 'diskUsage', 'lastTouched')) {
@@ -138,8 +140,8 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
-    # Stamps the host's last operator action so the next launch orders cards newest-first.
-    # Deliberately does NOT stamp lastSeen: that means "last run" (subtitle + 24h scan reuse).
+    # Stamps the host's last operator action so the next launch orders cards newest-
+    # first. Deliberately leaves lastSeen alone: that means "last run" (24h scan reuse).
     [void] Touch([string]$hostname) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
@@ -151,8 +153,8 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
-    # Merges a fresh inventory probe onto the host's entry WITHOUT touching its scan/apply
-    # status fields; stamps the controller's probe time for "last probed ...".
+    # Merges a fresh inventory probe onto the host's entry without touching its
+    # scan/apply status fields; stamps the probe time for "last probed ...".
     [void] UpsertInventory([string]$hostname, [MachineInventory]$inv) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         if ($null -eq $inv) { return }
@@ -168,8 +170,8 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
-    # Merges a fresh "biggest folders" scan onto the host's entry WITHOUT touching its
-    # scan/apply status fields. Mirrors UpsertInventory.
+    # Merges a fresh "biggest folders" scan onto the host's entry without touching
+    # its scan/apply status fields. Mirrors UpsertInventory.
     [void] UpsertDiskUsage([string]$hostname, [DiskUsageReport]$report) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         if ($null -eq $report) { return }
@@ -238,8 +240,11 @@ class RecentConnectionsStore {
     # Rebuilds the typed cache + index from the raw entries when stale.
     hidden [void] EnsureCache() {
         if ($this.CacheValid) { return }
-        $typed = @($this.Entries() | ForEach-Object { [RecentConnection]::FromHashtable([hashtable]$_) })
-        $sorted = $typed | Sort-Object -Property @{ Expression = { [RecentConnectionsStore]::RecencyKey($_) }; Descending = $true }
+        $typed = @($this.Entries() |
+                ForEach-Object { [RecentConnection]::FromHashtable([hashtable]$_) })
+        $sorted = $typed | Sort-Object -Property @{
+            Expression = { [RecentConnectionsStore]::RecencyKey($_) }; Descending = $true
+        }
         $this.Cache = @($sorted | Select-Object -First ([RecentConnectionsStore]::Cap))
         $this.Index = @{}
         foreach ($rc in $this.Cache) {
@@ -259,7 +264,8 @@ class RecentConnectionsStore {
         if ([string]::IsNullOrWhiteSpace($value)) { return [datetime]::MinValue }
         $parsed = [datetime]::MinValue
         $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
-        if ([datetime]::TryParse($value, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
+        if ([datetime]::TryParse($value, [System.Globalization.CultureInfo]::InvariantCulture,
+                $styles, [ref]$parsed)) {
             return $parsed
         }
         return [datetime]::MinValue

@@ -35,25 +35,25 @@ class DialogPresenter {
             $reader = [System.Xml.XmlReader]::Create($xamlPath)
             $this.Window = [System.Windows.Markup.XamlReader]::Load($reader)
             $reader.Close()
-            
-            # Apply Resources
+
             $this.Resources.ApplyResourcesToWindow($this.Window)
-            
-            # Bind standard events; handlers must close over $self ($this rebinds to the
-            # sender inside a WPF handler - see .NOTES) or the buttons silently die.
+
+            # Handlers must close over $self (see .NOTES) or the buttons silently die.
             $self = $this
 
             $btnClose = $this.Window.FindName("btnClose")
             if ($btnClose) { $btnClose.Add_Click({ $self.Window.Close() }.GetNewClosure()) }
 
             $btnMinimize = $this.Window.FindName("btnMinimize")
-            if ($btnMinimize) { $btnMinimize.Add_Click({ $self.Window.WindowState = 'Minimized' }.GetNewClosure()) }
+            if ($btnMinimize) {
+                $btnMinimize.Add_Click({ $self.Window.WindowState = 'Minimized' }.GetNewClosure())
+            }
 
             $panelControlBar = $this.Window.FindName("panelControlBar")
             if ($panelControlBar) {
                 $panelControlBar.Add_MouseLeftButtonDown({
-                    if ($_.ButtonState -eq 'Pressed') { $self.Window.DragMove() }
-                }.GetNewClosure())
+                        if ($_.ButtonState -eq 'Pressed') { $self.Window.DragMove() }
+                    }.GetNewClosure())
             }
         }
         catch {
@@ -81,13 +81,20 @@ class DialogPresenter {
         if ($isRollback) {
             $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
         }
-        $this.Window.DataContext = $this.NewVm("Updates Detected!", $msg, @(), 'Update Now', 'Later')
+        $this.Window.DataContext = $this.NewVm("Updates Detected!", $msg, @(),
+            'Update Now', 'Later')
         return $this.ShowModal()
     }
 
     # Builds the dialog's content view-model: Has* flags for which parts show, plus the
     # button commands (primary resolves $true, secondary $false; empty secondary = alert).
-    hidden [DialogViewModel] NewVm([string]$title, [string]$message, [string[]]$listItems, [string]$primaryText, [string]$secondaryText) {
+    hidden [DialogViewModel] NewVm(
+        [string]$title,
+        [string]$message,
+        [string[]]$listItems,
+        [string]$primaryText,
+        [string]$secondaryText
+    ) {
         $vm = [DialogViewModel]::new()
         $vm.Title = $title
         $vm.HasTitle = -not [string]::IsNullOrEmpty($title)

@@ -24,9 +24,11 @@ using module ".\RemoteServices.psm1"
 #>
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
-    hidden [hashtable] $IpCache  = @{}   # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys)
+    # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys).
+    hidden [hashtable] $IpCache = @{}
     hidden [hashtable] $InFlight = @{}   # host -> $true while a resolve job is queued
-    hidden [hashtable] $VerifiedNames = @{}   # host -> name the box at its IP reported (identity check)
+    # host -> the name the box at its IP reported (identity check).
+    hidden [hashtable] $VerifiedNames = @{}
 
     # How long a cached verdict is trusted before a re-validate is allowed. A
     # DHCP IP can move, so we re-resolve on the next select once an entry is stale.
@@ -34,9 +36,10 @@ class HostResolver : RemoteJobService {
 
     HostResolver([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
 
-    HostResolver([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
+    HostResolver([AppConfig] $config, [NetworkProbe] $probe,
+        [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # --- Cache state ------------------------------------------------------------------
+    # --- Cache state ---
 
     [void] SetActiveDc([string]$dc) {
         if (-not [string]::IsNullOrWhiteSpace($dc)) { $this.ActiveDc = $dc.Trim() }
@@ -80,8 +83,8 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
-    # Releases the single-flight latch WITHOUT caching a verdict - required when a resolve
-    # fails or never starts, or the host stays "in flight" forever and wedges.
+    # Releases the single-flight latch without caching a verdict - required when a
+    # resolve fails or never starts, or the host stays "in flight" forever and wedges.
     [void] ClearInFlight([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $this.InFlight.Remove($hostName.Trim())
@@ -106,7 +109,7 @@ class HostResolver : RemoteJobService {
         return ($age -gt $this.Ttl)
     }
 
-    # True when a CACHED verdict aged past the TTL; unlike NeedsResolve it ignores
+    # True when a cached verdict aged past the TTL; unlike NeedsResolve it ignores
     # DC/in-flight state and uncached hosts - only "is the verdict too old to trust?".
     [bool] IsVerdictStale([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
@@ -116,7 +119,7 @@ class HostResolver : RemoteJobService {
         return ($age -gt $this.Ttl)
     }
 
-    # --- Worker-arg builders (run the actual resolution on the pool) -------------------
+    # --- Worker-arg builders (the actual resolution runs on the pool) ---
 
     # Warm job: discover + pick a live domain controller (one-time, at startup).
     [hashtable] PrepareWarm() {
@@ -140,7 +143,7 @@ class HostResolver : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Name'; Ip = $this.GetCachedIp($hostName) })
     }
 
-    # --- Verified computer-name cache (identity check) --------------------------------
+    # --- Verified computer-name cache (identity check) ---
 
     [void] CacheName([string]$hostName, [string]$actualName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }

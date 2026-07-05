@@ -109,7 +109,8 @@ class InventoryFormat {
     # Uptime phrased from the last boot time. '—' for an unknown (MinValue) boot.
     static [string] UptimeLabel([datetime]$lastBoot) {
         if ($lastBoot -eq [datetime]::MinValue) { return '—' }
-        $bootUtc = if ($lastBoot.Kind -eq [System.DateTimeKind]::Utc) { $lastBoot } else { $lastBoot.ToUniversalTime() }
+        $bootUtc = if ($lastBoot.Kind -eq [System.DateTimeKind]::Utc) { $lastBoot }
+        else { $lastBoot.ToUniversalTime() }
         $span = [datetime]::UtcNow - $bootUtc
         if ($span.TotalSeconds -lt 0) { return 'just booted' }
         if ($span.TotalMinutes -lt 60) { return "up $([int]$span.TotalMinutes) min" }

@@ -24,7 +24,8 @@ class DiskUsageService : RemoteJobService {
 
     DiskUsageService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
 
-    DiskUsageService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
+    DiskUsageService([AppConfig] $config, [NetworkProbe] $probe,
+        [LogService] $logger) : base($config, $probe, $logger) {}
 
     # Returns worker args for the "DiskScan" job (no network here - the worker gates
     # reachability itself and resolves wiztree64.exe); Options only carries the row cap.

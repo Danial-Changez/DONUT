@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Security
 
 # MVVM base types: compiled into Donut.Launcher in production (guard skips); on the
-# `pwsh -Sta` dev path compile them here, BEFORE the class graph parses against them.
+# `pwsh -Sta` dev path compile them here, before the class graph parses against them.
 if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
     Add-Type -Path @(
         "$PSScriptRoot\Launcher\ObservableObject.cs",

@@ -38,7 +38,7 @@ class DeviceFlowDecision {
                 $d.TokenData = $result.TokenData
                 return $d
             }
-            'pending'   { return [DeviceFlowDecision]::new([PollOutcome]::KeepPolling) }
+            'pending' { return [DeviceFlowDecision]::new([PollOutcome]::KeepPolling) }
             'slow_down' { return [DeviceFlowDecision]::new([PollOutcome]::SlowDown) }
             default {
                 $d = [DeviceFlowDecision]::new([PollOutcome]::Failed)

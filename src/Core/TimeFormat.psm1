@@ -8,12 +8,11 @@
     UTC and compared against UtcNow. WPF-free so it can be unit-tested.
 #>
 class TimeFormat {
-    # Renders a coarse relative time for a past instant. Input may be UTC or
-    # local Kind; it is normalised to UTC and compared against UtcNow.
     static [string] Relative([datetime]$when) {
         $whenUtc = if ($when.Kind -eq [System.DateTimeKind]::Utc) {
             $when
-        } else {
+        }
+        else {
             $when.ToUniversalTime()
         }
 

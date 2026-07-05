@@ -26,15 +26,15 @@ class DcuLog {
     static [hashtable] ParseReturnCode([string]$logText) {
         if ([string]::IsNullOrWhiteSpace($logText)) { return @{ Found = $false; Code = 0 } }
         # dcu-cli: "The program exited with return code: 0". Tolerate case/spacing and
-        # take the LAST occurrence (the most recent run's result).
+        # take the last occurrence (the most recent run's result).
         $hits = [regex]::Matches($logText, '(?im)return\s+code:\s*(-?\d+)')
         if ($hits.Count -eq 0) { return @{ Found = $false; Code = 0 } }
         $last = $hits[$hits.Count - 1]
         return @{ Found = $true; Code = [int]$last.Groups[1].Value }
     }
 
-    # dcu-cli's documented return codes: only 0 is success, 1/5 mean reboot needed, and
-    # EVERYTHING else is an error - 2/3/4 are NOT benign (reference in .NOTES).
+    # dcu-cli's documented return codes: only 0 is success, 1/5 mean reboot needed,
+    # and everything else is an error - 2/3/4 are not benign (reference in .NOTES).
     static [hashtable] $Meanings = @{
         0 = 'success'
         1 = 'reboot required'
@@ -47,7 +47,7 @@ class DcuLog {
         8 = 'no update filters are configured'
     }
 
-    # The codes that are NOT failures: 0 (done) plus 1 and 5 (done, but reboot to finish).
+    # The codes that are not failures: 0 (done) plus 1 and 5 (done, but reboot to finish).
     static [int[]] $SuccessCodes = @(0, 1, 5)
     static [int[]] $RebootCodes  = @(1, 5)
 
@@ -58,8 +58,8 @@ class DcuLog {
     static [string] DescribeReturnCode([int]$code) {
         if ([DcuLog]::Meanings.ContainsKey($code)) { return [DcuLog]::Meanings[$code] }
         $range = switch ($code) {
-            { $_ -ge 100 -and $_ -le 113 }   { 'input-validation error'; break }
-            { $_ -ge 500 -and $_ -le 503 }   { 'scan error'; break }
+            { $_ -ge 100 -and $_ -le 113 } { 'input-validation error'; break }
+            { $_ -ge 500 -and $_ -le 503 } { 'scan error'; break }
             { $_ -ge 1000 -and $_ -le 1002 } { 'apply-updates error'; break }
             { $_ -ge 1505 -and $_ -le 1506 } { 'configure error'; break }
             { $_ -ge 2000 -and $_ -le 2007 } { 'driver-install error'; break }

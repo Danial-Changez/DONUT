@@ -11,8 +11,8 @@
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot
-    # Cross-INSTANCE write lock: every worker runspace builds its own LogService over the
-    # same Donut.log, so only a named (kernel) mutex keyed by path prevents lost lines.
+    # Cross-instance write lock: every worker runspace builds its own LogService over
+    # the same Donut.log, so only a named kernel mutex keyed by path prevents lost lines.
     hidden [System.Threading.Mutex] $FileMutex
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
@@ -27,9 +27,10 @@ class LogService {
         }
         $this.LogFilePath = Join-Path $logDirectory "Donut.log"
         $this.SyncRoot = [System.Object]::new()
-        $hash = [System.BitConverter]::ToString(
-            [System.Security.Cryptography.SHA1]::HashData(
-                [System.Text.Encoding]::UTF8.GetBytes($this.LogFilePath.ToLowerInvariant()))).Replace('-', '').Substring(0, 16)
+        $pathBytes = [System.Text.Encoding]::UTF8.GetBytes($this.LogFilePath.ToLowerInvariant())
+        $hashHex = [System.BitConverter]::ToString(
+            [System.Security.Cryptography.SHA1]::HashData($pathBytes))
+        $hash = $hashHex.Replace('-', '').Substring(0, 16)
         $this.FileMutex = [System.Threading.Mutex]::new($false, "Local\DonutLog-$hash")
     }
 
@@ -83,8 +84,8 @@ class LogService {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$level] $message"
 
-        # BOUNDED wait so logging can never hang a thread: on timeout write anyway, and an
-        # abandoned mutex (a runspace died holding it) still grants ownership - proceed.
+        # Bounded wait so logging can never hang a thread: on timeout write anyway; an
+        # abandoned mutex (a runspace died holding it) still grants ownership.
         $owned = $false
         if ($null -ne $this.FileMutex) {
             try { $owned = $this.FileMutex.WaitOne(2000) }

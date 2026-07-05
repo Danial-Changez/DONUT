@@ -42,14 +42,16 @@ class DriverMatchingService {
             "Nvidia"    = @("NVIDIA", "Nvidia Corporation")
             "Realtek"   = @("Realtek", "Realtek Semiconductor")
         }
-        
+
         # Category patterns for detecting update/driver categories
         $this.CategoryPatterns = @{
             "BIOS"        = @("BIOS", "System BIOS", "UEFI", "Firmware")
             "Chipset"     = @("Chipset", "Intel Management Engine", "ME", "AMT")
             "Audio"       = @("Audio", "Sound", "Realtek Audio", "High Definition Audio", "MEDIA")
-            "Network"     = @("Network", "Ethernet", "WiFi", "Wireless", "LAN", "WLAN", "Intel Dual Band", "NET", "Docks/Stands")
-            "Graphics"    = @("Graphics", "Display", "Video", "VGA", "Intel HD", "Intel UHD", "GeForce", "Radeon", "DISPLAY")
+            "Network"     = @("Network", "Ethernet", "WiFi", "Wireless", "LAN", "WLAN",
+                "Intel Dual Band", "NET", "Docks/Stands")
+            "Graphics"    = @("Graphics", "Display", "Video", "VGA", "Intel HD", "Intel UHD",
+                "GeForce", "Radeon", "DISPLAY")
             "Storage"     = @("Storage", "RAID", "AHCI", "NVMe", "SSD", "Intel RST")
             "USB"         = @("USB", "USB Controller", "USB 3.0", "USB-C")
             "Bluetooth"   = @("Bluetooth", "BT")
@@ -59,9 +61,8 @@ class DriverMatchingService {
             "Application" = @("Application", "App")
             "Others"      = @("Others", "Other")
         }
-        
-        # Category name mappings (DCU report category -> standard category)
-        # Used when parsing Dell Command Update XML reports
+
+        # DCU report category -> standard category (used when parsing DCU XML reports)
         $this.CategoryMappings = @{
             "Audio"       = @("Audio", "MEDIA")
             "Network"     = @("Network", "NET", "Docks/Stands")
@@ -73,9 +74,8 @@ class DriverMatchingService {
             "Input"       = @("Input")
             "Others"      = @("Others")
         }
-        
-        # Windows Device Class to category mappings
-        # Used when reading installed drivers via Win32_PnPSignedDriver
+
+        # Windows device class -> category (used with Win32_PnPSignedDriver)
         $this.DeviceClassMappings = @{
             "MEDIA"     = "Audio"
             "NET"       = "Network"
@@ -130,62 +130,62 @@ class DriverMatchingService {
         if ($null -eq $installedDrivers -or $installedDrivers.Count -eq 0) {
             return $null
         }
-        
+
         $updateCategory = $this.DetectCategory($updateName)
         $updateNameLower = $updateName.ToLower()
-        
+
         $bestMatch = $null
         $bestScore = 0
-        
+
         foreach ($driver in $installedDrivers) {
             $score = 0
             $driverName = $driver.DriverName
             $driverProvider = $driver.ProviderName
-            
+
             if ([string]::IsNullOrEmpty($driverName)) { continue }
-            
+
             $driverNameLower = $driverName.ToLower()
-            
+
             # Category match (highest weight)
             $driverCategory = $this.DetectCategory($driverName)
             if ($driverCategory -eq $updateCategory -and $updateCategory -ne "Other") {
                 $score += 50
             }
-            
+
             # Provider/Brand match
             $updateBrand = $this.DetectBrandFromName($updateName)
             $driverBrand = $this.DetectBrand($driverProvider)
             if ($updateBrand -eq $driverBrand -and $updateBrand -ne "Unknown") {
                 $score += 30
             }
-            
+
             # Partial name match (keywords)
             $updateWords = $updateNameLower -split '\s+|[-_]'
             $driverWords = $driverNameLower -split '\s+|[-_]'
-            $commonWords = $updateWords | Where-Object { $driverWords -contains $_ -and $_.Length -gt 2 }
+            $commonWords = $updateWords |
+                Where-Object { $driverWords -contains $_ -and $_.Length -gt 2 }
             $score += ($commonWords.Count * 5)
-            
+
             # Version pattern detection
             if ($updateNameLower -match '\d+\.\d+' -and $driverNameLower -match '\d+\.\d+') {
                 $score += 10
             }
-            
+
             if ($score -gt $bestScore) {
                 $bestScore = $score
                 $bestMatch = @{
-                    Driver = $driver
-                    Score = $score
+                    Driver   = $driver
+                    Score    = $score
                     Category = $driverCategory
-                    Brand = $driverBrand
+                    Brand    = $driverBrand
                 }
             }
         }
-        
-        # Only return match if score is above threshold
+
         if ($bestScore -ge 20) {
             return $bestMatch
         }
-        
+
         return $null
     }
 
@@ -202,23 +202,23 @@ class DriverMatchingService {
 
     [hashtable] CompareVersions([string]$installedVersion, [string]$updateVersion) {
         $result = @{
-            Installed = $installedVersion
-            Update = $updateVersion
-            IsNewer = $false
+            Installed  = $installedVersion
+            Update     = $updateVersion
+            IsNewer    = $false
             ParseError = $false
         }
-        
+
         try {
-            # Extract version numbers
             $installedNums = [regex]::Matches($installedVersion, '\d+')
             $updateNums = [regex]::Matches($updateVersion, '\d+')
-            
+
             $maxSegments = [Math]::Max($installedNums.Count, $updateNums.Count)
-            
+
             for ($i = 0; $i -lt $maxSegments; $i++) {
-                $instVal = if ($i -lt $installedNums.Count) { [int]$installedNums[$i].Value } else { 0 }
+                $instVal = if ($i -lt $installedNums.Count) { [int]$installedNums[$i].Value }
+                else { 0 }
                 $updVal = if ($i -lt $updateNums.Count) { [int]$updateNums[$i].Value } else { 0 }
-                
+
                 if ($updVal -gt $instVal) {
                     $result.IsNewer = $true
                     break
@@ -240,12 +240,12 @@ class DriverMatchingService {
         if ($null -eq $match) {
             return "No matching installed driver found for: $updateName"
         }
-        
+
         $driver = $match.Driver
         $comparison = $this.CompareVersions($driver.DriverVersion, $updateVersion)
-        
+
         $newerText = if ($comparison.IsNewer) { "[NEWER]" } else { "[SAME/OLDER]" }
-        
+
         return @"
 Update: $updateName ($updateVersion)
 Matched Driver: $($driver.DriverName)
@@ -255,7 +255,8 @@ Match Score: $($match.Score)
 "@
     }
 
-    # Normalize application names for matching (strip trailing 'Application', remove spaces, lowercase)
+    # Normalizes application names for matching: strips a trailing 'Application',
+    # removes spaces, lowercases.
     [string] NormalizeAppName([string]$name) {
         if ([string]::IsNullOrEmpty($name)) { return "" }
         $n = $name -replace '(?i)\s*Application$', ''

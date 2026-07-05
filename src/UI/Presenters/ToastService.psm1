@@ -68,9 +68,9 @@ class ToastService {
         $timer = [DispatcherTimer]::new()
         $timer.Interval = [TimeSpan]::FromMilliseconds($durationMs)
         $timer.Add_Tick({
-            $timer.Stop()
-            $svc.Dismiss($toast)
-        }.GetNewClosure())
+                $timer.Stop()
+                $svc.Dismiss($toast)
+            }.GetNewClosure())
         $timer.Start()
     }
 
@@ -84,9 +84,9 @@ class ToastService {
         $reaper = [DispatcherTimer]::new()
         $reaper.Interval = [TimeSpan]::FromMilliseconds($this.ExitAnimationMs)
         $reaper.Add_Tick({
-            $reaper.Stop()
-            if ($svc.Items.Contains($toast)) { [void]$svc.Items.Remove($toast) }
-        }.GetNewClosure())
+                $reaper.Stop()
+                if ($svc.Items.Contains($toast)) { [void]$svc.Items.Remove($toast) }
+            }.GetNewClosure())
         $reaper.Start()
     }
 

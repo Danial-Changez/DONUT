@@ -14,7 +14,8 @@
     disk.
 #>
 class ScanCacheDecision {
-    static [bool] IsFresh([string]$lastJobType, [datetime]$lastSeen, [datetime]$now, [timespan]$ttl, [bool]$reportExists) {
+    static [bool] IsFresh([string]$lastJobType, [datetime]$lastSeen,
+        [datetime]$now, [timespan]$ttl, [bool]$reportExists) {
         if ($lastJobType -ne 'Scan' -and $lastJobType -ne 'UpdateScan') { return $false }
         if ($lastSeen -eq [datetime]::MinValue) { return $false }
         if (($now - $lastSeen) -gt $ttl) { return $false }

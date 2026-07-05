@@ -46,7 +46,8 @@ class LogsPresenter {
         $logsDir = $this.Config.LogsPath
         $logFiles = @()
         if (Test-Path $logsDir) {
-            $logFiles = @(Get-ChildItem -Path $logsDir -File | Sort-Object LastWriteTime -Descending)
+            $logFiles = @(Get-ChildItem -Path $logsDir -File |
+                    Sort-Object LastWriteTime -Descending)
         }
 
         if ($logFiles.Count -eq 0) {
@@ -57,7 +58,8 @@ class LogsPresenter {
         foreach ($file in $logFiles) {
             try {
                 $this.LogsVm.Tabs.Add($this.BuildFileTab($file))
-            } catch {
+            }
+            catch {
                 $this.LogsVm.Tabs.Add([LogTabViewModel]::new($file.BaseName, "Error reading file: $_"))
             }
         }
@@ -70,7 +72,8 @@ class LogsPresenter {
             return [LogTabViewModel]::new($file.BaseName, $this.ReadFull($file.FullName))
         }
 
-        $tab = [LogTabViewModel]::new($file.BaseName, $this.ReadTail($file.FullName, [LogsPresenter]::TailBytes))
+        $tab = [LogTabViewModel]::new($file.BaseName,
+            $this.ReadTail($file.FullName, [LogsPresenter]::TailBytes))
         $tab.IsTruncated = $true
         $sizeMb = [Math]::Round($file.Length / 1MB, 1)
         $tab.TruncationNote = "Showing the last $([int]([LogsPresenter]::TailBytes / 1KB)) KB of $sizeMb MB."
@@ -78,7 +81,9 @@ class LogsPresenter {
         $presenter = $this
         $capturedPath = $file.FullName
         $capturedTab = $tab
-        $load = { param($p) $capturedTab.ShowFull($presenter.ReadFull($capturedPath)) }.GetNewClosure()
+        $load = {
+            param($p) $capturedTab.ShowFull($presenter.ReadFull($capturedPath))
+        }.GetNewClosure()
         $tab.LoadFullCommand = [RelayCommand]::new([System.Action[object]]$load)
         return $tab
     }
@@ -91,7 +96,8 @@ class LogsPresenter {
     # Reads the last $maxBytes of a file (shared-read so it works on a live log),
     # dropping the partial first line so the view starts on a clean line boundary.
     hidden [string] ReadTail([string]$path, [int]$maxBytes) {
-        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
         try {
             if ($fs.Length -gt $maxBytes) {
                 [void]$fs.Seek(-$maxBytes, [System.IO.SeekOrigin]::End)
@@ -113,7 +119,8 @@ class LogsPresenter {
         try {
             Get-ChildItem -Path $this.Config.LogsPath -File | Remove-Item -Force -ErrorAction Stop
             $this.LoadLogs()
-        } catch {
+        }
+        catch {
             [System.Windows.Forms.MessageBox]::Show("Failed to clear logs: $_", "Error")
         }
     }

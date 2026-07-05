@@ -61,7 +61,7 @@ class PersonLensService {
         return (@{ errors = @($message) } | ConvertTo-Json -Compress)
     }
 
-    # --- exchange crypto + hygiene (pure; format shared with LensAgent.ps1) ---------
+    # --- Exchange crypto + hygiene (pure; format shared with LensAgent.ps1) ---
 
     # 48 random bytes per agent session: 32-byte AES-256 key + 16-byte IV.
     static [byte[]] NewKeyIv() {
@@ -89,7 +89,8 @@ class PersonLensService {
         try {
             $aes.Key = [byte[]]($keyIv[0..31]); $aes.IV = [byte[]]($keyIv[32..47])
             $dec = $aes.CreateDecryptor()
-            return [System.Text.Encoding]::UTF8.GetString($dec.TransformFinalBlock($blob, 0, $blob.Length))
+            return [System.Text.Encoding]::UTF8.GetString(
+                $dec.TransformFinalBlock($blob, 0, $blob.Length))
         }
         finally { $aes.Dispose() }
     }
@@ -111,7 +112,8 @@ class PersonLensService {
     static [void] SweepStaleExchanges([int]$minutes) {
         $root = Join-Path $env:ProgramData 'DONUT'
         Get-ChildItem -Path $root -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ne 'lens-agent' -and $_.LastWriteTime -lt (Get-Date).AddMinutes(-$minutes) } |
+            Where-Object { $_.Name -ne 'lens-agent' -and
+                $_.LastWriteTime -lt (Get-Date).AddMinutes(-$minutes) } |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
@@ -127,10 +129,11 @@ class PersonLensService {
         try {
             Get-ChildItem -Path (Split-Path $dir -Parent) -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
                 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        } catch { }
+        }
+        catch { }
     }
 
-    # --- agent supervision -------------------------------------------------------
+    # --- Agent supervision ---
 
     # Ensures the persistent de-elevated agent is alive, (re)starting it when the
     # heartbeat is stale. Returns '' on success or the failure reason. Mutex-guarded
@@ -139,27 +142,32 @@ class PersonLensService {
         $mutex = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
         $owned = $false
         try {
-            try { $owned = $mutex.WaitOne(20000) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
+            try { $owned = $mutex.WaitOne(20000) }
+            catch [System.Threading.AbandonedMutexException] { $owned = $true }
 
             $dir = [PersonLensService]::AgentDir()
             $beat = Join-Path $dir 'heartbeat.txt'
-            if ((Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and (Test-Path -LiteralPath $beat)) {
+            if ((Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and
+                (Test-Path -LiteralPath $beat)) {
                 # The agent beats every ~2s; anything older means it's gone.
-                if (((Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime).TotalSeconds -lt 15) { return '' }
+                $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
+                if ($beatAge.TotalSeconds -lt 15) { return '' }
             }
 
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
             if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
 
-            $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+                Select-Object -First 1
             if (-not $explorer) { return 'no interactive desktop session to de-elevate into.' }
             $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner
             $interactiveUser = "$($owner.Domain)\$($owner.User)"
 
             # Cold start: replace any previous instance and rebuild the exchange dir.
             [PersonLensService]::SweepStaleExchanges(15)
-            Stop-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -Confirm:$false -ErrorAction SilentlyContinue
+            $taskName = [PersonLensService]::AgentTaskName
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
@@ -168,11 +176,14 @@ class PersonLensService {
             try {
                 $acl = Get-Acl $dir
                 $acl.SetAccessRuleProtection($true, $false)
-                $system = [System.Security.Principal.SecurityIdentifier]::new([System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
-                $admins = [System.Security.Principal.SecurityIdentifier]::new([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
-                $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($system, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-                $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($admins, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-                $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($interactiveUser, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+                $system = [System.Security.Principal.SecurityIdentifier]::new(
+                    [System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
+                $admins = [System.Security.Principal.SecurityIdentifier]::new(
+                    [System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+                foreach ($who in @($system, $admins, $interactiveUser)) {
+                    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+                            $who, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+                }
                 Set-Acl -Path $dir -AclObject $acl
             }
             catch {
@@ -190,24 +201,34 @@ class PersonLensService {
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
             $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -ExchangeDir "{1}" -ParentPid {2} -SiteServer "{3}"' -f $agentScript, $dir, $donutPid, $this.SiteServer
-            # pwsh is a console app: its window is created BEFORE -WindowStyle Hidden can
+            # pwsh is a console app: its window is created before -WindowStyle Hidden can
             # hide it, so an interactive-token task flashes a console on the desktop.
             # conhost --headless runs it on a pseudoconsole with no window at all.
             $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
             $action =
-                if (Test-Path -LiteralPath $conhost) {
-                    New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "{0}" {1}' -f $pwshPath, $argline)
-                }
-                else {
-                    New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
-                }
-            $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
+            if (Test-Path -LiteralPath $conhost) {
+                $headless = '--headless "{0}" {1}' -f $pwshPath, $argline
+                New-ScheduledTaskAction -Execute $conhost -Argument $headless
+            }
+            else {
+                New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
+            }
+            $principalArgs = @{ UserId = $interactiveUser; LogonType = 'Interactive'; RunLevel = 'Limited' }
+            $principal = New-ScheduledTaskPrincipal @principalArgs
             # PT0S = no execution time limit: the agent lives for the app's lifetime and
             # exits itself when DONUT's process dies (its -ParentPid watchdog).
-            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew
+            $taskSettings = @{
+                AllowStartIfOnBatteries    = $true
+                DontStopIfGoingOnBatteries = $true
+                StartWhenAvailable         = $true
+                ExecutionTimeLimit         = (New-TimeSpan -Seconds 0)
+                MultipleInstances          = 'IgnoreNew'
+            }
+            $settings = New-ScheduledTaskSettingsSet @taskSettings
             $task = New-ScheduledTask -Action $action -Principal $principal -Settings $settings
-            Register-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -InputObject $task -Force -ErrorAction Stop | Out-Null
-            Start-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -ErrorAction Stop
+            Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop |
+                Out-Null
+            Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 
             # Wait for the first heartbeat (the agent writes it before its pre-warm).
             $deadline = (Get-Date).AddSeconds(20)
@@ -226,7 +247,7 @@ class PersonLensService {
         }
     }
 
-    # --- env-coupled seam (overridden in tests) ---------------------------------
+    # --- Env-coupled seam (overridden in tests) ---
 
     # One lookup over the agent exchange: write request-<id>, stream partial-<id>-N to
     # the Information stream (tag 'LensPartial'), return the decrypted final bundle.
@@ -242,7 +263,8 @@ class PersonLensService {
         $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
         $resultPath = Join-Path $dir "result-$reqId.bin"
         try {
-            $request = @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer } | ConvertTo-Json -Compress
+            $request = @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer } |
+                ConvertTo-Json -Compress
             [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"), $request, $keyIv)
 
             # 100ms poll; the agent's writes are atomic (tmp + rename), so no settle wait.
@@ -253,7 +275,9 @@ class PersonLensService {
                 if (Test-Path -LiteralPath $partialPath) {
                     $partialIndex++
                     try {
-                        Write-Information -MessageData ([PersonLensService]::UnprotectText([IO.File]::ReadAllBytes($partialPath), $keyIv)) -Tags 'LensPartial'
+                        $partialText = [PersonLensService]::UnprotectText(
+                            [IO.File]::ReadAllBytes($partialPath), $keyIv)
+                        Write-Information -MessageData $partialText -Tags 'LensPartial'
                     }
                     catch { }
                     continue   # check for the next partial before sleeping

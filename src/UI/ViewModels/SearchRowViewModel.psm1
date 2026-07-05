@@ -40,10 +40,12 @@ class SearchRowViewModel {
         $vm = [SearchRowViewModel]::new()
         $vm.Result = $r
         if ([string]$r.Kind -eq 'User') {
-            $label = if (-not [string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.UserPrincipalName } else { [string]$r.SamAccountName }
+            $label = if ([string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.SamAccountName }
+            else { [string]$r.UserPrincipalName }
             if ($r.LockedOut) { $label = $label + " `u{1F512}" }
             $vm.Primary = $label
-            $sub = @([string]$r.DisplayName, [string]$r.Domain) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            $sub = @([string]$r.DisplayName, [string]$r.Domain) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             $vm.Secondary = ($sub -join '  -  ')
             $vm.CanUnlock = [bool]$r.LockedOut
         }

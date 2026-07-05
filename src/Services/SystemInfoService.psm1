@@ -40,14 +40,17 @@ class SystemInfoService {
     [SystemInfo] Gather() {
         $info = [SystemInfo]::new()
 
-        try { $info.Hostname = $this.GetHostname() } catch { $this.Logger.LogDebug("Hostname lookup failed: $_") }
-        try { $info.IPv4 = $this.GetPrimaryIPv4() } catch { $this.Logger.LogDebug("IPv4 lookup failed: $_") }
+        try { $info.Hostname = $this.GetHostname() }
+        catch { $this.Logger.LogDebug("Hostname lookup failed: $_") }
+        try { $info.IPv4 = $this.GetPrimaryIPv4() }
+        catch { $this.Logger.LogDebug("IPv4 lookup failed: $_") }
 
         try {
             $dom = $this.GetDomainInfo()
             $info.Domain = [string]$dom.Domain
             $info.DomainJoined = [bool]$dom.Joined
-        } catch { $this.Logger.LogDebug("Domain lookup failed: $_") }
+        }
+        catch { $this.Logger.LogDebug("Domain lookup failed: $_") }
 
         try {
             $bat = $this.GetBatteryRaw()
@@ -56,7 +59,8 @@ class SystemInfoService {
                 $info.BatteryPercent = [int]$bat.Percent
                 $info.Charging = [bool]$bat.Charging
             }
-        } catch { $this.Logger.LogDebug("Battery lookup failed: $_") }
+        }
+        catch { $this.Logger.LogDebug("Battery lookup failed: $_") }
 
         # Domain controller health (reuses NetworkProbe's cached discovery).
         try {
@@ -67,12 +71,13 @@ class SystemInfoService {
                     $info.DcReachable = $true
                 }
             }
-        } catch { $this.Logger.LogDebug("DC lookup failed: $_") }
+        }
+        catch { $this.Logger.LogDebug("DC lookup failed: $_") }
 
         return $info
     }
 
-    # --- Pure formatting (unit-tested) -----------------------------------------------
+    # --- Pure formatting (unit-tested) ---
 
     static [string] BatteryLabel([bool]$hasBattery, [int]$percent, [bool]$charging) {
         if (-not $hasBattery) { return 'AC - no battery' }
@@ -80,7 +85,7 @@ class SystemInfoService {
         return "$percent% - $state"
     }
 
-    # --- Seams (raw side effects; resilient) -----------------------------------------
+    # --- Seams (raw side effects; resilient) ---
 
     hidden [string] GetHostname() {
         return $env:COMPUTERNAME
@@ -97,7 +102,9 @@ class SystemInfoService {
 
         # Fallback: first non-loopback IPv4 from DNS.
         $addrs = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName())
-        $v4 = $addrs | Where-Object { $_.AddressFamily -eq 'InterNetwork' -and -not [System.Net.IPAddress]::IsLoopback($_) } | Select-Object -First 1
+        $v4 = $addrs | Where-Object {
+            $_.AddressFamily -eq 'InterNetwork' -and -not [System.Net.IPAddress]::IsLoopback($_)
+        } | Select-Object -First 1
         if ($v4) { return $v4.ToString() }
         return ''
     }
@@ -112,7 +119,8 @@ class SystemInfoService {
 
     # Returns @{ Percent; Charging } or $null when there is no battery.
     hidden [hashtable] GetBatteryRaw() {
-        $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+        $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue |
+            Select-Object -First 1
         if ($null -eq $bat) { return $null }
         # BatteryStatus 1 = discharging; anything else implies AC/charging.
         return @{

@@ -20,7 +20,6 @@ class SelfUpdateService {
 
     SelfUpdateService() {
         $this.Logger = [NullLogService]::new()
-        # Token stored in config directory to match structure
         $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
     }
 
@@ -29,7 +28,7 @@ class SelfUpdateService {
         $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
     }
 
-    # --- Token Management (DPAPI) --------------------------------------------
+    # --- Token management (DPAPI) ---
 
     [string] GetStoredToken() {
         if (-not (Test-Path $this.TokenFile)) { return $null }
@@ -40,7 +39,7 @@ class SelfUpdateService {
             )
             $json = [Text.Encoding]::UTF8.GetString($decrypted)
             $data = $json | ConvertFrom-Json
-            
+
             # Returned as-is: no expiry check / refresh (kept simple deliberately).
             return $data.access_token
         }
@@ -61,15 +60,20 @@ class SelfUpdateService {
         [IO.File]::WriteAllBytes($this.TokenFile, $encrypted)
     }
 
-    # --- Device Flow -----------------------------------------------------------
+    # --- Device flow ---
 
     [PSCustomObject] InitiateDeviceFlow() {
         $body = @{
             client_id = $this.ClientId
             scope     = $this.Scope
         }
-        $response = Invoke-RestMethod -Uri "https://github.com/login/device/code" -Method Post -Body $body -Headers @{ Accept = "application/json" }
-        return $response
+        $req = @{
+            Uri     = 'https://github.com/login/device/code'
+            Method  = 'Post'
+            Body    = $body
+            Headers = @{ Accept = 'application/json' }
+        }
+        return Invoke-RestMethod @req
     }
 
     # Polls GitHub's device-flow token endpoint once; Status tells the caller what next:
@@ -81,13 +85,23 @@ class SelfUpdateService {
             grant_type  = "urn:ietf:params:oauth:grant-type:device_code"
         }
         try {
-            $response = Invoke-RestMethod -Uri "https://github.com/login/oauth/access_token" -Method Post -Body $body -Headers @{ Accept = "application/json" }
+            $req = @{
+                Uri     = 'https://github.com/login/oauth/access_token'
+                Method  = 'Post'
+                Body    = $body
+                Headers = @{ Accept = 'application/json' }
+            }
+            $response = Invoke-RestMethod @req
 
             if ($response.error) {
-                switch ($response.error) {
-                    'authorization_pending' { return [PSCustomObject]@{ Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null } }
-                    'slow_down'             { return [PSCustomObject]@{ Status = 'slow_down'; AccessToken = $null; TokenData = $null; Error = $null } }
-                    default                 { return [PSCustomObject]@{ Status = 'error'; AccessToken = $null; TokenData = $null; Error = $response.error } }
+                $status = switch ($response.error) {
+                    'authorization_pending' { 'pending' }
+                    'slow_down' { 'slow_down' }
+                    default { 'error' }
+                }
+                $err = if ($status -eq 'error') { $response.error } else { $null }
+                return [PSCustomObject]@{
+                    Status = $status; AccessToken = $null; TokenData = $null; Error = $err
                 }
             }
 
@@ -100,11 +114,13 @@ class SelfUpdateService {
         }
         catch {
             $this.Logger.LogDebug("Device-flow token poll failed (will retry): $($_.Exception.Message)")
-            return [PSCustomObject]@{ Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null }
+            return [PSCustomObject]@{
+                Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null
+            }
         }
     }
 
-    # --- Release Management ------------------------------------------------------
+    # --- Release management ---
 
     [PSCustomObject] GetLatestRelease([string]$Token) {
         $headers = @{
@@ -126,26 +142,24 @@ class SelfUpdateService {
 
     [string] DownloadAsset([string]$Token, [PSCustomObject]$Asset, [string]$DestDir) {
         if (-not (Test-Path $DestDir)) { New-Item -ItemType Directory -Path $DestDir | Out-Null }
-        
+
         $destPath = Join-Path $DestDir $Asset.name
         $headers = @{
             Authorization = "token $Token"
             Accept        = "application/octet-stream"
         }
-        
+
         Invoke-RestMethod -Uri $Asset.url -Headers $headers -OutFile $destPath
         return $destPath
     }
 
     [version] GetLocalVersion() {
-        # 1. Try Registry (Production/MSI)
-        # We look for the Uninstall key created by the MSI
+        # Registry first (MSI installs); the match criteria mirror InstallWorker's.
         $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
         if (Test-Path $regPath) {
             $subKeys = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
             foreach ($key in $subKeys) {
                 $app = Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue
-                # Match criteria from InstallWorker
                 if ($app.DisplayName -like '*DONUT*' -and $app.Publisher -like '*Bakery*') {
                     if ($app.DisplayVersion) {
                         return [version]$app.DisplayVersion
@@ -154,12 +168,12 @@ class SelfUpdateService {
             }
         }
 
-        # 2. Fallback: Version file (Development/Portable)
+        # Fallback for dev/portable installs: the version file.
         $verFile = Join-Path $env:LOCALAPPDATA "DONUT\version.txt"
         if (Test-Path $verFile) {
             return [version](Get-Content $verFile -Raw).Trim()
         }
-        
+
         return [version]"0.0.0.0"
     }
 
@@ -170,11 +184,10 @@ class SelfUpdateService {
     }
 
     [void] ApplyUpdate([string]$MsiPath, [bool]$IsRollback, [string]$SourceRoot) {
-        # Locate InstallWorker
         $workerScript = Join-Path $SourceRoot "Scripts\InstallWorker.ps1"
         if (-not (Test-Path $workerScript)) { throw "InstallWorker.ps1 not found at $workerScript" }
-        
-        # Copy worker to temp
+
+        # Run the worker from the stage dir - the MSI replaces the source tree mid-install.
         $stageDir = Split-Path $MsiPath -Parent
         $tempWorker = Join-Path $stageDir "InstallWorker.ps1"
         Copy-Item -Path $workerScript -Destination $tempWorker -Force
@@ -185,7 +198,7 @@ class SelfUpdateService {
             "-ProcessNameToClose `"DONUT`"",
             "-Passive"
         )
-        
+
         if ($IsRollback) {
             $argList += "-Rollback"
         }

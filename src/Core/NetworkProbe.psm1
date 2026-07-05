@@ -38,7 +38,7 @@ class NetworkProbe {
         $this.Logger = [LogService]::Coalesce($logger)
     }
 
-    # --- Domain controller discovery -------------------------------------------------
+    # --- Domain controller discovery ---
 
     # Returns the cached list of domain controllers, querying AD once on first use.
     [string[]] GetDomainControllers() {
@@ -85,7 +85,7 @@ class NetworkProbe {
         return $null
     }
 
-    # --- DNS resolution (fail-hard via active DC) ------------------------------------
+    # --- DNS resolution (fail-hard via active DC) ---
 
     [IPAddress] ResolveHost([string]$hostName) {
         $server = $this.GetActiveDomainController()
@@ -109,8 +109,8 @@ class NetworkProbe {
         }
     }
 
-    # Resolves a host against an ALREADY-KNOWN DC (one Resolve-DnsName, no discovery) -
-    # the cheap background pre-resolve path. Returns $null (logged) on any failure.
+    # Resolves a host against an already-known DC (one Resolve-DnsName, no discovery)
+    # - the cheap background pre-resolve path. Returns $null (logged) on any failure.
     [IPAddress] ResolveWith([string]$hostName, [string]$dc) {
         if ([string]::IsNullOrWhiteSpace($dc)) {
             $this.Logger.LogError("ResolveWith for '$hostName': no domain controller supplied.")
@@ -146,11 +146,12 @@ class NetworkProbe {
         }
     }
 
-    # --- Connectivity probes ---------------------------------------------------------
+    # --- Connectivity probes ---
 
     # Shared bounded (2s) TCP connect probe behind IsRpcAvailable/IsSmbAvailable. The two
     # label params preserve each wrapper's exact log strings.
-    hidden [bool] IsPortOpen([string]$hostName, [int]$port, [string]$portDesc, [string]$checkLabel) {
+    hidden [bool] IsPortOpen([string]$hostName, [int]$port,
+        [string]$portDesc, [string]$checkLabel) {
         try {
             $client = [TcpClient]::new()
             $result = $client.BeginConnect($hostName, $port, $null, $null)
@@ -191,8 +192,8 @@ class NetworkProbe {
         }
     }
 
-    # Asks the machine AT an IP for its own name (the identity check gating a destructive
-    # Apply), via WMI over DCOM - psexec's transport. Returns '' (logged) on failure.
+    # Asks the machine at an IP for its own name (the identity check gating a
+    # destructive apply), via WMI over DCOM. Returns '' (logged) on failure.
     [string] ResolveComputerName([string]$ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
         try {
@@ -204,7 +205,7 @@ class NetworkProbe {
         }
     }
 
-    # --- Overridable seams (raw side effects; faked in unit tests) --------------------
+    # --- Overridable seams (raw side effects; faked in unit tests) ---
 
     # Queries Active Directory for all domain controllers and returns their host names.
     hidden [string[]] QueryDomainControllers() {
@@ -216,9 +217,22 @@ class NetworkProbe {
     hidden [string] QueryComputerName([string]$ip) {
         # -OperationTimeoutSec bounds the open (see GatherRemoteInventory): a box that
         # died between the RPC gate and this call must fail in seconds, not minutes.
-        $session = New-CimSession -ComputerName $ip -SessionOption (New-CimSessionOption -Protocol Dcom) -OperationTimeoutSec 15 -ErrorAction Stop
+        $open = @{
+            ComputerName        = $ip
+            SessionOption       = (New-CimSessionOption -Protocol Dcom)
+            OperationTimeoutSec = 15
+            ErrorAction         = 'Stop'
+        }
+        $session = New-CimSession @open
         try {
-            $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem -Property Name -OperationTimeoutSec 10 -ErrorAction Stop
+            $query = @{
+                CimSession          = $session
+                ClassName           = 'Win32_ComputerSystem'
+                Property            = 'Name'
+                OperationTimeoutSec = 10
+                ErrorAction         = 'Stop'
+            }
+            $cs = Get-CimInstance @query
             return [string]$cs.Name
         }
         finally {

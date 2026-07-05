@@ -21,7 +21,6 @@ using module ".\DriverMatchingService.psm1"
     InventoryService, DiskUsageService and HostResolver also subclass
     RemoteJobService (in their own files) to reuse BuildWorkerArgs.
 #>
-# Base class for remote host operations
 class RemoteJobService {
     [AppConfig] $Config
     [NetworkProbe] $Probe
@@ -44,8 +43,8 @@ class RemoteJobService {
     hidden static [RemoteOperationException] Fail([LogService]$logger, [RemoteOperationException]$ex) {
         switch ($ex.Level) {
             ([ErrorLevel]::Warning) { $logger.LogWarning($ex.Message); break }
-            ([ErrorLevel]::Error)   { $logger.LogError($ex.Message); break }
-            default                 { $logger.LogInfo($ex.Message); break }
+            ([ErrorLevel]::Error) { $logger.LogError($ex.Message); break }
+            default { $logger.LogInfo($ex.Message); break }
         }
         return $ex
     }
@@ -84,7 +83,8 @@ class ScanService : RemoteJobService {
 
     ScanService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
 
-    ScanService([AppConfig] $config, [NetworkProbe] $probe, [LogService] $logger) : base($config, $probe, $logger) {}
+    ScanService([AppConfig] $config, [NetworkProbe] $probe,
+        [LogService] $logger) : base($config, $probe, $logger) {}
 
     # Builds the worker args only (no network) - the worker asserts reachability on the
     # pool thread, so the UI thread never blocks on an offline/slow host.
@@ -100,11 +100,13 @@ class RemoteUpdateService : RemoteJobService {
     # last-write time so a fresh scan re-parses but repeated reads in one flow don't.
     hidden [hashtable] $ReportCache = @{}
 
-    RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe, [DriverMatchingService] $matcher) : base($config, $probe) {
+    RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe,
+        [DriverMatchingService] $matcher) : base($config, $probe) {
         $this.DriverMatcher = $matcher
     }
 
-    RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe, [DriverMatchingService] $matcher, [LogService] $logger) : base($config, $probe, $logger) {
+    RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe,
+        [DriverMatchingService] $matcher, [LogService] $logger) : base($config, $probe, $logger) {
         $this.DriverMatcher = $matcher
     }
 
@@ -117,9 +119,9 @@ class RemoteUpdateService : RemoteJobService {
         if (-not (Test-Path $reportPath)) { return $null }
 
         try {
-            # Cache the parsed doc keyed by last-write time: one apply flow's repeated calls
-            # don't re-parse on the UI thread, while a new scan's newer file misses the cache.
-            $ticks =(Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
+            # Cache the parsed doc keyed by last-write time: repeated calls in one flow
+            # don't re-parse on the UI thread; a new scan's newer file misses the cache.
+            $ticks = (Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
             $cached = $this.ReportCache[$hostName]
             if ($null -ne $cached -and $cached.Ticks -eq $ticks) { return $cached.Xml }
 

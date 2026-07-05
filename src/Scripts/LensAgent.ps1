@@ -61,9 +61,10 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 
 $script:KeyIv = $null
 try { $script:KeyIv = [IO.File]::ReadAllBytes((Join-Path $ExchangeDir 'key.bin')) } catch { }
-if (-not $script:KeyIv -or $script:KeyIv.Length -ne 48) { return }   # no session key -> nothing to serve
+# No session key -> nothing to serve.
+if (-not $script:KeyIv -or $script:KeyIv.Length -ne 48) { return }
 
-# --- crypto + atomic file I/O (format shared with PersonLensService) ---------------
+# --- Crypto + atomic file I/O (format shared with PersonLensService) ---
 function Protect-Text([string]$text) {
     $aes = [System.Security.Cryptography.Aes]::Create()
     try {
@@ -110,8 +111,8 @@ $script:AffinityScript = {
     param($server, $samValue)
     $p = @{
         Uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
-              [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
-              "&`$select=UniqueUserName,ResourceName"
+        [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
+        "&`$select=UniqueUserName,ResourceName"
         UseDefaultCredentials = $true; ErrorAction = 'Stop'
     }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
@@ -119,24 +120,31 @@ $script:AffinityScript = {
 }
 
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
-function Write-LensPartial([hashtable]$b, [string]$reqId, [int]$seq) {
-    try { Write-LensBundle (Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $reqId, $seq)) ($b | ConvertTo-Json -Depth 6) } catch { }
+function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
+    try {
+        $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
+        Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
+    }
+    catch { }
 }
 
-# --- one lookup: the validated pipeline, emitting partials as it goes ---------------
-function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [string]$reqId) {
+# --- One lookup: the validated pipeline, emitting partials as it goes ---
+function Resolve-Lens {
+    # "Lens" is singular; the rule misreads the trailing 's'.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '')]
+    param([string]$identity, [string]$samHint, [string]$server, [string]$reqId)
     $bundle = [ordered]@{
         upn = ''; sam = ''; displayName = ''; email = ''; manager = ''; office = ''
         devices = @(); errors = @()
     }
 
-    # Affinity starts NOW when the SAM is already trustworthy: the finder's hint, a
-    # DOMAIN\SAM identity, or a bare SAM. A UPN/display-name identity waits for AD.
+    # Affinity starts immediately when the SAM is already trustworthy: the finder's
+    # hint, a DOMAIN\SAM identity, or a bare SAM. A UPN/display-name waits for AD.
     $samGuess =
-        if ($samHint) { $samHint }
-        elseif ($identity -match '\\') { $identity.Split('\')[-1] }
-        elseif ($identity -notmatch '[@\s]') { $identity }
-        else { '' }
+    if ($samHint) { $samHint }
+    elseif ($identity -match '\\') { $identity.Split('\')[-1] }
+    elseif ($identity -notmatch '[@\s]') { $identity }
+    else { '' }
     $affinityJob = $null
     if ($samGuess -and $server) {
         try { $affinityJob = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $server, $samGuess } catch { $affinityJob = $null }
@@ -145,13 +153,14 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
     # AD user (forest-wide GC -> home-domain bind).
     $sam = $samGuess
     $uFilter =
-        if ($identity -match '@') { "(&(objectClass=user)(userPrincipalName=$identity))" }
-        elseif ($identity -match '\s') { "(&(objectClass=user)(displayName=$identity))" }
-        else { "(&(objectClass=user)(sAMAccountName=$samGuess))" }
+    if ($identity -match '@') { "(&(objectClass=user)(userPrincipalName=$identity))" }
+    elseif ($identity -match '\s') { "(&(objectClass=user)(displayName=$identity))" }
+    else { "(&(objectClass=user)(sAMAccountName=$samGuess))" }
     try {
         $uHit = Find-Gc $uFilter
         if (-not $uHit) { throw "no AD user matched '$identity'." }
-        $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"   # binds home domain
+        # Binding the DN reaches the user's home domain.
+        $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"
         $bundle.sam         = [string]$user.Properties['samaccountname'][0]
         $bundle.displayName = [string]$user.Properties['displayname'][0]
         $bundle.upn         = [string]$user.Properties['userprincipalname'][0]
@@ -170,7 +179,7 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
     }
 
     # Partial 1: directory facts.
-    Write-LensPartial $bundle $reqId 1
+    Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 1
 
     # UPN/display-name pick: the SAM only became known from the AD read - start now.
     if (-not $affinityJob -and $sam -and $server) {
@@ -183,7 +192,9 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
         $rows = $null
         try {
             if ($affinityJob) {
-                if (Wait-Job -Job $affinityJob -Timeout 45) { $rows = Receive-Job -Job $affinityJob -ErrorAction Stop }
+                if (Wait-Job -Job $affinityJob -Timeout 45) {
+                    $rows = Receive-Job -Job $affinityJob -ErrorAction Stop
+                }
                 else { throw 'timed out after 45s.' }
             }
             else {
@@ -196,36 +207,47 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
         finally {
             if ($affinityJob) { Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue }
         }
-        $wsids = @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } | ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
+        $wsids = @($rows |
+                Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } |
+                ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
     }
 
     # Partial 2: name-only device rows the moment affinity lands.
     if ($wsids.Count -gt 0) {
         $bundle.devices = @($wsids | ForEach-Object {
-                [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''; note = 'loading details…'; bitLockerKeys = @() }
+                [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''
+                    note = 'loading details…'; bitLockerKeys = @()
+                }
             })
-        Write-LensPartial $bundle $reqId 2
+        Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 2
     }
 
     # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
     $devices = [System.Collections.Generic.List[object]]::new()
     foreach ($wsid in $wsids) {
-        $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''; note = ''; bitLockerKeys = @() }
+        $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
+            note = ''; bitLockerKeys = @()
+        }
         try {
             $cHit = Find-Gc "(&(objectClass=computer)(cn=$wsid))"
             if ($cHit) {
                 $compDn = [string]$cHit.Properties['distinguishedname'][0]
-                $dev.domain = (($compDn -split ',' | Where-Object { $_ -match '^DC=' } | ForEach-Object { $_.Substring(3) }) -join '.')
+                $dev.domain = (($compDn -split ',' |
+                            Where-Object { $_ -match '^DC=' } |
+                            ForEach-Object { $_.Substring(3) }) -join '.')
 
                 # OS + last domain logon (lastLogonTimestamp: replicated, up to ~14 days
                 # coarse - good enough for "which of these machines is current").
                 $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
                 $cs.SearchScope = 'Base'
                 $cs.Filter = '(objectClass=*)'
-                'operatingsystem', 'lastlogontimestamp' | ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
+                'operatingsystem', 'lastlogontimestamp' |
+                    ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
                 $c = $cs.FindOne()
                 if ($c) {
-                    if ($c.Properties['operatingsystem'].Count -gt 0) { $dev.os = [string]$c.Properties['operatingsystem'][0] }
+                    if ($c.Properties['operatingsystem'].Count -gt 0) {
+                        $dev.os = [string]$c.Properties['operatingsystem'][0]
+                    }
                     if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
                         $ft = [int64]$c.Properties['lastlogontimestamp'][0]
                         if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
@@ -234,14 +256,20 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
 
                 $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
                 $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
-                'msfve-recoverypassword', 'whencreated' | ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
+                'msfve-recoverypassword', 'whencreated' |
+                    ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
                 $keys = @($bl.FindAll())
                 if ($keys.Count -gt 0) {
                     $dev.bitLockerKeys = @($keys | ForEach-Object {
-                            @{ password = [string]$_.Properties['msfve-recoverypassword'][0]; created = [string]$_.Properties['whencreated'][0] }
+                            @{
+                                password = [string]$_.Properties['msfve-recoverypassword'][0]
+                                created  = [string]$_.Properties['whencreated'][0]
+                            }
                         })
                 }
-                elseif (-not $dev.note) { $dev.note = 'BitLocker not escrowed to AD (or not readable)' }
+                elseif (-not $dev.note) {
+                    $dev.note = 'BitLocker not escrowed to AD (or not readable)'
+                }
             }
             elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
         }
@@ -252,7 +280,8 @@ function Resolve-Lens([string]$identity, [string]$samHint, [string]$server, [str
     }
     $bundle.devices = $devices.ToArray()
 
-    Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) ($bundle | ConvertTo-Json -Depth 6)
+    $resultPath = Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)
+    Write-LensBundle $resultPath ($bundle | ConvertTo-Json -Depth 6)
 }
 
 # --- pre-warm (parallel with DONUT's startup; heartbeat first so the parent unblocks) --
@@ -260,7 +289,7 @@ $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
-# Beat + parent/stop watchdog on a BACKGROUND thread. A lookup blocks the serve loop for
+# Beat + parent/stop watchdog on a background thread. A lookup blocks the serve loop for
 # its whole duration (tens of seconds), so beating from that loop would let the heartbeat
 # go stale mid-lookup - and EnsureAgent (15s staleness = dead) would then tear this live
 # agent down mid-lookup, stranding the request. A dedicated beater keeps a busy agent
@@ -271,29 +300,41 @@ try {
     $script:HeartbeatJob = Start-ThreadJob -ScriptBlock {
         param($beatPath, $stopPath, $parentPid)
         while ($true) {
-            try { [IO.File]::WriteAllText($beatPath, [datetime]::UtcNow.ToString('o')) } catch { break }   # dir gone
+            # A failed beat write means the exchange dir is gone.
+            try { [IO.File]::WriteAllText($beatPath, [datetime]::UtcNow.ToString('o')) }
+            catch { break }
             if ([IO.File]::Exists($stopPath)) { break }
+            # A missing parent process means DONUT closed.
             try { $null = [System.Diagnostics.Process]::GetProcessById($parentPid) }
-            catch { try { [IO.File]::WriteAllText($stopPath, 'parent-exited') } catch { }; break }   # DONUT closed
+            catch { try { [IO.File]::WriteAllText($stopPath, 'parent-exited') } catch { }; break }
             Start-Sleep -Seconds 2
         }
     } -ArgumentList $heartbeatPath, $stopPath, $ParentPid
-} catch { $script:HeartbeatJob = $null }
+}
+catch { $script:HeartbeatJob = $null }
 
 $script:ForestNc = ''
-try { $script:ForestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0] } catch { }
-try { $null = Find-Gc '(objectClass=domain)' } catch { }              # bind the GC once (ThreadJob imported above)
+try {
+    $script:ForestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
+}
+catch { }
+# Bind the GC once (ThreadJob imported above).
+try { $null = Find-Gc '(objectClass=domain)' } catch { }
 if ($SiteServer) {
     # Throwaway affinity primes TLS + Kerberos to the AdminService (result discarded).
-    try { $null = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $SiteServer, 'zzz-donut-warm' } catch { }
+    try {
+        $null = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $SiteServer, 'zzz-donut-warm'
+    }
+    catch { }
 }
 
-# --- serve ---------------------------------------------------------------------------
+# --- Serve loop ---
 $lastBeat = [datetime]::MinValue
 $lastParentCheck = [datetime]::MinValue
 while ($true) {
     if (Test-Path -LiteralPath $stopPath) { break }
-    if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }   # dir purged out from under us -> exit
+    # Dir purged out from under us -> exit.
+    if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }
 
     $now = [datetime]::UtcNow
     # The background heartbeat job owns the beat + parent watchdog; only beat from the serve
@@ -307,7 +348,8 @@ while ($true) {
         }
         if (($now - $lastParentCheck).TotalSeconds -ge 3) {
             $lastParentCheck = $now
-            if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }   # DONUT closed
+            # A missing parent process means DONUT closed.
+            if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
         }
     }
 
@@ -321,17 +363,28 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
-            Resolve-Lens ([string]$req.identity) ([string]$req.sam) ([string]$req.siteServer) $reqId
+            $lensArgs = @{
+                identity = [string]$req.identity
+                samHint  = [string]$req.sam
+                server   = [string]$req.siteServer
+                reqId    = $reqId
+            }
+            Resolve-Lens @lensArgs
         }
         catch {
             # Never leave the parent hanging: always answer, even if only with the error.
-            try { Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) (@{ errors = @("Lens agent: $($_.Exception.Message)") } | ConvertTo-Json) } catch { }
+            try {
+                $errJson = @{ errors = @("Lens agent: $($_.Exception.Message)") } | ConvertTo-Json
+                Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $errJson
+            }
+            catch { }
         }
     }
 
     # Sweep responses a parent abandoned (e.g. it timed out and moved on).
     Get-ChildItem -Path $ExchangeDir -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^(partial|result)-' -and $_.LastWriteTimeUtc -lt [datetime]::UtcNow.AddMinutes(-10) } |
+        Where-Object { $_.Name -match '^(partial|result)-' -and
+            $_.LastWriteTimeUtc -lt [datetime]::UtcNow.AddMinutes(-10) } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 
     Start-Sleep -Milliseconds 150

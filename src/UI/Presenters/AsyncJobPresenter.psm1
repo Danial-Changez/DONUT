@@ -38,7 +38,7 @@ class AsyncJobPresenter {
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
 
         # A modal's nested message loop re-fires this timer: keep polling/streaming, but
-        # DEFER completion work + AfterPump (both can open a dialog; stacking deadlocks).
+        # defer completion work + AfterPump (both can open a dialog; stacking deadlocks).
         $modal = $this.IsModalOpen()
 
         $processedAny = $false
@@ -67,7 +67,7 @@ class AsyncJobPresenter {
     # Overridden by presenters that own a DialogPresenter; no-op base.
     [bool] IsModalOpen() { return $false }
 
-    # --- Overridable hooks (no-op by default) ----------------------------------------
+    # --- Overridable hooks (no-op by default) ---
 
     # Per-tick, after Poll() and before the terminal-status check.
     [void] OnJobPolled([AsyncJob]$job) { }

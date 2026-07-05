@@ -64,16 +64,20 @@ try {
     # fall back to it, or to defaults, when no Settings were supplied.
     $config = if ($Settings) {
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, $Settings)
-    } elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
+    }
+    elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
         $mgr = [ConfigManager]::new($SourceRoot)
         $mgr.LoadConfig()
-    } else {
+    }
+    else {
         # Use default config with provided paths
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, @{})
     }
-    
-    [ExecutionService]::StartWorker($HostName, $JobType, $Options, $ResolvedIp, $config, $SourceRoot, $LogsDir, $ReportsDir)
-} catch {
+
+    [ExecutionService]::StartWorker($HostName, $JobType, $Options, $ResolvedIp,
+        $config, $SourceRoot, $LogsDir, $ReportsDir)
+}
+catch {
     Write-Error "Worker failed: $_"
     exit 1
 }
