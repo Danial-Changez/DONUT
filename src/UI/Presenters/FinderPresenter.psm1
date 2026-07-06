@@ -6,7 +6,6 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
-using module "..\..\Services\PersonLensService.psm1"
 using module "..\..\Models\PersonLens.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
@@ -136,8 +135,23 @@ class FinderPresenter {
     }
 
     # App closing: stop the de-elevated Lens agent and purge every Lens exchange dir.
+    # Routed through the pool worker (StopAgent) rather than a direct static call so the
+    # UI never has to parse-load PersonLensService - the teardown + its literals stay
+    # single-sourced in the service. Run synchronously (EndInvoke) so it finishes before
+    # the process exits; all best-effort, matching the agent's own parent-PID self-exit.
     [void] OnAppClosing() {
-        [PersonLensService]::StopAndPurgeAgent()
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $job = $this.StartPoolScript($worker, @{
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    StopAgent  = $true
+                })
+            try { $job.Ps.EndInvoke($job.Handle) } finally { $job.Ps.Dispose() }
+        }
+        catch {
+            $this.Logger.LogException("Lens agent teardown could not run", $_)
+        }
     }
 
     # Starts a worker script on the shared pool and returns the job envelope the poll

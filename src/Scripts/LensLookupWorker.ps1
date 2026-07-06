@@ -14,6 +14,11 @@
     pre-warms its libraries in parallel with DONUT's own startup) WITHOUT running a
     lookup. Returns '' on success or the agent's failure reason.
 
+    -StopAgent: called once at app close to run the full parent-side teardown
+    (StopAndPurgeAgent) WITHOUT running a lookup. Kept on the pool so the UI never has to
+    parse-load PersonLensService itself - the teardown + its literals stay single-sourced
+    in the service, invoked here in the worker runspace where the service already loads.
+
 .PARAMETER Identity
     UPN / DOMAIN\SAM / bare SAM / display name to resolve (ignored with -WarmOnly).
 
@@ -33,6 +38,9 @@
 .PARAMETER WarmOnly
     Start/verify the agent and return, without running a lookup.
 
+.PARAMETER StopAgent
+    Stop/unregister the agent and purge every Lens exchange dir, without running a lookup.
+
 .NOTES
     Runs on a pool runspace, as the elevated admin account.
 #>
@@ -44,10 +52,15 @@ param(
     [Parameter(Mandatory)] [string] $SourceRoot,
     [string] $Sam = '',
     [int] $TimeoutSec = 60,
-    [switch] $WarmOnly
+    [switch] $WarmOnly,
+    [switch] $StopAgent
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Teardown needs no live service (StopAndPurgeAgent is static): run it and return before
+# constructing anything, so app close never depends on an agent/SCCM round-trip.
+if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
