@@ -12,11 +12,11 @@ in [`Coding-Style.md`](Coding-Style.md).
   documented with XML doc comments to the standard codified in `Coding-Style.md`
   (§ *C# (`src/Launcher/`)*) — which follows Zephyr's scope: document the public
   API, don't restate the identifier, leave trivial members and internals alone.
-- **HomePresenter split — planned, not yet executed.** This document *is* the
-  plan. The split touches the app's busiest presenter and the shared job pump, so
-  it must land behind a green Pester run (`tests/Unit`, `tests/Integration`) and
-  manual UI verification on Windows — it is specced here first rather than
-  committed blind.
+- **HomePresenter split — stage 1 (scaffold) done; rest pending a Pester run.**
+  `InventoryPresenter`'s class, constructor, and duck-typed seam are wired into
+  `HomePresenter` (inert — zero behavior change). The remaining stages move the
+  detail state + methods and touch the shared job pump, so they must land behind a
+  green Pester run (`tests/Unit`, `tests/Integration`) and manual UI verification.
 
 ## Motivation
 
@@ -110,13 +110,16 @@ narrow `GetRecord` / persist seam rather than owning the store.
 
 Each step is independently compilable + testable; commit per step.
 
-1. **Create `InventoryPresenter` with the seam, delegate nothing yet.** Add the
-   class + constructor, move the detail-panel control lookups into its
-   `Initialize`, but keep the methods on `HomePresenter` calling the new object as
-   a thin pass-through. Verifies wiring with zero behavior change.
-2. **Move the pure render/format helpers** (`PopulateDetailCards`,
-   `RenderDetailSubtitle`, `RefreshOverview`, `UpdateOverviewTiles`,
-   `AppendLog*`). These have the fewest cross-dependencies.
+1. **Scaffold `InventoryPresenter` (the seam), inert. — *Done.*** Add the class,
+   constructor, and duck-typed `$Home` back-ref, register it in `HomePresenter`'s
+   `using module` graph, and construct it — but delegate nothing (empty
+   `Initialize`). Zero behavior change; validates the parse-graph placement (the
+   architecturally risky part).
+2. **Move the detail controls + pure render/format helpers.** Relocate the detail +
+   overview control fields and their `FindName` lookups into
+   `InventoryPresenter.Initialize`, plus the leaf helpers (`PopulateDetailCards`,
+   `RenderDetailSubtitle`, `RefreshOverview`, `UpdateOverviewTiles`, `AppendLog*`) —
+   the fewest cross-dependencies.
 3. **Move the probe lifecycle** (`StartInventory`/`CompleteInventory`,
    `FindBigFolders`/`CompleteDiskScan`) and switch `OnJobCompleted` to delegate
    the `Inventory` / `DiskScan` kinds.
