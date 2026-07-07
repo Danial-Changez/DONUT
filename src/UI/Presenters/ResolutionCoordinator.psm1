@@ -151,4 +151,79 @@ class ResolutionCoordinator {
             $this.Logger.LogException("[$hostName] identity check could not start", $_)
         }
     }
+
+    # Resolve job finished: cache the DC (warm) or the per-host verdict, detect an IP
+    # change, persist the DC, and refresh the offline indicator. HomePresenter owns the
+    # PendingRuns / PendingGathers queue, so re-issuing queued work is handed back to it.
+    [void] CompleteResolve([AsyncJob]$job) {
+        if ($job.Status -eq 'Failed') {
+            # Even a failed resolve must release the single-flight latch, or the host wedges.
+            $this.Resolver.ClearInFlight($job.HostName)
+            $this.Home.DropPendingRunOnResolveFailure($job.HostName)
+            return
+        }
+        foreach ($item in @($job.Result)) {
+            if ($null -eq $item) { continue }
+            $mode = [string]$item.Mode
+            if ($mode -eq 'Warm') {
+                $dc = [string]$item.ActiveDc
+                if (-not [string]::IsNullOrWhiteSpace($dc)) {
+                    $this.Resolver.SetActiveDc($dc)
+                    $this.PersistDomainController($dc, @($item.DomainControllers))
+                }
+            }
+            elseif ($mode -eq 'Host') {
+                $hn = [string]$item.HostName
+                $newIp = [string]$item.Ip
+                $online = [bool]$item.Online
+                $oldIp = $this.Resolver.GetCachedIp($hn)
+                # Log only a first find or an actual change - never a same-IP TTL refresh.
+                if (-not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
+                    if ([string]::IsNullOrWhiteSpace($oldIp)) { $this.Logger.LogInfo("[$hn] resolved IP $newIp") }
+                    else { $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp") }
+                }
+                $this.Resolver.CacheVerdict($hn, $newIp, $online)
+                $this.Home.RenderReachability($hn)
+                # Surface the fresh IP in the detail subtitle if this host's panel is open.
+                if ($hn -eq $this.Home.SelectedHost) {
+                    $rcSel = $this.Home.GetRecord($hn)
+                    $iso = ''
+                    if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) {
+                        $iso = $rcSel.Inventory.ProbedAt
+                    }
+                    $this.Home.Detail.RenderDetailSubtitle($hn, $iso)
+                }
+                # HomePresenter owns the queue: hand the verdict back to re-issue queued work.
+                $this.Home.ReissueAfterResolve($hn, $online)
+            }
+            elseif ($mode -eq 'Name') {
+                $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
+            }
+            elseif ($mode -eq 'WarmRunspace') {
+                # No-op: the job's purpose was loading the module graph into its runspace.
+            }
+        }
+    }
+
+    # Persists the active DC (and list) so the next launch resolves without waiting
+    # on AD discovery. Only writes when something changed.
+    hidden [void] PersistDomainController([string]$dc, [string[]]$list) {
+        if ($null -eq $this.ConfigManager) { return }
+        $changed = $false
+        if ([string]$this.Config.Settings['activeDomainController'] -ne $dc) {
+            $this.Config.Settings['activeDomainController'] = $dc
+            $changed = $true
+        }
+        if ($null -ne $list -and $list.Count -gt 0) {
+            $existing = @($this.Config.Settings['domainControllers'])
+            if (($existing -join '|') -ne ($list -join '|')) {
+                $this.Config.Settings['domainControllers'] = @($list)
+                $changed = $true
+            }
+        }
+        if ($changed) {
+            try { $this.ConfigManager.SaveConfig($this.Config) }
+            catch { $this.Logger.LogException("Could not persist domain controller", $_) }
+        }
+    }
 }
