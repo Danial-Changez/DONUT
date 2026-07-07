@@ -10,7 +10,6 @@ component "UI (src/UI/Views)" #102A2E {
     [MainWindow.xaml]
     [HomeView.xaml]
     [ConfigView.xaml]
-    [LogsView.xaml]
     [DialogWindow.xaml]
     [LoginWindow.xaml]
 }
@@ -34,7 +33,6 @@ component "PowerShell Classes (src)" {
         [ResolutionCoordinator]
         [FinderPresenter]
         [ConfigPresenter]
-        [LogsPresenter]
         [LoginPresenter]
         [UpdatePresenter]
         [DialogPresenter]
@@ -47,7 +45,6 @@ component "PowerShell Classes (src)" {
         [SearchRowViewModel]
         [FolderNodeViewModel]
         [ConfigViewModel]
-        [LogsViewModel]
         [ToastViewModel]
         [DialogViewModel]
         [LoginViewModel]
@@ -100,6 +97,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [DonutApp.ps1] ..> [MainPresenter] : initializes
 [MainPresenter] ..> [MainWindow.xaml] : manages
 [MainPresenter] ..> [HomePresenter] : creates
+[MainPresenter] ..> [ConfigPresenter] : settings overlay (lazy)
 
 [HomePresenter] ..> [HomeViewModel] : builds + wires commands
 [HomeViewModel] ..> [HomeView.xaml] : DataContext (bindings)
@@ -109,8 +107,6 @@ database "%LOCALAPPDATA%\\DONUT" {
 [ToastService] ..> [ToastViewModel] : enqueues
 [DialogPresenter] ..> [DialogViewModel] : per-dialog content
 [DialogPresenter] ..> [DialogWindow.xaml] : shows modal
-[LogsPresenter] ..> [LogsViewModel] : populates tabs
-[LogsViewModel] ..> [LogsView.xaml] : DataContext (bindings)
 [ConfigPresenter] ..> [ConfigViewModel] : SaveCommand
 [LoginPresenter] ..> [LoginViewModel] : device-flow output
 [LoginViewModel] ..> [LoginWindow.xaml] : DataContext (bindings)

@@ -27,7 +27,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 - **24h Scan Reuse:** A scan run within the last 24 hours is reused instead of re-scanning; it's only re-run after an apply.
 - **Live AD Finder:** The search bar searches Active Directory (computers + users) across the org's forests, and can unlock locked-out accounts inline.
 - **User Lens:** Picking a person in the finder opens a Lens in the detail pane — their directory info (UPN, email, manager, office) and their SCCM-assigned devices (OS + last domain logon, read from AD), with BitLocker recovery keys revealed on click and each device addable to the machine list. The SCCM/BitLocker lookup runs **de-elevated as your logged-on account** (DONUT itself runs elevated as an admin account, which can't read them).
-- **Dynamic Configuration:** Driven by a user-friendly JSON config (`config.json`) edited through the Config tab.
+- **Dynamic Configuration:** Driven by a user-friendly JSON config (`config.json`) edited through the in-app settings dialog (gear icon).
 - **GitHub App Updates:** Authenticates via a GitHub App (Device Flow) and self-updates from the latest GitHub release (supports rollback by tag).
 - **Detailed Logging:** Per-host logs for execution outcomes and errors.
 - **DNS and Error Validation:** Validates DNS/IP before execution.
@@ -71,7 +71,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 2. **Configure Commands:**
 
-   - Use the Config tab in the UI to select and configure DCU commands and options.
+   - Click the gear icon in the top bar to open Settings, where you select and configure DCU commands and options.
    - For more information on "Text Option" parameters, see [DCU-CLI Documentation](https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-%7C-update-cli-commands?guid=guid-92619086-5f7c-4a05-bce2-0d560c15e8ed&lang=en-us) for more details.
 
      **Note: If a main command is run with no options from the `Dropdown/Multi-Select Options` selected, then DCU will use the target machine's defaults.**
@@ -91,10 +91,8 @@ This PowerShell project automates remote execution of the Dell Command Update (D
    **Note: If you disconnect from the network while updates are running, they will continue, you will just lose access to the live feed.**
 
 5. **Review Logs:**
-   - Detailed logs are saved in the logs tab for each run (if specified).
-   - If a file path is specified in "Output Log", a tab in its name will be appended under the Logs page.
-   - If no file path is specified, the "Default" tab will be appended to if any errors with the run are detected.
-     - For example, if the "Output Log" was set to `C:\temp\DONUT\applyUpdates.log`, new data will be appended to the ApplyUpdates tab.
+   - Live run progress shows in each machine's row and detail panel; there is no in-app Logs page.
+   - Logs are written to `%LOCALAPPDATA%\DONUT\logs` — a central `Donut.log` plus a per-host copy of each run's output log (`<hostname>.log`). Open that folder to review past runs.
 
 ---
 

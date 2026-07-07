@@ -414,12 +414,12 @@ package "Donut.UI.Presenters" #2B1A12 {
         -ConfigManager: ConfigManager
         -HomePresenter: HomePresenter
         -ConfigPresenter: ConfigPresenter
-        -LogsPresenter: LogsPresenter
         -Resources: ResourceService
         +Initialize(): void
         +Show(): void
-        +NavigateTo(viewName): void
-        +ToggleRail(): void
+        +ShowHome(): void
+        +OpenSettings(): void
+        +CloseSettings(): void
     }
 
     class HomePresenter extends AsyncJobPresenter {
@@ -483,13 +483,8 @@ package "Donut.UI.Presenters" #2B1A12 {
 
     class ConfigPresenter {
         +LoadCurrentConfig(): void
-        +OnCommandChanged(item): void
+        +LoadOptionView(viewName): void
         +OnSave(): void
-    }
-
-    class LogsPresenter {
-        +LoadLogs(): void
-        +ClearLogs(): void
     }
 
     class DialogPresenter {
@@ -590,17 +585,6 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +PrimaryCommand / SecondaryCommand: RelayCommand
     }
 
-    class LogsViewModel {
-        +Tabs: ObservableCollection<LogTabViewModel>
-        +ClearCommand: RelayCommand
-    }
-    class LogTabViewModel {
-        +Header / Text / TruncationNote: string
-        +IsTruncated: bool
-        +LoadFullCommand: RelayCommand
-        +ShowFull(fullText): void
-    }
-
     class ConfigViewModel {
         +SaveCommand: RelayCommand
     }
@@ -610,9 +594,8 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +SetOutput(text): void
     }
     class MainViewModel {
-        +ActivePage: string
-        +IsRailCollapsed: bool
-        +NavigateCommand / ToggleRailCommand: RelayCommand
+        +IsSettingsOpen: bool
+        +OpenSettingsCommand / CloseSettingsCommand: RelayCommand
         +Minimize/Maximize/CloseCommand: RelayCommand
     }
 }
@@ -622,8 +605,6 @@ ObservableObject <|-- HomeViewModel
 ObservableObject <|-- HostViewModel
 ObservableObject <|-- ToastViewModel
 ObservableObject <|-- DialogViewModel
-ObservableObject <|-- LogsViewModel
-ObservableObject <|-- LogTabViewModel
 ObservableObject <|-- ConfigViewModel
 ObservableObject <|-- LoginViewModel
 ObservableObject <|-- MainViewModel
@@ -639,7 +620,6 @@ RemoteJobService <|-- DiskUsageService
 ' --- composition / navigation -------------------------------------------
 MainPresenter --> HomePresenter
 MainPresenter --> ConfigPresenter
-MainPresenter --> LogsPresenter
 MainPresenter --> ResourceService
 MainPresenter --> ToastService
 
@@ -712,8 +692,6 @@ FinderPresenter ..> SearchRowViewModel
 MainPresenter --> MainViewModel
 ToastService --> ToastViewModel
 DialogPresenter --> DialogViewModel
-LogsPresenter --> LogsViewModel
-LogsViewModel --> LogTabViewModel
 LoginPresenter --> LoginViewModel
 ConfigPresenter --> ConfigViewModel
 ExecutionService ..> DcuLog
