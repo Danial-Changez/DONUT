@@ -36,7 +36,6 @@ its [index](diagrams/README.md)). Comment/layout conventions live in
 - [6. Testing](#6-testing)
 - [7. Code Coverage](#7-code-coverage)
 
----
 
 ## 1. Directory Structure
 
@@ -75,13 +74,14 @@ Runtime Data Location:
 └── InstallWorker.ps1       <-- Copied during update
 ```
 
-`Models`, `Services`, and `Core` separate concerns explicitly: **Models** are pure
-data structures and mappers (DTOs), **Services** hold DONUT-specific business logic,
-and **Core** is generic infrastructure (`NetworkProbe`, `ConfigManager`). Because
-`logs`, `reports`, and `config` live under `%LOCALAPPDATA%\DONUT`, an MSI upgrade in
+`Models`, `Services`, and `Core` separate concerns explicitly: 
+- **Models** are pure data structures and mappers (DTOs).
+- **Services** hold DONUT-specific business logic.
+- **Core** is generic infrastructure (`NetworkProbe`, `ConfigManager`). 
+ 
+Since `logs`, `reports`, and `config` live under `%LOCALAPPDATA%\DONUT`, an MSI upgrade in
 `Program Files` never touches user data.
 
----
 
 ## 2. Architecture (MVVM)
 
