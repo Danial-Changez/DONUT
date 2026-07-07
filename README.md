@@ -39,7 +39,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 - **PowerShell 7+** (required for parallel processing, current project runs on 7.5.2)
 - **Dell Command Update CLI (`dcu-cli.exe`)** (must be installed on each target)
 - **PsExec (Sysinternals Suite)** (for remote command execution)
-- **.NET Desktop 9.0+** (needed for WPF to run with the current packaged version)
+- **.NET Desktop 10.0+** (needed for WPF to run with the current packaged version)
 - **Windows Admin Access** (for remote access)
 - **GitHub App Access** (to allow your team to sign in via Device Flow and receive updates from your org's GitHub Releases)
 
@@ -54,7 +54,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
    - PsTools is available at `https://learn.microsoft.com/en-us/sysinternals/downloads/pstools`.
    - Extract the zip to **Documents**, **Downloads**, or **Desktop** (any one of these directories will suffice).
    - Transfer the **contents** of the folder to `C:\Windows\System32`.
-3. Run the .NET Desktop SDK installer (available at `https://dotnet.microsoft.com/en-us/download/dotnet/9.0`).
+3. Run the .NET Desktop SDK installer (available at `https://dotnet.microsoft.com/en-us/download/dotnet/10.0`).
 4. Install DONUT (MSI available under releases).
 5. Navigate to **Virus & Threat Protection > Manage Settings > Add or remove exclusions** (this is NOT a virus, just not digitally signed).
 6. Click **Add an exclusion**.

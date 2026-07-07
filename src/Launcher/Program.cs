@@ -23,7 +23,7 @@ static class Program
         // Production layout: exe under bin/x64/DONUT -> ../../../src/Start-Donut.ps1.
         string scriptPath = Path.GetFullPath(Path.Combine(exePath, "..", "..", "..", "src", "Start-Donut.ps1"));
 
-        // Dev layout: exe under src/Launcher/bin/Debug/net9.0-windows.
+        // Dev layout: exe under src/Launcher/bin/Debug/net10.0-windows.
         if (!File.Exists(scriptPath))
         {
             scriptPath = Path.GetFullPath(Path.Combine(exePath, "..", "..", "..", "..", "Start-Donut.ps1"));
