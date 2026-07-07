@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -22,7 +23,12 @@ public sealed class SmoothProgressBar : Control
     private int _sweepX;
     private readonly Timer _anim;
 
+    // Styling/state set in code only (never via the WinForms designer), so the designer
+    // must not try to serialize these — satisfies analyzer WFO1000.
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color FillColor { get; set; } = Color.FromArgb(0xF2, 0xB4, 0x17);
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color TrackColor { get; set; } = Color.FromArgb(38, 255, 255, 255);
 
     public SmoothProgressBar()
@@ -35,12 +41,14 @@ public sealed class SmoothProgressBar : Control
         _anim.Start();
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Indeterminate
     {
         get => _indeterminate;
         set { _indeterminate = value; Invalidate(); }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Maximum
     {
         get => _maximum;
@@ -49,6 +57,7 @@ public sealed class SmoothProgressBar : Control
 
     // Setting a value implicitly leaves the indeterminate phase (the first real
     // milestone proves the parse finished).
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Value
     {
         get => _value;
