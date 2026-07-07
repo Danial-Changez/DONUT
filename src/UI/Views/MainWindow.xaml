@@ -37,101 +37,8 @@
                 </LinearGradientBrush>
             </Border.BorderBrush>
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <!-- Sidebar (Auto so it follows the animated rail width) -->
-                    <ColumnDefinition Width="Auto" />
-                    <!-- Main Section -->
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <!-- Sidebar -->
-                <Border x:Name="sidebar"
-                        CornerRadius="10,0,0,10"
-                        Width="250"
-                        ClipToBounds="True"
-                        Grid.Column="0">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="1,0.75"
-                                             EndPoint="0,0">
-                            <GradientStop Color="{DynamicResource SecondaryBackgroundDarkColor}"
-                                          Offset="0" />
-                            <GradientStop Color="{DynamicResource SecondaryBackgroundColor}"
-                                          Offset="1" />
-                        </LinearGradientBrush>
-                    </Border.Background>
-                    <Grid>
-                        <StackPanel x:Name="SidebarPanel"
-                                    Background="Transparent"
-                                    HorizontalAlignment="Stretch"
-                                    Margin="10,0,0,0">
-                            <!-- The logo IS the collapse/expand toggle: full DONUT wordmark when
-                                 expanded, donut icon when collapsed (the image source is swapped
-                                 in MainPresenter.ToggleRail). Top margin (30) lines it up with the
-                                 page header icon, which sits below the 30px window-control row. -->
-                            <Button x:Name="btnRailToggle"
-                                    Command="{Binding ToggleRailCommand}"
-                                    HorizontalAlignment="Left"
-                                    Margin="14,24,8,26"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    ToolTip="Collapse / expand sidebar">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="8"
-                                                Padding="6,4">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver"
-                                                     Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource PanelBackgroundHover}" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <Image x:Name="Logo"
-                                       Height="44"
-                                       Stretch="Uniform"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Left" />
-                            </Button>
-                            <!-- Menu Buttons -->
-                            <RadioButton x:Name="btnHome"
-                                         Command="{Binding NavigateCommand}"
-                                         CommandParameter="Home"
-                                         Style="{DynamicResource menuButton}"
-                                         Tag="{DynamicResource AccentPurpleLight}">
-                                <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Left">
-                                    <Path Style="{DynamicResource menuButtonIcon}"
-                                          Data="{DynamicResource Home}" />
-                                    <TextBlock x:Name="lblHome"
-                                               Text="Home"
-                                               Style="{DynamicResource menuButtonText}" />
-                                </StackPanel>
-                            </RadioButton>
-                            <RadioButton x:Name="btnConfig"
-                                         Command="{Binding OpenSettingsCommand}"
-                                         Style="{DynamicResource menuButton}"
-                                         Tag="{DynamicResource AccentBlue}">
-                                <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Left">
-                                    <Path Style="{DynamicResource menuButtonIcon}"
-                                          Data="{DynamicResource Config}" />
-                                    <TextBlock x:Name="lblConfig"
-                                               Text="Config"
-                                               Style="{DynamicResource menuButtonText}" />
-                                </StackPanel>
-                            </RadioButton>
-                        </StackPanel>
-                    </Grid>
-                </Border>
                 <!-- Main Section -->
-                <Border CornerRadius="0,10,10,0"
-                        Grid.Column="1">
+                <Border CornerRadius="10">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0"
                                              EndPoint="1,0.75">
@@ -145,8 +52,8 @@
                         <Grid.RowDefinitions>
                             <!-- Control Bar -->
                             <RowDefinition Height="30" />
-                            <!-- Header/Caption -->
-                            <RowDefinition Height="40" />
+                            <!-- Branding bar -->
+                            <RowDefinition Height="48" />
                             <!-- Content Section / Child Views -->
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
@@ -191,45 +98,15 @@
                                       Data="{DynamicResource Config}" />
                             </Button>
                         </StackPanel>
-                        <!-- Header -->
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center"
-                                    Grid.Row="1">
-                            <!-- Home Header -->
-                            <StackPanel Orientation="Horizontal"
-                                        x:Name="headerHome"
-                                        Visibility="Collapsed">
-                                <Path Data="{DynamicResource Home}"
-                                      Height="24"
-                                      Width="24"
-                                      Stretch="Uniform"
-                                      Fill="{DynamicResource TitleTextSecondary}"
-                                      Margin="35,0,10,0" />
-                                <TextBlock Text="Home"
-                                           Foreground="{DynamicResource TitleTextSecondary}"
-                                           FontSize="20"
-                                           FontFamily="Montserrat"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                            <!-- Config Header -->
-                            <StackPanel Orientation="Horizontal"
-                                        x:Name="headerConfig"
-                                        Visibility="Collapsed">
-                                <Path Data="{DynamicResource Config}"
-                                      Height="24"
-                                      Width="24"
-                                      Stretch="Uniform"
-                                      Fill="{DynamicResource TitleTextSecondary}"
-                                      Margin="35,0,10,0" />
-                                <TextBlock Text="Configuration"
-                                           Foreground="{DynamicResource TitleTextSecondary}"
-                                           FontSize="20"
-                                           FontFamily="Montserrat"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                        </StackPanel>
+                        <!-- Branding bar: the DONUT wordmark (Logo source set in
+                             MainPresenter.LoadImages). -->
+                        <Image x:Name="Logo"
+                               Grid.Row="1"
+                               Height="32"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               Margin="35,0,0,0" />
                         <ContentControl x:Name="contentMain"
                                         Grid.Row="2"
                                         Margin="25" />
