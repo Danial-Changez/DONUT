@@ -48,7 +48,7 @@ alt Updates available
     Presenter -> Job: queue UpdateApply
     activate Job
     Job -> Exec: (pool) RunApplyPhase(device, options)
-    note right of Exec: InvokePsExec: watchdog 120m; live-tails apply.log\n(percent lines drive the bar). If psexec's pipe drops\n(e.g. a NIC-driver install), dcu-cli's own return code is\nrecovered from apply.log — see diagrams/network-flow.puml.
+    note right of Exec: InvokePsExec: watchdog 120m; live-tails apply.log\n(percent lines drive the bar). If psexec's pipe drops\n(e.g. a NIC-driver install), dcu-cli's own return code is\nrecovered from apply.log — see network-flow.puml.
     Exec --> Job: apply result + RebootRequired (dcu code 1/5)
     deactivate Job
     Presenter -> Presenter: CheckForManualReboot(job) -> ManualRebootQueue
