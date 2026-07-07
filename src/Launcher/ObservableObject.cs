@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.ComponentModel;
 using System.Reflection;
@@ -17,7 +19,7 @@ namespace Donut.Mvvm
     /// </remarks>
     public abstract class ObservableObject : INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>Raise change notification for one property.</summary>
         public void Raise(string propertyName)

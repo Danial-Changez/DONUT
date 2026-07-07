@@ -168,9 +168,36 @@ class MainPresenter {
             }.GetNewClosure())
 
         $this.Window.Add_Closed({
+                # The window is gone. Finish the Lens-agent teardown the close handler
+                # started (invisible, bounded wait), then hard-exit: the tray message loop
+                # in Donut.Launcher would otherwise keep the process alive in the background
+                # (locking the exe against rebuilds). Environment.Exit is the same mechanism
+                # the tray 'Exit' item uses.
+                if ($global:LensTeardownJob) {
+                    try {
+                        [void]$global:LensTeardownJob.Handle.AsyncWaitHandle.WaitOne(
+                            [TimeSpan]::FromSeconds(5))
+                    }
+                    catch { }
+                    try { $global:LensTeardownJob.Ps.Dispose() } catch { }
+                    $global:LensTeardownJob = $null
+                }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Shutdown()
                 }
+                [System.Environment]::Exit(0)
+            }.GetNewClosure())
+
+        # Shown from the worker STA thread, so Windows won't foreground it automatically -
+        # it opens behind other windows. Once it renders, force it to the front (the brief
+        # Topmost toggle raises it without needing foreground-activation rights).
+        $this.Window.Add_ContentRendered({
+                $w = $presenter.Window
+                if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
+                $w.Activate()
+                $w.Topmost = $true
+                $w.Topmost = $false
+                $w.Focus()
             }.GetNewClosure())
 
         $this.NavigateTo('Home')

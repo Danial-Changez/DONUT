@@ -6,7 +6,6 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
-using module "..\..\Services\PersonLensService.psm1"
 using module "..\..\Models\PersonLens.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
@@ -136,8 +135,26 @@ class FinderPresenter {
     }
 
     # App closing: stop the de-elevated Lens agent and purge every Lens exchange dir.
+    # Routed through the pool worker (StopAgent) rather than a direct static call so the
+    # UI never has to parse-load PersonLensService - the teardown + its literals stay
+    # single-sourced in the service.
+    #
+    # Started here (BeginInvoke, no wait) so the window closes immediately instead of
+    # freezing while the agent stops, then stashed in $global:LensTeardownJob so DonutApp
+    # can await it after the window is gone (an invisible wait) and before the process
+    # exits - guaranteeing the scheduled-task cleanup still finishes.
     [void] OnAppClosing() {
-        [PersonLensService]::StopAndPurgeAgent()
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $global:LensTeardownJob = $this.StartPoolScript($worker, @{
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    StopAgent  = $true
+                })
+        }
+        catch {
+            $this.Logger.LogException("Lens agent teardown could not start", $_)
+        }
     }
 
     # Starts a worker script on the shared pool and returns the job envelope the poll

@@ -36,12 +36,22 @@ using module "..\UI\Presenters\LoginPresenter.psm1"
 using module "..\UI\Presenters\UpdatePresenter.psm1"
 using module "..\Services\ResourceService.psm1"
 
+# Splash progress: $global:Splash is injected by Donut.Launcher. It is absent on the
+# dev `pwsh -Sta` path, so both helpers are no-ops there.
+function Update-Splash([int]$Percent, [string]$Status) {
+    if ($global:Splash) { try { $global:Splash.Report($Percent, $Status) } catch { } }
+}
+function Close-Splash {
+    if ($global:Splash) { try { $global:Splash.Complete() } catch { } }
+}
+
 try {
     Write-Host "Initializing ConfigManager..."
     # Resolve the parent of Scripts\ so 'src' stays the root.
     $srcRoot = (Resolve-Path "$PSScriptRoot\..").Path
     $configManager = [ConfigManager]::new($srcRoot)
     $global:AppConfig = $configManager.LoadConfig()
+    Update-Splash 18 'Loading configuration'
 
     foreach ($folder in @("logs", "reports")) {
         $path = Join-Path (Split-Path $configManager.ConfigPath -Parent) $folder
@@ -60,10 +70,12 @@ try {
     # min = max pins every runspace: idle cleanup only disposes above the minimum, so
     # min=1 let warmed runspaces die and later jobs cold-load under the loader lock.
     [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
+    Update-Splash 44 'Warming runspace pool'
 
     $logger.LogInfo("Loading resources.")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
+    Update-Splash 66 'Loading resources'
 
     $logger.LogInfo("Preparing self-update + main window.")
     $networkProbe = [NetworkProbe]::new($logger)
@@ -77,10 +89,15 @@ try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
         $logger.LogInfo("Main window preloaded (runspace pool warmed).")
+        Update-Splash 90 'Preparing sign-in'
     }
     catch {
         $logger.LogException("Main window preload failed", $_)
     }
+
+    # Close the splash before sign-in/update: everything past this point is interactive
+    # (a login or update prompt may appear), not unattended loading.
+    Close-Splash
 
     try {
         # Sign-in (if needed) + update check / prompt, before the main window shows.
@@ -99,6 +116,7 @@ try {
 
 }
 catch {
+    Close-Splash
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
     [System.Windows.Forms.MessageBox]::Show("Error starting Donut: $_", "Error")
 }
