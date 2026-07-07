@@ -2,7 +2,8 @@
 
 Comment and layout conventions for the PowerShell sources under `src/`. The rules
 are adapted from the [Zephyr RTOS coding style](https://docs.zephyrproject.org/latest/contribute/style/code.html)
-and its inline-documentation guidelines, translated to PowerShell.
+and [documentation guidelines](https://docs.zephyrproject.org/latest/contribute/documentation/guidelines.html),
+translated to PowerShell.
 
 ## Comments
 
@@ -35,7 +36,8 @@ comments:
   security invariants) that inline comments can reference.
 - Every class and non-trivial public method gets a brief `#` doc comment directly
   above it stating its contract — purpose, return semantics, and any caller-facing
-  constraint. Trivial getters/setters need none.
+  constraint. State what the signature can't show; don't restate the name or type
+  (Zephyr's Doxygen rule). Trivial getters/setters need none.
 - Fields get a short trailing `# comment` only when the type/name doesn't already
   say it (units, ownership, lifetime).
 
@@ -45,6 +47,9 @@ comments:
 - Sentence case; capitalize acronyms properly (`DCU`, `SMB`, `UNC`). No
   all-caps emphasis (`NEVER`, `WITHOUT`) — if a point needs stress, say why
   instead.
+- Prefer ASCII; **never emojis** (Zephyr: "avoid using non-ASCII symbols in code,
+  unless it significantly improves clarity, avoid emojis in any case"). Non-ASCII
+  punctuation is acceptable only where it genuinely reads better.
 - Section separators, used sparingly in files large enough to need navigation,
   are exactly `# --- Section name ---` (no long dash padding, no `====`).
 
