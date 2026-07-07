@@ -40,7 +40,7 @@ class InventoryPresenter {
         [DiskUsageService] $diskUsageService,
         [object] $store,
         [object] $toasts,
-        [object] $home
+        [object] $homePresenter
     ) {
         $this.Config = $config
         $this.Logger = $logger
@@ -49,7 +49,7 @@ class InventoryPresenter {
         $this.DiskUsageService = $diskUsageService
         $this.Store = $store
         $this.Toasts = $toasts
-        $this.Home = $home
+        $this.Home = $homePresenter
     }
 
     # Adopts the detail-panel + overview controls from the Home view. Empty until the
