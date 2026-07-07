@@ -103,6 +103,8 @@ class MainPresenter {
 
         $this.Controls = @{}
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
+        $this.Controls['settingsContent'] = $this.Window.FindName("settingsContent")
+        $this.Controls['settingsCard'] = $this.Window.FindName("settingsCard")
 
         $this.LoadImages()
 
@@ -146,6 +148,10 @@ class MainPresenter {
         $this.MainVm.NavigateCommand = [RelayCommand]::new([System.Action[object]]$nav)
         $rail = { param($p) $presenter.ToggleRail() }.GetNewClosure()
         $this.MainVm.ToggleRailCommand = [RelayCommand]::new([System.Action[object]]$rail)
+        $openSettings = { param($p) $presenter.OpenSettings() }.GetNewClosure()
+        $this.MainVm.OpenSettingsCommand = [RelayCommand]::new([System.Action[object]]$openSettings)
+        $closeSettings = { param($p) $presenter.CloseSettings() }.GetNewClosure()
+        $this.MainVm.CloseSettingsCommand = [RelayCommand]::new([System.Action[object]]$closeSettings)
         $min = { param($p) $presenter.Window.WindowState = 'Minimized' }.GetNewClosure()
         $this.MainVm.MinimizeCommand = [RelayCommand]::new([System.Action[object]]$min)
         $max = { param($p)
@@ -242,22 +248,25 @@ class MainPresenter {
         return $null
     }
 
-    # Builds a page's view + presenter on first navigation, so construction cost
-    # waits for the tab open rather than being paid at startup.
-    hidden [void] EnsureView([string]$viewName) {
-        if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) { return }
+    # Builds the Config view + presenter once, on first settings open, and hosts it in
+    # the overlay card. ConfigPresenter toasts + closes the overlay on save.
+    hidden [void] EnsureConfigView() {
+        if ($this.Views.ContainsKey('Config') -and $this.Views['Config']) { return }
 
-        if ($viewName -eq 'Config') {
-            $configView = $this.LoadView("ConfigView.xaml")
-            $this.Views['Config'] = $configView
-            if ($configView) {
-                $this.ConfigPresenter = [ConfigPresenter]::new($this.Config, $this.ConfigManager, $configView)
+        $configView = $this.LoadView("ConfigView.xaml")
+        $this.Views['Config'] = $configView
+        if ($configView) {
+            $presenter = $this
+            $onSaved = { $presenter.CloseSettings() }.GetNewClosure()
+            $this.ConfigPresenter = [ConfigPresenter]::new(
+                $this.Config, $this.ConfigManager, $configView, $this.ToastService, $onSaved)
+            if ($this.Controls['settingsContent']) {
+                $this.Controls['settingsContent'].Content = $configView
             }
         }
     }
 
     [void] NavigateTo([string]$viewName) {
-        $this.EnsureView($viewName)
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) {
             $this.Controls['contentMain'].Content = $this.Views[$viewName]
 
@@ -282,6 +291,19 @@ class MainPresenter {
         }
 
         if ($this.MainVm) { $this.MainVm.Set('ActivePage', $viewName) }
+    }
+
+    # Opens the settings overlay, building the Config view lazily on first use. A
+    # visibility toggle (not ShowDialog), so background jobs keep pumping behind it.
+    [void] OpenSettings() {
+        $this.EnsureConfigView()
+        if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $true) }
+        # Focus the card so the overlay's Esc key binding is in scope.
+        if ($this.Controls['settingsCard']) { $this.Controls['settingsCard'].Focus() }
+    }
+
+    [void] CloseSettings() {
+        if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
     }
 
     # Collapses the sidebar to an icon-only rail (or expands it back), animating

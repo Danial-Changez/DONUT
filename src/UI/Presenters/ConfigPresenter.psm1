@@ -5,6 +5,7 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\ViewModels\ConfigViewModel.psm1"
+using module ".\ToastService.psm1"
 
 <#
 .SYNOPSIS
@@ -24,12 +25,17 @@ class ConfigPresenter {
     [ConfigViewModel] $ConfigVm
     [FrameworkElement] $CurrentOptionView
     [string] $CurrentSection
+    [ToastService] $Toast
+    [object] $OnSaved             # invoked after a successful save (closes the overlay)
 
-    ConfigPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view) {
+    ConfigPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
+        [ToastService] $toast, [object] $onSaved) {
         $this.Config = $config
         $this.ConfigManager = $configManager
         $this.Logger = $configManager.Logger
         $this.ViewContent = $view
+        $this.Toast = $toast
+        $this.OnSaved = $onSaved
         $this.Initialize()
     }
 
@@ -178,6 +184,8 @@ class ConfigPresenter {
         if ($this.CurrentSection) {
             $activeCommand = $this.CurrentSection.Substring(0, 1).ToLower() +
             $this.CurrentSection.Substring(1)
+            # Persist the dropdown choice so it round-trips on reload.
+            $this.Config.SetActiveCommand($activeCommand)
 
             if ($this.Config.Settings.ContainsKey('commands')) {
                 $commands = $this.Config.Settings['commands']
@@ -204,13 +212,13 @@ class ConfigPresenter {
 
         try {
             $this.ConfigManager.SaveConfig($this.Config)
-            [Forms.MessageBox]::Show(
-                "Config saved successfully.`nActive Command: $activeCommand",
-                "Success"
-            )
+            if ($this.Toast) {
+                $this.Toast.ShowSuccess('Config saved', "Active command: $activeCommand")
+            }
+            if ($this.OnSaved) { & $this.OnSaved }
         }
         catch {
-            [Forms.MessageBox]::Show("Failed to save config: $_", "Error")
+            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
         }
     }
 
