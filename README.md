@@ -1,6 +1,6 @@
 <h1> DONUT </h1>
 
-This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored in accordance with the [Refactored Proposal](docs/Refactoring_Proposal.md). Refer to it for more details.
+This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [Architecture](docs/Architecture.md) reference describes how it is built. Refer to it for more details.
 
 ---
 
@@ -113,7 +113,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ### Key Concepts
 
 - **Runspaces:** Used for parallel remote execution, runspace management, and UI updates.
-- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture section](docs/Refactoring_Proposal.md#2-architecture-mvp--mvvm).
+- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture reference](docs/Architecture.md#2-architecture-mvvm).
 - **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
 - **GitHub App Updates:** Requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256.
 
