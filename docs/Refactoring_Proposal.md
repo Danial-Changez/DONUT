@@ -246,6 +246,10 @@ build/wire the view-models (see [The MVVM migration](#the-mvvm-migration)).
 | `DialogPresenter` | Dialog service: shows the modal `DialogWindow`, returns the verdict |
 | `ToastService` | Enqueues `ToastViewModel`s + owns the auto-dismiss/exit-animation timers |
 
+> **Planned:** `HomePresenter` (the largest coordinator) is slated to shed its
+> detail-panel + inventory/disk cluster into an `InventoryPresenter`, reusing the
+> `FinderPresenter` seam. See [`HomePresenter-Split-Plan.md`](HomePresenter-Split-Plan.md).
+
 ---
 
 ## 4. Implementation Considerations
