@@ -85,8 +85,8 @@ Since `logs`, `reports`, and `config` live under `%LOCALAPPDATA%\DONUT`, an MSI 
 
 Every surface renders through data bindings: the machine list is a virtualizing
 `ListBox` of `HostViewModel`s, the detail pane and overview strip bind to
-`SelectedMachine.*`, and the folders tree, AD finder dropdown, Logs tabs, toasts,
-dialogs, login window, and shell chrome all bind their own view-models.
+`SelectedMachine.*`, and the folders tree, AD finder dropdown, toasts, dialogs,
+login window, settings overlay, and shell chrome all bind their own view-models.
 
 ### The Layers
 1. **Model layer (`src/Models`, `src/Services`, `src/Core`)** — data, business
@@ -124,9 +124,9 @@ suffix). A few surfaces stay deliberately imperative, each the standard MVVM ans
 
 - **`DialogPresenter`** is a *dialog service* — showing a modal and returning a result
   is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
-- **`MainPresenter`** keeps lazy page construction (Config/Logs build on first
-  navigation — a startup-cost win) and the rail width/label animations; the shell's
-  nav/rail/chrome *inputs* are bound commands on `MainViewModel`.
+- **`MainPresenter`** keeps lazy Config construction (the Config view builds on first
+  settings-overlay open — a startup-cost win) and the Home fade-in; the shell's
+  settings-overlay/chrome *inputs* are bound commands on `MainViewModel`.
 - **`ConfigPresenter`** keeps its data-driven form binder: every named control in a
   command's option view maps 1:1 to a dcu-cli arg key, so a typed property per field
   would restate the key list for no behaviour gain.
@@ -224,12 +224,11 @@ All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
 | `FolderNodeViewModel` | Display-ready largest-folders tree node (pure, computed per report) |
 | `SearchRowViewModel` | AD finder dropdown row — section header or result, with Pick/Unlock commands (pure) |
 | `PersonLensViewModel` / `LensDeviceViewModel` | The user Lens shown in the detail pane: person fields + a device collection, each device with a Reveal-BitLocker toggle and an Add-to-machine-list command |
-| `ConfigViewModel` | Config page chrome (SaveCommand); the option forms stay on the presenter's data-driven binder by design |
-| `LogsViewModel` / `LogTabViewModel` | Logs page: tab collection + per-tab text with tail-truncation ("Load full file") state |
+| `ConfigViewModel` | Config chrome (SaveCommand); the option forms stay on the presenter's data-driven binder by design |
 | `ToastViewModel` | One toast card (title/message/accent/IsClosing for the exit animation) |
 | `DialogViewModel` | One modal dialog's content (title/message/list/buttons + verdict commands) |
 | `LoginViewModel` | Login window content (output text + AuthCommand) |
-| `MainViewModel` | Shell: NavigateCommand, rail toggle, window chrome commands, ActivePage/IsRailCollapsed |
+| `MainViewModel` | Shell: OpenSettings/CloseSettings commands, window chrome commands, IsSettingsOpen |
 
 ### Presenters (`src/UI/Presenters/`)
 Coordinators/services: they own the engine objects and build/wire the view-models. See
@@ -238,14 +237,13 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 
 | Class | Purpose |
 |-------|---------|
-| `MainPresenter` | Composition root: main window, lazy page construction, rail animation, shell command targets |
+| `MainPresenter` | Composition root: main window, lazy Config construction, the settings overlay, shell command targets |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
 | `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list, and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |
 | `ResolutionCoordinator` | The `Resolve` job lifecycle and runspace-pool warm: start-early IP resolution via the shared `HostResolver`, verdict caching, and DC discovery/persist. When a verdict lands it re-issues queued runs/gathers through `HomePresenter`'s seam methods |
 | `FinderPresenter` | The search bar's live multi-forest AD finder (debounced per-forest fan-out + inline unlock) and the **user Lens** (agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via the duck-typed back-ref |
-| `ConfigPresenter` | Command selection, the data-driven option-form binder, args persistence |
-| `LogsPresenter` | Log file I/O (enumerate, tail-read, load-full, clear) behind `LogsViewModel` |
+| `ConfigPresenter` | Hosted in the settings overlay: command selection, the data-driven option-form binder, args persistence; toasts + closes the overlay on save |
 | `LoginPresenter` | GitHub Device Flow: poll timer + modal lifecycle behind `LoginViewModel` |
 | `UpdatePresenter` | Self-update check and prompt |
 | `DialogPresenter` | Dialog service: shows the modal `DialogWindow`, returns the verdict |
