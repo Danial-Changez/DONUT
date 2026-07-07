@@ -168,11 +168,8 @@ class MainPresenter {
             }.GetNewClosure())
 
         $this.Window.Add_Closed({
-                # The window is gone. Finish the Lens-agent teardown the close handler
-                # started (invisible, bounded wait), then hard-exit: the tray message loop
-                # in Donut.Launcher would otherwise keep the process alive in the background
-                # (locking the exe against rebuilds). Environment.Exit is the same mechanism
-                # the tray 'Exit' item uses.
+                # Window gone: finish the Lens-agent teardown (bounded, invisible wait), then
+                # hard-exit so the tray loop doesn't keep the process alive (locks the exe).
                 if ($global:LensTeardownJob) {
                     try {
                         [void]$global:LensTeardownJob.Handle.AsyncWaitHandle.WaitOne(
@@ -188,9 +185,8 @@ class MainPresenter {
                 [System.Environment]::Exit(0)
             }.GetNewClosure())
 
-        # Shown from the worker STA thread, so Windows won't foreground it automatically -
-        # it opens behind other windows. Once it renders, force it to the front (the brief
-        # Topmost toggle raises it without needing foreground-activation rights).
+        # Shown from the worker STA thread, so Windows won't foreground it. Once rendered,
+        # the brief Topmost toggle forces it to the front (needs no foreground-activation right).
         $this.Window.Add_ContentRendered({
                 $w = $presenter.Window
                 if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }

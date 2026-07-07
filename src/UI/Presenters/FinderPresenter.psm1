@@ -134,15 +134,10 @@ class FinderPresenter {
         }
     }
 
-    # App closing: stop the de-elevated Lens agent and purge every Lens exchange dir.
-    # Routed through the pool worker (StopAgent) rather than a direct static call so the
-    # UI never has to parse-load PersonLensService - the teardown + its literals stay
-    # single-sourced in the service.
-    #
-    # Started here (BeginInvoke, no wait) so the window closes immediately instead of
-    # freezing while the agent stops, then stashed in $global:LensTeardownJob so DonutApp
-    # can await it after the window is gone (an invisible wait) and before the process
-    # exits - guaranteeing the scheduled-task cleanup still finishes.
+    # App closing: stop the de-elevated Lens agent + purge its exchange dirs. Routed through
+    # the pool worker (StopAgent) so the UI never parse-loads PersonLensService. BeginInvoke
+    # only (no wait) so the window closes at once; stashed in $global:LensTeardownJob for
+    # MainPresenter's Closed handler to await before the process exits.
     [void] OnAppClosing() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'

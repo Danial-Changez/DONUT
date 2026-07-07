@@ -8,23 +8,14 @@ using module "..\Models\PersonLens.psm1"
 
 .DESCRIPTION
     DONUT runs elevated as the admin account, but the Lens data (SCCM affinity +
-    BitLocker) is readable only by the operator's regular account. A single
-    LensAgent.ps1 runs DE-ELEVATED for the app's lifetime - started at app startup
-    (or restarted on demand when its heartbeat goes stale) via a scheduled task
-    (Interactive logon = the logged-on token, no password; RunLevel Limited;
-    conhost --headless so no console window ever appears). Persistence removes the
-    per-pick task registration + pwsh cold start, and the agent pre-warms its
-    libraries in parallel with DONUT's own startup.
+    BitLocker) is readable only by the operator's regular account - so a single
+    LensAgent.ps1 runs DE-ELEVATED for the app's lifetime via a scheduled task and
+    serves lookups over an ACL-locked, AES-256-encrypted request/response exchange
+    under %ProgramData%\DONUT\lens-agent. This class is the agent's supervisor +
+    client: start/heartbeat/restart, drive one lookup, stream partials, teardown.
 
-    Lookups are a request/response exchange over the fixed, ACL-locked
-    %ProgramData%\DONUT\lens-agent dir (inherited ACL stripped to SYSTEM /
-    Administrators / the interactive user): the parent writes request-<id>.bin, the
-    agent answers partial-<id>-1 (directory facts), partial-<id>-2 (name-only device
-    rows) and result-<id>.bin. Because bundles hold BitLocker recovery keys, every
-    payload is AES-256 encrypted with the session key (key.bin, minted at agent
-    start); partials are streamed to the caller on the Information stream (tag
-    'LensPartial'). The agent exits when DONUT's process dies or stop.flag appears;
-    the window-close purge stops/unregisters the task and deletes the dir.
+    See docs/Refactoring_Proposal.md ("De-elevating the user Lens") for the full
+    exchange protocol, security model, and performance rationale.
 
 .NOTES
     Mirrors ActiveDirectoryService's seam pattern: the agent/task I/O is isolated in

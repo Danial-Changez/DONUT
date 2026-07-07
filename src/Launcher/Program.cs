@@ -18,15 +18,12 @@ static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        // Path to the PowerShell entry point
         string exePath = AppDomain.CurrentDomain.BaseDirectory;
 
-        // 1. Try relative to executable (Production/Release)
-        // Expected: bin/x64/DONUT/Donut.Launcher.exe -> ../../../src/Scripts/Start-Donut.ps1
+        // Production layout: exe under bin/x64/DONUT -> ../../../src/Start-Donut.ps1.
         string scriptPath = Path.GetFullPath(Path.Combine(exePath, "..", "..", "..", "src", "Start-Donut.ps1"));
 
-        // 2. Try relative to source (Debug/Dev)
-        // Expected: src/Launcher/bin/Debug/net9.0-windows/Donut.Launcher.exe -> ../../../../Scripts/Start-Donut.ps1
+        // Dev layout: exe under src/Launcher/bin/Debug/net9.0-windows.
         if (!File.Exists(scriptPath))
         {
             scriptPath = Path.GetFullPath(Path.Combine(exePath, "..", "..", "..", "..", "Start-Donut.ps1"));
@@ -38,8 +35,7 @@ static class Program
             return;
         }
 
-        // The splash reads its art from <repo>/assets/Images, derived from the resolved
-        // script path so it works in both the dev and installed layouts.
+        // Splash art dir, derived from the script path so it resolves in dev + installed layouts.
         string? assetsDir = null;
         try
         {
@@ -50,8 +46,7 @@ static class Program
         }
         catch { /* splash falls back to its install-path candidate */ }
 
-        // Show the splash immediately on the main (UI) thread, before the app graph
-        // parses on the worker thread — so it animates while the parse blocks.
+        // Show on the main thread before the worker parses the app graph (which blocks it).
         var splash = new SplashForm(assetsDir);
         splash.Show();
         var progress = new StartupProgress(splash);
@@ -91,14 +86,11 @@ static class Program
                 }
                 finally
                 {
-                    // Backstop: dismiss the splash even if startup threw before
-                    // DonutApp.ps1 could close it.
+                    // Backstop: dismiss the splash if startup threw before DonutApp closed it.
                     progress.Complete();
 
-                    // Fallback hard-exit for paths where the main window never showed (on the
-                    // normal path the window's own Closed handler exits first). Without this
-                    // the tray message loop keeps the launcher alive as a background process,
-                    // locking the exe against rebuilds.
+                    // Fallback hard-exit when the main window never showed (normal close exits
+                    // via the window's Closed handler); else the tray loop keeps the exe alive.
                     Environment.Exit(0);
                 }
             });

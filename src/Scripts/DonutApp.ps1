@@ -36,8 +36,8 @@ using module "..\UI\Presenters\LoginPresenter.psm1"
 using module "..\UI\Presenters\UpdatePresenter.psm1"
 using module "..\Services\ResourceService.psm1"
 
-# Splash progress: $global:Splash is injected by Donut.Launcher. It is absent on the
-# dev `pwsh -Sta` path, so both helpers are no-ops there.
+# Splash progress helpers. $global:Splash is injected by Donut.Launcher (absent on the dev
+# pwsh path, so these no-op there).
 function Update-Splash([int]$Percent, [string]$Status) {
     if ($global:Splash) { try { $global:Splash.Report($Percent, $Status) } catch { } }
 }

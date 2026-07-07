@@ -8,11 +8,9 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Owner-drawn progress bar with a rounded track and a brand-yellow fill. The stock
-/// WinForms <see cref="ProgressBar"/> renders through the Windows visual styles, which
-/// ignore ForeColor and lock the fill to the theme green; this control paints its own
-/// colour, eases toward the target value for a smooth fill, and offers an indeterminate
-/// sweep for the pre-progress module-parse phase.
+/// Owner-drawn progress bar with a rounded, brand-yellow fill — the stock WinForms
+/// <see cref="ProgressBar"/> locks its fill to the theme green. Eases toward the target
+/// value, and offers an indeterminate sweep for the pre-progress module-parse phase.
 /// </summary>
 public sealed class SmoothProgressBar : Control
 {
@@ -23,8 +21,7 @@ public sealed class SmoothProgressBar : Control
     private int _sweepX;
     private readonly Timer _anim;
 
-    // Styling/state set in code only (never via the WinForms designer), so the designer
-    // must not try to serialize these — satisfies analyzer WFO1000.
+    // Set in code only, not via the designer, so mark them non-serialized (satisfies WFO1000).
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color FillColor { get; set; } = Color.FromArgb(0xF2, 0xB4, 0x17);
 

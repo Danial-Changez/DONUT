@@ -9,11 +9,9 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Borderless startup splash shown by <see cref="Program"/> before the PowerShell app
-/// graph parses. Displays the spinning-donut art (an animated GIF), the current init
-/// milestone, and an owner-drawn brand-yellow progress bar. It lives on the launcher's
-/// main (UI) thread while the app builds on the PowerShell worker thread, so it stays
-/// responsive while the module-parse blocks that thread.
+/// Borderless startup splash — spinning-donut GIF, the current init milestone, and an
+/// owner-drawn progress bar. Lives on the main thread while the app graph parses on the
+/// worker thread, so it stays responsive through the parse.
 /// </summary>
 public sealed class SplashForm : Form
 {
@@ -27,10 +25,7 @@ public sealed class SplashForm : Form
     private readonly SmoothProgressBar _bar;
 
     /// <summary>Builds the splash window and loads its art.</summary>
-    /// <param name="assetsDir">
-    /// Directory searched for the spinning-donut GIF (and the static-logo fallback); may be null,
-    /// in which case only the install-path candidate is tried.
-    /// </param>
+    /// <param name="assetsDir">GIF/logo search dir; null falls back to the install path.</param>
     public SplashForm(string? assetsDir)
     {
         FormBorderStyle = FormBorderStyle.None;
