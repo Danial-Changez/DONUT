@@ -10,7 +10,7 @@ Describe "PersonLens" {
   "displayName": "Jane Doe",
   "email": "jane.doe@corp.com",
   "manager": "John Smith",
-  "office": "SPRINGFIELD, ON, 100 MAIN STREET",
+  "office": "100 MAIN STREET, SPRINGFIELD, ON, N0A 1A0",
   "devices": [
     { "name": "WS-1", "os": "Windows 11 Enterprise", "lastLogon": "2026-07-03T10:00:00Z", "domain": "prod.contoso.com",
       "bitLockerKeys": [ { "password": "111-222", "created": "2026-05-01T00:00:00Z" }, { "password": "333-444", "created": "" } ] },
@@ -30,7 +30,7 @@ Describe "PersonLens" {
             $p.DisplayName | Should -Be 'Jane Doe'
             $p.Email       | Should -Be 'jane.doe@corp.com'
             $p.Manager     | Should -Be 'John Smith'
-            $p.Office      | Should -Be 'SPRINGFIELD, ON, 100 MAIN STREET'
+            $p.Office      | Should -Be '100 MAIN STREET, SPRINGFIELD, ON, N0A 1A0'
         }
 
         It "maps each device with its OS, last logon, domain and BitLocker keys" {
