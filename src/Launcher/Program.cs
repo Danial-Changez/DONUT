@@ -32,6 +32,24 @@ static class Program
             return;
         }
 
+        // The splash reads its art from <repo>/assets/Images, derived from the resolved
+        // script path so it works in both the dev and installed layouts.
+        string? assetsDir = null;
+        try
+        {
+            string? srcDir = Path.GetDirectoryName(scriptPath);            // ...\src
+            string? repoRoot = srcDir is null ? null : Path.GetDirectoryName(srcDir);
+            if (repoRoot is not null)
+                assetsDir = Path.Combine(repoRoot, "assets", "Images");
+        }
+        catch { /* splash falls back to its install-path candidate */ }
+
+        // Show the splash immediately on the main (UI) thread, before the app graph
+        // parses on the worker thread — so it animates while the parse blocks.
+        var splash = new SplashForm(assetsDir);
+        splash.Show();
+        var progress = new StartupProgress(splash);
+
         try
         {
             // Run PowerShell in a separate STA thread to support WPF
@@ -43,6 +61,10 @@ static class Program
                     iss.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
                     iss.ApartmentState = ApartmentState.STA;
                     iss.ThreadOptions = PSThreadOptions.UseCurrentThread;
+
+                    // Exposed to DonutApp.ps1 as $Splash for milestone reporting.
+                    iss.Variables.Add(new SessionStateVariableEntry(
+                        "Splash", progress, "DONUT startup splash reporter"));
 
                     using (var ps = PowerShell.Create(iss))
                     {
@@ -60,6 +82,12 @@ static class Program
                 catch (Exception ex)
                 {
                     MessageBox.Show(ex.ToString(), "Thread Error");
+                }
+                finally
+                {
+                    // Backstop: dismiss the splash even if startup threw before
+                    // DonutApp.ps1 could close it.
+                    progress.Complete();
                 }
             });
 
