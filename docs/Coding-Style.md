@@ -58,6 +58,41 @@ comments:
   `InventoryService::BuildProbeScript`) are part of the shipped payload string —
   edit them only deliberately, never as part of a style sweep.
 
+## C# (`src/Launcher/`)
+
+The launcher and the `Donut.Mvvm` base types are C#. The same "why, not what"
+rule applies, expressed in C#'s native Doxygen equivalent — **XML documentation
+comments** (`///`). Zephyr's [Doxygen style](https://docs.zephyrproject.org/latest/contribute/style/doxygen.html)
+scopes this to the **public API**, and warns *"don't restate the identifier or
+the type"* — so document what the signature can't show, and nothing that just
+echoes it:
+
+- **Public types and non-trivial public members** get a `///` `<summary>` stating
+  the contract. Add `<param>` / `<returns>` / `<exception>` only where they carry
+  something the signature doesn't — valid values/ranges, units, nullability,
+  ownership/lifetime, or the *why*; `<remarks>` for cross-cutting notes (threading,
+  idempotency). Reference other types with `<see cref="..."/>`.
+- **Trivial members need none.** An obvious auto-property (`FillColor`), a
+  setup-only constructor, a self-describing one-liner — leave undocumented rather
+  than add a `<summary>` that restates the name. (Same as the PowerShell rule:
+  "trivial getters/setters need none.")
+- **Internal/private members are not API.** A plain `//` comment for the *why* is
+  enough — no `///` (Zephyr excludes internals from Doxygen entirely). Inline `//`
+  notes sit below any `///` doc, never replace it.
+- **Interface implementations** use `/// <inheritdoc/>` instead of restating the
+  interface's contract.
+- Nullable reference types are on (`<Nullable>enable</Nullable>` /
+  `#nullable enable`); annotate nullability honestly (`object?`, `Foo?`) so the
+  compiler stays quiet — see the `RelayCommand` / `ObservableObject` signatures.
+- WinForms custom controls mark code-only public properties
+  `[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]`
+  (analyzer **WFO1000**); they are never placed on a designer surface.
+- Section separators match the PowerShell rule: `// --- Section name ---`.
+
+Doc-file generation (`GenerateDocumentationFile`) is intentionally **off**: the
+docs are for readers, not a published API surface, so missing-doc warnings
+(CS1591) are not a build gate.
+
 ## Formatting (automated)
 
 The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's

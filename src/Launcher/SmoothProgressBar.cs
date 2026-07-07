@@ -41,6 +41,10 @@ public sealed class SmoothProgressBar : Control
         _anim.Start();
     }
 
+    /// <summary>
+    /// When true, shows a looping sweep instead of a value — for the module-parse phase, which
+    /// cannot report a percentage. Assigning <see cref="Value"/> clears it.
+    /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Indeterminate
     {
@@ -48,6 +52,7 @@ public sealed class SmoothProgressBar : Control
         set { _indeterminate = value; Invalidate(); }
     }
 
+    /// <summary>Upper bound for <see cref="Value"/> (clamped to at least 1). Defaults to 100.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Maximum
     {
@@ -55,8 +60,11 @@ public sealed class SmoothProgressBar : Control
         set { _maximum = Math.Max(1, value); Invalidate(); }
     }
 
-    // Setting a value implicitly leaves the indeterminate phase (the first real
-    // milestone proves the parse finished).
+    /// <summary>
+    /// Current progress, clamped to 0..<see cref="Maximum"/>. Assigning a value leaves the
+    /// indeterminate phase (the first real milestone proves the parse finished) and eases the
+    /// fill toward the new position.
+    /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Value
     {

@@ -15,14 +15,20 @@ public sealed class StartupProgress
 
     public StartupProgress(SplashForm splash) => _splash = splash;
 
-    // Called from the worker thread at each startup milestone.
+    /// <summary>Reports an init milestone, moving the splash bar to a determinate value.</summary>
+    /// <param name="percent">Completion for this milestone, 0–100.</param>
+    /// <param name="status">Short status line shown under the bar (e.g. "Loading resources").</param>
+    /// <remarks>Called from the PowerShell worker thread; the update is posted to the UI thread.</remarks>
     public void Report(int percent, string status) =>
         Post(() => _splash.SetProgress(percent, status));
 
-    // Called from the worker thread once the app is ready (idempotent — safe to call
-    // again from Program's finally as a backstop).
+    /// <summary>Fills the bar and dismisses the splash once the app is ready (or on failure).</summary>
+    /// <remarks>
+    /// Idempotent — safe to call again from <see cref="Program"/>'s finally block as a backstop.
+    /// </remarks>
     public void Complete() => Post(_splash.CompleteAndClose);
 
+    // Marshals a splash update onto its UI thread, tolerating an already-closed splash.
     private void Post(Action action)
     {
         // Handle is created the moment the splash is shown on the main thread, well

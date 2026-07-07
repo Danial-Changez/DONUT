@@ -26,6 +26,11 @@ public sealed class SplashForm : Form
     private readonly Label _pct;
     private readonly SmoothProgressBar _bar;
 
+    /// <summary>Builds the splash window and loads its art.</summary>
+    /// <param name="assetsDir">
+    /// Directory searched for the spinning-donut GIF (and the static-logo fallback); may be null,
+    /// in which case only the install-path candidate is tried.
+    /// </param>
     public SplashForm(string? assetsDir)
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -142,6 +147,9 @@ public sealed class SplashForm : Form
 
     // --- invoked on the UI thread via StartupProgress ---
 
+    /// <summary>Moves the bar to a determinate value and updates the status line.</summary>
+    /// <param name="percent">Completion 0–100.</param>
+    /// <param name="status">Status line shown under the bar.</param>
     public void SetProgress(int percent, string status)
     {
         _status.Text = status;
@@ -149,6 +157,7 @@ public sealed class SplashForm : Form
         _pct.Text = percent + "%";
     }
 
+    /// <summary>Fills the bar to 100%, then dismisses the splash after a brief settle.</summary>
     public void CompleteAndClose()
     {
         if (IsDisposed) return;

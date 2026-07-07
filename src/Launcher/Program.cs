@@ -5,8 +5,14 @@ using System.Management.Automation.Runspaces;
 
 namespace Donut.Launcher;
 
+/// <summary>
+/// Launcher entry point. Shows the startup splash on the main (UI) thread, then hosts the
+/// DONUT PowerShell/WPF app on a dedicated STA worker thread while a tray icon keeps the
+/// message loop alive; the process hard-exits when the app window closes.
+/// </summary>
 static class Program
 {
+    /// <summary>Process entry point; STA is required by WPF and WinForms.</summary>
     [STAThread]
     static void Main()
     {
@@ -110,6 +116,10 @@ static class Program
     }
 }
 
+/// <summary>
+/// Hosts the WinForms message loop and the DONUT system-tray icon while the WPF app runs on
+/// the worker thread. The "Exit" menu item hard-terminates the process.
+/// </summary>
 public class TrayApplicationContext : ApplicationContext
 {
     private NotifyIcon trayIcon;

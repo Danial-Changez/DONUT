@@ -19,9 +19,10 @@ namespace Donut.Mvvm
     /// </remarks>
     public abstract class ObservableObject : INotifyPropertyChanged
     {
+        /// <inheritdoc/>
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        /// <summary>Raise change notification for one property.</summary>
+        /// <summary>Raises change notification for one property.</summary>
         public void Raise(string propertyName)
         {
             var handler = PropertyChanged;
@@ -37,6 +38,9 @@ namespace Donut.Mvvm
         /// not flood the binding system. Coerces obvious value-type mismatches (e.g. double
         /// percent into an int property) defensively.
         /// </summary>
+        /// <param name="propertyName">Public instance property to write.</param>
+        /// <param name="value">New value; coerced to the property type when it differs.</param>
+        /// <returns><c>true</c> if the value changed and notification was raised; otherwise <c>false</c>.</returns>
         public bool Set(string propertyName, object value)
         {
             var prop = GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
