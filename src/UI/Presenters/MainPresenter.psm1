@@ -163,9 +163,16 @@ class MainPresenter {
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
-        $this.Window.Add_MouseLeftButtonDown({
-                if ($_.ButtonState -eq 'Pressed') { $presenter.Window.DragMove() }
-            }.GetNewClosure())
+        # Drag the window only by its top control bar (this is a borderless WindowStyle=None
+        # window). Wiring DragMove to the whole window made every click-drag move it, so text
+        # in the content area could never be selected. Mirrors DialogPresenter / LoginPresenter,
+        # which scope the drag to their control bar.
+        $controlBar = $this.Window.FindName("panelControlBar")
+        if ($controlBar) {
+            $controlBar.Add_MouseLeftButtonDown({
+                    if ($_.ButtonState -eq 'Pressed') { $presenter.Window.DragMove() }
+                }.GetNewClosure())
+        }
 
         $this.Window.Add_Closed({
                 # The window is gone. Finish the Lens-agent teardown the close handler
