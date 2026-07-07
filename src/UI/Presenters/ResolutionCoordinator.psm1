@@ -11,8 +11,8 @@ using module "..\..\Models\JobEnums.psm1"
     identity verification, and the completion of Resolve-kind AsyncJobs.
 
 .DESCRIPTION
-    Extracted from HomePresenter (see docs/HomePresenter-Split-Plan.md). Owns the
-    Resolve-job lifecycle over the shared HostResolver: warms a live DC + the runspace
+    Extracted from HomePresenter (see docs/Architecture.md, "Design decisions"). Owns
+    the Resolve-job lifecycle over the shared HostResolver: warms a live DC + the runspace
     pool at startup, pre-resolves host IPs single-flight, runs the pre-apply identity
     check, and handles CompleteResolve (cache the verdict / DC, then hand queued work
     back to HomePresenter to re-issue). HomePresenter keeps the AsyncJob pump and the
