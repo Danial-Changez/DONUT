@@ -3,6 +3,7 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
+using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using module ".\ConfigPresenter.psm1"
@@ -32,6 +33,7 @@ class MainPresenter {
     [HomePresenter] $HomePresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
+    [DispatcherWatchdog] $Watchdog   # diagnostic: logs UI-thread stalls (loader-lock freeze)
     [ResourceService] $Resources
     [ToastService] $ToastService
     [MainViewModel] $MainVm
@@ -202,6 +204,10 @@ class MainPresenter {
                 $w.Topmost = $false
                 $w.Focus()
             }.GetNewClosure())
+
+        # Diagnostic (remove once pinned): logs UI-thread stalls over 1 s - the freeze.
+        $this.Watchdog = [DispatcherWatchdog]::new($this.Logger, 1000)
+        $this.Watchdog.Start()
 
         $this.NavigateTo('Home')
     }

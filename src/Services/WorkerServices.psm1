@@ -491,8 +491,18 @@ class ExecutionService {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
             throw [RpcUnavailableException]::new($ip)
         }
+        # Diagnostic (remove once pinned): a "start" with no matching "done" names the
+        # step that hung on the loader lock; a long "done" names the slow cold-load.
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree start.")
         $this.DeployWizTree($ip)
+        $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree done in $($sw.ElapsedMilliseconds) ms.")
+
+        $sw.Restart()
+        $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) start.")
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand(), 'DonutDisk', 20)
+        $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
+
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
         $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }

@@ -191,6 +191,7 @@ consumes the result and exposes it to the bindings.
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure "relative time" formatter (`2m ago`) |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
+| `DispatcherWatchdog` | **Diagnostic (temporary):** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, to pin the intermittent disk-scan-mid-scan freeze (suspected CLR loader-lock contention). Paired with per-phase timing in `ExecutionService.RunDiskScanPhase`; both are removed once the freeze is pinned |
 
 #### Services (`src/Services/`)
 All remote services subclass `RemoteJobService` (shared worker-arg
