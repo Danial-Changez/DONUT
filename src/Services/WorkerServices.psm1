@@ -524,7 +524,8 @@ class ExecutionService {
     [void] DeployWizTree([string]$ip) {
         $localExe = Join-Path $this.ToolsDir 'wiztree64.exe'
         if (-not (Test-Path $localExe)) {
-            throw "Bundled wiztree64.exe not found at $localExe. Drop the binary into src\Tools\."
+            throw [System.IO.FileNotFoundException]::new(
+                'Bundled wiztree64.exe not found. Drop the binary into src\Tools\.', $localExe)
         }
 
         $remoteDir = "\\$ip\C$\temp\DONUT"

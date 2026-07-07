@@ -54,7 +54,7 @@ class RemoteJobService {
 
         if (-not (Test-Path $scriptPath)) {
             $this.Logger.LogError("RemoteWorker script not found at $scriptPath")
-            throw "RemoteWorker script not found at $scriptPath"
+            throw [System.IO.FileNotFoundException]::new('RemoteWorker script not found.', $scriptPath)
         }
 
         return @{
