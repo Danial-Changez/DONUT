@@ -6,7 +6,7 @@
     WPF-free so the "is the cached scan still good?" decision is unit-tested
     without a presenter/store; HomePresenter feeds it the recents fields plus
     whether the report file still exists. Mirrors the DeviceFlowDecision /
-    FleetStatus pure-mapper pattern.
+    FleetCardStatus pure-mapper pattern.
 
     Reuse is allowed only when the host's LAST completed job was a Scan/UpdateScan
     (a successful apply records 'UpdateApply', so reuse is off afterwards -> the

@@ -91,7 +91,7 @@ dialogs, login window, and shell chrome all bind their own view-models.
 ### The Layers
 1. **Model layer (`src/Models`, `src/Services`, `src/Core`)** — data, business
    logic, and infrastructure.
-   - **Models**: data models and pure mappers (e.g. `AppConfig`, `FleetStatus`).
+   - **Models**: data models and pure mappers (e.g. `AppConfig`, `FleetCardStatus`).
    - **Services**: project-specific modules (e.g. `SelfUpdateService`).
    - **Core**: general, reusable modules (e.g. `NetworkProbe`).
 2. **View layer (`src/UI/Views`)** — XAML: structure, layout, `DataTemplate`s, and
@@ -170,7 +170,7 @@ consumes the result and exposes it to the bindings. The full structure is in
 | `AppConfig` | Configuration container with defaults, settings merge, and DCU CLI argument building |
 | `DeviceContext` | Remote device state: hostname, IP, online status, status message |
 | `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `Resolve`) |
-| `FleetStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
+| `FleetCardStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
 | `DcuProgress` | Pure parser: a DCU output line → percent complete, plus the scan's milestone step (`N/5` beside the progress bar) |
 | `DcuLog` | Pure parser for dcu-cli's `-outputLog`: extracts the authoritative "return code: N" line and classifies it (only {0, 1, 5} are success/reboot; everything else is an error) |
 | `RemoteError` (exception hierarchy) | Typed, severity-tagged remote failures: offline / unresolvable / RPC blocked / DCU not installed / launch fault / **connection lost** (psexec transport codes 233, 64, ...) / **timed out** (watchdog); `RemoteFailure` re-derives the reason from a worker message that crossed the runspace boundary |

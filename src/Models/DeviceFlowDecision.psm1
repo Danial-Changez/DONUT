@@ -7,7 +7,7 @@
     GitHub device-flow login loop should take (authorize / keep polling / slow
     down / fail). WPF-free so the polling decision can be unit-tested without a
     window or timer; LoginPresenter applies the decision to the real UI/timer.
-    Mirrors the FleetStatus / DcuProgress pure-mapper pattern.
+    Mirrors the FleetCardStatus / DcuProgress pure-mapper pattern.
 #>
 enum PollOutcome {
     Authorized    # token received: save it and finish

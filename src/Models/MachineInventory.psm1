@@ -7,7 +7,7 @@
     Dell service tag, battery health, disk, uptime). MachineInventory is the
     DTO/round-trip; InventoryFormat derives the card labels. WPF-free so the
     calc/format logic is unit-tested and the presenter just renders it. Mirrors
-    the FleetStatus / DcuProgress pure-helper pattern.
+    the FleetCardStatus / DcuProgress pure-helper pattern.
 #>
 class MachineInventory {
     [string] $Model = ''

@@ -45,7 +45,7 @@ package "Donut.Models" #15233B {
         Resolve
     }
 
-    enum FleetState {
+    enum FleetCardState {
         Queued
         Scanning
         Updating
@@ -54,12 +54,12 @@ package "Donut.Models" #15233B {
         Failed
     }
 
-    class FleetStatus {
-        +State: FleetState
+    class FleetCardStatus {
+        +State: FleetCardState
         +Label: string
         +ColorKey: string
         +IsBusy: bool
-        +{static} FromJob(jobType, status, rebootRequired): FleetStatus
+        +{static} FromJob(jobType, status, rebootRequired): FleetCardStatus
     }
 
     class DcuProgress {
@@ -692,17 +692,17 @@ ConfigManager ..> AppConfig
 ConfigPresenter --> ConfigManager
 
 ' --- pure mappers consumed by the presenter -----------------------------
-HomePresenter ..> FleetStatus
+HomePresenter ..> FleetCardStatus
 HomePresenter ..> DcuProgress
 HomePresenter ..> ScanCacheDecision
 HomePresenter ..> SystemInfoService
 InventoryPresenter ..> DiskUsageTree
 InventoryPresenter ..> MachineInventory
 
-FleetStatus ..> FleetState
+FleetCardStatus ..> FleetCardState
 ScanCacheDecision ..> RecentConnection
 HomeViewModel --> HostViewModel
-HostViewModel ..> FleetStatus
+HostViewModel ..> FleetCardStatus
 HostViewModel ..> RecentConnection
 HostViewModel ..> TimeFormat
 HostViewModel ..> InventoryFormat
