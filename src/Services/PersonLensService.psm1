@@ -108,10 +108,8 @@ class PersonLensService {
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # Full parent-side teardown on app close: stop.flag makes the agent exit now,
-    # stop/unregister removes the task, and the purge deletes every lens-* dir (bundles
-    # can hold BitLocker keys - nothing may outlive the app). All best-effort; keeps
-    # every parent-side literal in this one class.
+    # Full parent-side teardown on close: the purge deletes every lens-* dir because bundles
+    # hold BitLocker keys and nothing may outlive the app. Best-effort.
     static [void] StopAndPurgeAgent() {
         $dir = [PersonLensService]::AgentDir()
         try { New-Item -ItemType File -Path (Join-Path $dir 'stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
@@ -126,9 +124,8 @@ class PersonLensService {
 
     # --- Agent supervision ---
 
-    # Ensures the persistent de-elevated agent is alive, (re)starting it when the
-    # heartbeat is stale. Returns '' on success or the failure reason. Mutex-guarded
-    # so concurrent pool runspaces can't race a double start.
+    # (Re)starts the agent when its heartbeat is stale; returns '' or the failure reason.
+    # Mutex-guarded so concurrent pool runspaces can't race a double start.
     [string] EnsureAgent() {
         $mutex = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
         $owned = $false
@@ -192,9 +189,8 @@ class PersonLensService {
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
             $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -ExchangeDir "{1}" -ParentPid {2} -SiteServer "{3}"' -f $agentScript, $dir, $donutPid, $this.SiteServer
-            # pwsh is a console app: its window is created before -WindowStyle Hidden can
-            # hide it, so an interactive-token task flashes a console on the desktop.
-            # conhost --headless runs it on a pseudoconsole with no window at all.
+            # pwsh's window is created before -WindowStyle Hidden can hide it, so it flashes a
+            # console; conhost --headless runs it on a pseudoconsole with no window at all.
             $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
             $action =
             if (Test-Path -LiteralPath $conhost) {

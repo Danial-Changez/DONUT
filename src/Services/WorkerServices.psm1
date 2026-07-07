@@ -383,11 +383,8 @@ class ExecutionService {
         return $inv
     }
 
-    # Launches psexec.exe headless and returns the Process for the caller's watchdog.
-    # CreateNoWindow hides the console so concurrent runs never sit in front of the
-    # WPF UI; stdout stays unredirected so psexec keeps a real console (a file
-    # redirect removed it - the suspected cause of remote 0xC0000142 init failures).
-    # Args are space-joined exactly as logged, preserving the delicate DCU quoting.
+    # CreateNoWindow keeps concurrent psexec consoles off the WPF UI; stdout stays
+    # unredirected so psexec keeps a real console (redirecting it caused remote 0xC0000142).
     hidden static [System.Diagnostics.Process] StartPsExecHidden([string[]]$psexecArgs) {
         $psi = [System.Diagnostics.ProcessStartInfo]::new()
         $psi.FileName = 'psexec.exe'
@@ -397,9 +394,8 @@ class ExecutionService {
         return [System.Diagnostics.Process]::Start($psi)
     }
 
-    # Shared psexec watchdog: polls HasExited on a 1500ms tick (running $onTick, e.g.
-    # the DCU log tail), kills + throws past the deadline, throws on a negative
-    # (NTSTATUS) exit, and returns the raw code - classification stays with the caller.
+    # Polls HasExited on a 1500ms tick running $onTick; kills + throws past the deadline,
+    # and returns the raw code - classification stays with the caller.
     hidden [int] WaitForRemoteProcess(
         [System.Diagnostics.Process]$p,
         [string]$target,

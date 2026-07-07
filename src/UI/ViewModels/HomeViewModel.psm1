@@ -38,9 +38,8 @@ class HomeViewModel : ObservableObject {
         $this.SearchResults = [ObservableCollection[object]]::new()
     }
 
-    # Programmatic selection: raises so the bound ListBox.SelectedItem follows (its
-    # SelectionChanged then runs the presenter's side-effects uniformly). Machine
-    # mode drops any open Lens.
+    # Programmatic selection: raises so the bound ListBox.SelectedItem follows and its
+    # SelectionChanged runs the presenter's side-effects uniformly. Machine mode drops any Lens.
     [void] SetSelected([HostViewModel]$vm) {
         $this.Set('SelectedMachine', $vm)
         if ($null -ne $vm) {

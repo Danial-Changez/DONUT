@@ -134,10 +134,8 @@ class FinderPresenter {
         }
     }
 
-    # App closing: stop the de-elevated Lens agent + purge its exchange dirs. Routed through
-    # the pool worker (StopAgent) so the UI never parse-loads PersonLensService. BeginInvoke
-    # only (no wait) so the window closes at once; stashed in $global:LensTeardownJob for
-    # MainPresenter's Closed handler to await before the process exits.
+    # Tears down the Lens agent via the pool worker so the UI never parse-loads
+    # PersonLensService; stashed in $global:LensTeardownJob for the Closed handler to await.
     [void] OnAppClosing() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
@@ -152,9 +150,8 @@ class FinderPresenter {
         }
     }
 
-    # Starts a worker script on the shared pool and returns the job envelope the poll
-    # loops expect (@{ Ps; Handle }; call sites append their own keys). Throws on
-    # failure - each call site keeps its own catch/log/toast behavior.
+    # Returns the job envelope the poll loops expect (@{ Ps; Handle }); throws on failure
+    # so each call site keeps its own catch/log/toast behavior.
     hidden [hashtable] StartPoolScript([string]$scriptPath, [hashtable]$parameters) {
         $ps = [System.Management.Automation.PowerShell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetPool()

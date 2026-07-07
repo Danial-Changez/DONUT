@@ -165,10 +165,8 @@ class MainPresenter {
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
-        # Drag the window only by its top control bar (this is a borderless WindowStyle=None
-        # window). Wiring DragMove to the whole window made every click-drag move it, so text
-        # in the content area could never be selected. Mirrors DialogPresenter / LoginPresenter,
-        # which scope the drag to their control bar.
+        # Scope DragMove to the top control bar: wiring it to the whole borderless window made
+        # every click-drag move it, so content-area text could never be selected.
         $controlBar = $this.Window.FindName("panelControlBar")
         if ($controlBar) {
             $controlBar.Add_MouseLeftButtonDown({

@@ -258,9 +258,8 @@ class HomePresenter : AsyncJobPresenter {
 
     # --- Start-early IP resolution ---
 
-    # A resolve verdict landed for a host (owned by ResolutionCoordinator): re-issue any
-    # gather / run queued behind the re-check. The PendingRuns / PendingGathers queue is
-    # owned here because the run / gather flows write it.
+    # ResolutionCoordinator calls this when a verdict lands: re-issue gather/run queued behind
+    # the re-check. The PendingRuns/PendingGathers queue lives here (the run/gather flows write it).
     [void] ReissueAfterResolve([string]$hostName, [bool]$online) {
         if ($this.PendingGathers.ContainsKey($hostName)) {
             $gatherForce = [bool]$this.PendingGathers[$hostName]
@@ -857,9 +856,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.StartInventory($hostName, $true)
     }
 
-    # Reachability gate for a background inventory probe: skip offline hosts, queue
-    # unknown/stale ones behind a re-check (strongest force wins; CompleteResolve
-    # re-issues when the verdict lands), and hand an online host to InventoryPresenter.
+    # Reachability gate: skip offline hosts, queue unknown/stale ones behind a re-check, and
+    # hand an online host to InventoryPresenter; CompleteResolve re-issues when it lands.
     [void] StartInventory([string]$hostName, [bool]$force) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         # Only gather from a known-online host so the worker reuses the cached IP.
