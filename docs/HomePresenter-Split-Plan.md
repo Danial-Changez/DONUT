@@ -20,6 +20,11 @@ in [`Coding-Style.md`](Coding-Style.md).
   `tests/Unit/InventoryPresenter.Tests.ps1`; build + lint + format + 522 Pester
   tests are green. **Still owed:** the manual UI pass on a live domain host
   (select a machine → inventory + biggest-folders render; refresh re-probes).
+- **Second extraction: `ResolutionCoordinator` — done.** The host-resolution / warm
+  cluster moved out of HomePresenter (now ~985 lines); see the section below. **Still
+  owed:** the manual UI pass on a live domain host (add a machine resolves online/offline;
+  a run queued behind an offline→online host re-issues when the verdict lands; the DC is
+  still discovered + persisted on startup).
 
   Two deviations from the staged plan below, both to reduce churn/coupling:
   - `AppendLog*` + the `DetailLog` / `DetailProgress` controls moved in **stage 3**
@@ -176,12 +181,32 @@ and `InventoryPresenter` owns more of the selection + log path than first scoped
   `HomePresenter`.
 - **Rollback:** each stage is a standalone commit; revert the last green step.
 
-## Deliberately *not* split (yet)
+## Second extraction: `ResolutionCoordinator` — *done*
 
 The **host-resolution / warm** cluster (`StartWarm`, `WarmPool`, `PrefetchIp`,
-`CompleteResolve`, `StartVerifyName`, …) is also pump-coupled (`Resolve` job
-kind) and is a plausible second extraction (`ResolutionCoordinator`). It is left
-for a follow-up: `HostResolver` already holds the cache logic, so the presenter
-glue is thinner and the payoff smaller than the inventory cluster. Splitting one
-cluster at a time keeps each change reviewable — the same rule `Refactoring_Proposal.md`
-applies to naming churn.
+`InvalidateResolved`, `StartVerifyName`, `CompleteResolve`, `PersistDomainController`)
+was extracted into `src/UI/Presenters/ResolutionCoordinator.psm1`, taking HomePresenter
+from 1140 to ~985 lines. It follows the same seam as `InventoryPresenter`:
+
+- **`HostResolver` stays a shared collaborator** — used by the run / apply / inventory-gate
+  flows too, so HomePresenter owns it and passes the same instance to the coordinator by
+  reference (not owned there).
+- **Split the gate.** `CompleteResolve` caches the verdict / DC and renders reachability in
+  the coordinator, but hands re-issuing queued work back to HomePresenter via
+  `ReissueAfterResolve` / `DropPendingRunOnResolveFailure`, so the `PendingRuns` /
+  `PendingGathers` queue stays single-owned by Home.
+- **Consumers stay in Home.** `RenderReachability` (row render) and `AttachResolvedIp`
+  (worker-arg threading) consume resolution results and are used by the run + inventory
+  flows, so they remain on HomePresenter.
+
+Covered by `tests/Unit/ResolutionCoordinator.Tests.ps1` (WPF-free: fakes HostResolver + the
+`$Home` back-ref; asserts the Host / Failed / Warm branches + PrefetchIp single-flight).
+
+## Deliberately *not* split
+
+The **update-apply flow** (`ProceedWithApply`, the identity-mismatch gate, manual-reboot
+detection, driver-report helpers) is cohesive but more entangled with the pump +
+`DialogPresenter`; the shell / list / search and housekeeping clusters are small and core
+to HomePresenter's identity. Splitting them further would fragment the coordinator into
+back-ref indirection without a cohesion gain — HomePresenter (~985 lines: pump + run/apply
++ shell) is the intended stopping point.

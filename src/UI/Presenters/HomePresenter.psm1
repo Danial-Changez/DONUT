@@ -20,6 +20,7 @@ using module "..\ViewModels\HostViewModel.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module ".\FinderPresenter.psm1"
 using module ".\InventoryPresenter.psm1"
+using module ".\ResolutionCoordinator.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -93,7 +94,6 @@ class HomePresenter : AsyncJobPresenter {
     [InventoryService] $InventoryService
     [DiskUsageService] $DiskUsageService
     [HostResolver] $Resolver
-    [bool] $PoolWarmed = $false   # single-shot guard for WarmPool
     # Reuse a scan/update-scan newer than this instead of re-scanning.
     [timespan] $ScanCacheTtl = [timespan]::FromHours(24)
     [string] $SelectedHost
@@ -102,6 +102,9 @@ class HomePresenter : AsyncJobPresenter {
     [FinderPresenter] $Finder
     # Per-machine detail panel (inventory + storage scan); split stage 1 (scaffold).
     [InventoryPresenter] $Detail
+    # Host resolution: DC/runspace warm, IP pre-resolve, identity check, Resolve-job
+    # completion. Owns the Resolve lifecycle over the shared Resolver; pump stays here.
+    [ResolutionCoordinator] $Resolution
     [System.Windows.Window] $HostWindow    # parent window; hooked so the popup tracks moves/resizes
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
@@ -180,6 +183,11 @@ class HomePresenter : AsyncJobPresenter {
             $config, $this.Logger, $this.HomeVm, $this.InventoryService,
             $this.DiskUsageService, $this.Store, $this.Toasts, $this)
 
+        # Split scaffold: the resolution coordinator is constructed and wired, but still
+        # inert - HomePresenter owns the resolve methods until the next stages move them.
+        $this.Resolution = [ResolutionCoordinator]::new(
+            $config, $this.Logger, $this.ConfigManager, $this.Toasts, $this.Resolver, $this)
+
         $this.Initialize()
         $this.Detail.Initialize($this.ViewContent)
     }
@@ -239,210 +247,45 @@ class HomePresenter : AsyncJobPresenter {
 
         # Warm the pool synchronously before the message loop starts - the one safe
         # time to take the loader-lock hit (see .NOTES).
-        $this.WarmPool()
+        $this.Resolution.WarmPool()
 
         # Prime the finder + Lens agent in the background (non-blocking, unlike WarmPool).
         $this.Finder.WarmAdSearch()
         $this.Finder.WarmLens()
 
-        $this.StartWarm()
+        $this.Resolution.StartWarm()
     }
 
     # --- Start-early IP resolution ---
 
-    # One-time: discover and pick a live DC on the pool; cached when it completes.
-    [void] StartWarm() {
-        try {
-            $prep = $this.Resolver.PrepareWarm()
-            $job = [AsyncJob]::new('', [JobKind]::Resolve)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.ActiveJobs.Add($job)
+    # A resolve verdict landed for a host (owned by ResolutionCoordinator): re-issue any
+    # gather / run queued behind the re-check. The PendingRuns / PendingGathers queue is
+    # owned here because the run / gather flows write it.
+    [void] ReissueAfterResolve([string]$hostName, [bool]$online) {
+        if ($this.PendingGathers.ContainsKey($hostName)) {
+            $gatherForce = [bool]$this.PendingGathers[$hostName]
+            $this.PendingGathers.Remove($hostName)
+            $this.StartInventory($hostName, $gatherForce)
         }
-        catch {
-            $this.Logger.LogException("Resolver warm-up could not start", $_)
-        }
-    }
-
-    # Warms every pool runspace's module graph synchronously. One-shot; loader-lock
-    # rationale in .NOTES.
-    [void] WarmPool() {
-        if ($this.PoolWarmed) { return }
-        $this.PoolWarmed = $true
-        $n = $this.Config.GetThrottleLimit()
-        if ($n -lt 1) { $n = 1 }
-
-        $pool = [RunspaceManager]::GetPool()
-        $shells = [System.Collections.Generic.List[object]]::new()
-        $handles = [System.Collections.Generic.List[object]]::new()
-        for ($i = 0; $i -lt $n; $i++) {
-            try {
-                $prep = $this.Resolver.PrepareWarmRunspace()
-                $ps = [System.Management.Automation.PowerShell]::Create()
-                $ps.RunspacePool = $pool
-                $ps.AddCommand($prep.ScriptPath) | Out-Null
-                foreach ($k in $prep.Arguments.Keys) {
-                    $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
-                }
-                $handles.Add($ps.BeginInvoke())
-                $shells.Add($ps)
+        if ($this.PendingRuns.ContainsKey($hostName)) {
+            $this.PendingRuns.Remove($hostName)
+            if ($online) {
+                $this.StartProcess($hostName)
             }
-            catch {
-                $this.Logger.LogException("Runspace warm-up could not start", $_)
-            }
-        }
-
-        # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
-        $deadline = [datetime]::UtcNow.AddSeconds(30)
-        for ($i = 0; $i -lt $shells.Count; $i++) {
-            try {
-                $remaining = [int][Math]::Max(0,
-                    [Math]::Ceiling(($deadline - [datetime]::UtcNow).TotalMilliseconds))
-                if ($handles[$i].AsyncWaitHandle.WaitOne($remaining)) {
-                    $shells[$i].EndInvoke($handles[$i])
-                }
-            }
-            catch {
-                $this.Logger.LogException("Runspace warm-up failed", $_)
-            }
-            finally {
-                try { $shells[$i].Dispose() } catch { }
-            }
-        }
-        $this.Logger.LogInfo("Pre-warmed $($shells.Count) runspace(s).")
-    }
-
-    # Resolves a host's IP in the background (single-flight); no-op until a DC is warm
-    # or if the host is already cached / in flight.
-    [void] PrefetchIp([string]$hostName) {
-        if (-not $this.Resolver.NeedsResolve($hostName)) { return }
-        try {
-            $this.Resolver.MarkInFlight($hostName)
-            $prep = $this.Resolver.PrepareResolve($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.ActiveJobs.Add($job)
-        }
-        catch {
-            # Release the latch if the job never started, or NeedsResolve stays false
-            # forever and the host wedges.
-            $this.Resolver.ClearInFlight($hostName)
-            $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
-        }
-    }
-
-    # A failed job may mean a dead cached IP: drop it and re-resolve for the retry.
-    [void] InvalidateResolved([string]$hostName) {
-        $this.Resolver.Invalidate($hostName)
-        $this.PrefetchIp($hostName)
-    }
-
-    # Resolve job finished: cache the DC (warm) or the per-host verdict, detect an IP
-    # change, persist the DC, and refresh the offline indicator.
-    [void] CompleteResolve([AsyncJob]$job) {
-        if ($job.Status -eq 'Failed') {
-            # Even a failed resolve must release the single-flight latch, or the host wedges.
-            $this.Resolver.ClearInFlight($job.HostName)
-            # A queued run can't proceed without a verdict - drop it with a reason.
-            if ($this.PendingRuns.ContainsKey($job.HostName)) {
-                $this.PendingRuns.Remove($job.HostName)
-                $this.Detail.AppendLog($job.HostName, "Run not started: could not verify reachability (resolve failed).")
-                if ($this.Toasts) { $this.Toasts.ShowWarning($job.HostName, "Run not started - could not verify $($job.HostName) is reachable.") }
-            }
-            return
-        }
-        foreach ($item in @($job.Result)) {
-            if ($null -eq $item) { continue }
-            $mode = [string]$item.Mode
-            if ($mode -eq 'Warm') {
-                $dc = [string]$item.ActiveDc
-                if (-not [string]::IsNullOrWhiteSpace($dc)) {
-                    $this.Resolver.SetActiveDc($dc)
-                    $this.PersistDomainController($dc, @($item.DomainControllers))
-                }
-            }
-            elseif ($mode -eq 'Host') {
-                $hn = [string]$item.HostName
-                $newIp = [string]$item.Ip
-                $online = [bool]$item.Online
-                $oldIp = $this.Resolver.GetCachedIp($hn)
-                # Log only a first find or an actual change - never a same-IP TTL refresh.
-                if (-not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
-                    if ([string]::IsNullOrWhiteSpace($oldIp)) { $this.Logger.LogInfo("[$hn] resolved IP $newIp") }
-                    else { $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp") }
-                }
-                $this.Resolver.CacheVerdict($hn, $newIp, $online)
-                $this.RenderReachability($hn)
-                # Surface the fresh IP in the detail subtitle if this host's panel is open.
-                if ($hn -eq $this.SelectedHost) {
-                    $rcSel = $this.GetRecord($hn)
-                    $iso = ''
-                    if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) {
-                        $iso = $rcSel.Inventory.ProbedAt
-                    }
-                    $this.Detail.RenderDetailSubtitle($hn, $iso)
-                }
-                # Re-issue a gather queued behind this re-verification.
-                if ($this.PendingGathers.ContainsKey($hn)) {
-                    $gatherForce = [bool]$this.PendingGathers[$hn]
-                    $this.PendingGathers.Remove($hn)
-                    $this.StartInventory($hn, $gatherForce)
-                }
-                # Start a run queued behind this re-verification.
-                if ($this.PendingRuns.ContainsKey($hn)) {
-                    $this.PendingRuns.Remove($hn)
-                    if ($online) {
-                        $this.StartProcess($hn)
-                    }
-                    else {
-                        $this.Detail.AppendLog($hn, "Host is offline - queued run skipped.")
-                        if ($this.Toasts) { $this.Toasts.ShowWarning($hn, "$hn is offline - run skipped.") }
-                    }
-                }
-            }
-            elseif ($mode -eq 'Name') {
-                $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
-            }
-            elseif ($mode -eq 'WarmRunspace') {
-                # No-op: the job's purpose was loading the module graph into its runspace.
+            else {
+                $this.Detail.AppendLog($hostName, "Host is offline - queued run skipped.")
+                if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - run skipped.") }
             }
         }
     }
 
-    # Fires the identity check (what name does the box at this IP report?) as its own
-    # pool job; its verdict gates the destructive apply.
-    [void] StartVerifyName([string]$hostName) {
-        if ([string]::IsNullOrWhiteSpace($this.Resolver.GetCachedIp($hostName))) { return }
-        $this.Resolver.ClearVerifiedName($hostName)
-        try {
-            $prep = $this.Resolver.PrepareName($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.ActiveJobs.Add($job)
-        }
-        catch {
-            $this.Logger.LogException("[$hostName] identity check could not start", $_)
-        }
-    }
-
-    # Persists the active DC (and list) so the next launch resolves without waiting
-    # on AD discovery. Only writes when something changed.
-    hidden [void] PersistDomainController([string]$dc, [string[]]$list) {
-        if ($null -eq $this.ConfigManager) { return }
-        $changed = $false
-        if ([string]$this.Config.Settings['activeDomainController'] -ne $dc) {
-            $this.Config.Settings['activeDomainController'] = $dc
-            $changed = $true
-        }
-        if ($null -ne $list -and $list.Count -gt 0) {
-            $existing = @($this.Config.Settings['domainControllers'])
-            if (($existing -join '|') -ne ($list -join '|')) {
-                $this.Config.Settings['domainControllers'] = @($list)
-                $changed = $true
-            }
-        }
-        if ($changed) {
-            try { $this.ConfigManager.SaveConfig($this.Config) }
-            catch { $this.Logger.LogException("Could not persist domain controller", $_) }
+    # A resolve failed for a host: a queued run can't proceed without a verdict, so drop
+    # it with a reason (called by ResolutionCoordinator.CompleteResolve).
+    [void] DropPendingRunOnResolveFailure([string]$hostName) {
+        if ($this.PendingRuns.ContainsKey($hostName)) {
+            $this.PendingRuns.Remove($hostName)
+            $this.Detail.AppendLog($hostName, "Run not started: could not verify reachability (resolve failed).")
+            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Run not started - could not verify $hostName is reachable.") }
         }
     }
 
@@ -513,7 +356,7 @@ class HomePresenter : AsyncJobPresenter {
 
         foreach ($hostName in $targetHosts) {
             $this.EnsureRow($hostName)
-            $this.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
+            $this.Resolution.PrefetchIp($hostName)        # resolve now so the row shows online/offline on Add
             $this.StartInventory($hostName, $true)
         }
         # Newest on top; moved in reverse so the first typed host ends up topmost.
@@ -633,7 +476,7 @@ class HomePresenter : AsyncJobPresenter {
                 return
             }
             $this.PendingRuns[$hostName] = $true
-            $this.PrefetchIp($hostName)
+            $this.Resolution.PrefetchIp($hostName)
             $this.Detail.AppendLog($hostName, "Verifying $hostName is reachable - the run starts automatically once confirmed.")
             return
         }
@@ -686,7 +529,7 @@ class HomePresenter : AsyncJobPresenter {
                 $this.RefreshCardStatus($job)
                 $this.Detail.RefreshOverview()
                 # Apply is destructive: run the identity check in parallel to gate it.
-                if ($command -eq 'applyUpdates') { $this.StartVerifyName($hostName) }
+                if ($command -eq 'applyUpdates') { $this.Resolution.StartVerifyName($hostName) }
             }
         }
         catch {
@@ -754,7 +597,7 @@ class HomePresenter : AsyncJobPresenter {
     # scan/apply do driver-match analysis, apply transition, and recents persistence.
     [void] OnJobCompleted([AsyncJob]$job) {
         if ($job.JobType -eq [JobKind]::Resolve) {
-            $this.CompleteResolve($job)
+            $this.Resolution.CompleteResolve($job)
             return
         }
         if ($job.JobType -eq [JobKind]::Inventory) {
@@ -788,7 +631,7 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         if ($job.Status -eq 'Failed') {
-            $this.InvalidateResolved($job.HostName)
+            $this.Resolution.InvalidateResolved($job.HostName)
             if ($this.Toasts) { $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.") }
         }
 
@@ -871,7 +714,7 @@ class HomePresenter : AsyncJobPresenter {
         $actual = $this.Resolver.GetVerifiedName($hostName)
         $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
         if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
-        $this.InvalidateResolved($hostName)
+        $this.Resolution.InvalidateResolved($hostName)
         return $true
     }
 
@@ -1029,7 +872,7 @@ class HomePresenter : AsyncJobPresenter {
             $prevForce = $this.PendingGathers.ContainsKey($hostName) -and
             [bool]$this.PendingGathers[$hostName]
             $this.PendingGathers[$hostName] = ($force -or $prevForce)
-            $this.PrefetchIp($hostName)
+            $this.Resolution.PrefetchIp($hostName)
             return
         }
         $this.Detail.RunInventoryProbe($hostName, $force)
