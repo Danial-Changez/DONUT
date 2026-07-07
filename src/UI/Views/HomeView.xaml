@@ -607,10 +607,10 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Margin="0,0,0,10">
-              <TextBlock Text="{Binding DisplayName}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
-                         Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Text="{Binding Upn}" FontFamily="Montserrat" FontSize="11.5"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}" />
+              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="Montserrat" FontSize="11.5"
+                       Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
 
             <!-- Loading / error status -->
@@ -644,19 +644,19 @@
               </Grid.RowDefinitions>
               <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
                 <TextBlock Text="EMAIL" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock Text="{Binding Email}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
                 <TextBlock Text="MANAGER" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock Text="{Binding Manager}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
                 <TextBlock Text="SAM" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock Text="{Binding Sam}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="1">
                 <TextBlock Text="OFFICE" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBlock Text="{Binding Office}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
               </StackPanel>
             </Grid>
 
@@ -680,19 +680,37 @@
                             <ColumnDefinition Width="Auto" />
                           </Grid.ColumnDefinitions>
                           <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Name}" FontFamily="Montserrat" FontSize="13.5" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
-                              <Run Text="{Binding Os}" /><Run Text="   ·   " /><Run Text="{Binding LastSeenText}" />
-                            </TextBlock>
-                            <!-- BitLocker key: hidden until revealed (a recovery secret) -->
-                            <TextBlock Text="{Binding BitLockerText}" FontFamily="Consolas" FontSize="12"
-                                       Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}" />
+                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="Montserrat" FontSize="13.5" FontWeight="SemiBold"
+                                     Foreground="{DynamicResource TitleTextPrimary}" />
+                            <TextBox Style="{DynamicResource SelectableText}" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
+                              <TextBox.Text>
+                                <MultiBinding StringFormat="{}{0}   ·   {1}">
+                                  <Binding Path="Os" />
+                                  <Binding Path="LastSeenText" />
+                                </MultiBinding>
+                              </TextBox.Text>
+                            </TextBox>
+                            <!-- BitLocker key: hidden until revealed (a recovery secret); selectable to copy -->
+                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="Consolas" FontSize="12"
+                                     Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                     Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}" />
                             <!-- Note when there's no BitLocker / device not found -->
-                            <TextBlock Text="{Binding Note}" FontFamily="Montserrat" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" TextWrapping="Wrap" Margin="0,4,0,0">
-                              <TextBlock.Style>
-                                <Style TargetType="TextBlock">
+                            <TextBox Text="{Binding Note}" FontFamily="Montserrat" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,4,0,0">
+                              <TextBox.Style>
+                                <!-- Selectable (mirrors SelectableText) + Wrap; collapses when empty. -->
+                                <Style TargetType="TextBox">
+                                  <Setter Property="IsReadOnly" Value="True" />
+                                  <Setter Property="IsReadOnlyCaretVisible" Value="False" />
+                                  <Setter Property="IsTabStop" Value="False" />
+                                  <Setter Property="AcceptsReturn" Value="False" />
+                                  <Setter Property="TextWrapping" Value="Wrap" />
+                                  <Setter Property="Background" Value="Transparent" />
+                                  <Setter Property="BorderThickness" Value="0" />
+                                  <Setter Property="Padding" Value="0" />
+                                  <Setter Property="Cursor" Value="IBeam" />
+                                  <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                  <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
+                                  <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
                                   <Setter Property="Visibility" Value="Visible" />
                                   <Style.Triggers>
                                     <Trigger Property="Text" Value="">
@@ -700,8 +718,8 @@
                                     </Trigger>
                                   </Style.Triggers>
                                 </Style>
-                              </TextBlock.Style>
-                            </TextBlock>
+                              </TextBox.Style>
+                            </TextBox>
                           </StackPanel>
                           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- Wrapped so visibility can trigger (HasBitLocker &amp; not yet revealed)
