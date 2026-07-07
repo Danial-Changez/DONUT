@@ -491,8 +491,22 @@ class ExecutionService {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
             throw [RpcUnavailableException]::new($ip)
         }
+        # Diagnostic: the first disk scan of a session cold-loads the SMB-write + PsExec
+        # paths, which can stall the STA thread on the process-wide loader lock (the
+        # freeze reproduced by starting a storage scan mid dcu-scan). These logs run on
+        # the pool thread, so they survive a UI freeze: a "start" with no matching "done"
+        # means that step hung; an anomalously long "done" names the slow cold-load.
+        # Remove once the freeze is pinned.
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree start.")
         $this.DeployWizTree($ip)
+        $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree done in $($sw.ElapsedMilliseconds) ms.")
+
+        $sw.Restart()
+        $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) start.")
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand(), 'DonutDisk', 20)
+        $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
+
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
         $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
