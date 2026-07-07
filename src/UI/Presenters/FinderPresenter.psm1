@@ -163,6 +163,13 @@ class FinderPresenter {
         return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
     }
 
+    # Best-effort dispose of a pool job's PowerShell handle (logs at debug, never throws).
+    hidden [void] DisposeJob([object]$ps) {
+        if ($null -eq $ps) { return }
+        try { $ps.Dispose() }
+        catch { $this.Logger.LogDebug("Job dispose failed: $($_.Exception.Message)") }
+    }
+
     # Fire-and-forget warm: one throwaway search per forest primes the worker graph
     # + each forest's LDAP bind. Never blocks; reaped by the first real search.
     [void] WarmAdSearch() {
@@ -182,7 +189,7 @@ class FinderPresenter {
     # Disposes the startup AD warm jobs; their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
-        foreach ($j in @($this.AdWarmJobs)) { try { $j.Ps.Dispose() } catch { } }
+        foreach ($j in @($this.AdWarmJobs)) { $this.DisposeJob($j.Ps) }
         $this.AdWarmJobs.Clear()
     }
 
@@ -215,7 +222,7 @@ class FinderPresenter {
             }
             $job.Ps.Dispose()
         }
-        catch { try { $job.Ps.Dispose() } catch { } }
+        catch { $this.DisposeJob($job.Ps) }
     }
 
     # --- AD live search (search-bar dropdown) ---
@@ -240,7 +247,7 @@ class FinderPresenter {
     # re-open the dropdown, disposes the jobs, stops polling.
     [void] AbortSearch() {
         $this.SearchToken++
-        foreach ($job in @($this.SearchJobs)) { try { $job.Ps.Dispose() } catch { } }
+        foreach ($job in @($this.SearchJobs)) { $this.DisposeJob($job.Ps) }
         $this.SearchJobs.Clear()
         $this.SearchResults.Clear()
         $this.SearchSeen.Clear()
@@ -286,7 +293,7 @@ class FinderPresenter {
             $results = @()
             try { $results = @($job.Ps.EndInvoke($job.Handle)) }
             catch { $this.Logger.LogException("AD search failed", $_) }
-            try { $job.Ps.Dispose() } catch { }
+            $this.DisposeJob($job.Ps)
             [void]$this.SearchJobs.Remove($job)
             if ($job.Token -ne $this.SearchToken) { continue }
             foreach ($row in $results) {
@@ -397,7 +404,7 @@ class FinderPresenter {
                 $ok = [bool]($res | Select-Object -Last 1)
             }
             catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
-            try { $job.Ps.Dispose() } catch { }
+            $this.DisposeJob($job.Ps)
             [void]$this.UnlockJobs.Remove($job)
             if ($this.Toasts) {
                 if ($ok) { $this.Toasts.ShowSuccess("Account unlocked", $job.Upn) }
@@ -444,7 +451,7 @@ class FinderPresenter {
         # Newest pick wins: bump the token and drop any in-flight lookup.
         $this.LensToken++
         $token = $this.LensToken
-        foreach ($j in @($this.LensJobs)) { try { $j.Ps.Dispose() } catch { } }
+        foreach ($j in @($this.LensJobs)) { $this.DisposeJob($j.Ps) }
         $this.LensJobs.Clear()
 
         try {
@@ -495,7 +502,7 @@ class FinderPresenter {
             $json = ''
             try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
             catch { $this.Logger.LogException("Lens lookup failed", $_) }
-            try { $job.Ps.Dispose() } catch { }
+            $this.DisposeJob($job.Ps)
             [void]$this.LensJobs.Remove($job)
             if ($job.Token -ne $this.LensToken) { continue }   # a newer pick supersedes this
 
