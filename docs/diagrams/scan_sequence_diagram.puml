@@ -18,7 +18,7 @@ alt Host known Offline
     Presenter -> Presenter: skip + toast ("host is offline")
 else Verdict missing or older than the 5-min TTL
     Presenter -> Presenter: queue in PendingRuns + PrefetchIp (re-verify off-thread)
-    note right of Presenter: CompleteResolve() starts the run\nautomatically once a fresh verdict lands\n(or drops it with a reason). See\ndiagrams/network-flow.puml for the full trace.
+    note right of Presenter: CompleteResolve() starts the run\nautomatically once a fresh verdict lands\n(or drops it with a reason). See\nnetwork-flow.puml for the full trace.
 else Scan < 24h old and report cached
     Presenter -> Presenter: RecentScanIsFresh() = true
     note right of Presenter: ScanCacheDecision.IsFresh()\nToast "results are current" — no job queued.
