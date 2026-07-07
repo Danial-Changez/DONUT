@@ -1,14 +1,18 @@
 # Resume point — `refactor/code-standards-and-splits`
 
 Handoff for continuing this branch on a machine with **`dotnet`** and **`pwsh` +
-Pester** (the branch was produced on a Linux box without either, so nothing here is
-built or tested yet). Point me at this file to pick up.
+Pester**. **Picked up 2026-07-06** on Windows (dotnet 9.0.315, pwsh 7.6, Pester
+5.7): STEP 1 verified, STEP 2 (the HomePresenter split) completed, all gates green.
+Only STEP 3 (merge) and the manual UI pass remain.
 
 ## Branch state
 
 - Branch: **`refactor/code-standards-and-splits`**, based on `main` at the merged
   splash/window work (`6f2d466`).
-- **Not built, not tested, not merged.** Working tree clean.
+- **Built, linted, formatted, and 522 Pester tests green. Not yet merged.** One
+  latent bug fixed on pickup: the stage-1 scaffold's ctor took `$home`, which
+  collides with PowerShell's read-only automatic `$HOME` (renamed to
+  `$homePresenter`, matching `FinderPresenter`). Working tree clean.
 - Commits since `main` (Zephyr `area: summary`, no `Signed-off-by` by request):
 
   | Commit | Summary |
@@ -21,6 +25,11 @@ built or tested yet). Point me at this file to pick up.
   | `88fd4bd` | `style:` annotate intentional best-effort catch blocks |
   | `5b91e3d` | `services:` throw FileNotFoundException for missing bundled files |
   | `ef854e1` | `presenters:` scaffold InventoryPresenter (split stage 1) |
+  | `419b0a9` | `presenters:` rename InventoryPresenter ctor param off `$home` |
+  | `2ef00dd` | `presenters:` move detail render helpers to InventoryPresenter (stage 2) |
+  | `02c2c4c` | `presenters:` move probe lifecycle + job log to InventoryPresenter (stage 3) |
+  | `9c29f6a` | `presenters:` move machine selection to InventoryPresenter (stage 4) |
+  | `747624f` | `test:` cover InventoryPresenter (stage 5) |
 
 ## What was done (four workstreams)
 
@@ -40,56 +49,36 @@ built or tested yet). Point me at this file to pick up.
    constructor + duck-typed `$Home` seam, registered in the parse graph and
    constructed **inert** (empty `Initialize`). Zero behavior change.
 
-## STEP 1 — Verify before doing anything else
+## STEP 1 — Verify — *done*
+
+Green on pickup (after the `$home` ctor fix, `419b0a9`):
 
 ```powershell
-dotnet build src/Launcher/Donut.Launcher.csproj      # expect 0 errors, 0 warnings
-pwsh -File tools/Invoke-Lint.ps1                      # PSScriptAnalyzer gate
-pwsh -File tools/Invoke-Format.ps1 -Check            # formatting gate
-Invoke-Pester tests/Unit                             # + tests/Integration
+dotnet build src/Launcher/Donut.Launcher.csproj   # 0 errors, 0 warnings
+pwsh -File tools/Invoke-Lint.ps1                   # PSScriptAnalyzer gate: clean
+pwsh -File tools/Invoke-Format.ps1 -Check          # formatting gate: clean
+Invoke-Pester tests/Unit, tests/Integration        # 522 passed, 0 failed
 ```
 
-Then launch the app once and confirm the per-machine **detail panel** still fills
-(inventory + biggest-folders) — the `InventoryPresenter` scaffold is inert, so this
-should be unchanged.
+The full-app launch could not be exercised here (needs a live domain host).
+Parse-graph wiring was verified headlessly instead: `HomePresenter` +
+`InventoryPresenter` load under `pwsh -Sta`, and every method `HomePresenter` calls
+via `$this.Detail` resolves on `InventoryPresenter`.
 
-**Most likely failure points (fix, then re-run):**
-- `InventoryPresenter` **parse-graph wiring** — a bad `using module` path or type
-  reference stops the whole app parsing. Paths were checked to resolve, but the
-  PowerShell parser is the real test.
-- `FinderPresenter.DisposeJob` — confirm all seven call sites still compile and the
-  disposal path works.
-- C# XML-doc trims / `FileNotFoundException` — should be clean; the build confirms.
+## STEP 2 — HomePresenter split — *done* (stages 1–5)
 
-## STEP 2 — Continue the HomePresenter split (stages 2–5)
+Complete; see `docs/HomePresenter-Split-Plan.md` for the final shape, the "split the
+gate" decision, and the stage-2→3 `AppendLog*` deferral. `InventoryPresenter` owns
+the detail panel (render + job log + probe + selection); `HomePresenter` keeps the
+`AsyncJob` pump and a thin `StartInventory` reachability gate. Commits `2ef00dd`,
+`02c2c4c`, `9c29f6a`, `747624f`.
 
-Follow **`docs/HomePresenter-Split-Plan.md`**. Key constraint: the detail/inventory
-cluster shares the **`AsyncJob` pump** (`HomePresenter.OnJobCompleted` routes by
-`JobKind`), so `HomePresenter` keeps pump ownership and **delegates** the
-`Inventory` / `DiskScan` kinds to `InventoryPresenter` — it does not move the pump.
+## STEP 3 — Merge — *remaining*
 
-Commit **one stage per commit**, verifying (STEP 1) between each:
-
-- **Stage 2** — move the detail + overview control fields and their `FindName`
-  lookups into `InventoryPresenter.Initialize`, plus the leaf render helpers
-  (`PopulateDetailCards`, `RenderDetailSubtitle`, `RefreshOverview`,
-  `UpdateOverviewTiles`, `AppendLog*`). Repoint `HomePresenter` references to
-  `$this.Detail.*`.
-- **Stage 3** — move the probe lifecycle (`StartInventory`/`CompleteInventory`,
-  `FindBigFolders`/`CompleteDiskScan`) and switch `OnJobCompleted` to delegate the
-  `Inventory` / `DiskScan` kinds to `$this.Detail`.
-- **Stage 4** — move selection (`SelectHost`/`SelectMachine`/
-  `OnMachineSelectionChanged`/`ClearSelection`); repoint `FinderPresenter`'s
-  `StartInventory` seam and the `MachineList` selection-changed handler to
-  `InventoryPresenter`. Keep `SelectedHost` owned by `HomePresenter` (read/written
-  via the back-ref) so there is one owner.
-- **Stage 5** — delete any pass-throughs; add `tests/Unit/InventoryPresenter.Tests.ps1`
-  (fake the services; assert `CompleteInventory` populates the tiles and the
-  stale/fresh re-probe decision), mirroring the existing presenter tests.
-
-Target: `HomePresenter` ≈ 900–1000 lines, `InventoryPresenter` ≈ 300–350.
-
-## STEP 3 — Merge
+**Do the manual UI pass first** (the one gate this machine couldn't run): launch the
+app, select a machine, confirm the detail panel fills (inventory + biggest-folders),
+Refresh re-probes, and the finder's "add to list then inventory" path still works.
+Then, once green:
 
 Once the build + Pester + lint/format are all green:
 

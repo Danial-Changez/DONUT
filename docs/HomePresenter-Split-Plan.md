@@ -12,11 +12,24 @@ in [`Coding-Style.md`](Coding-Style.md).
   documented with XML doc comments to the standard codified in `Coding-Style.md`
   (§ *C# (`src/Launcher/`)*) — which follows Zephyr's scope: document the public
   API, don't restate the identifier, leave trivial members and internals alone.
-- **HomePresenter split — stage 1 (scaffold) done; rest pending a Pester run.**
-  `InventoryPresenter`'s class, constructor, and duck-typed seam are wired into
-  `HomePresenter` (inert — zero behavior change). The remaining stages move the
-  detail state + methods and touch the shared job pump, so they must land behind a
-  green Pester run (`tests/Unit`, `tests/Integration`) and manual UI verification.
+- **HomePresenter split — complete (stages 1–5).** `InventoryPresenter` now owns
+  the detail panel: header + overview render, the job log, the inventory / disk
+  probe execution + completion, and machine selection. `HomePresenter` keeps the
+  `AsyncJob` pump and a thin `StartInventory` reachability gate that hands online
+  hosts to `$this.Detail.RunInventoryProbe`. Covered by
+  `tests/Unit/InventoryPresenter.Tests.ps1`; build + lint + format + 522 Pester
+  tests are green. **Still owed:** the manual UI pass on a live domain host
+  (select a machine → inventory + biggest-folders render; refresh re-probes).
+
+  Two deviations from the staged plan below, both to reduce churn/coupling:
+  - `AppendLog*` + the `DetailLog` / `DetailProgress` controls moved in **stage 3**
+    (with their probe-method callers), not stage 2 — they are driven by the probe
+    lifecycle, so moving them in stage 2 would have rewritten ~35 call sites only to
+    revert ~12.
+  - **"Split the gate":** `StartInventory`'s reachability check (resolver verdict +
+    `PendingGathers` queue + `PrefetchIp`) stays in `HomePresenter`; only the probe
+    *execution* moved (`RunInventoryProbe`). This keeps the resolver/pump state with
+    its owner and left `FinderPresenter`'s `StartInventory` seam unchanged.
 
 ## Motivation
 
@@ -108,28 +121,32 @@ narrow `GetRecord` / persist seam rather than owning the store.
 
 ## Staged migration
 
-Each step is independently compilable + testable; commit per step.
+Each step was independently compilable + testable; committed per step. **All done.**
 
-1. **Scaffold `InventoryPresenter` (the seam), inert. — *Done.*** Add the class,
-   constructor, and duck-typed `$Home` back-ref, register it in `HomePresenter`'s
-   `using module` graph, and construct it — but delegate nothing (empty
-   `Initialize`). Zero behavior change; validates the parse-graph placement (the
-   architecturally risky part).
-2. **Move the detail controls + pure render/format helpers.** Relocate the detail +
-   overview control fields and their `FindName` lookups into
-   `InventoryPresenter.Initialize`, plus the leaf helpers (`PopulateDetailCards`,
-   `RenderDetailSubtitle`, `RefreshOverview`, `UpdateOverviewTiles`, `AppendLog*`) —
-   the fewest cross-dependencies.
-3. **Move the probe lifecycle** (`StartInventory`/`CompleteInventory`,
-   `FindBigFolders`/`CompleteDiskScan`) and switch `OnJobCompleted` to delegate
-   the `Inventory` / `DiskScan` kinds.
-4. **Move selection** (`SelectHost`/`SelectMachine`/`OnMachineSelectionChanged`/
-   `ClearSelection`) and repoint `FinderPresenter`'s `StartInventory` seam +
-   `MachineList` selection-changed handler to `InventoryPresenter`.
-5. **Delete the pass-throughs**; `HomePresenter` retains only `$this.Detail`
-   plus the pump routing.
+1. **Scaffold `InventoryPresenter` (the seam), inert. — *Done.*** The class,
+   constructor, and duck-typed `$Home` back-ref, registered in `HomePresenter`'s
+   `using module` graph and constructed with an empty `Initialize`. Zero behavior
+   change; validated the parse-graph placement (the architecturally risky part).
+2. **Move the detail controls + pure render helpers. — *Done.*** The detail-header +
+   overview control fields and `FindName` lookups, plus `PopulateDetailCards`,
+   `RenderDetailSubtitle`, `RefreshOverview`, `UpdateOverviewTiles`. `AppendLog*`
+   was **deferred to stage 3** (see the deviation note under *Status*).
+3. **Move the probe lifecycle. — *Done.*** `RunInventoryProbe` (the execution half
+   of `StartInventory`), `CompleteInventory`, `FindBigFolders`, `CompleteDiskScan`,
+   `RefreshInventory`, `InventoryIsStale`, and `AppendLog*` + the `DetailLog` /
+   `DetailProgress` controls and probe buttons; `OnJobCompleted` now delegates the
+   `Inventory` / `DiskScan` kinds. `HomePresenter` keeps `StartInventory` as the
+   reachability gate ("split the gate", see *Status*).
+4. **Move selection. — *Done.*** `SelectHost`/`SelectMachine`/
+   `OnMachineSelectionChanged`/`ClearSelection`; repointed the `MachineList`
+   selection-changed handler. `FinderPresenter`'s `StartInventory` seam needed no
+   change because the gate stayed in `HomePresenter`.
+5. **Tests + cleanup. — *Done.*** No pass-throughs remained (callers were repointed
+   to `$this.Detail` directly); added `tests/Unit/InventoryPresenter.Tests.ps1`.
 
-Target: `HomePresenter` ≈ 900–1000 lines, `InventoryPresenter` ≈ 300–350.
+Outcome: `HomePresenter` 1439 → ~1140 lines, `InventoryPresenter` ~380. (Above the
+900-1000 / 300-350 estimate because "split the gate" kept the gate in `HomePresenter`
+and `InventoryPresenter` owns more of the selection + log path than first scoped.)
 
 ## Test gates
 
