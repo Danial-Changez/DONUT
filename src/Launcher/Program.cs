@@ -50,6 +50,10 @@ static class Program
         splash.Show();
         var progress = new StartupProgress(splash);
 
+        // Captured on the UI thread (the WinForms sync context is installed once the splash
+        // creates its handle) so the worker thread can end the tray loop when the app closes.
+        var uiContext = System.Threading.SynchronizationContext.Current;
+
         try
         {
             // Run PowerShell in a separate STA thread to support WPF
@@ -88,6 +92,15 @@ static class Program
                     // Backstop: dismiss the splash even if startup threw before
                     // DonutApp.ps1 could close it.
                     progress.Complete();
+
+                    // The WPF app has shut down (main window closed, and any background
+                    // teardown awaited in DonutApp.ps1 has finished). End the tray message
+                    // loop so the launcher process exits instead of lingering as a background
+                    // process — which otherwise keeps the exe locked against rebuilds.
+                    if (uiContext is not null)
+                        uiContext.Post(_ => Application.Exit(), null);
+                    else
+                        Application.Exit();
                 }
             });
 
@@ -95,7 +108,12 @@ static class Program
             psThread.IsBackground = true;
             psThread.Start();
 
-            Application.Run(new TrayApplicationContext());
+            // Hosts the message loop (and the tray icon) while the WPF app runs on the worker
+            // thread; ends when that thread signals Application.Exit above.
+            using (var tray = new TrayApplicationContext())
+            {
+                Application.Run(tray);
+            }
         }
         catch (Exception ex)
         {
@@ -133,5 +151,22 @@ public class TrayApplicationContext : ApplicationContext
         trayIcon.Visible = false;
         Application.Exit();
         Environment.Exit(0);
+    }
+
+    // Runs when the message loop ends (worker thread signalled Application.Exit) so the
+    // tray icon is removed instead of lingering as a ghost until the mouse hovers it.
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            try
+            {
+                trayIcon.Visible = false;
+                trayIcon.Icon?.Dispose();
+                trayIcon.Dispose();
+            }
+            catch { }
+        }
+        base.Dispose(disposing);
     }
 }

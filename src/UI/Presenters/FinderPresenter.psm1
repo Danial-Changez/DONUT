@@ -139,15 +139,14 @@ class FinderPresenter {
     # UI never has to parse-load PersonLensService - the teardown + its literals stay
     # single-sourced in the service.
     #
-    # Fire-and-forget (BeginInvoke, no EndInvoke wait) so the window closes immediately
-    # instead of freezing while the agent stops. The launcher process outlives the WPF
-    # shutdown (the tray keeps it alive) and the pool is never disposed on close, so the
-    # teardown runs to completion in the background; if it is cut short, the agent
-    # self-exits on parent-PID death - so this stays best-effort either way.
+    # Started here (BeginInvoke, no wait) so the window closes immediately instead of
+    # freezing while the agent stops, then stashed in $global:LensTeardownJob so DonutApp
+    # can await it after the window is gone (an invisible wait) and before the process
+    # exits - guaranteeing the scheduled-task cleanup still finishes.
     [void] OnAppClosing() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            [void]$this.StartPoolScript($worker, @{
+            $global:LensTeardownJob = $this.StartPoolScript($worker, @{
                     SiteServer = $this.Config.GetAdminServiceHost()
                     SourceRoot = $this.Config.SourceRoot
                     StopAgent  = $true
