@@ -115,6 +115,7 @@ static class Program
 public class TrayApplicationContext : ApplicationContext
 {
     private NotifyIcon trayIcon;
+    private bool cleaned;
     private string iconPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Bakery", "DONUT", "assets", "Images", "logo yellow arrow.png");
     public TrayApplicationContext()
     {
@@ -127,18 +128,29 @@ public class TrayApplicationContext : ApplicationContext
         };
 
         trayIcon.ContextMenuStrip.Items.Add("Exit", null, Exit);
+
+        // The window-close and startup-backstop paths hard-exit via Environment.Exit, which
+        // skips Dispose; hook ProcessExit so the icon is removed instead of ghosting until hover.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanupTray();
+    }
+
+    // Idempotent: ProcessExit can fire after the Exit menu already cleaned up.
+    void CleanupTray()
+    {
+        if (cleaned) { return; }
+        cleaned = true;
+        try
+        {
+            trayIcon.Visible = false;
+            trayIcon.Icon?.Dispose();
+            trayIcon.Dispose();
+        }
+        catch { /* already disposed */ }
     }
 
     void Exit(object? sender, EventArgs e)
     {
-        // Dispose the icon if it was created from file
-        try
-        {
-            trayIcon.Icon?.Dispose();
-        }
-        catch { /* icon already disposed */ }
-
-        trayIcon.Visible = false;
+        CleanupTray();
         Application.Exit();
         Environment.Exit(0);
     }
