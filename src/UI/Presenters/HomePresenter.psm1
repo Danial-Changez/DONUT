@@ -20,6 +20,7 @@ using module "..\ViewModels\HostViewModel.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module ".\FinderPresenter.psm1"
 using module ".\InventoryPresenter.psm1"
+using module ".\ResolutionCoordinator.psm1"
 using module ".\AsyncJobPresenter.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
@@ -102,6 +103,9 @@ class HomePresenter : AsyncJobPresenter {
     [FinderPresenter] $Finder
     # Per-machine detail panel (inventory + storage scan); split stage 1 (scaffold).
     [InventoryPresenter] $Detail
+    # Host resolution: DC/runspace warm, IP pre-resolve, identity check, Resolve-job
+    # completion. Owns the Resolve lifecycle over the shared Resolver; pump stays here.
+    [ResolutionCoordinator] $Resolution
     [System.Windows.Window] $HostWindow    # parent window; hooked so the popup tracks moves/resizes
 
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
@@ -179,6 +183,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.Detail = [InventoryPresenter]::new(
             $config, $this.Logger, $this.HomeVm, $this.InventoryService,
             $this.DiskUsageService, $this.Store, $this.Toasts, $this)
+
+        # Split scaffold: the resolution coordinator is constructed and wired, but still
+        # inert - HomePresenter owns the resolve methods until the next stages move them.
+        $this.Resolution = [ResolutionCoordinator]::new(
+            $config, $this.Logger, $this.ConfigManager, $this.Toasts, $this.Resolver, $this)
 
         $this.Initialize()
         $this.Detail.Initialize($this.ViewContent)
