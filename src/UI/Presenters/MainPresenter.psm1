@@ -7,7 +7,6 @@ using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using module ".\ConfigPresenter.psm1"
-using module ".\LogsPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\MainViewModel.psm1"
@@ -18,8 +17,8 @@ using module "..\ViewModels\MainViewModel.psm1"
 
 .DESCRIPTION
     Builds and shows MainWindow, loads each page's view on demand, switches the
-    active page from the rail, and constructs the Home / Config / Logs presenters
-    plus the shared ToastService. Applies the merged XAML resources to the window.
+    active page from the rail, and constructs the Home / Config presenters plus the
+    shared ToastService. Applies the merged XAML resources to the window.
 #>
 class MainPresenter {
     [AppConfig] $Config
@@ -29,7 +28,6 @@ class MainPresenter {
     [hashtable] $Views
     [hashtable] $Headers
     [ConfigPresenter] $ConfigPresenter
-    [LogsPresenter] $LogsPresenter
     [HomePresenter] $HomePresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
@@ -110,15 +108,13 @@ class MainPresenter {
 
         $this.Controls['btnHome'] = $this.Window.FindName("btnHome")
         $this.Controls['btnConfig'] = $this.Window.FindName("btnConfig")
-        $this.Controls['btnLogs'] = $this.Window.FindName("btnLogs")
 
         $this.Controls['sidebar'] = $this.Window.FindName("sidebar")
         $this.Controls['btnRailToggle'] = $this.Window.FindName("btnRailToggle")
         # The logo doubles as the toggle button, so it's not part of the fading labels.
         $this.Controls['railLabels'] = @(
             $this.Window.FindName("lblHome"),
-            $this.Window.FindName("lblConfig"),
-            $this.Window.FindName("lblLogs")
+            $this.Window.FindName("lblConfig")
         ) | Where-Object { $_ }
 
         # Toast overlay, shared with sub-presenters that need notifications.
@@ -130,12 +126,11 @@ class MainPresenter {
         $this.Headers = @{}
         $this.Headers['Home'] = $this.Window.FindName("headerHome")
         $this.Headers['Config'] = $this.Window.FindName("headerConfig")
-        $this.Headers['Logs'] = $this.Window.FindName("headerLogs")
 
         $this.Views = @{}
 
-        # Home is the default page, built eagerly; Config and Logs build lazily on
-        # first navigation so startup never pays for tabs the user may not open.
+        # Home is the default page, built eagerly; Config builds lazily on first
+        # navigation so startup never pays for a tab the user may not open.
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
@@ -247,8 +242,8 @@ class MainPresenter {
         return $null
     }
 
-    # Builds a page's view + presenter on first navigation, so construction cost -
-    # notably Logs reading every log file - waits for the tab open.
+    # Builds a page's view + presenter on first navigation, so construction cost
+    # waits for the tab open rather than being paid at startup.
     hidden [void] EnsureView([string]$viewName) {
         if ($this.Views.ContainsKey($viewName) -and $this.Views[$viewName]) { return }
 
@@ -257,13 +252,6 @@ class MainPresenter {
             $this.Views['Config'] = $configView
             if ($configView) {
                 $this.ConfigPresenter = [ConfigPresenter]::new($this.Config, $this.ConfigManager, $configView)
-            }
-        }
-        elseif ($viewName -eq 'Logs') {
-            $logsView = $this.LoadView("LogsView.xaml")
-            $this.Views['Logs'] = $logsView
-            if ($logsView) {
-                $this.LogsPresenter = [LogsPresenter]::new($this.Config, $logsView)
             }
         }
     }

@@ -127,20 +127,6 @@
                                                Style="{DynamicResource menuButtonText}" />
                                 </StackPanel>
                             </RadioButton>
-                            <RadioButton x:Name="btnLogs"
-                                         Command="{Binding NavigateCommand}"
-                                         CommandParameter="Logs"
-                                         Style="{DynamicResource menuButton}"
-                                         Tag="{DynamicResource AccentCyan}">
-                                <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Left">
-                                    <Path Style="{DynamicResource menuButtonIcon}"
-                                          Data="{DynamicResource Logs}" />
-                                    <TextBlock x:Name="lblLogs"
-                                               Text="Logs"
-                                               Style="{DynamicResource menuButtonText}" />
-                                </StackPanel>
-                            </RadioButton>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -227,23 +213,6 @@
                                       Fill="{DynamicResource TitleTextSecondary}"
                                       Margin="35,0,10,0" />
                                 <TextBlock Text="Configuration"
-                                           Foreground="{DynamicResource TitleTextSecondary}"
-                                           FontSize="20"
-                                           FontFamily="Montserrat"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                            <!-- Logs Header -->
-                            <StackPanel Orientation="Horizontal"
-                                        x:Name="headerLogs"
-                                        Visibility="Collapsed">
-                                <Path Data="{DynamicResource Logs}"
-                                      Height="24"
-                                      Width="24"
-                                      Stretch="Uniform"
-                                      Fill="{DynamicResource TitleTextSecondary}"
-                                      Margin="35,0,10,0" />
-                                <TextBlock Text="Logs"
                                            Foreground="{DynamicResource TitleTextSecondary}"
                                            FontSize="20"
                                            FontFamily="Montserrat"
