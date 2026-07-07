@@ -114,19 +114,6 @@ try {
         $logger.LogError("Main window could not be built.")
     }
 
-    # Show() returned, so the main window has closed. Finish the Lens-agent teardown the
-    # close handler kicked off (see FinderPresenter.OnAppClosing): the window is already
-    # gone, so this wait is invisible - it just holds the process open long enough to
-    # unregister the scheduled task and purge the exchange dirs before the launcher exits.
-    if ($global:LensTeardownJob) {
-        try { $global:LensTeardownJob.Ps.EndInvoke($global:LensTeardownJob.Handle) }
-        catch { $logger.LogException("Lens agent teardown did not complete cleanly", $_) }
-        finally {
-            try { $global:LensTeardownJob.Ps.Dispose() } catch { }
-            $global:LensTeardownJob = $null
-        }
-    }
-
 }
 catch {
     Close-Splash
