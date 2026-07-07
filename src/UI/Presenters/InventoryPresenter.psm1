@@ -139,7 +139,7 @@ class InventoryPresenter {
         $this.Home.SelectedHost = $hostName
 
         # Resolve now so the IP is cached before the operator gathers or hits Run.
-        $this.Home.PrefetchIp($hostName)
+        $this.Home.Resolution.PrefetchIp($hostName)
 
         $this.RenderHostLog($hostName)
 
@@ -297,7 +297,7 @@ class InventoryPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Inventory probe failed.")
-            $this.Home.InvalidateResolved($hostName)
+            $this.Home.Resolution.InvalidateResolved($hostName)
             return
         }
 
@@ -360,7 +360,7 @@ class InventoryPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Disk scan failed.")
-            $this.Home.InvalidateResolved($hostName)
+            $this.Home.Resolution.InvalidateResolved($hostName)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Disk scan failed. Open the log for details.") }
             return
         }

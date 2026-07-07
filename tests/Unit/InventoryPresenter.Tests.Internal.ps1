@@ -40,21 +40,30 @@ class FakeResolver {
     [string] GetCachedIp([string]$h) { return '10.0.0.9' }
 }
 
+# ResolutionCoordinator seam: InventoryPresenter reaches resolution via Home.Resolution.
+class FakeResolution {
+    [int] $InvalidateCount = 0
+    [void] InvalidateResolved([string]$h) { $this.InvalidateCount++ }
+    [void] PrefetchIp([string]$h) {}
+}
+
 # Duck-typed HomePresenter back-ref: only the seams InventoryPresenter reaches.
 class FakeHome {
     [hashtable] $Rows = @{}
     [hashtable] $Records = @{}
     [string] $SelectedHost
     [object] $Resolver
-    [int] $InvalidateCount = 0
-    FakeHome() { $this.Resolver = [FakeResolver]::new() }
+    [object] $Resolution
+    FakeHome() {
+        $this.Resolver = [FakeResolver]::new()
+        $this.Resolution = [FakeResolution]::new()
+    }
     [object] GetRecord([string]$h) {
         if ($this.Records.ContainsKey($h)) { return $this.Records[$h] } return $null
     }
     [object] GetRow([string]$h) {
         if ($this.Rows.ContainsKey($h)) { return $this.Rows[$h] } return $null
     }
-    [void] InvalidateResolved([string]$h) { $this.InvalidateCount++ }
 }
 
 Describe "InventoryPresenter" {
@@ -137,7 +146,7 @@ Describe "InventoryPresenter" {
 
             $script:p.CompleteInventory($script:job)
 
-            $script:fakeHome.InvalidateCount | Should -Be 1
+            $script:fakeHome.Resolution.InvalidateCount | Should -Be 1
             $script:store.Inventories.ContainsKey('PC1') | Should -BeFalse
         }
     }
