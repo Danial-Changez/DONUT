@@ -37,25 +37,27 @@ class InventoryPresenter {
     [object]           $Toasts   # ToastService
     [object]           $Home     # duck-typed back-ref to HomePresenter's machine seams
 
-    # Detail-panel controls: header (binding-driven), log, progress bar, probe buttons.
+    # Detail-panel controls: header, log, progress bar, probe buttons. The header +
+    # overview values are selectable TextBoxes (SelectableText style), so the operator
+    # can copy them; they are still binding-driven and no method reads them.
     [System.Windows.UIElement] $DetailEmptyHint
     [System.Windows.UIElement] $DetailContent
-    [TextBlock] $DetailHostText
-    [TextBlock] $DetailProbed
+    [TextBox] $DetailHostText
+    [TextBox] $DetailProbed
     [Button] $DetailRefreshButton
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
 
     # Overview tile controls (mirror the selected remote machine)
-    [TextBlock] $OvModel
-    [TextBlock] $OvModelSub
-    [TextBlock] $OvBattery
-    [TextBlock] $OvBatterySub
-    [TextBlock] $OvDisk
-    [TextBlock] $OvDiskSub
-    [TextBlock] $OvUpdates
-    [TextBlock] $OvUpdatesSub
+    [TextBox] $OvModel
+    [TextBox] $OvModelSub
+    [TextBox] $OvBattery
+    [TextBox] $OvBatterySub
+    [TextBox] $OvDisk
+    [TextBox] $OvDiskSub
+    [TextBox] $OvUpdates
+    [TextBox] $OvUpdatesSub
 
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox

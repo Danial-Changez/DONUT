@@ -235,10 +235,10 @@
       <StackPanel>
         <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvModel" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvModelSub" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="Montserrat" FontSize="11.5"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+        <TextBox x:Name="txtOvModel" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBox x:Name="txtOvModelSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="Montserrat" FontSize="11.5"
+                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
 
@@ -248,10 +248,10 @@
       <StackPanel>
         <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvBattery" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvBatterySub" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="Montserrat" FontSize="11.5"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+        <TextBox x:Name="txtOvBattery" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBox x:Name="txtOvBatterySub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="Montserrat" FontSize="11.5"
+                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
 
@@ -261,10 +261,10 @@
       <StackPanel>
         <TextBlock Text="DISK" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvDisk" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="txtOvDiskSub" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="Montserrat" FontSize="11.5"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+        <TextBox x:Name="txtOvDisk" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBox x:Name="txtOvDiskSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="Montserrat" FontSize="11.5"
+                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
 
@@ -274,10 +274,10 @@
       <StackPanel>
         <TextBlock Text="UPDATES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
                    Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBlock x:Name="txtOvUpdates" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBlock x:Name="txtOvUpdatesSub" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="Montserrat" FontSize="11.5"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+        <TextBox x:Name="txtOvUpdates" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBox x:Name="txtOvUpdatesSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="Montserrat" FontSize="11.5"
+                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
   </Grid>
@@ -472,10 +472,10 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBlock x:Name="txtDetailHost" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
-                         Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-              <TextBlock x:Name="txtDetailProbed" Text="{Binding SelectedMachine.ProbedText}" FontFamily="Montserrat" FontSize="11"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+                       Foreground="{DynamicResource TitleTextPrimary}" />
+              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="Montserrat" FontSize="11"
+                       Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
                     Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
@@ -525,11 +525,26 @@
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
-                                   FontFamily="Montserrat" FontSize="12"
-                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
-                          <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                        <TextBox Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
+                                 FontFamily="Montserrat" FontSize="12" VerticalAlignment="Center">
+                          <TextBox.Style>
+                            <!-- Selectable (mirrors SelectableText), with root rows brighter.
+                                 Inlined rather than BasedOn: the codebase resolves styles via
+                                 DynamicResource, and BasedOn only takes StaticResource. -->
+                            <Style TargetType="TextBox">
+                              <Setter Property="IsReadOnly" Value="True" />
+                              <Setter Property="IsReadOnlyCaretVisible" Value="False" />
+                              <Setter Property="IsTabStop" Value="False" />
+                              <Setter Property="AcceptsReturn" Value="False" />
+                              <Setter Property="TextWrapping" Value="NoWrap" />
+                              <Setter Property="Background" Value="Transparent" />
+                              <Setter Property="BorderThickness" Value="0" />
+                              <Setter Property="Padding" Value="0" />
+                              <Setter Property="Margin" Value="0" />
+                              <Setter Property="Cursor" Value="IBeam" />
+                              <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                              <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
+                              <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
                               <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
                               <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsRoot}" Value="True">
@@ -537,12 +552,12 @@
                                 </DataTrigger>
                               </Style.Triggers>
                             </Style>
-                          </TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock Grid.Column="1" Text="{Binding SizeText}"
-                                   FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource BodyTextSecondary}"
-                                   Margin="10,0,0,0" VerticalAlignment="Center" />
+                          </TextBox.Style>
+                        </TextBox>
+                        <TextBox Grid.Column="1" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
+                                 FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource BodyTextSecondary}"
+                                 Margin="10,0,0,0" VerticalAlignment="Center" />
                       </Grid>
                     </HierarchicalDataTemplate>
                   </TreeView.ItemTemplate>
