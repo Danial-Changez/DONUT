@@ -458,6 +458,69 @@
         <Setter Property="Margin"
                 Value="0,12,0,4" />
     </Style>
+    <!-- Uppercase micro-label heading for the settings sub-cards (matches Home). -->
+    <Style x:Key="SettingsSectionLabel"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="Montserrat" />
+        <Setter Property="FontSize"
+                Value="11" />
+        <Setter Property="FontWeight"
+                Value="SemiBold" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextTertiary}" />
+        <Setter Property="Margin"
+                Value="0,0,0,10" />
+    </Style>
+    <!-- Chip-style CheckBox for multi-select config tokens: a pill that fills accent
+         when checked. Stays a CheckBox so the binder reads Content + IsChecked. -->
+    <Style x:Key="ChipCheckBox"
+           TargetType="CheckBox">
+        <Setter Property="FontFamily"
+                Value="Montserrat" />
+        <Setter Property="FontSize"
+                Value="12.5" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextSecondary}" />
+        <Setter Property="Margin"
+                Value="0,0,8,8" />
+        <Setter Property="Cursor"
+                Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="chip"
+                            CornerRadius="8"
+                            Padding="12,6"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource InputBorder}"
+                            Background="Transparent">
+                        <ContentPresenter VerticalAlignment="Center"
+                                          HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter TargetName="chip"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource AccentPurple}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked"
+                                 Value="True">
+                            <Setter TargetName="chip"
+                                    Property="Background"
+                                    Value="{DynamicResource AccentBlue}" />
+                            <Setter TargetName="chip"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource AccentBlue}" />
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource PrimaryForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- Modern Button = Arcane "default" (primary) button: violet-600 fill,
          rounded-lg (9.6), font-medium, h-36, hover = primary/90. Was a bold
          fully-rounded violet pill; now matches shadcn's default variant so
