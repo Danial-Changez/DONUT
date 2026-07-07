@@ -167,9 +167,14 @@ function Resolve-Lens {
         $bundle.email       = [string]$user.Properties['mail'][0]
         $mgrDn = [string]$user.Properties['manager'][0]
         if ($mgrDn) { $bundle.manager = Get-Cn $mgrDn }
+        # physicalDeliveryOfficeName duplicates the city/province here, so it is only a
+        # fallback when the street-address fields are empty.
         $office = @()
-        foreach ($k in 'physicaldeliveryofficename', 'streetaddress', 'l', 'st', 'postalcode') {
+        foreach ($k in 'streetaddress', 'l', 'st', 'postalcode') {
             $v = [string]$user.Properties[$k][0]; if ($v) { $office += $v }
+        }
+        if (-not $office) {
+            $v = [string]$user.Properties['physicaldeliveryofficename'][0]; if ($v) { $office += $v }
         }
         $bundle.office = ($office -join ', ')
         if ($bundle.sam) { $sam = $bundle.sam }
