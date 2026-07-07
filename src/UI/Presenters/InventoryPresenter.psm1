@@ -116,6 +116,54 @@ class InventoryPresenter {
         }
     }
 
+    # Selection changed: open the detail panel for the new host, or clear on deselect.
+    [void] OnMachineSelectionChanged() {
+        $item = if ($this.Home.MachineList) { $this.Home.MachineList.SelectedItem } else { $null }
+        $this.HomeVm.SetSelected($item)
+        if ($item) { $this.SelectHost([string]$item.HostName) }
+        else { $this.ClearSelection() }
+    }
+
+    # Programmatic selection; the ListBox's SelectionChanged then opens the detail.
+    [void] SelectMachine([string]$hostName) {
+        $rowVm = $this.Home.GetRow($hostName)
+        if ($rowVm -and $this.Home.MachineList) { $this.Home.MachineList.SelectedItem = $rowVm }
+    }
+
+    # Opens the detail panel (single click): renders cached inventory/folders instantly,
+    # never touches the network - a fresh probe needs double-click or Refresh.
+    [void] SelectHost([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $this.Home.SelectedHost = $hostName
+
+        # Resolve now so the IP is cached before the operator gathers or hits Run.
+        $this.Home.PrefetchIp($hostName)
+
+        $this.RenderHostLog($hostName)
+
+        $rc = $this.Home.GetRecord($hostName)
+        $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
+        $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        # Same-instance re-applies are skipped, so re-selecting keeps the folder tree's
+        # expansion state.
+        $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
+        $rowVm = $this.Home.GetRow($hostName)
+        if ($rowVm) { $rowVm.ApplyFolders($cachedDisk) }
+
+        # Reflect any known verdict now; the PrefetchIp above updates it when it lands.
+        $this.Home.RenderReachability($hostName)
+
+        # Gather, or queue behind the reachability verdict - selecting an unreachable
+        # machine must never open the freeze-prone connect.
+        $this.Home.StartInventory($hostName, $false)
+    }
+
+    # Clears the current selection and returns the detail pane to its empty state.
+    [void] ClearSelection() {
+        $this.Home.SelectedHost = $null
+        $this.UpdateOverviewTiles()
+    }
+
     # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model.
     hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
         $vm = $this.Home.GetRow($hostName)

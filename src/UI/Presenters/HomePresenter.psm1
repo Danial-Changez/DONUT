@@ -201,7 +201,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.ViewContent.DataContext = $this.HomeVm
         if ($this.MachineList) {
             $this.MachineList.Add_SelectionChanged({
-                    $presenter.OnMachineSelectionChanged() }.GetNewClosure())
+                    $presenter.Detail.OnMachineSelectionChanged() }.GetNewClosure())
         }
 
         if ($this.SearchButton) {
@@ -520,7 +520,7 @@ class HomePresenter : AsyncJobPresenter {
         $ordered = @($targetHosts)
         [array]::Reverse($ordered)
         foreach ($hostName in $ordered) { $this.MoveRowToTop($hostName) }
-        $this.SelectMachine($targetHosts[0])
+        $this.Detail.SelectMachine($targetHosts[0])
         $this.UpdateEmptyHint()
 
         $this.SearchBar.Text = ""
@@ -1002,59 +1002,11 @@ class HomePresenter : AsyncJobPresenter {
 
     # --- Detail panel + inventory probe ---
 
-    # Selection changed: open the detail panel for the new host, or clear on deselect.
-    [void] OnMachineSelectionChanged() {
-        $item = if ($this.MachineList) { $this.MachineList.SelectedItem } else { $null }
-        $this.HomeVm.SetSelected($item)
-        if ($item) { $this.SelectHost([string]$item.HostName) }
-        else { $this.ClearSelection() }
-    }
-
-    # Programmatic selection; the ListBox's SelectionChanged then opens the detail.
-    [void] SelectMachine([string]$hostName) {
-        $rowVm = $this.GetRow($hostName)
-        if ($rowVm -and $this.MachineList) { $this.MachineList.SelectedItem = $rowVm }
-    }
-
-    # Opens the detail panel (single click): renders cached inventory/folders instantly,
-    # never touches the network - a fresh probe needs double-click or Refresh.
-    [void] SelectHost([string]$hostName) {
-        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-        $this.SelectedHost = $hostName
-
-        # Resolve now so the IP is cached before the operator gathers or hits Run.
-        $this.PrefetchIp($hostName)
-
-        $this.Detail.RenderHostLog($hostName)
-
-        $rc = $this.GetRecord($hostName)
-        $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
-        $this.Detail.PopulateDetailCards($hostName, $cachedInv, $rc)
-        # Same-instance re-applies are skipped, so re-selecting keeps the folder tree's
-        # expansion state.
-        $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
-        $rowVm = $this.GetRow($hostName)
-        if ($rowVm) { $rowVm.ApplyFolders($cachedDisk) }
-
-        # Reflect any known verdict now; the PrefetchIp above updates it when it lands.
-        $this.RenderReachability($hostName)
-
-        # Gather, or queue behind the reachability verdict - selecting an unreachable
-        # machine must never open the freeze-prone connect.
-        $this.StartInventory($hostName, $false)
-    }
-
     # Double-click: select the row (cheap, cached) and gather fresh inventory.
     [void] OnRowActivated([string]$hostName) {
         $this.MoveRowToTop($hostName)
-        $this.SelectMachine($hostName)
+        $this.Detail.SelectMachine($hostName)
         $this.StartInventory($hostName)
-    }
-
-    # Clears the current selection and returns the detail pane to its empty state.
-    [void] ClearSelection() {
-        $this.SelectedHost = $null
-        $this.Detail.UpdateOverviewTiles()
     }
 
     # Explicit gather (double-click / Refresh): forces a fresh probe regardless of TTL.
@@ -1097,7 +1049,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.PendingRuns.Remove($hostName)
             $this.PendingGathers.Remove($hostName)
             $this.ScanSteps.Remove($hostName)
-            if ($hostName -eq $this.SelectedHost) { $this.ClearSelection() }
+            if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
         }
         $this.UpdateEmptyHint()
         $this.Detail.RefreshOverview()
