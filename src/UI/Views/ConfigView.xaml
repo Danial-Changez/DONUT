@@ -1,64 +1,36 @@
-<!-- ConfigView.xaml -->
-<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
-    <Border CornerRadius="8"
-            Margin="10"
-            Background="{DynamicResource PanelBackground}">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <!-- Title -->
-                <RowDefinition Height="Auto" />
-                <!-- Command Dropdown -->
-                <RowDefinition Height="*" />
-                <!-- Options (child view) -->
-                <RowDefinition Height="Auto" />
-                <!-- Save Button -->
-            </Grid.RowDefinitions>
-            <!-- Title -->
-            <TextBlock Text="Main Command"
-                       Grid.Row="0"
-                       FontFamily="Montserrat"
-                       FontSize="20"
-                       FontWeight="Bold"
-                       Foreground="{DynamicResource AccentBlue}"
-                       Margin="0,18,0,18"
-                       HorizontalAlignment="Center" />
-            <!-- Main Command Dropdown -->
-            <StackPanel Grid.Row="1"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        Margin="0,0,0,16">
-                <ComboBox x:Name="MainCommandComboBox"
-                          Width="220"
-                          Margin="10,0,0,0"
-                          Style="{DynamicResource ModernComboBox}">
-                    <ComboBoxItem Content="Scan" />
-                    <ComboBoxItem Content="Apply Updates" />
+<!-- Config form chrome, hosted in the settings overlay card. MainCommandComboBox and
+     ConfigOptionsContent are looked up by name; Save binds the ConfigViewModel. -->
+<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <TextBlock Text="Configuration"
+               FontFamily="Montserrat"
+               FontSize="18"
+               FontWeight="Bold"
+               Foreground="{DynamicResource TitleTextPrimary}"
+               Margin="0,0,0,14" />
+    <TextBlock Text="COMMAND"
+               Style="{DynamicResource SettingsSectionLabel}" />
+    <ComboBox x:Name="MainCommandComboBox"
+              Width="220"
+              HorizontalAlignment="Left"
+              Style="{DynamicResource ModernComboBox}"
+              Margin="0,0,0,16">
+        <ComboBoxItem Content="Scan" />
+        <ComboBoxItem Content="Apply Updates" />
 
-                    <!-- Pages Commented out after discussion with leadership -->
-                    <!-- <ComboBoxItem Content="Configure" />
-                    <ComboBoxItem Content="Custom Notification" />
-                    <ComboBoxItem Content="Driver Install" />
-                    <ComboBoxItem Content="Generate Encrypted Password" />
-                    <ComboBoxItem Content="Help" />
-                    <ComboBoxItem Content="Version" /> -->
-                    
-                </ComboBox>
-            </StackPanel>
-            <!-- Dynamic Options Section (child view) -->
-            <ContentControl x:Name="ConfigOptionsContent"
-                            Grid.Row="2"
-                            Margin="0,0,0,0" />
-            <!-- Save Button -->
-            <Button x:Name="btnSaveConfig"
-                    Grid.Row="3"
-                    Content="Save Config"
-                    Command="{Binding SaveCommand}"
-                    Style="{DynamicResource ModernButton}"
-                    HorizontalAlignment="Center"
-                    Margin="0,0,0,15" />
-        </Grid>
-    </Border>
-</Grid>
+        <!-- Commented out after discussion with leadership -->
+        <!-- <ComboBoxItem Content="Configure" />
+        <ComboBoxItem Content="Custom Notification" />
+        <ComboBoxItem Content="Driver Install" />
+        <ComboBoxItem Content="Generate Encrypted Password" />
+        <ComboBoxItem Content="Help" />
+        <ComboBoxItem Content="Version" /> -->
+    </ComboBox>
+    <ContentControl x:Name="ConfigOptionsContent" />
+    <Button x:Name="btnSaveConfig"
+            Content="Save"
+            Command="{Binding SaveCommand}"
+            Style="{DynamicResource ButtonPrimary}"
+            HorizontalAlignment="Right"
+            Margin="0,16,0,0" />
+</StackPanel>

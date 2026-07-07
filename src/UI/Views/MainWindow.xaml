@@ -128,13 +128,15 @@
                 </Border.InputBindings>
             </Border>
             <Border x:Name="settingsCard"
-                    Width="520"
-                    MaxHeight="620"
+                    Width="560"
+                    MaxHeight="640"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     CornerRadius="10"
                     Focusable="True"
-                    Background="{DynamicResource PanelBackground}">
+                    Background="{DynamicResource PrimaryBackground}"
+                    BorderBrush="{DynamicResource PanelBorder}"
+                    BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
