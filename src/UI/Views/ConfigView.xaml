@@ -7,14 +7,12 @@
                FontSize="18"
                FontWeight="Bold"
                Foreground="{DynamicResource TitleTextPrimary}"
-               Margin="0,0,0,14" />
-    <TextBlock Text="COMMAND"
-               Style="{DynamicResource SettingsSectionLabel}" />
+               Margin="0,2,0,16" />
     <!-- Command picker: a segmented pill; the presenter loads the matching view. -->
     <Border CornerRadius="9"
             Background="{DynamicResource Secondary}"
             Padding="3"
-            HorizontalAlignment="Left"
+            HorizontalAlignment="Center"
             Margin="0,0,0,16">
         <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="cmdScan"
