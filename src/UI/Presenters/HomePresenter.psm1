@@ -102,25 +102,12 @@ class HomePresenter : AsyncJobPresenter {
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox
 
-    # Detail-panel controls
-    [System.Windows.UIElement] $DetailEmptyHint
-    [System.Windows.UIElement] $DetailContent
-    [TextBlock] $DetailHostText
-    [TextBlock] $DetailProbed
+    # Detail-panel controls (log + progress + probe buttons). The detail-header and
+    # overview tiles moved to InventoryPresenter; these migrate with the probe lifecycle.
     [Button] $DetailRefreshButton
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
-
-    # Overview tile controls (mirror the selected remote machine)
-    [TextBlock] $OvModel
-    [TextBlock] $OvModelSub
-    [TextBlock] $OvBattery
-    [TextBlock] $OvBatterySub
-    [TextBlock] $OvDisk
-    [TextBlock] $OvDiskSub
-    [TextBlock] $OvUpdates
-    [TextBlock] $OvUpdatesSub
 
     # Search-bar AD finder + user Lens; holds a duck-typed back-ref to the machine seams.
     [FinderPresenter] $Finder
@@ -219,20 +206,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
 
-        $this.OvModel = $this.ViewContent.FindName('txtOvModel')
-        $this.OvModelSub = $this.ViewContent.FindName('txtOvModelSub')
-        $this.OvBattery = $this.ViewContent.FindName('txtOvBattery')
-        $this.OvBatterySub = $this.ViewContent.FindName('txtOvBatterySub')
-        $this.OvDisk = $this.ViewContent.FindName('txtOvDisk')
-        $this.OvDiskSub = $this.ViewContent.FindName('txtOvDiskSub')
-        $this.OvUpdates = $this.ViewContent.FindName('txtOvUpdates')
-        $this.OvUpdatesSub = $this.ViewContent.FindName('txtOvUpdatesSub')
-
-        # Detail panel
-        $this.DetailEmptyHint = $this.ViewContent.FindName('DetailEmptyHint')
-        $this.DetailContent = $this.ViewContent.FindName('DetailContent')
-        $this.DetailHostText = $this.ViewContent.FindName('txtDetailHost')
-        $this.DetailProbed = $this.ViewContent.FindName('txtDetailProbed')
+        # Detail panel (log + progress + probe buttons). The detail-header and overview
+        # tiles are owned by InventoryPresenter, wired in its own Initialize.
         $this.DetailRefreshButton = $this.ViewContent.FindName('btnDetailRefresh')
         $this.DetailLog = $this.ViewContent.FindName('txtDetailLog')
         $this.DetailProgress = $this.ViewContent.FindName('DetailProgress')
@@ -429,7 +404,7 @@ class HomePresenter : AsyncJobPresenter {
                     if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) {
                         $iso = $rcSel.Inventory.ProbedAt
                     }
-                    $this.RenderDetailSubtitle($hn, $iso)
+                    $this.Detail.RenderDetailSubtitle($hn, $iso)
                 }
                 # Re-issue a gather queued behind this re-verification.
                 if ($this.PendingGathers.ContainsKey($hn)) {
@@ -701,7 +676,7 @@ class HomePresenter : AsyncJobPresenter {
             else {
                 $this.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
                 if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age - results are current.") }
-                $this.RefreshOverview()
+                $this.Detail.RefreshOverview()
             }
             return
         }
@@ -734,7 +709,7 @@ class HomePresenter : AsyncJobPresenter {
                     $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
                 $this.RefreshCardStatus($job)
-                $this.RefreshOverview()
+                $this.Detail.RefreshOverview()
                 # Apply is destructive: run the identity check in parallel to gate it.
                 if ($command -eq 'applyUpdates') { $this.StartVerifyName($hostName) }
             }
@@ -851,7 +826,7 @@ class HomePresenter : AsyncJobPresenter {
     # End of tick: refresh fleet counts and, once the batch drains, persist the
     # coalesced recents in one write.
     [void] AfterPump() {
-        $this.RefreshOverview()
+        $this.Detail.RefreshOverview()
         if ($this.ActiveJobs.Count -eq 0) {
             $this.Store.FlushSave()
         }
@@ -1118,7 +1093,7 @@ class HomePresenter : AsyncJobPresenter {
 
         $rc = $this.GetRecord($hostName)
         $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
-        $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        $this.Detail.PopulateDetailCards($hostName, $cachedInv, $rc)
         # Same-instance re-applies are skipped, so re-selecting keeps the folder tree's
         # expansion state.
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
@@ -1143,7 +1118,7 @@ class HomePresenter : AsyncJobPresenter {
     # Clears the current selection and returns the detail pane to its empty state.
     [void] ClearSelection() {
         $this.SelectedHost = $null
-        $this.UpdateOverviewTiles()
+        $this.Detail.UpdateOverviewTiles()
     }
 
     # Explicit gather (double-click / Refresh): forces a fresh probe regardless of TTL.
@@ -1239,7 +1214,7 @@ class HomePresenter : AsyncJobPresenter {
         # Push onto the view-model: updates the detail now if selected, ready if later.
         $rc = $this.GetRecord($hostName)
         $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
-        $this.PopulateDetailCards($hostName, $cached, $rc)
+        $this.Detail.PopulateDetailCards($hostName, $cached, $rc)
     }
 
     # Queues the on-demand "biggest folders on C:" scan (single-flight). Heavy - it
@@ -1307,25 +1282,6 @@ class HomePresenter : AsyncJobPresenter {
         if ($row) { $row.ApplyFolders($report) }
     }
 
-    # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model.
-    hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
-        $vm = $this.GetRow($hostName)
-        if ($vm) { $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso) }
-    }
-
-    # Syncs the host view-model's detail/overview bindables from its inventory.
-    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
-        $vm = $this.GetRow($hostName)
-        if ($null -eq $vm) { return }
-        $useInv = if ($null -ne $inv) { $inv }
-        elseif ($null -ne $rc) { $rc.Inventory }
-        else { $null }
-        if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
-        $probedIso = if ($null -ne $useInv -and $useInv.ProbedAt) { $useInv.ProbedAt } else { '' }
-        $vm.SetProbed($this.Resolver.GetCachedIp($hostName), $probedIso)
-        $vm.SetPendingUpdates($(if ($null -ne $rc) { $rc.UpdateCount } else { 0 }))
-    }
-
     # Removes idle (not currently running) machines from the list and recents.
     [void] ClearCompleted() {
         $toRemove = @($this.Rows.Keys | Where-Object { -not $this.IsRunning($_) })
@@ -1343,7 +1299,7 @@ class HomePresenter : AsyncJobPresenter {
             if ($hostName -eq $this.SelectedHost) { $this.ClearSelection() }
         }
         $this.UpdateEmptyHint()
-        $this.RefreshOverview()
+        $this.Detail.RefreshOverview()
         $this.Store.FlushSave()
     }
 
@@ -1373,14 +1329,6 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
     }
-
-    # Re-renders the overview strip (e.g. after a job changes pending-update counts).
-    [void] RefreshOverview() {
-        $this.UpdateOverviewTiles()
-    }
-
-    # No-op: the overview strip is fully binding-driven; kept for existing callers.
-    [void] UpdateOverviewTiles() { }
 
     [System.Windows.Media.Brush] ResBrush([string]$key) {
         $res = $null
