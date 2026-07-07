@@ -72,7 +72,7 @@ function Get-DONUTUninstallInfo {
                 }
             }
         }
-        catch {}
+        catch {}   # unreadable key -> treat as not installed
     }
     return $null
 }

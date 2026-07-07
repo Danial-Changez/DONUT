@@ -338,6 +338,8 @@ class ExecutionService {
             freeSpaceBytes = $null; totalSpaceBytes = $null
             lastBootTime = $null; probedAt = ([datetime]::UtcNow.ToString('o'))
         }
+        # Each CIM field is independently best-effort: a class that's absent (e.g. no battery
+        # on a desktop) or blocked leaves that field null rather than failing the whole probe.
         try {
             try { $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem -Property Model -ErrorAction Stop; $inv.model = $cs.Model } catch { }
             try {
@@ -408,6 +410,7 @@ class ExecutionService {
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         while (-not $p.HasExited) {
             if ([datetime]::UtcNow -gt $deadline) {
+                # Best-effort: it may already be exiting, or we may lack rights to kill it.
                 try { $p.Kill($true) } catch { }
                 throw [RemoteTimeoutException]::new($target, $operation, $maxMinutes)
             }

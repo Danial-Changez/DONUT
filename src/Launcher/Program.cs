@@ -136,7 +136,7 @@ public class TrayApplicationContext : ApplicationContext
         {
             trayIcon.Icon?.Dispose();
         }
-        catch { }
+        catch { /* icon already disposed */ }
 
         trayIcon.Visible = false;
         Application.Exit();
