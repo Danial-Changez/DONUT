@@ -205,8 +205,7 @@ class MainPresenter {
                 $w.Focus()
             }.GetNewClosure())
 
-        # Diagnostic: watch for UI-thread stalls > 1 s (the disk-scan-mid-scan loader-lock
-        # freeze). Logs to Donut.log; remove once the freeze is pinned.
+        # Diagnostic (remove once pinned): logs UI-thread stalls over 1 s - the freeze.
         $this.Watchdog = [DispatcherWatchdog]::new($this.Logger, 1000)
         $this.Watchdog.Start()
 

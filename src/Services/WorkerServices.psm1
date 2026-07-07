@@ -491,12 +491,8 @@ class ExecutionService {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
             throw [RpcUnavailableException]::new($ip)
         }
-        # Diagnostic: the first disk scan of a session cold-loads the SMB-write + PsExec
-        # paths, which can stall the STA thread on the process-wide loader lock (the
-        # freeze reproduced by starting a storage scan mid dcu-scan). These logs run on
-        # the pool thread, so they survive a UI freeze: a "start" with no matching "done"
-        # means that step hung; an anomalously long "done" names the slow cold-load.
-        # Remove once the freeze is pinned.
+        # Diagnostic (remove once pinned): a "start" with no matching "done" names the
+        # step that hung on the loader lock; a long "done" names the slow cold-load.
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree start.")
         $this.DeployWizTree($ip)

@@ -2,21 +2,17 @@ using module ".\LogService.psm1"
 
 <#
 .SYNOPSIS
-    Diagnostic watchdog that logs when the WPF dispatcher (UI thread) is blocked.
+    Diagnostic watchdog that logs when the WPF dispatcher (UI thread) stalls.
 
 .DESCRIPTION
-    A trivial-work DispatcherTimer on the UI thread records the gap since its previous
-    tick. A gap far larger than the interval means the dispatcher was blocked in
-    between - e.g. the STA thread contending on the process-wide CLR loader lock while
-    a pool thread cold-loads a worker path (the known disk-scan-mid-scan freeze). Pairs
-    with the worker-side timing in WorkerServices.RunDiskScanPhase: the worker log
-    (pool thread) survives the freeze and names the slow cold-load; this log confirms
-    the UI thread actually stalled.
+    A trivial 250 ms DispatcherTimer measures the gap since its own last tick; a gap far
+    over the interval means the STA thread was blocked - the suspected loader-lock
+    contention while a pool thread cold-loads a worker path. Pairs with the worker-side
+    timing in WorkerServices.RunDiskScanPhase to pin the disk-scan-mid-scan freeze.
 
 .NOTES
-    Diagnostic only - remove once the freeze is pinned. Catches stalls that recover
-    (it logs on the first tick after the dispatcher comes back); a permanent hang stops
-    the timer, so the worker-side start/done logs are the signal for that case.
+    Diagnostic only; remove once the freeze is pinned. It catches stalls that recover; a
+    permanent hang stops the timer, so the worker-side start/done logs cover that case.
 #>
 class DispatcherWatchdog {
     hidden [LogService] $Logger
