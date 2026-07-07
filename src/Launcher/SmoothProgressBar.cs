@@ -8,11 +8,9 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Owner-drawn progress bar with a rounded track and a brand-yellow fill. The stock
-/// WinForms <see cref="ProgressBar"/> renders through the Windows visual styles, which
-/// ignore ForeColor and lock the fill to the theme green; this control paints its own
-/// colour, eases toward the target value for a smooth fill, and offers an indeterminate
-/// sweep for the pre-progress module-parse phase.
+/// Owner-drawn progress bar with a rounded, brand-yellow fill — the stock WinForms
+/// <see cref="ProgressBar"/> locks its fill to the theme green. Eases toward the target
+/// value, and offers an indeterminate sweep for the pre-progress module-parse phase.
 /// </summary>
 public sealed class SmoothProgressBar : Control
 {
@@ -23,8 +21,7 @@ public sealed class SmoothProgressBar : Control
     private int _sweepX;
     private readonly Timer _anim;
 
-    // Styling/state set in code only (never via the WinForms designer), so the designer
-    // must not try to serialize these — satisfies analyzer WFO1000.
+    // Set in code only, not via the designer, so mark them non-serialized (satisfies WFO1000).
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color FillColor { get; set; } = Color.FromArgb(0xF2, 0xB4, 0x17);
 
@@ -41,6 +38,10 @@ public sealed class SmoothProgressBar : Control
         _anim.Start();
     }
 
+    /// <summary>
+    /// When true, shows a looping sweep instead of a value — for the module-parse phase, which
+    /// cannot report a percentage. Assigning <see cref="Value"/> clears it.
+    /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Indeterminate
     {
@@ -48,6 +49,7 @@ public sealed class SmoothProgressBar : Control
         set { _indeterminate = value; Invalidate(); }
     }
 
+    /// <summary>Upper bound for <see cref="Value"/> (clamped to at least 1). Defaults to 100.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Maximum
     {
@@ -55,8 +57,11 @@ public sealed class SmoothProgressBar : Control
         set { _maximum = Math.Max(1, value); Invalidate(); }
     }
 
-    // Setting a value implicitly leaves the indeterminate phase (the first real
-    // milestone proves the parse finished).
+    /// <summary>
+    /// Current progress, clamped to 0..<see cref="Maximum"/>. Assigning a value leaves the
+    /// indeterminate phase (the first real milestone proves the parse finished) and eases the
+    /// fill toward the new position.
+    /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Value
     {

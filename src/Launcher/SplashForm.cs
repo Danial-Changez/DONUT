@@ -9,11 +9,9 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Borderless startup splash shown by <see cref="Program"/> before the PowerShell app
-/// graph parses. Displays the spinning-donut art (an animated GIF), the current init
-/// milestone, and an owner-drawn brand-yellow progress bar. It lives on the launcher's
-/// main (UI) thread while the app builds on the PowerShell worker thread, so it stays
-/// responsive while the module-parse blocks that thread.
+/// Borderless startup splash — spinning-donut GIF, the current init milestone, and an
+/// owner-drawn progress bar. Lives on the main thread while the app graph parses on the
+/// worker thread, so it stays responsive through the parse.
 /// </summary>
 public sealed class SplashForm : Form
 {
@@ -26,6 +24,8 @@ public sealed class SplashForm : Form
     private readonly Label _pct;
     private readonly SmoothProgressBar _bar;
 
+    /// <summary>Builds the splash window and loads its art.</summary>
+    /// <param name="assetsDir">GIF/logo search dir; null falls back to the install path.</param>
     public SplashForm(string? assetsDir)
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -142,6 +142,9 @@ public sealed class SplashForm : Form
 
     // --- invoked on the UI thread via StartupProgress ---
 
+    /// <summary>Moves the bar to a determinate value and updates the status line.</summary>
+    /// <param name="percent">Completion 0–100.</param>
+    /// <param name="status">Status line shown under the bar.</param>
     public void SetProgress(int percent, string status)
     {
         _status.Text = status;
@@ -149,6 +152,7 @@ public sealed class SplashForm : Form
         _pct.Text = percent + "%";
     }
 
+    /// <summary>Fills the bar to 100%, then dismisses the splash after a brief settle.</summary>
     public void CompleteAndClose()
     {
         if (IsDisposed) return;

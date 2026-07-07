@@ -114,6 +114,39 @@
         <Setter Property="Focusable"
                 Value="True" />
     </Style>
+    <!-- Reads like a TextBlock but lets the user select + copy the text. Keyed (not
+         implicit), so it fully replaces the implicit TextBox style above: used for the
+         machine-detail values (host, IP, service tag, disk, folder rows). Font + colour
+         come from each instance; no ellipsis (TextBox has none) so long values clip. -->
+    <Style x:Key="SelectableText"
+           TargetType="TextBox">
+        <Setter Property="IsReadOnly"
+                Value="True" />
+        <Setter Property="IsReadOnlyCaretVisible"
+                Value="False" />
+        <Setter Property="IsTabStop"
+                Value="False" />
+        <Setter Property="AcceptsReturn"
+                Value="False" />
+        <Setter Property="TextWrapping"
+                Value="NoWrap" />
+        <Setter Property="Background"
+                Value="Transparent" />
+        <Setter Property="BorderThickness"
+                Value="0" />
+        <Setter Property="Padding"
+                Value="0" />
+        <Setter Property="Margin"
+                Value="0" />
+        <Setter Property="Cursor"
+                Value="IBeam" />
+        <Setter Property="FocusVisualStyle"
+                Value="{x:Null}" />
+        <Setter Property="HorizontalScrollBarVisibility"
+                Value="Hidden" />
+        <Setter Property="VerticalScrollBarVisibility"
+                Value="Hidden" />
+    </Style>
     <!-- style for each tab header -->
     <Style x:Key="TerminalTabItemStyle"
            TargetType="TabItem">
