@@ -36,7 +36,6 @@ its [index](diagrams/README.md)). Comment/layout conventions live in
 - [6. Testing](#6-testing)
 - [7. Code Coverage](#7-code-coverage)
 
-
 ## 1. Directory Structure
 
 The structure emphasizes testability and a layered UI architecture.
@@ -81,7 +80,6 @@ Runtime Data Location:
  
 Since `logs`, `reports`, and `config` live under `%LOCALAPPDATA%\DONUT`, an MSI upgrade in
 `Program Files` never touches user data.
-
 
 ## 2. Architecture (MVVM)
 
@@ -135,29 +133,29 @@ suffix). A few surfaces stay deliberately imperative, each the standard MVVM ans
 
 ### Design decisions
 `HomePresenter` is the largest coordinator because it owns the `AsyncJob` pump plus
-the run/apply flow, host resolution, and the machine list. Two cohesive clusters have
-been carved off it — `FinderPresenter` (AD finder + Lens) and `InventoryPresenter`
-(detail panel + inventory/disk probes) — following a consistent seam:
+the run/apply flow and the machine list. Three cohesive clusters have been carved off
+it — `FinderPresenter` (AD finder + Lens), `InventoryPresenter` (detail panel +
+inventory/disk probes), and `ResolutionCoordinator` (the resolve-job lifecycle +
+runspace-pool warm) — following a consistent seam:
 
 - **Duck-typed back-ref.** Each coordinator is constructed with a `[object] $Home`
   reference to `HomePresenter` and calls back through it. A *typed* `[HomePresenter]`
   field would create a `using module` import cycle, so the back-ref is intentionally
   `[object]`.
 - **Split the gate.** When a cluster is coupled to shared coordination state, only the
-  *execution* moves out; the gate stays with its owner. The reachability check that
-  decides whether to probe a host stays in `HomePresenter.StartInventory`; only the
-  probe execution (`RunInventoryProbe`) moved to `InventoryPresenter`. This keeps the
-  reachability queue and the `AsyncJob` pump single-owned by `HomePresenter`.
+  *execution* moves out; the gate stays with its owner. Two cases: the reachability
+  check that decides whether to probe a host stays in `HomePresenter.StartInventory`
+  while only the probe execution (`RunInventoryProbe`) moved to `InventoryPresenter`;
+  and the run/gather queue stays in `HomePresenter` while `ResolutionCoordinator`, once
+  a verdict lands, re-issues queued work through the `ReissueAfterResolve` /
+  `DropPendingRunOnResolveFailure` seam methods. This keeps the reachability queue and
+  the `AsyncJob` pump single-owned by `HomePresenter`.
+- **Shared, not owned.** `HostResolver` has call sites across resolution, run, apply,
+  and the inventory gate, so `HomePresenter` keeps the single instance and passes it to
+  `ResolutionCoordinator` by reference rather than handing over ownership.
 - **One cluster at a time.** Each extraction is a cohesive unit with its own test; the
-  remainder (pump + run/apply + resolution + shell) is the core and is left intact
-  rather than fragmented into back-ref indirection. Shared collaborators such as
-  `HostResolver` stay owned by `HomePresenter` and are reached by a coordinator through
-  the back-ref (call sites span resolution, run, apply, and the inventory gate). The
-  resolve/warm cluster is the natural next extraction candidate; it stays in
-  `HomePresenter` for now because `HostResolver` already holds the cache logic, so the
-  presenter glue is thin.
-
----
+  remainder (pump + run/apply + shell) is the irreducible core and is left intact
+  rather than fragmented into further back-ref indirection.
 
 ## 3. Key Classes
 
@@ -242,8 +240,9 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 |-------|---------|
 | `MainPresenter` | Composition root: main window, lazy page construction, rail animation, shell command targets |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, host resolution + runspace-pool warm (`Resolve` job kind), the machine rows/list, and housekeeping. Delegates the detail panel to `InventoryPresenter` and the search-bar finder + Lens to `FinderPresenter` |
+| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list, and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |
+| `ResolutionCoordinator` | The `Resolve` job lifecycle and runspace-pool warm: start-early IP resolution via the shared `HostResolver`, verdict caching, and DC discovery/persist. When a verdict lands it re-issues queued runs/gathers through `HomePresenter`'s seam methods |
 | `FinderPresenter` | The search bar's live multi-forest AD finder (debounced per-forest fan-out + inline unlock) and the **user Lens** (agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via the duck-typed back-ref |
 | `ConfigPresenter` | Command selection, the data-driven option-form binder, args persistence |
 | `LogsPresenter` | Log file I/O (enumerate, tail-read, load-full, clear) behind `LogsViewModel` |
@@ -251,8 +250,6 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 | `UpdatePresenter` | Self-update check and prompt |
 | `DialogPresenter` | Dialog service: shows the modal `DialogWindow`, returns the verdict |
 | `ToastService` | Enqueues `ToastViewModel`s + owns the auto-dismiss/exit-animation timers |
-
----
 
 ## 4. Runtime Flows
 
@@ -268,8 +265,6 @@ the load-bearing flows end to end:
 | Live AD finder + unlock | [`ad_finder_sequence_diagram.puml`](diagrams/ad_finder_sequence_diagram.puml) |
 | User Lens (de-elevated agent) | [`lens_lookup_sequence_diagram.puml`](diagrams/lens_lookup_sequence_diagram.puml) |
 | Self-update (device flow + MSI) | [`update_sequence_diagram.puml`](diagrams/update_sequence_diagram.puml) |
-
----
 
 ## 5. Implementation Notes
 
@@ -474,8 +469,6 @@ Based on the [Dell Command Update CLI Reference](https://www.dell.com/support/ma
   for updates/rollbacks; the copy is hash-gated (SHA-256) to avoid needless writes, and
   Device Flow tokens are DPAPI-protected (CurrentUser).
 
----
-
 ## 6. Testing
 
 The core principle is **dependency injection**: a class whose only job is to touch the
@@ -512,14 +505,13 @@ class MockNetworkProbe : NetworkProbe {
 
 - **Unit (`tests/Unit`):** config parse/build, service logic with mocks (scan/apply
   two-phase, driver matching, confirmation triggers), self-update token/decision logic,
-  the presenter coordinators (e.g. `InventoryPresenter.Tests.ps1`) with faked services
-  and a duck-typed `$Home` back-ref.
+  the presenter coordinators (e.g. `InventoryPresenter.Tests.ps1`,
+  `ResolutionCoordinator.Tests.ps1`) with faked services and a duck-typed `$Home`
+  back-ref.
 - **Integration (`tests/Integration`):** remote paths (DNS failure, reverse-DNS
   mismatch, RPC 1722) against a mock/loopback target with temp UNC folders to verify
   log/report copy; the ApplyUpdates flow (confirmation/skip, clipboard list); the
   updater flow (SHA-256 verify, HTML/SSO rejection, rollback, hash-gated worker copy).
-
----
 
 ## 7. Code Coverage
 

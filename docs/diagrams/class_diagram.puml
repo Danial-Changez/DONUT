@@ -428,6 +428,7 @@ package "Donut.UI.Presenters" #2B1A12 {
         -Resolver: HostResolver
         -Store: RecentConnectionsStore
         -Detail: InventoryPresenter
+        -Resolution: ResolutionCoordinator
         -Finder: FinderPresenter
         -ScanCacheTtl: timespan
         +OnSearch(): void
@@ -437,9 +438,8 @@ package "Donut.UI.Presenters" #2B1A12 {
         +RecentScanIsFresh(host): bool
         +ProceedWithApply(host): bool
         +StartInventory(host, force): void
-        +PrefetchIp(host) / CompleteResolve(job): void
+        +ReissueAfterResolve(host, online): void
         +MoveRowToTop(host): void
-        +WarmPool(): void
     }
 
     class InventoryPresenter {
@@ -453,6 +453,17 @@ package "Donut.UI.Presenters" #2B1A12 {
         +RefreshInventory(host): void
         +FindBigFolders(host): void
         +CompleteDiskScan(job): void
+    }
+
+    class ResolutionCoordinator {
+        -Resolver: HostResolver
+        -ConfigManager: object
+        -Home: object
+        +StartWarm() / WarmPool(): void
+        +PrefetchIp(host): void
+        +InvalidateResolved(host): void
+        +StartVerifyName(host): void
+        +CompleteResolve(job): void
     }
 
     class FinderPresenter {
@@ -640,10 +651,13 @@ HomePresenter --> RecentConnectionsStore
 HomePresenter --> HomeViewModel
 HomePresenter --> FinderPresenter
 HomePresenter --> InventoryPresenter
+HomePresenter --> ResolutionCoordinator
 FinderPresenter ..> HomePresenter : duck-typed back-ref
 InventoryPresenter ..> HomePresenter : duck-typed back-ref
 InventoryPresenter --> InventoryService
 InventoryPresenter --> DiskUsageService
+ResolutionCoordinator ..> HomePresenter : duck-typed back-ref
+ResolutionCoordinator --> HostResolver
 FinderPresenter --> ActiveDirectoryService
 FinderPresenter --> PersonLensViewModel
 FinderPresenter --> HomeViewModel

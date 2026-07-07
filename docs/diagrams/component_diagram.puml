@@ -31,6 +31,7 @@ component "PowerShell Classes (src)" {
         [MainPresenter]
         [HomePresenter]
         [InventoryPresenter]
+        [ResolutionCoordinator]
         [FinderPresenter]
         [ConfigPresenter]
         [LogsPresenter]
@@ -117,10 +118,11 @@ database "%LOCALAPPDATA%\\DONUT" {
 [HomePresenter] ..> [ScanService] : scan
 [HomePresenter] ..> [RemoteUpdateService] : updates
 [HomePresenter] ..> [InventoryPresenter] : detail panel
-[HomePresenter] ..> [HostResolver] : prefetch IP
+[HomePresenter] ..> [ResolutionCoordinator] : resolve + warm
 [HomePresenter] ..> [FinderPresenter] : AD finder + user Lens
 [InventoryPresenter] ..> [InventoryService] : per-machine probe
 [InventoryPresenter] ..> [DiskUsageService] : storage scan
+[ResolutionCoordinator] ..> [HostResolver] : resolve + prefetch IP
 [FinderPresenter] ..> [ActiveDirectoryService] : live AD finder
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
 [LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
