@@ -12,7 +12,7 @@
     Deliberately free of any WPF dependency so it can be unit-tested off-domain
     and out of process. The presenter consumes the result and pokes the controls.
 #>
-enum FleetState {
+enum FleetCardState {
     Queued
     Scanning
     Updating
@@ -21,13 +21,13 @@ enum FleetState {
     Failed
 }
 
-class FleetStatus {
-    [FleetState] $State
+class FleetCardStatus {
+    [FleetCardState] $State
     [string]     $Label
     [string]     $ColorKey   # resource key into UIColors.xaml
     [bool]       $IsBusy     # true => indeterminate progress bar is animating
 
-    FleetStatus([FleetState]$state, [string]$label, [string]$colorKey, [bool]$isBusy) {
+    FleetCardStatus([FleetCardState]$state, [string]$label, [string]$colorKey, [bool]$isBusy) {
         $this.State    = $state
         $this.Label    = $label
         $this.ColorKey = $colorKey
@@ -36,34 +36,34 @@ class FleetStatus {
 
     # Maps a job's coordinates (jobType Scan/UpdateScan/UpdateApply, status Created/
     # Running/Completed/Failed, rebootRequired) to a display status.
-    static [FleetStatus] FromJob([string]$jobType, [string]$status, [bool]$rebootRequired) {
+    static [FleetCardStatus] FromJob([string]$jobType, [string]$status, [bool]$rebootRequired) {
         switch ($status) {
             'Failed' {
-                return [FleetStatus]::new([FleetState]::Failed, 'Failed', 'AccentRed', $false)
+                return [FleetCardStatus]::new([FleetCardState]::Failed, 'Failed', 'AccentRed', $false)
             }
             'Created' {
-                return [FleetStatus]::new([FleetState]::Queued, 'Queued',
+                return [FleetCardStatus]::new([FleetCardState]::Queued, 'Queued',
                     'BodyTextTertiary', $false)
             }
             'Running' {
                 if ($jobType -eq 'UpdateApply') {
-                    return [FleetStatus]::new([FleetState]::Updating, 'Updating…',
+                    return [FleetCardStatus]::new([FleetCardState]::Updating, 'Updating…',
                         'AccentPurple', $true)
                 }
                 # Scan and UpdateScan are both "scanning" from the user's view.
-                return [FleetStatus]::new([FleetState]::Scanning, 'Scanning…', 'AccentCyan', $true)
+                return [FleetCardStatus]::new([FleetCardState]::Scanning, 'Scanning…', 'AccentCyan', $true)
             }
             'Completed' {
                 if ($rebootRequired) {
-                    return [FleetStatus]::new([FleetState]::RebootRequired, 'Reboot required',
+                    return [FleetCardStatus]::new([FleetCardState]::RebootRequired, 'Reboot required',
                         'AccentYellow', $false)
                 }
-                return [FleetStatus]::new([FleetState]::Completed, 'Completed',
+                return [FleetCardStatus]::new([FleetCardState]::Completed, 'Completed',
                     'AccentGreen', $false)
             }
         }
 
         # Unknown status: treat as queued so a card still renders something sane.
-        return [FleetStatus]::new([FleetState]::Queued, 'Queued', 'BodyTextTertiary', $false)
+        return [FleetCardStatus]::new([FleetCardState]::Queued, 'Queued', 'BodyTextTertiary', $false)
     }
 }

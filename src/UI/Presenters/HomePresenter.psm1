@@ -4,7 +4,7 @@ using namespace System.Windows.Threading
 using namespace System.Collections.Generic
 using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
-using module "..\..\Models\FleetStatus.psm1"
+using module "..\..\Models\FleetCardStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
@@ -534,7 +534,7 @@ class HomePresenter : AsyncJobPresenter {
         }
         catch {
             $this.Detail.AppendLog($hostName, "Error starting process: $_")
-            $row.ApplyStatus([FleetStatus]::FromJob('Scan', 'Failed', $false))
+            $row.ApplyStatus([FleetCardStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
     }
@@ -704,7 +704,7 @@ class HomePresenter : AsyncJobPresenter {
         $row = $this.GetRow($job.HostName)
         if (-not $row) { return }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
-        $row.ApplyStatus([FleetStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+        $row.ApplyStatus([FleetCardStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
     }
 
     # Aborts a pending apply ($true) when the identity check confirmed the IP answers

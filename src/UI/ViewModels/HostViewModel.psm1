@@ -1,6 +1,6 @@
 using namespace Donut.Mvvm
 using namespace System.Windows.Media
-using module "..\..\Models\FleetStatus.psm1"
+using module "..\..\Models\FleetCardStatus.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
@@ -15,7 +15,7 @@ using module ".\FolderNodeViewModel.psm1"
     Inherits the C# ObservableObject base so WPF binds to it and updates live when the
     coordinator (HomePresenter) sets its properties on the UI thread. Exposes ready-to-bind
     values (labels, visibility bools, and Brushes) so the DataTemplate stays plain; the
-    status/colour DECISIONS reuse the tested pure mappers ([FleetStatus] while a job runs,
+    status/colour DECISIONS reuse the tested pure mappers ([FleetCardStatus] while a job runs,
     the idle mappers below when one isn't).
 
 .NOTES
@@ -73,8 +73,8 @@ class HostViewModel : ObservableObject {
         $this.DotBrush = [HostViewModel]::BrushFor('BodyTextTertiary')
     }
 
-    # --- Live job status (running / terminal), from a pure FleetStatus ---
-    [void] ApplyStatus([FleetStatus]$status) {
+    # --- Live job status (running / terminal), from a pure FleetCardStatus ---
+    [void] ApplyStatus([FleetCardStatus]$status) {
         $this.SetDotKey($status.ColorKey)
         $this.SetChipKey($status.ColorKey)
         $this.Set('ChipText', $status.Label)
@@ -242,7 +242,7 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressBrush', [HostViewModel]::BrushFor($key))
     }
 
-    # --- Pure status mapping (idle rows; running rows go through FleetStatus) ---------
+    # --- Pure status mapping (idle rows; running rows go through FleetCardStatus) ---------
 
     static [string] IdleColorKey([string]$lastStatus) {
         switch ($lastStatus) {
