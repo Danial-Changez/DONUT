@@ -20,7 +20,8 @@ class ConfigPresenter {
     [ConfigManager] $ConfigManager
     [LogService] $Logger
     [FrameworkElement] $ViewContent
-    [ComboBox] $MainCommandComboBox
+    [RadioButton] $CmdScan
+    [RadioButton] $CmdApplyUpdates
     [ContentControl] $ConfigOptionsContent
     [ConfigViewModel] $ConfigVm
     [FrameworkElement] $CurrentOptionView
@@ -40,53 +41,38 @@ class ConfigPresenter {
     }
 
     [void] Initialize() {
-        $this.MainCommandComboBox = $this.ViewContent.FindName('MainCommandComboBox')
+        $this.CmdScan = $this.ViewContent.FindName('cmdScan')
+        $this.CmdApplyUpdates = $this.ViewContent.FindName('cmdApplyUpdates')
         $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
 
-        # Page VM: Save binds SaveCommand; the command combo's SelectionChanged stays an
-        # event - it's view navigation (which option form shows), not data.
+        # Page VM: Save binds SaveCommand; the command segments stay events - picking
+        # one is view navigation (which option form shows), not data.
         $this.ConfigVm = [ConfigViewModel]::new()
         $presenter = $this
         $save = { param($p) $presenter.OnSave() }.GetNewClosure()
         $this.ConfigVm.SaveCommand = [RelayCommand]::new([System.Action[object]]$save)
         $this.ViewContent.DataContext = $this.ConfigVm
 
-        if ($this.MainCommandComboBox) {
-            $this.MainCommandComboBox.Add_SelectionChanged({
-                    if ($_.AddedItems.Count -gt 0) {
-                        $presenter.OnCommandChanged($_.AddedItems[0])
-                    }
-                }.GetNewClosure())
+        if ($this.CmdScan) {
+            $scan = { $presenter.LoadOptionView('Scan') }.GetNewClosure()
+            $this.CmdScan.Add_Checked($scan)
+        }
+        if ($this.CmdApplyUpdates) {
+            $apply = { $presenter.LoadOptionView('ApplyUpdates') }.GetNewClosure()
+            $this.CmdApplyUpdates.Add_Checked($apply)
         }
 
         $this.LoadCurrentConfig()
     }
 
     [void] LoadCurrentConfig() {
-        if (-not $this.MainCommandComboBox) { return }
-
-        $activeCmd = $this.Config.GetActiveCommand()
-
-        # ComboBox index: 0 = Scan, 1 = Apply Updates.
-        $index = 0
-        if ($activeCmd -eq 'applyUpdates') { $index = 1 }
-
-        $this.MainCommandComboBox.SelectedIndex = $index
-
-        # Force the view load: setting an index that was already 0 raises no event.
-        if ($this.MainCommandComboBox.SelectedItem) {
-            $this.OnCommandChanged($this.MainCommandComboBox.SelectedItem)
+        # Checking a segment fires its Checked handler, which loads the option view.
+        if ($this.Config.GetActiveCommand() -eq 'applyUpdates' -and $this.CmdApplyUpdates) {
+            $this.CmdApplyUpdates.IsChecked = $true
         }
-    }
-
-    [void] OnCommandChanged([object] $selectedItem) {
-        $content = $selectedItem
-        if ($selectedItem -is [Controls.ComboBoxItem]) {
-            $content = $selectedItem.Content
+        elseif ($this.CmdScan) {
+            $this.CmdScan.IsChecked = $true
         }
-
-        $viewName = $content.ToString().Replace(" ", "")
-        $this.LoadOptionView($viewName)
     }
 
     [void] LoadOptionView([string] $viewName) {

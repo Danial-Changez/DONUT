@@ -521,6 +521,49 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- Segmented pill toggle: two in a rounded track make the Scan/Apply command
+         picker. Checked segment fills accent; RadioButton keeps them exclusive. -->
+    <Style x:Key="SegmentToggle"
+           TargetType="RadioButton">
+        <Setter Property="FontFamily"
+                Value="Montserrat" />
+        <Setter Property="FontSize"
+                Value="13" />
+        <Setter Property="FontWeight"
+                Value="Medium" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextSecondary}" />
+        <Setter Property="Cursor"
+                Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="seg"
+                            CornerRadius="7"
+                            Padding="18,7"
+                            Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource TitleTextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked"
+                                 Value="True">
+                            <Setter TargetName="seg"
+                                    Property="Background"
+                                    Value="{DynamicResource AccentBlue}" />
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource PrimaryForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- Modern Button = Arcane "default" (primary) button: violet-600 fill,
          rounded-lg (9.6), font-medium, h-36, hover = primary/90. Was a bold
          fully-rounded violet pill; now matches shadcn's default variant so
