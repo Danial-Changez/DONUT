@@ -104,9 +104,8 @@ function Find-Gc([string]$Filter) {
     return $s.FindOne()
 }
 
-# The SCCM affinity query, self-contained so it can run on a thread job in parallel
-# with the AD user read. endswith on the forest-unique SAM is the only filter shape
-# this AdminService accepts (eq + backslash, or-ed filters, etc. all answer 404).
+# Self-contained so it runs on a thread job parallel to the AD read. endswith on the
+# forest-unique SAM is the only filter this AdminService accepts (others answer 404).
 $script:AffinityScript = {
     param($server, $samValue)
     $p = @{
@@ -294,11 +293,8 @@ $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
-# Beat + parent/stop watchdog on a background thread. A lookup blocks the serve loop for
-# its whole duration (tens of seconds), so beating from that loop would let the heartbeat
-# go stale mid-lookup - and EnsureAgent (15s staleness = dead) would then tear this live
-# agent down mid-lookup, stranding the request. A dedicated beater keeps a busy agent
-# looking alive. Best-effort: without ThreadJob the serve loop beats between lookups.
+# Beat from a background thread: a lookup blocks the serve loop for tens of seconds, and
+# beating there would let EnsureAgent (15s = dead) tear a busy agent down mid-lookup.
 try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
 $script:HeartbeatJob = $null
 try {
@@ -342,9 +338,8 @@ while ($true) {
     if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }
 
     $now = [datetime]::UtcNow
-    # The background heartbeat job owns the beat + parent watchdog; only beat from the serve
-    # loop as the no-ThreadJob fallback, so the two never race on heartbeat.txt (a concurrent
-    # write could throw and be misread as "the dir vanished").
+    # Only beat from the serve loop as the no-ThreadJob fallback, so it never races the
+    # background beater on heartbeat.txt (a concurrent write could look like a vanished dir).
     if (-not $script:HeartbeatJob) {
         if (($now - $lastBeat).TotalSeconds -ge 2) {
             $lastBeat = $now

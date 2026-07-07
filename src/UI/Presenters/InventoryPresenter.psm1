@@ -37,9 +37,8 @@ class InventoryPresenter {
     [object]           $Toasts   # ToastService
     [object]           $Home     # duck-typed back-ref to HomePresenter's machine seams
 
-    # Detail-panel controls: header, log, progress bar, probe buttons. The header +
-    # overview values are selectable TextBoxes (SelectableText style), so the operator
-    # can copy them; they are still binding-driven and no method reads them.
+    # Detail-panel + overview controls. The header/overview values are selectable TextBoxes
+    # (SelectableText) so the operator can copy them; still binding-driven, no method reads them.
     [System.Windows.UIElement] $DetailEmptyHint
     [System.Windows.UIElement] $DetailContent
     [TextBox] $DetailHostText

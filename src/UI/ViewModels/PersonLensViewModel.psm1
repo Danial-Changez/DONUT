@@ -42,9 +42,8 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('HasDevices', $false)
     }
 
-    # Applies a mid-flight PARTIAL bundle: partial 1 carries the directory facts,
-    # partial 2 adds name-only device rows (details still loading), so both land
-    # early while the crawl continues. The loading state stays on until Apply.
+    # Applies a mid-flight PARTIAL bundle (partial 1 = directory facts, partial 2 = name-only
+    # device rows) so they paint early; the loading state stays on until Apply.
     [void] ApplyPartial([PersonLens]$lens) {
         if ($null -eq $lens -or -not $this.IsLoading) { return }
         if ($lens.Upn) { $this.Set('Upn', $lens.Upn) }

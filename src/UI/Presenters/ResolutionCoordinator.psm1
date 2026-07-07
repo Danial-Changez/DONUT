@@ -152,9 +152,8 @@ class ResolutionCoordinator {
         }
     }
 
-    # Resolve job finished: cache the DC (warm) or the per-host verdict, detect an IP
-    # change, persist the DC, and refresh the offline indicator. HomePresenter owns the
-    # PendingRuns / PendingGathers queue, so re-issuing queued work is handed back to it.
+    # Resolve finished: cache the DC (warm) or the per-host verdict and refresh the indicator.
+    # HomePresenter owns the run/gather queue, so re-issuing queued work is handed back to it.
     [void] CompleteResolve([AsyncJob]$job) {
         if ($job.Status -eq 'Failed') {
             # Even a failed resolve must release the single-flight latch, or the host wedges.
