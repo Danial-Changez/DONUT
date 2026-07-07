@@ -137,20 +137,24 @@ class FinderPresenter {
     # App closing: stop the de-elevated Lens agent and purge every Lens exchange dir.
     # Routed through the pool worker (StopAgent) rather than a direct static call so the
     # UI never has to parse-load PersonLensService - the teardown + its literals stay
-    # single-sourced in the service. Run synchronously (EndInvoke) so it finishes before
-    # the process exits; all best-effort, matching the agent's own parent-PID self-exit.
+    # single-sourced in the service.
+    #
+    # Fire-and-forget (BeginInvoke, no EndInvoke wait) so the window closes immediately
+    # instead of freezing while the agent stops. The launcher process outlives the WPF
+    # shutdown (the tray keeps it alive) and the pool is never disposed on close, so the
+    # teardown runs to completion in the background; if it is cut short, the agent
+    # self-exits on parent-PID death - so this stays best-effort either way.
     [void] OnAppClosing() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $job = $this.StartPoolScript($worker, @{
+            [void]$this.StartPoolScript($worker, @{
                     SiteServer = $this.Config.GetAdminServiceHost()
                     SourceRoot = $this.Config.SourceRoot
                     StopAgent  = $true
                 })
-            try { $job.Ps.EndInvoke($job.Handle) } finally { $job.Ps.Dispose() }
         }
         catch {
-            $this.Logger.LogException("Lens agent teardown could not run", $_)
+            $this.Logger.LogException("Lens agent teardown could not start", $_)
         }
     }
 

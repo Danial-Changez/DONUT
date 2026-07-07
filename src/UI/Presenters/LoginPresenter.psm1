@@ -63,6 +63,16 @@ class LoginPresenter {
 
         $this.LoadImages()
 
+        # Shown from the worker STA thread; force it to the front once rendered so it does
+        # not open hidden behind other windows (see MainPresenter for the same pattern).
+        $this.LoginWindow.Add_ContentRendered({
+                $lw = $presenter.LoginWindow
+                $lw.Activate()
+                $lw.Topmost = $true
+                $lw.Topmost = $false
+                $lw.Focus()
+            }.GetNewClosure())
+
         $this.LoginWindow.ShowDialog() | Out-Null
         return $this.LoginSuccess
     }

@@ -173,6 +173,18 @@ class MainPresenter {
                 }
             }.GetNewClosure())
 
+        # Shown from the worker STA thread, so Windows won't foreground it automatically -
+        # it opens behind other windows. Once it renders, force it to the front (the brief
+        # Topmost toggle raises it without needing foreground-activation rights).
+        $this.Window.Add_ContentRendered({
+                $w = $presenter.Window
+                if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
+                $w.Activate()
+                $w.Topmost = $true
+                $w.Topmost = $false
+                $w.Focus()
+            }.GetNewClosure())
+
         $this.NavigateTo('Home')
     }
 
