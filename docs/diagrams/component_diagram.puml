@@ -30,6 +30,7 @@ component "PowerShell Classes (src)" {
     package "Presenters (coordinators)" #2B1A12 {
         [MainPresenter]
         [HomePresenter]
+        [InventoryPresenter]
         [FinderPresenter]
         [ConfigPresenter]
         [LogsPresenter]
@@ -115,10 +116,11 @@ database "%LOCALAPPDATA%\\DONUT" {
 [Donut.Mvvm\n(ObservableObject + RelayCommand)] ..> [HostViewModel] : base types (all VMs)
 [HomePresenter] ..> [ScanService] : scan
 [HomePresenter] ..> [RemoteUpdateService] : updates
-[HomePresenter] ..> [InventoryService] : per-machine probe
-[HomePresenter] ..> [DiskUsageService] : storage scan
+[HomePresenter] ..> [InventoryPresenter] : detail panel
 [HomePresenter] ..> [HostResolver] : prefetch IP
 [HomePresenter] ..> [FinderPresenter] : AD finder + user Lens
+[InventoryPresenter] ..> [InventoryService] : per-machine probe
+[InventoryPresenter] ..> [DiskUsageService] : storage scan
 [FinderPresenter] ..> [ActiveDirectoryService] : live AD finder
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
 [LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
