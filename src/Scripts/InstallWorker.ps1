@@ -37,12 +37,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-<#
-    Get-DONUTUninstallInfo
-    Purpose: Locate DONUT in Windows Uninstall registry.
-    Returns: PSCustomObject with DisplayName, DisplayVersion, UninstallString,
-    ProductCode, KeyPath; or $null.
-#>
+# Finds the installed DONUT entry in the Uninstall registry (DisplayName + Publisher
+# match); returns its product code / install location / version, or $null if absent.
 function Get-DONUTUninstallInfo {
     $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
     $subKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
@@ -77,11 +73,8 @@ function Get-DONUTUninstallInfo {
     return $null
 }
 
-<#
-    Invoke-MsiInstall
-    Purpose: Install MSI package with optional passive UI and logging.
-    Returns: Exit code from msiexec.
-#>
+# Installs the MSI with reboot suppressed; returns msiexec's exit code
+# (1603 when the MSI path is missing).
 function Invoke-MsiInstall {
     param(
         [Parameter(Mandatory = $true)][string]$MsiPath,
@@ -102,11 +95,7 @@ function Invoke-MsiInstall {
     return [int]$p.ExitCode
 }
 
-<#
-    Invoke-MsiUninstallViaMsi
-    Purpose: Uninstall MSI package by path, with optional passive UI.
-    Returns: Exit code from msiexec.
-#>
+# Uninstalls the given product code with reboot suppressed; returns msiexec's exit code.
 function Invoke-MsiUninstall {
     param(
         [Parameter(Mandatory = $true)][string]$ProdCode,
@@ -120,10 +109,7 @@ function Invoke-MsiUninstall {
     return [int]$p.ExitCode
 }
 
-<#
-    Stop-DonutProcessGracefully
-    Purpose: Attempt to close running DONUT processes gracefully, then force-kill if needed.
-#>
+# Closes running DONUT windows, waits up to TimeoutSeconds, then force-kills any survivors.
 function Stop-DonutProcessGracefully {
     param([string]$Name, [int]$TimeoutSeconds = 10)
     $procs = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
