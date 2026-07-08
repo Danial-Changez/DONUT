@@ -43,6 +43,9 @@ class FinderPresenter {
     [ToastService] $Toasts
     [DialogPresenter] $DialogPresenter
     [object] $Home                     # duck-typed HomePresenter back-ref (see .NOTES)
+    # Scriptblock ($payload, $caption) set by MainPresenter to pop the shell's QR overlay;
+    # null until wired, so the QR button no-ops on the dev graph before the shell exists.
+    [object] $OnShowQr
     [TextBox] $SearchBar               # the dual-use GoogleSearchBar (finder wiring only)
 
     # AD live-search (search-bar dropdown: computers + locked-out users)
@@ -517,13 +520,22 @@ class FinderPresenter {
         if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
     }
 
-    # Wires each Lens device's Add command to drop its WSID into the machine list.
+    # Wires each Lens device's Add command (drop its WSID into the machine list) and its
+    # QR command (pop the shell overlay with a QR of the device's latest recovery key).
     hidden [void] WireLensDeviceCommands() {
         $presenter = $this
         foreach ($dev in $this.LensVm.Devices) {
             $capName = [string]$dev.Name
             $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
             $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
+
+            $vm = $dev
+            $qr = { param($p)
+                if ($presenter.OnShowQr -and -not [string]::IsNullOrWhiteSpace($vm.LatestKey)) {
+                    & $presenter.OnShowQr $vm.LatestKey $vm.Name
+                }
+            }.GetNewClosure()
+            $dev.ShowQrCommand = [RelayCommand]::new([System.Action[object]]$qr)
         }
     }
 

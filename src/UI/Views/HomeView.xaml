@@ -742,6 +742,14 @@
                               <Button Content="Reveal key" Command="{Binding RevealCommand}"
                                       Style="{DynamicResource ButtonOutline}" FontSize="11" Height="28" />
                             </ContentControl>
+                            <!-- QR of the latest recovery key: shown whenever the device has
+                                 BitLocker (an alternate reveal - stays available after reveal). -->
+                            <ContentControl Margin="0,0,6,0"
+                                            Visibility="{Binding HasBitLocker, Converter={StaticResource BoolToVis}}">
+                              <Button Content="QR" Command="{Binding ShowQrCommand}"
+                                      Style="{DynamicResource ButtonOutline}" FontSize="11" Height="28"
+                                      ToolTip="Show a QR code of the latest BitLocker recovery key" />
+                            </ContentControl>
                             <Button Content="Add" Command="{Binding AddCommand}"
                                     Style="{DynamicResource ButtonPrimary}" FontSize="11" Height="28" Padding="14,4"
                                     ToolTip="Add this machine to the list" />

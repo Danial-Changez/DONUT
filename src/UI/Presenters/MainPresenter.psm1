@@ -138,6 +138,13 @@ class MainPresenter {
         $this.MainVm.MaximizeCommand = [RelayCommand]::new([System.Action[object]]$max)
         $close = { param($p) $presenter.Window.Close() }.GetNewClosure()
         $this.MainVm.CloseCommand = [RelayCommand]::new([System.Action[object]]$close)
+        $closeQr = { param($p) $presenter.CloseQr() }.GetNewClosure()
+        $this.MainVm.CloseQrCommand = [RelayCommand]::new([System.Action[object]]$closeQr)
+        # Let the Home finder pop the shell's QR overlay for a Lens device's recovery key.
+        $showQr = { param($payload, $caption) $presenter.ShowQr($payload, $caption) }.GetNewClosure()
+        if ($this.HomePresenter -and $this.HomePresenter.Finder) {
+            $this.HomePresenter.Finder.OnShowQr = $showQr
+        }
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -270,6 +277,48 @@ class MainPresenter {
 
     [void] CloseSettings() {
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
+    }
+
+    # Pops the QR overlay with a scannable code for a BitLocker recovery key. The payload is
+    # rendered to an in-memory image only (never written to disk, matching how the keys are
+    # otherwise handled); a render failure toasts rather than opening an empty card.
+    [void] ShowQr([string]$payload, [string]$caption) {
+        if ([string]::IsNullOrWhiteSpace($payload)) { return }
+        $img = $this.BuildQrImage($payload)
+        if ($null -eq $img) {
+            if ($this.ToastService) {
+                $this.ToastService.ShowError($caption, "Couldn't render the QR code.")
+            }
+            return
+        }
+        $this.MainVm.Set('QrImage', $img)
+        $this.MainVm.Set('QrCaption', "BitLocker recovery key - $caption")
+        $this.MainVm.Set('IsQrOpen', $true)
+    }
+
+    [void] CloseQr() {
+        if ($this.MainVm) { $this.MainVm.Set('IsQrOpen', $false) }
+    }
+
+    # Encodes text to a QR PNG (in memory) via the bundled QR helper, returned as a frozen
+    # BitmapImage safe to bind cross-thread. The helper uses ECC level Q (~25% recovery) so
+    # the code still scans if partly glared on screen. Returns $null on any failure.
+    hidden [System.Windows.Media.ImageSource] BuildQrImage([string]$payload) {
+        try {
+            $png = [Donut.Qr.QrCode]::EncodePng($payload, 20)
+            $ms = [System.IO.MemoryStream]::new($png)
+            $img = [System.Windows.Media.Imaging.BitmapImage]::new()
+            $img.BeginInit()
+            $img.StreamSource = $ms
+            $img.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+            $img.EndInit()
+            $img.Freeze()
+            return $img
+        }
+        catch {
+            $this.Logger.LogException("QR render failed", $_)
+            return $null
+        }
     }
 
     [void] Show() {

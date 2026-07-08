@@ -1,0 +1,33 @@
+#nullable enable
+
+using QRCoder;
+
+namespace Donut.Qr
+{
+    /// <summary>
+    /// Thin wrapper over bundled QRCoder: encodes text to a PNG entirely in memory via the
+    /// dependency-free <see cref="PngByteQRCode"/> path (no System.Drawing/GDI). Kept in C#
+    /// so the QR call sidesteps PowerShell's handling of QRCoder's optional parameters.
+    /// </summary>
+    /// <remarks>
+    /// Compiled into Donut.Launcher in production; Start-Donut.ps1 also compiles it from this
+    /// source (guarded) so the `pwsh -Sta` dev path resolves the type. MainPresenter turns the
+    /// returned bytes into a frozen BitmapImage for the QR overlay.
+    /// </remarks>
+    public static class QrCode
+    {
+        /// <summary>
+        /// Encodes <paramref name="text"/> to a QR-code PNG. ECC level Q (~25% recovery)
+        /// keeps the code scannable under mild on-screen glare.
+        /// </summary>
+        /// <param name="text">The payload to encode (e.g. a BitLocker recovery key).</param>
+        /// <param name="pixelsPerModule">Size of each QR module in pixels.</param>
+        /// <returns>PNG bytes; never written to disk by this method.</returns>
+        public static byte[] EncodePng(string text, int pixelsPerModule)
+        {
+            var generator = new QRCodeGenerator();
+            var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.Q);
+            return new PngByteQRCode(data).GetGraphic(pixelsPerModule);
+        }
+    }
+}

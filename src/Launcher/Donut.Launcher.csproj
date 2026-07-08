@@ -14,6 +14,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.3" />
+    <!-- Bundled QRCoder (MIT), committed at src\Lib: compiles QrCode.cs against it and copies
+         the DLL beside the launcher so Donut.Qr.QrCode resolves it at runtime. -->
+    <Reference Include="QRCoder">
+      <HintPath>$(DonutSrcDir)\Lib\QRCoder.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

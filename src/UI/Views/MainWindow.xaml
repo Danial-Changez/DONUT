@@ -172,6 +172,82 @@
                 </Grid>
             </Border>
         </Grid>
+        <!-- QR overlay: same non-modal dim + centered card as settings, showing a QR of a
+             BitLocker recovery key. The image is built in memory (never written to disk). -->
+        <Grid x:Name="qrOverlay"
+              Visibility="{Binding IsQrOpen, Converter={StaticResource BoolToVis}}">
+            <Grid.InputBindings>
+                <KeyBinding Key="Escape" Command="{Binding CloseQrCommand}" />
+            </Grid.InputBindings>
+            <!-- Dim backdrop, a sibling BEHIND the card so card clicks don't bubble here. -->
+            <Border Background="#B0000000">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick" Command="{Binding CloseQrCommand}" />
+                </Border.InputBindings>
+            </Border>
+            <Border Width="360"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="10"
+                    Focusable="True"
+                    Background="{DynamicResource PrimaryBackground}"
+                    BorderBrush="{DynamicResource PanelBorder}"
+                    BorderThickness="1">
+                <Grid Margin="20,14,20,20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- Header: caption + close, mirroring the settings card. -->
+                    <Grid Grid.Row="0">
+                        <TextBlock Text="{Binding QrCaption}"
+                                   FontFamily="Montserrat"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TitleTextPrimary}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left"
+                                   Margin="0,0,40,0" />
+                        <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Width="34"
+                                Height="30"
+                                Command="{Binding CloseQrCommand}"
+                                Style="{DynamicResource controlButton}"
+                                Tag="{DynamicResource AccentPink}"
+                                ToolTip="Close">
+                            <Path Style="{DynamicResource controlButtonIcon}"
+                                  Width="12"
+                                  Height="12"
+                                  Data="{DynamicResource xMark}" />
+                        </Button>
+                    </Grid>
+                    <!-- White plate keeps the QR high-contrast/scannable in either theme. -->
+                    <Border Grid.Row="1"
+                            Margin="0,14,0,0"
+                            Padding="12"
+                            Background="White"
+                            CornerRadius="6"
+                            HorizontalAlignment="Center">
+                        <Image Source="{Binding QrImage}"
+                               Width="280"
+                               Height="280"
+                               Stretch="Uniform"
+                               SnapsToDevicePixels="True" />
+                    </Border>
+                    <TextBlock Grid.Row="2"
+                               Margin="0,12,0,0"
+                               Text="Scan to read the recovery key, then close this."
+                               FontFamily="Montserrat"
+                               FontSize="11"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource BodyTextTertiary}" />
+                </Grid>
+            </Border>
+        </Grid>
         <!-- Toast overlay: non-modal notifications stack here, top-right, above
              everything else. The host itself is click-through; only the toast
              cards inside it are hit-testable. -->
