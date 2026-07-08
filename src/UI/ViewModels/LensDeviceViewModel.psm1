@@ -39,13 +39,19 @@ class LensDeviceViewModel : ObservableObject {
             $this.BitLockerText = (@($d.BitLockerKeys | ForEach-Object {
                         if ($_.Created) { "$($_.Password)  ($($_.Created))" } else { $_.Password }
                     }) -join "`n")
-            # Newest key wins: Created is ISO8601 so an ordinal compare sorts chronologically;
-            # blank Created sorts earliest, so a dated rotation supersedes an undated one.
+            # Newest key wins. Created is agent-normalized ISO8601; parse to a DateTime and
+            # compare chronologically (unparseable/blank sorts earliest, so a dated rotation
+            # supersedes an undated one). A later key at the same instant still wins the tie.
             $latest = $null
+            $latestAt = [datetime]::MinValue
             foreach ($k in $d.BitLockerKeys) {
-                if ($null -eq $latest -or [string]::CompareOrdinal(
-                        [string]$k.Created, [string]$latest.Created) -ge 0) {
+                $at = [datetime]::MinValue
+                [void][datetime]::TryParse([string]$k.Created,
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)
+                if ($null -eq $latest -or $at -ge $latestAt) {
                     $latest = $k
+                    $latestAt = $at
                 }
             }
             if ($null -ne $latest) { $this.LatestKey = $latest.Password }

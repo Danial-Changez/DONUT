@@ -265,9 +265,24 @@ function Resolve-Lens {
                 $keys = @($bl.FindAll())
                 if ($keys.Count -gt 0) {
                     $dev.bitLockerKeys = @($keys | ForEach-Object {
+                            # whenCreated marshals to a DateTime (rarely a string); normalize to
+                            # ISO8601 UTC so the model's contract holds and newest-key selection
+                            # sorts chronologically instead of lexically on a culture-formatted string.
+                            $wc = $_.Properties['whencreated'][0]
+                            $iso = ''
+                            if ($wc -is [datetime]) {
+                                $iso = $wc.ToUniversalTime().ToString('o')
+                            }
+                            elseif ($wc) {
+                                $dt = [datetime]::MinValue
+                                if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
+                                    $iso = $dt.ToUniversalTime().ToString('o')
+                                }
+                                else { $iso = [string]$wc }
+                            }
                             @{
                                 password = [string]$_.Properties['msfve-recoverypassword'][0]
-                                created  = [string]$_.Properties['whencreated'][0]
+                                created  = $iso
                             }
                         })
                 }
