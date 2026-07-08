@@ -6,6 +6,7 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
+using namespace Donut.Interop
 using module ".\ConfigPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\ToastService.psm1"
@@ -176,6 +177,18 @@ class MainPresenter {
                 $w.Topmost = $true
                 $w.Topmost = $false
                 $w.Focus()
+            }.GetNewClosure())
+
+        # Constrain maximize to the monitor work area - a WindowChrome window otherwise
+        # overflows the screen edges and covers the taskbar. Needs the HWND, so wait.
+        $this.Window.Add_SourceInitialized({
+                try {
+                    $hwnd = [Interop.WindowInteropHelper]::new($presenter.Window).Handle
+                    if ($hwnd -ne [IntPtr]::Zero) {
+                        [WindowChromeHelper]::ConstrainMaximize($hwnd)
+                    }
+                }
+                catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
             }.GetNewClosure())
 
         # Diagnostic (remove once pinned): logs UI-thread stalls over 1 s - the freeze.

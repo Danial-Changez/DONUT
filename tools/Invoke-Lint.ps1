@@ -8,8 +8,8 @@
       1. Build output under src\Launcher\bin (bundled PowerShell runtime modules) is
          excluded - those aren't our code.
       2. TypeNotFound is a PARSER diagnostic that ExcludeRules can't suppress; the only
-         hits are the runtime-compiled MVVM base types (ObservableObject / RelayCommand),
-         so they're filtered here by name.
+         hits are the runtime-compiled C# types (ObservableObject / RelayCommand /
+         WindowChromeHelper), so they're filtered here by name.
 
     Rule calibration lives in PSScriptAnalyzerSettings.psd1 at the repo root.
 
@@ -41,8 +41,9 @@ $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
 $results = $files | ForEach-Object {
     Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings -ErrorAction SilentlyContinue
 } | Where-Object {
-    # Drop the known-unresolvable MVVM base types (see .DESCRIPTION).
-    -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match 'ObservableObject|RelayCommand')
+    # Drop the known-unresolvable runtime-compiled C# types (see .DESCRIPTION).
+    -not ($_.RuleName -eq 'TypeNotFound' -and
+        $_.Message -match 'ObservableObject|RelayCommand|WindowChromeHelper')
 }
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"

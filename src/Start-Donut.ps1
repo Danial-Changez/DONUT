@@ -21,10 +21,18 @@ Add-Type -AssemblyName System.Security
 # MVVM base types: compiled into Donut.Launcher in production (guard skips); on the
 # `pwsh -Sta` dev path compile them here, before the class graph parses against them.
 if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
+    # Reference the loaded WPF assemblies by path so versions match; the simple name
+    # can resolve to an older reference assembly that conflicts with PresentationCore.
+    $loaded = [AppDomain]::CurrentDomain.GetAssemblies()
+    $refs = foreach ($name in 'System.ObjectModel', 'WindowsBase', 'PresentationCore') {
+        $asm = $loaded | Where-Object { $_.GetName().Name -eq $name } | Select-Object -First 1
+        if ($asm -and $asm.Location) { $asm.Location } else { $name }
+    }
     Add-Type -Path @(
         "$PSScriptRoot\Launcher\ObservableObject.cs",
-        "$PSScriptRoot\Launcher\RelayCommand.cs"
-    ) -ReferencedAssemblies System.ObjectModel, WindowsBase, PresentationCore
+        "$PSScriptRoot\Launcher\RelayCommand.cs",
+        "$PSScriptRoot\Launcher\WindowChromeHelper.cs"
+    ) -ReferencedAssemblies $refs
 }
 
 . "$PSScriptRoot\Scripts\DonutApp.ps1"
