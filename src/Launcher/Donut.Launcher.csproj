@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -7,9 +7,34 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Roots for the embedded app tree, relative to this project in src\Launcher\. -->
+    <DonutSrcDir>$(MSBuildProjectDirectory)\..</DonutSrcDir>
+    <DonutRepoRoot>$(MSBuildProjectDirectory)\..\..</DonutRepoRoot>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embed the PowerShell class graph, workers, and XAML: everything under src\ except
+         the compiled Launcher project (its .cs are already in this DLL) and build output.
+         LogicalName preserves each file's path so Program.cs extracts it back to src\... . -->
+    <EmbeddedResource Include="$(DonutSrcDir)\**\*.psm1;$(DonutSrcDir)\**\*.ps1;$(DonutSrcDir)\**\*.xaml"
+                      Exclude="$(DonutSrcDir)\Launcher\**;$(DonutSrcDir)\**\bin\**;$(DonutSrcDir)\**\obj\**">
+      <LogicalName>src/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+
+    <!-- Runtime images the presenters + splash/tray load. assets\Screenshots is docs-only. -->
+    <EmbeddedResource Include="$(DonutRepoRoot)\assets\Images\**\*.*">
+      <LogicalName>assets/Images/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+
+    <!-- Native tool pushed to remote shares for disk scans; not in git, so it embeds only
+         when the operator has dropped it into src\Tools\ before building. -->
+    <EmbeddedResource Include="$(DonutSrcDir)\Tools\wiztree64.exe"
+                      Condition="Exists('$(DonutSrcDir)\Tools\wiztree64.exe')">
+      <LogicalName>src/Tools/wiztree64.exe</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>
