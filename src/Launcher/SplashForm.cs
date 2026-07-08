@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.IO;
 using System.Windows.Forms;
 using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threading.Timer
 
@@ -24,9 +22,8 @@ public sealed class SplashForm : Form
     private readonly Label _pct;
     private readonly SmoothProgressBar _bar;
 
-    /// <summary>Builds the splash window and loads its art.</summary>
-    /// <param name="assetsDir">GIF/logo search dir; null falls back to the install path.</param>
-    public SplashForm(string? assetsDir)
+    /// <summary>Builds the splash window and loads its art from embedded resources.</summary>
+    public SplashForm()
     {
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
@@ -43,7 +40,7 @@ public sealed class SplashForm : Form
             BackColor = Color.Transparent,
             Bounds = new Rectangle((360 - 120) / 2, 26, 120, 120),
         };
-        TryLoadArt(assetsDir);
+        TryLoadArtFromResources();
 
         _word = new Label
         {
@@ -88,34 +85,15 @@ public sealed class SplashForm : Form
         Controls.Add(_bar);
     }
 
-    // Loads the splash art: the spinning-donut GIF if present, otherwise the existing
-    // static logo, otherwise nothing. GIFs animate automatically in a PictureBox.
-    private void TryLoadArt(string? assetsDir)
+    // Loads the splash art from embedded resources: the spinning-donut GIF if present,
+    // otherwise the static logo. GIFs animate automatically in a PictureBox.
+    private void TryLoadArtFromResources()
     {
-        foreach (string name in new[] { "loading.gif", "logo yellow arrow.png" })
+        foreach (string logical in new[] { "assets/Images/loading.gif",
+                                           "assets/Images/logo yellow arrow.png" })
         {
-            var candidates = new List<string>();
-            if (!string.IsNullOrEmpty(assetsDir))
-                candidates.Add(Path.Combine(assetsDir, name));
-            candidates.Add(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "Bakery", "DONUT", "assets", "Images", name));
-
-            foreach (string path in candidates)
-            {
-                try
-                {
-                    if (!File.Exists(path)) continue;
-                    // Copy into memory so the source file isn't left locked.
-                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
-                    var ms = new MemoryStream();
-                    fs.CopyTo(ms);
-                    ms.Position = 0;
-                    _art.Image = Image.FromStream(ms);
-                    return;
-                }
-                catch { /* try the next candidate; a missing/broken asset is non-fatal */ }
-            }
+            Image? img = EmbeddedAssets.LoadImage(logical);
+            if (img != null) { _art.Image = img; return; }
         }
     }
 
