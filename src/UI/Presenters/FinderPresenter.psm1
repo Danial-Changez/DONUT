@@ -31,8 +31,8 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
     $Home is a DUCK-TYPED back-reference to HomePresenter (a typed import would be a
-    using-module cycle); the complete machine-side seam is: PrefetchIp, EnsureRow,
-    StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
+    using-module cycle); the complete machine-side seam is: Resolution.PrefetchIp,
+    EnsureRow, StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
     $presenter, since in a WPF handler $this rebinds to the sender.
 #>
 class FinderPresenter {
@@ -357,7 +357,7 @@ class FinderPresenter {
         }
         $this.SuppressSearch = $false
         # Start-early: a picked computer is about to be run - warm its IP now.
-        $this.Home.PrefetchIp($name)
+        $this.Home.Resolution.PrefetchIp($name)
     }
 
     # Locked user chosen: confirm, unlock against its home domain, toast the result.
@@ -532,7 +532,7 @@ class FinderPresenter {
     [void] OnAddDeviceToList([string]$wsid) {
         if ([string]::IsNullOrWhiteSpace($wsid)) { return }
         $this.Home.EnsureRow($wsid)
-        $this.Home.PrefetchIp($wsid)
+        $this.Home.Resolution.PrefetchIp($wsid)
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)
         $this.Home.UpdateEmptyHint()
