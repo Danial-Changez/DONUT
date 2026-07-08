@@ -140,6 +140,20 @@ function Stop-DonutProcessGracefully {
     }
 }
 
+# Surfaces a fatal update error to the user: this worker runs in a hidden window, so its
+# console output is invisible. Best-effort; never throws.
+function Show-UpdateError {
+    param([string]$Message)
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        [System.Windows.Forms.MessageBox]::Show(
+            $Message, 'DONUT Update',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    }
+    catch {}
+}
+
 # --- Main install logic ---
 try {
     if ($ProcessNameToClose) {
@@ -152,6 +166,7 @@ try {
     if ($Rollback) {
         $unExit = Invoke-MsiUninstall -ProdCode $info.ProductCode -Passive:$Passive
         if (@(0, 3010, 1605) -notcontains $unExit) {
+            Show-UpdateError "DONUT rollback failed (code $unExit). It may need a manual reinstall."
             Write-Error "Uninstall failed with exit code $unExit"
             exit 1
         }
@@ -161,6 +176,7 @@ try {
     $exit = Invoke-MsiInstall -MsiPath $MsiPath -LogPath $logPath -Passive:$Passive
 
     if (@(0, 3010) -notcontains $exit) {
+        Show-UpdateError "DONUT update failed (code $exit).`nSee log: $logPath"
         Write-Error "MSI install failed with exit code $exit. See log: $logPath"
         exit 1
     }
@@ -179,6 +195,7 @@ try {
             Start-Process -FilePath $exePath
         }
         catch {
+            Show-UpdateError "DONUT updated but couldn't relaunch. Open it from the Start Menu."
             Write-Host "[WARN] Failed to launch DONUT: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
@@ -186,6 +203,7 @@ try {
     exit 0
 }
 catch {
+    Show-UpdateError "DONUT update failed:`n$($_.Exception.Message)"
     Write-Host ("[ERROR] " + $_.Exception.Message) -ForegroundColor Red
     exit 1
 }
