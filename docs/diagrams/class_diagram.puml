@@ -358,8 +358,8 @@ package "Donut.Services" #221634 {
         +InvokePsExec(parameters): int
         +InvokeRemotePwsh(target, script, serviceName, maxMinutes): void
         +ReadDcuReturnCode(ip, outputLog, baseline): Hashtable
-        -EmitNewDcuLogLines(remoteLog, seenChars): int
-        -ClearRemoteOutputLog(ip, outputLog): object
+        -EmitNewDcuLogLines(ip, remoteLog, seenChars): int
+        +{static} BuildRemoteDcuScript(command, argsString, outputLog): string
         +CopyRemoteArtifacts(host): Hashtable
     }
 

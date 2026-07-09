@@ -132,9 +132,9 @@ else fresh Online
     P -> J : UpdateScan
     P -> J : Resolve{Name}  (StartVerifyName — parallel identity check, applyUpdates mode only)
     J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
-    W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
-    W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
-    W -> H : live-tail scan.log while psexec runs -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
+    W -> N : InvokePsExec SMB gate -> IsSmbAvailable(ip) (445, 2s) — the ONLY pre-launch touch
+    W -> H : psexec -s -h  pwsh -EncodedCommand (BuildRemoteDcuScript: discover dcu-cli on target, clear + /scan)
+    W -> H : live-tail scan.log while psexec runs (each tick SMB-gated 2s) -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
     W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report;\nSMB-gated with a brief retry - warns + skips instead of hanging)
     J --> P : Complete(UpdateScan)
   end
@@ -161,16 +161,16 @@ else Match OR Unknown
   P -> R : re-check IdentityVerdict  (late Mismatch -> ABORT + re-resolve)
   P -> J : UpdateApply
   J -> W : RunApplyPhase -> InvokePsExec
-  W -> N : FindDcuCli -> IsSmbAvailable(ip)
-  W -> H : clear apply.log over C$ (controller-side, + freshness baseline)
-  W -> H : psexec: clear again remotely ; dcu-cli /applyUpdates (-outputLog apply.log)
-  W -> H : live-tail apply.log while psexec runs -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
+  W -> N : InvokePsExec SMB gate -> IsSmbAvailable(ip) (445, 2s) — the ONLY pre-launch touch
+  W -> H : psexec: pwsh -EncodedCommand (BuildRemoteDcuScript: kill DCU, discover dcu-cli, clear apply.log, /applyUpdates)
+  W -> H : live-tail apply.log while psexec runs (each tick SMB-gated 2s) -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
   note right of W #E8F5E9
-    [FIXED] the log is cleared from the CONTROLLER before psexec starts -
-    the remote-side clear only runs if the remote command does. A leftover
-    that can't be deleted stamps a LastWriteTimeUtc baseline (target-vs-
-    target, skew-immune), so a stale log from a previous run can never
-    "confirm" a run that never happened.
+    [FIXED] NO controller-side UNC before launch. dcu-cli discovery and the
+    pre-run log clear both run ON the target (BuildRemoteDcuScript), so an
+    open-but-wedged C$ share (e.g. a host mid-reboot after a BIOS flash) can
+    no longer stall the worker before psexec is even sent. The remote clear
+    runs after killing any live DCU, so a recovered code is always this run's.
+    A missing dcu-cli returns the $DcuNotFoundExit sentinel -> DcuNotInstalled.
   end note
 end
 
@@ -184,7 +184,7 @@ else transport code  (233 PIPE_NOT_CONNECTED / 64 NETNAME_DELETED / ...)
     SMB pipe rides over -> psexec loses the pipe though dcu-cli finished.
   end note
   W -> H : ReadDcuReturnCode: retry <=5x, each gated by IsSmbAvailable (2s)
-  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init;\nonly trusted if written AFTER the pre-run baseline)
+  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init;\ntarget-side clear ran pre-run, so the log is this run's — baseline $null)
   W -> W : DcuLog.ParseReturnCode (last "return code: N")
   alt N in {0,1,5}   -> treat as completed (1/5 = reboot)
     W --> J : return N

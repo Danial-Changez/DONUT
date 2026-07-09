@@ -133,17 +133,18 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli" {
+    Context "InvokePsExec SMB gate" {
         It "Fails fast (RpcUnavailable) when the admin share (SMB/445) is unreachable" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
-            $probe.IsSmbAvailableResult = $false   # short-circuits before any UNC Test-Path
+            $probe.IsSmbAvailableResult = $false   # gate throws before psexec is ever launched
             $matcher = [DriverMatchingService]::new()
             $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
+            $params = @{ ComputerName = 'PC-5'; Command = 'scan'; Arguments = '-silent'; OutputLog = 'C:\temp\DONUT\scan.log' }
             $threw = $false; $errName = ''
-            try { $service.FindDcuCli('203.0.113.9') } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
+            try { $service.InvokePsExec($params) } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
             $threw  | Should -BeTrue
             $errName | Should -Be 'RpcUnavailableException'
         }
@@ -324,23 +325,6 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli" {
-        It "Should return null when DCU CLI is not found" {
-            # This test verifies the method exists and returns expected type
-            # The actual DCU path lookup would fail in test environments
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
-            # FindDcuCli is hidden, so we can't call it directly
-            # This test validates the service can be constructed and used
-            $service | Should -Not -BeNullOrEmpty
-        }
-    }
-
     Context "Integration with AppConfig" {
         It "Should use AppConfig settings for BuildDcuArgs" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{
@@ -492,17 +476,34 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli Path Resolution" {
-        It "Should throw when DCU CLI not found at expected paths" {
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
-            # FindDcuCli checks UNC paths which won't exist in test
-            { $service.FindDcuCli("127.0.0.1") } | Should -Throw "*not installed*"
+    Context "BuildRemoteDcuScript" {
+        It "resolves dcu-cli on the target and clears the prior log (no controller-side UNC)" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('applyUpdates',
+                '-silent -outputLog=C:\temp\DONUT\apply.log', 'C:\temp\DONUT\apply.log')
+
+            # dcu-cli is discovered ON the target (Test-Path there), not over a controller UNC.
+            $s.Contains('C:\Program Files (x86)\Dell\CommandUpdate\dcu-cli.exe') | Should -BeTrue
+            $s.Contains('C:\Program Files\Dell\CommandUpdate\dcu-cli.exe')       | Should -BeTrue
+            $s.Contains('Test-Path -LiteralPath')                               | Should -BeTrue
+            # The prior log is cleared remotely, and dcu-cli runs with the given args.
+            $s.Contains("Remove-Item -LiteralPath 'C:\temp\DONUT\apply.log'")    | Should -BeTrue
+            $s.Contains('/applyUpdates -silent -outputLog=C:\temp\DONUT\apply.log') | Should -BeTrue
+            # A missing dcu-cli comes back as the sentinel, not a hung path.
+            $s.Contains("exit $([ExecutionService]::DcuNotFoundExit)")           | Should -BeTrue
+        }
+
+        It "omits the clear line when no outputLog is supplied" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('scan', '-silent', '')
+            $s.Contains('Remove-Item') | Should -BeFalse
+            $s.Contains('/scan -silent') | Should -BeTrue
+        }
+
+        It "uses a not-found sentinel outside every dcu-cli and psexec transport code" {
+            # Past the driver-install range (2000-2007) so DescribeReturnCode never claims it,
+            # and not one of the connection-lost transport codes.
+            [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
+            @(0, 1, 5, 64, 109, 121, 232, 233, 1236) |
+                Should -Not -Contain ([ExecutionService]::DcuNotFoundExit)
         }
     }
 
