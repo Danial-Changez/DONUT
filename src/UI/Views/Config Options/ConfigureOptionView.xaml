@@ -10,8 +10,8 @@
             <!-- Flags -->
             <TextBlock Text="Flags"
                        FontFamily="{DynamicResource FontSans}"
-                       FontSize="16"
-                       FontWeight="Bold"
+                       FontSize="14"
+                       FontWeight="SemiBold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,0,0,8" />
             <StackPanel Orientation="Vertical"
@@ -141,30 +141,29 @@
                             Margin="0,0,0,8">
                     <ToggleButton x:Name="forceRestart"
                                   Style="{DynamicResource ModernToggleSwitch}" />
-                    <Path x:Name="rebootWarningIcon"
-                          Data="{DynamicResource Warning}"
-                          Fill="{DynamicResource AccentYellow}"
-                          Width="20"
-                          Height="20"
-                          Margin="8,0,-4,0"
-                          VerticalAlignment="Center"
-                          Stretch="Uniform"
-                          Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Text="Force Restart"
                                FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center" />
-                    <TextBlock x:Name="rebootWarningText"
-                               Text="(WARNING: This will cause the target machine(s) to automatically restart)"
-                               Foreground="{DynamicResource AccentYellow}"
-                               FontWeight="Bold"
-                               FontSize="14"
-                               FontFamily="{DynamicResource FontSans}"
-                               Margin="8,0,0,0"
-                               VerticalAlignment="Center"
-                               Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <!-- Arcane amber warning badge, shown only while the toggle is on. -->
+                    <Border Style="{DynamicResource BadgeAmber}"
+                            Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{DynamicResource Warning}"
+                                  Fill="{DynamicResource AccentYellow}"
+                                  Width="11"
+                                  Height="11"
+                                  Margin="0,0,5,0"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Center" />
+                            <TextBlock Style="{DynamicResource BadgeAmberText}"
+                                       Text="Auto-restarts the target machine(s)" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal"
                             Margin="0,0,0,8">
@@ -224,8 +223,8 @@
             <!-- Dropdown / Multi-Select Options -->
             <TextBlock Text="Dropdown / Multi-Select Options"
                        FontFamily="{DynamicResource FontSans}"
-                       FontSize="16"
-                       FontWeight="Bold"
+                       FontSize="14"
+                       FontWeight="SemiBold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
@@ -245,8 +244,8 @@
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Severity"
                                FontFamily="{DynamicResource FontSans}"
-                               FontSize="14"
-                               FontWeight="Bold"
+                               FontSize="13"
+                               FontWeight="Medium"
                                Foreground="{DynamicResource BodyTextPrimary}"
                                Margin="0,0,0,6"
                                Grid.Row="0"
@@ -293,8 +292,8 @@
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Type"
                                FontFamily="{DynamicResource FontSans}"
-                               FontSize="14"
-                               FontWeight="Bold"
+                               FontSize="13"
+                               FontWeight="Medium"
                                Foreground="{DynamicResource BodyTextPrimary}"
                                Margin="0,10,0,6"
                                Grid.Row="0"
@@ -346,8 +345,8 @@
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Device Category"
                                FontFamily="{DynamicResource FontSans}"
-                               FontSize="14"
-                               FontWeight="Bold"
+                               FontSize="13"
+                               FontWeight="Medium"
                                Foreground="{DynamicResource BodyTextPrimary}"
                                Margin="0,10,0,6"
                                Grid.Row="0"
@@ -392,8 +391,8 @@
                 </Grid>
                 <TextBlock Text="Schedule Action"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,8,0,6" />
                 <ComboBox x:Name="scheduleAction"
@@ -412,15 +411,15 @@
             <!-- Text/Number Options -->
             <TextBlock Text="Text/Number Options"
                        FontFamily="{DynamicResource FontSans}"
-                       FontSize="16"
-                       FontWeight="Bold"
+                       FontSize="14"
+                       FontWeight="SemiBold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
                 <TextBlock Text="Output Log"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -439,8 +438,8 @@
                 </StackPanel>
                 <TextBlock Text="Catalog Location"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,8,0,0" />
                 <StackPanel Orientation="Horizontal"
@@ -459,8 +458,8 @@
                 </StackPanel>
                 <TextBlock Text="Driver Library Location"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,8,0,0" />
                 <StackPanel Orientation="Horizontal"
@@ -479,8 +478,8 @@
                 </StackPanel>
                 <TextBlock Text="Download Location"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,8,0,0" />
                 <StackPanel Orientation="Horizontal"
@@ -499,8 +498,8 @@
                 </StackPanel>
                 <TextBlock Text="Import Settings"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,8,0,0" />
                 <StackPanel Orientation="Horizontal"
@@ -519,8 +518,8 @@
                 </StackPanel>
                 <TextBlock Text="Export Settings"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -538,8 +537,8 @@
                 </StackPanel>
                 <TextBlock Text="Bios Password"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -557,8 +556,8 @@
                 </StackPanel>
                 <TextBlock Text="Secure Bios Password"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -576,8 +575,8 @@
                 </StackPanel>
                 <TextBlock Text="Proxy Host"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -595,8 +594,8 @@
                 </StackPanel>
                 <TextBlock Text="Proxy User Name"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -614,8 +613,8 @@
                 </StackPanel>
                 <TextBlock Text="Proxy Password"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -633,8 +632,8 @@
                 </StackPanel>
                 <TextBlock Text="Secure Proxy Password"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -652,8 +651,8 @@
                 </StackPanel>
                 <TextBlock Text="Proxy Port"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -671,8 +670,8 @@
                 </StackPanel>
                 <TextBlock Text="Schedule Weekly"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -690,8 +689,8 @@
                 </StackPanel>
                 <TextBlock Text="Schedule Monthly"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -709,8 +708,8 @@
                 </StackPanel>
                 <TextBlock Text="Schedule Daily"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -728,8 +727,8 @@
                 </StackPanel>
                 <TextBlock Text="Deferral Install Interval"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -747,8 +746,8 @@
                 </StackPanel>
                 <TextBlock Text="Deferral Install Count"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -766,8 +765,8 @@
                 </StackPanel>
                 <TextBlock Text="Deferral Restart Interval"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -785,8 +784,8 @@
                 </StackPanel>
                 <TextBlock Text="Deferral Restart Count"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -804,8 +803,8 @@
                 </StackPanel>
                 <TextBlock Text="Max Retry"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="14"
-                           FontWeight="Bold"
+                           FontSize="13"
+                           FontWeight="Medium"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,10,0,6" />
                 <StackPanel Orientation="Horizontal"
@@ -825,8 +824,8 @@
             <!-- Throttle Limit -->
             <TextBlock Text="Throttle Limit"
                        FontFamily="{DynamicResource FontSans}"
-                       FontSize="16"
-                       FontWeight="Bold"
+                       FontSize="14"
+                       FontWeight="SemiBold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,10,0,8" />
             <StackPanel Orientation="Horizontal"
