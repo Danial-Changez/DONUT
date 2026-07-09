@@ -17,17 +17,21 @@ namespace Donut.Qr
     public static class QrCode
     {
         /// <summary>
-        /// Encodes <paramref name="text"/> to a QR-code PNG. ECC level Q (~25% recovery)
-        /// keeps the code scannable under mild on-screen glare.
+        /// Encodes <paramref name="text"/> to a QR-code PNG in the given module colours. ECC
+        /// level Q (~25% recovery) keeps the code scannable under mild on-screen glare. Keep
+        /// <paramref name="darkRgba"/> dark and <paramref name="lightRgba"/> light: decoders
+        /// need dark-on-light, so the colours may be themed but not inverted.
         /// </summary>
         /// <param name="text">The payload to encode (e.g. a BitLocker recovery key).</param>
         /// <param name="pixelsPerModule">Size of each QR module in pixels.</param>
+        /// <param name="darkRgba">Dark-module colour as [R,G,B,A].</param>
+        /// <param name="lightRgba">Light-module/background colour as [R,G,B,A].</param>
         /// <returns>PNG bytes; never written to disk by this method.</returns>
-        public static byte[] EncodePng(string text, int pixelsPerModule)
+        public static byte[] EncodePng(string text, int pixelsPerModule, byte[] darkRgba, byte[] lightRgba)
         {
             var generator = new QRCodeGenerator();
             var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.Q);
-            return new PngByteQRCode(data).GetGraphic(pixelsPerModule);
+            return new PngByteQRCode(data).GetGraphic(pixelsPerModule, darkRgba, lightRgba);
         }
     }
 }

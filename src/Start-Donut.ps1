@@ -36,8 +36,7 @@ if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
 }
 
 # QR helper (Donut.Qr.QrCode): wraps bundled QRCoder (MIT) for the BitLocker QR overlay.
-# Compiled into Donut.Launcher in production (guard skips); on the `pwsh -Sta` dev path load
-# QRCoder and compile the helper here, referencing the committed src\Lib\QRCoder.dll.
+# Prod compiles it into Donut.Launcher (guard skips); the dev path loads + compiles it here.
 if (-not ('Donut.Qr.QrCode' -as [type])) {
     $qrDll = Join-Path $PSScriptRoot 'Lib\QRCoder.dll'
     if (Test-Path $qrDll) {

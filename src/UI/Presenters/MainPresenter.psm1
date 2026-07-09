@@ -141,7 +141,9 @@ class MainPresenter {
         $closeQr = { param($p) $presenter.CloseQr() }.GetNewClosure()
         $this.MainVm.CloseQrCommand = [RelayCommand]::new([System.Action[object]]$closeQr)
         # Let the Home finder pop the shell's QR overlay for a Lens device's recovery key.
-        $showQr = { param($payload, $caption) $presenter.ShowQr($payload, $caption) }.GetNewClosure()
+        $showQr = { param($payload, $caption)
+            $presenter.ShowQr($payload, $caption)
+        }.GetNewClosure()
         if ($this.HomePresenter -and $this.HomePresenter.Finder) {
             $this.HomePresenter.Finder.OnShowQr = $showQr
         }
@@ -279,9 +281,8 @@ class MainPresenter {
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
     }
 
-    # Pops the QR overlay with a scannable code for a BitLocker recovery key. The payload is
-    # rendered to an in-memory image only (never written to disk, matching how the keys are
-    # otherwise handled); a render failure toasts rather than opening an empty card.
+    # Pops the QR overlay for a BitLocker recovery key, rendered to an in-memory image only
+    # (never written to disk). A render failure toasts instead of opening an empty card.
     [void] ShowQr([string]$payload, [string]$caption) {
         if ([string]::IsNullOrWhiteSpace($payload)) { return }
         $img = $this.BuildQrImage($payload)
@@ -300,12 +301,15 @@ class MainPresenter {
         if ($this.MainVm) { $this.MainVm.Set('IsQrOpen', $false) }
     }
 
-    # Encodes text to a QR PNG (in memory) via the bundled QR helper, returned as a frozen
-    # BitmapImage safe to bind cross-thread. The helper uses ECC level Q (~25% recovery) so
-    # the code still scans if partly glared on screen. Returns $null on any failure.
+    # Encodes text to a QR PNG (in memory) via the bundled QR helper, returned as a frozen,
+    # cross-thread-safe BitmapImage (ECC level Q for glare tolerance). $null on any failure.
     hidden [System.Windows.Media.ImageSource] BuildQrImage([string]$payload) {
         try {
-            $png = [Donut.Qr.QrCode]::EncodePng($payload, 20)
+            # Themed but still dark-on-light so any reader can scan it: violet-900 modules on a
+            # soft violet-50 plate (~9:1 contrast) instead of stark #000 on #FFF. RGBA bytes.
+            $dark = [byte[]](0x4C, 0x1D, 0x95, 0xFF)    # violet-900 (brand modules)
+            $light = [byte[]](0xF5, 0xF3, 0xFF, 0xFF)   # violet-50 (softened background)
+            $png = [Donut.Qr.QrCode]::EncodePng($payload, 20, $dark, $light)
             $ms = [System.IO.MemoryStream]::new($png)
             $img = [System.Windows.Media.Imaging.BitmapImage]::new()
             $img.BeginInit()

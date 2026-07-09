@@ -224,12 +224,17 @@
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
-                    <!-- White plate keeps the QR high-contrast/scannable in either theme. -->
+                    <!-- Light "code chip": a QR must stay dark-on-light to scan, so the plate
+                         stays light but is tinted to violet-50 (matching the QR's own light
+                         colour, no seam) and framed in the theme's violet to sit deliberately
+                         inside the dark card. -->
                     <Border Grid.Row="1"
                             Margin="0,14,0,0"
                             Padding="12"
-                            Background="White"
-                            CornerRadius="6"
+                            Background="#F5F3FF"
+                            BorderBrush="{DynamicResource WindowBorderAccent}"
+                            BorderThickness="1"
+                            CornerRadius="8"
                             HorizontalAlignment="Center">
                         <Image Source="{Binding QrImage}"
                                Width="280"

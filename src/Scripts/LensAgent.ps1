@@ -265,9 +265,8 @@ function Resolve-Lens {
                 $keys = @($bl.FindAll())
                 if ($keys.Count -gt 0) {
                     $dev.bitLockerKeys = @($keys | ForEach-Object {
-                            # whenCreated marshals to a DateTime (rarely a string); normalize to
-                            # ISO8601 UTC so the model's contract holds and newest-key selection
-                            # sorts chronologically instead of lexically on a culture-formatted string.
+                            # whenCreated marshals as a DateTime; normalize to ISO8601 UTC so the
+                            # DTO contract holds and newest-first selection is chronological.
                             $wc = $_.Properties['whencreated'][0]
                             $iso = ''
                             if ($wc -is [datetime]) {
