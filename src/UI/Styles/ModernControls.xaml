@@ -1,22 +1,25 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Arcane input recipe: borderless white@12% fill, rounded-lg, ring border on focus. -->
     <Style x:Key="GoogleSearchBar"
            TargetType="TextBox">
         <Setter Property="Background"
-                Value="{DynamicResource PanelBackground}" />
+                Value="{DynamicResource InputFill}" />
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="{DynamicResource TitleTextPrimary}" />
+        <Setter Property="CaretBrush"
+                Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="16" />
+                Value="13.5" />
         <Setter Property="Padding"
-                Value="16,8,40,8" />
+                Value="12,0,40,0" />
         <Setter Property="BorderThickness"
                 Value="0" />
         <Setter Property="Height"
-                Value="40" />
+                Value="32" />
         <Setter Property="HorizontalAlignment"
                 Value="Stretch" />
         <Setter Property="VerticalContentAlignment"
@@ -33,20 +36,21 @@
                     <Grid>
                         <Border x:Name="Border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="20"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="8.4"
                                 SnapsToDevicePixels="True">
                             <Grid>
                                 <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="0"
+                                              Margin="{TemplateBinding Padding}"
                                               VerticalAlignment="Center" />
                                 <!-- Placeholder watermark -->
                                 <TextBlock x:Name="Placeholder"
                                            Text="WSID..."
-                                           Foreground="{DynamicResource BodyTextTertiary}"
-                                           Opacity="0.5"
+                                           Foreground="{DynamicResource BodyTextPrimary}"
                                            IsHitTestVisible="False"
                                            VerticalAlignment="Center"
-                                           Margin="16,0,0,0"
+                                           Margin="13,0,0,0"
                                            Visibility="Collapsed" />
                             </Grid>
                         </Border>
@@ -63,6 +67,15 @@
                             <Setter TargetName="Placeholder"
                                     Property="Visibility"
                                     Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin"
+                                 Value="True">
+                            <Setter TargetName="Border"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="Border"
+                                    Property="Background"
+                                    Value="{DynamicResource InputBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -165,9 +178,9 @@
         <Setter Property="FontWeight"
                 Value="Normal" />
         <Setter Property="BorderThickness"
-                Value="2" />
+                Value="1" />
         <Setter Property="BorderBrush"
-                Value="{DynamicResource AccentBlue}" />
+                Value="{DynamicResource PanelBorder}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
@@ -184,9 +197,9 @@
                                  Value="True">
                             <Setter TargetName="Bd"
                                     Property="Background"
-                                    Value="{DynamicResource PanelBackgroundActive}" />
+                                    Value="{DynamicResource SurfaceSolid}" />
                             <Setter Property="FontWeight"
-                                    Value="Bold" />
+                                    Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsMouseOver"
                                  Value="True">
@@ -227,53 +240,137 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Modern TextBox Style -->
+    <!-- Modern TextBox: Arcane boxed input - white@12% fill, rounded-lg, no border
+         until focus paints the primary ring. -->
     <Style x:Key="ModernTextBox"
            TargetType="TextBox">
         <Setter Property="Background"
-                Value="Transparent" />
+                Value="{DynamicResource InputFill}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="14" />
+                Value="13" />
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="CaretBrush"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="BorderBrush"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="Transparent" />
         <Setter Property="BorderThickness"
-                Value="0,0,0,2" />
+                Value="1" />
+        <Setter Property="Height"
+                Value="32" />
         <Setter Property="Padding"
-                Value="2,2,2,2" />
+                Value="10,0" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
         <Setter Property="HorizontalAlignment"
                 Value="Left" />
-        <Setter Property="VerticalScrollBarVisibility"
-                Value="Auto" />
-        <Setter Property="HorizontalScrollBarVisibility"
-                Value="Auto" />
+        <Setter Property="VerticalContentAlignment"
+                Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter TargetName="Bd"
+                                    Property="Background"
+                                    Value="{DynamicResource InputBorder}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin"
+                                 Value="True">
+                            <Setter TargetName="Bd"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="Bd"
+                                    Property="Background"
+                                    Value="{DynamicResource InputBorder}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled"
+                                 Value="False">
+                            <Setter TargetName="Bd"
+                                    Property="Opacity"
+                                    Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
-    <!-- Modern ComboBox Style -->
+    <!-- Modern ComboBox: Arcane boxed select - input fill, rounded-lg, primary ring
+         when open; popup is a solid surface card. -->
     <Style x:Key="ModernComboBox"
            TargetType="ComboBox">
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="14" />
+                Value="13" />
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="Background"
-                Value="Transparent" />
+                Value="{DynamicResource InputFill}" />
         <Setter Property="BorderBrush"
-                Value="{DynamicResource AccentBlue}" />
+                Value="Transparent" />
         <Setter Property="BorderThickness"
-                Value="0,0,0,2" />
+                Value="1" />
+        <Setter Property="Height"
+                Value="32" />
         <Setter Property="Padding"
                 Value="2,2,2,2" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource BodyTextPrimary}" />
+                    <Setter Property="Padding"
+                            Value="10,6" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ComboBoxItem">
+                                <Border x:Name="itemBd"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        Margin="4,1"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter VerticalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsHighlighted"
+                                             Value="True">
+                                        <Setter TargetName="itemBd"
+                                                Property="Background"
+                                                Value="{DynamicResource PanelBackgroundHover}" />
+                                        <Setter Property="Foreground"
+                                                Value="{DynamicResource TitleTextPrimary}" />
+                                    </Trigger>
+                                    <Trigger Property="IsSelected"
+                                             Value="True">
+                                        <Setter TargetName="itemBd"
+                                                Property="Background"
+                                                Value="{DynamicResource TintViolet}" />
+                                        <Setter Property="Foreground"
+                                                Value="{DynamicResource TitleTextPrimary}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
@@ -282,7 +379,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="8.4">
                             <DockPanel LastChildFill="False">
                                 <ContentPresenter x:Name="ContentSite"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
@@ -297,7 +394,7 @@
                                       HorizontalAlignment="Right">
                                     <Path x:Name="Arrow"
                                           Data="M 0 0 L 8 0 L 4 4 Z"
-                                          Fill="{DynamicResource AccentBlue}"
+                                          Fill="{DynamicResource BodyTextPrimary}"
                                           Width="12"
                                           Height="8"
                                           Margin="0,0,8,0"
@@ -328,10 +425,12 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="Slide">
-                            <Border Background="{DynamicResource PanelBackground}"
-                                    BorderBrush="{DynamicResource AccentBlue}"
+                            <Border Background="{DynamicResource SurfaceSolid}"
+                                    BorderBrush="{DynamicResource PanelBorder}"
                                     BorderThickness="1"
-                                    CornerRadius="10"
+                                    CornerRadius="8.4"
+                                    Margin="0,4,0,0"
+                                    Padding="0,4"
                                     MinWidth="{TemplateBinding ActualWidth}">
                                 <ScrollViewer CanContentScroll="True">
                                     <StackPanel IsItemsHost="True" />
@@ -343,16 +442,19 @@
                         <Trigger Property="IsMouseOver"
                                  Value="True">
                             <Setter TargetName="Bd"
+                                    Property="Background"
+                                    Value="{DynamicResource InputBorder}" />
+                        </Trigger>
+                        <Trigger Property="IsDropDownOpen"
+                                 Value="True">
+                            <Setter TargetName="Bd"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource AccentPurple}" />
-                            <Setter TargetName="Arrow"
-                                    Property="Fill"
-                                    Value="{DynamicResource AccentPurple}" />
+                                    Value="{DynamicResource Primary}" />
                         </Trigger>
                         <Trigger Property="IsEnabled"
                                  Value="False">
-                            <Setter Property="Foreground"
-                                    Value="#888" />
+                            <Setter Property="Opacity"
+                                    Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -372,31 +474,33 @@
         <Setter Property="Background"
                 Value="{DynamicResource GroupBoxBackground}" />
         <Setter Property="BorderBrush"
-                Value="{DynamicResource AccentBlue}" />
+                Value="{DynamicResource PanelBorder}" />
         <Setter Property="BorderThickness"
-                Value="2" />
+                Value="1" />
     </Style>
-    <!-- Modern CheckBox Style -->
+    <!-- Modern CheckBox: shadcn-sized 16px box, primary fill when checked. -->
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="14" />
+                Value="13" />
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextPrimary}" />
         <Setter Property="Margin"
                 Value="0,0,16,8" />
+        <Setter Property="Cursor"
+                Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <DockPanel LastChildFill="True">
                         <Border x:Name="box"
-                                Width="30"
-                                Height="30"
-                                CornerRadius="6"
-                                BorderThickness="2"
-                                BorderBrush="{DynamicResource AccentBlue}"
+                                Width="16"
+                                Height="16"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource InputBorder}"
                                 Background="Transparent"
                                 VerticalAlignment="Center"
                                 HorizontalAlignment="Center"
@@ -404,19 +508,16 @@
                             <Grid>
                                 <Path x:Name="check"
                                       Data="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"
-                                      Stroke="{DynamicResource AccentBlue}"
                                       Visibility="Collapsed"
-                                      StrokeEndLineCap="Round"
-                                      StrokeStartLineCap="Round"
-                                      Height="18"
-                                      Width="18"
+                                      Height="10"
+                                      Width="10"
                                       Stretch="Uniform"
-                                      Fill="{DynamicResource TitleTextSecondary}"
+                                      Fill="{DynamicResource PrimaryForeground}"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center" />
                             </Grid>
                         </Border>
-                        <ContentPresenter Margin="10,0,0,0"
+                        <ContentPresenter Margin="8,0,0,0"
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Left" />
                     </DockPanel>
@@ -425,19 +526,19 @@
                                  Value="True">
                             <Setter TargetName="box"
                                     Property="Background"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="box"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource Primary}" />
                             <Setter TargetName="check"
                                     Property="Visibility"
                                     Value="Visible" />
-                            <Setter TargetName="check"
-                                    Property="Stroke"
-                                    Value="White" />
                         </Trigger>
                         <Trigger Property="IsMouseOver"
                                  Value="True">
                             <Setter TargetName="box"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource AccentPurple}" />
+                                    Value="{DynamicResource BodyTextSecondary}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -490,7 +591,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <Border x:Name="chip"
-                            CornerRadius="8"
+                            CornerRadius="6.7"
                             Padding="12,6"
                             BorderThickness="1"
                             BorderBrush="{DynamicResource InputBorder}"
@@ -503,18 +604,18 @@
                                  Value="True">
                             <Setter TargetName="chip"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource AccentPurple}" />
+                                    Value="{DynamicResource Primary}" />
                         </Trigger>
                         <Trigger Property="IsChecked"
                                  Value="True">
                             <Setter TargetName="chip"
                                     Property="Background"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource TintViolet}" />
                             <Setter TargetName="chip"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource TintVioletBorder}" />
                             <Setter Property="Foreground"
-                                    Value="{DynamicResource PrimaryForeground}" />
+                                    Value="{DynamicResource AccentPurpleLight}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -555,60 +656,9 @@
                                  Value="True">
                             <Setter TargetName="seg"
                                     Property="Background"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource SurfaceSolid}" />
                             <Setter Property="Foreground"
-                                    Value="{DynamicResource PrimaryForeground}" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-    <!-- Modern Button = Arcane "default" (primary) button: violet-600 fill,
-         rounded-lg (9.6), font-medium, h-36, hover = primary/90. Was a bold
-         fully-rounded violet pill; now matches shadcn's default variant so
-         primary CTAs across every view read like Arcane. -->
-    <Style x:Key="ModernButton"
-           TargetType="Button">
-        <Setter Property="Background"
-                Value="{DynamicResource Primary}" />
-        <Setter Property="Foreground"
-                Value="{DynamicResource PrimaryForeground}" />
-        <Setter Property="FontFamily"
-                Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize"
-                Value="14" />
-        <Setter Property="FontWeight"
-                Value="Medium" />
-        <Setter Property="BorderThickness"
-                Value="0" />
-        <Setter Property="Cursor"
-                Value="Hand" />
-        <Setter Property="Height"
-                Value="36" />
-        <Setter Property="Width"
-                Value="180" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            CornerRadius="9.6"
-                            Background="{TemplateBinding Background}">
-                        <ContentPresenter VerticalAlignment="Center"
-                                          HorizontalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver"
-                                 Value="True">
-                            <Setter TargetName="bd"
-                                    Property="Background"
-                                    Value="{DynamicResource PrimaryHover}" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled"
-                                 Value="False">
-                            <Setter TargetName="bd"
-                                    Property="Opacity"
-                                    Value="0.5" />
+                                    Value="{DynamicResource TitleTextPrimary}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -623,7 +673,7 @@
         <Setter Property="Width"
                 Value="7" />
         <Setter Property="Background"
-                Value="{DynamicResource AccentBlue}" />
+                Value="{DynamicResource PanelBackgroundActive}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
@@ -672,9 +722,10 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- Neutral zinc scrollbar (Arcane): quiet thumb, brightens on hover/drag. -->
     <Style TargetType="ScrollBar">
         <Setter Property="Foreground"
-                Value="{DynamicResource AccentBlue}" />
+                Value="{DynamicResource PanelBackgroundActive}" />
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Width"
@@ -718,14 +769,14 @@
                                  Value="true">
                             <Setter TargetName="Thumb"
                                     Property="Background"
-                                    Value="{DynamicResource AccentPurple}" />
+                                    Value="{DynamicResource BodyTextSecondary}" />
                         </Trigger>
                         <Trigger SourceName="Thumb"
                                  Property="IsDragging"
                                  Value="true">
                             <Setter TargetName="Thumb"
                                     Property="Background"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource BodyTextPrimary}" />
                         </Trigger>
                         <Trigger Property="IsEnabled"
                                  Value="false">
@@ -766,13 +817,13 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Modern Toggle Switch Style -->
+    <!-- Modern Toggle Switch: shadcn switch - 36x20 muted track, primary when on. -->
     <Style x:Key="ModernToggleSwitch"
            TargetType="ToggleButton">
         <Setter Property="Width"
-                Value="48" />
+                Value="36" />
         <Setter Property="Height"
-                Value="28" />
+                Value="20" />
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="BorderThickness"
@@ -782,21 +833,22 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Grid Width="48"
-                          Height="28">
+                    <Grid x:Name="Root"
+                          Width="36"
+                          Height="20">
                         <!-- Track -->
                         <Border x:Name="SwitchTrack"
-                                Width="48"
-                                Height="28"
-                                CornerRadius="14"
-                                Background="#333"
-                                BorderBrush="{DynamicResource AccentBlue}"
-                                BorderThickness="2" />
+                                Width="36"
+                                Height="20"
+                                CornerRadius="10"
+                                Background="{DynamicResource SurfaceMuted}"
+                                BorderBrush="{DynamicResource InputBorder}"
+                                BorderThickness="1" />
                         <!-- Thumb -->
                         <Ellipse x:Name="SwitchThumb"
-                                 Width="22"
-                                 Height="22"
-                                 Fill="{DynamicResource AccentBlue}"
+                                 Width="14"
+                                 Height="14"
+                                 Fill="{DynamicResource TitleTextPrimary}"
                                  Margin="3,3,0,3"
                                  HorizontalAlignment="Left" />
                         <!-- Label (optional) -->
@@ -809,10 +861,13 @@
                                  Value="True">
                             <Setter TargetName="SwitchTrack"
                                     Property="Background"
-                                    Value="{DynamicResource AccentBlue}" />
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="SwitchTrack"
+                                    Property="BorderBrush"
+                                    Value="Transparent" />
                             <Setter TargetName="SwitchThumb"
                                     Property="Fill"
-                                    Value="White" />
+                                    Value="{DynamicResource PrimaryForeground}" />
                             <Setter TargetName="SwitchThumb"
                                     Property="HorizontalAlignment"
                                     Value="Right" />
@@ -824,19 +879,13 @@
                                  Value="True">
                             <Setter TargetName="SwitchTrack"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource AccentPurple}" />
-                            <Setter TargetName="SwitchThumb"
-                                    Property="Fill"
-                                    Value="{DynamicResource AccentPurple}" />
+                                    Value="{DynamicResource BodyTextSecondary}" />
                         </Trigger>
                         <Trigger Property="IsEnabled"
                                  Value="False">
-                            <Setter TargetName="SwitchTrack"
-                                    Property="Background"
-                                    Value="#555" />
-                            <Setter TargetName="SwitchThumb"
-                                    Property="Fill"
-                                    Value="#888" />
+                            <Setter TargetName="Root"
+                                    Property="Opacity"
+                                    Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

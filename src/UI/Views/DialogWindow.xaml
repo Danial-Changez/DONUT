@@ -167,17 +167,17 @@
                         Content="{Binding PrimaryText}"
                         Command="{Binding PrimaryCommand}"
                         Width="120"
-                        Height="48"
+                        Height="40"
                         Margin="0,8,8,0"
-                        Style="{DynamicResource ModernButton}" />
+                        Style="{DynamicResource ButtonPrimary}" />
                 <Button x:Name="btnSecondary"
                         Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"
                         Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVis}}"
                         Width="120"
-                        Height="48"
+                        Height="40"
                         Margin="8,8,0,0"
-                        Style="{DynamicResource ModernButton}" />
+                        Style="{DynamicResource ButtonOutline}" />
             </StackPanel>
         </Grid>
     </Border>

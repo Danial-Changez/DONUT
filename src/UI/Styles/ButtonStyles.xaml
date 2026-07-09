@@ -131,10 +131,10 @@
                 </Setter>
         </Style>
     <!-- ============================================================
-         Arcane button system (shadcn variants, ported 1:1).
-         Shared: rounded-lg (radius 9.6 = 0.6rem), h-9 (36), px-4 (16),
-         text-sm (14), font-medium, disabled opacity 0.5. Violet is used
-         only by ButtonPrimary; everything else is neutral zinc.
+         Arcane button system (ported from getarcaneapp/arcane at its real
+         14px root scale). Shared: rounded-lg (8.4), h-9 (32), px-4 (14),
+         text-sm (12.5), font-medium, disabled opacity 0.5. Solid violet is
+         reserved for main CTAs; actions use the tinted variants below.
          ============================================================ -->
     <!-- default: bg-primary text-primary-foreground hover:bg-primary/90 -->
     <Style x:Key="ButtonPrimary"
@@ -142,18 +142,18 @@
         <Setter Property="Background" Value="{DynamicResource Primary}" />
         <Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -176,18 +176,18 @@
         <Setter Property="Background" Value="{DynamicResource Secondary}" />
         <Setter Property="Foreground" Value="{DynamicResource SecondaryForeground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -211,11 +211,11 @@
         <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
@@ -224,7 +224,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -247,18 +247,18 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TitleTextTertiary}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter x:Name="cp"
                                           HorizontalAlignment="Center"
@@ -284,18 +284,18 @@
         <Setter Property="Background" Value="{DynamicResource Destructive}" />
         <Setter Property="Foreground" Value="{DynamicResource DestructiveForeground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -333,7 +333,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="9.6"
+                            CornerRadius="8.4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
@@ -344,6 +344,160 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelBackgroundActive}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- ============================================================
+         ArcaneButton tinted action variants: tinted glass outline keyed to the
+         action's semantic color - bg {c}@10%, border {c}@30%, text = 400 shade;
+         hover lifts to @20%/@40%. Arcane uses these (not solid fills) for
+         start/stop/scan-style actions.
+         ============================================================ -->
+    <Style x:Key="ButtonTintPrimary"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource TintViolet}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentPurple}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintVioletHover}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintVioletBorderHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ButtonTintSuccess"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource TintGreen}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentGreen}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TintGreenBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintGreenHover}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintGreenBorderHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ButtonTintWarning"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource TintAmber}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentYellow}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TintAmberBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintAmberHover}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintAmberBorderHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ButtonTintDestructive"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource TintRed}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentRed}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TintRedBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintRedHover}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintRedBorderHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
