@@ -60,6 +60,13 @@ class HostViewModel : ObservableObject {
     [bool]   $HasFolders = $false
     hidden [object] $FoldersSource = $null   # last-applied report, to skip no-op rebuilds
 
+    # Available-updates list (DcuUpdate[]) shown in the detail pane after an apply-updates scan.
+    # Display-only (apply is gated by a confirm dialog); HasUpdates gates the section + folders.
+    [object] $Updates = @()
+    [bool]   $HasUpdates = $false
+    [string] $UpdatesHeader = ''
+    [string] $UpdatesIdentityText = ''
+
     # Backing state for idle/reachability recomposition: the chip/subtitle are rebuilt
     # from these whenever either the stored status or the live reachability changes.
     hidden [string] $BaseSubtitle = 'never run'

@@ -28,6 +28,7 @@ using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Services\HostResolver.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
+using module "..\..\Models\DcuUpdate.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
@@ -127,6 +128,10 @@ class HomePresenter : AsyncJobPresenter {
     # Highest scan milestone per host (1..5); ratcheted so a re-emitted earlier line
     # can't step backwards. Reset at job start.
     hidden [hashtable] $ScanSteps = @{}
+
+    # Hosts consented in one "Run all" apply batch: each applies without its own confirm
+    # dialog (ProceedWithApply auto-applies + removes them). Empty for single runs.
+    hidden [HashSet[string]] $BatchApplyHosts = [HashSet[string]]::new()
 
     HomePresenter(
         [AppConfig] $config,
@@ -378,6 +383,9 @@ class HomePresenter : AsyncJobPresenter {
                 $idleHosts
             )
             if (-not $confirmed) { return }
+            # Batch consent: each host applies without its own dialog (see ProceedWithApply).
+            $this.BatchApplyHosts.Clear()
+            foreach ($h in $idleHosts) { [void]$this.BatchApplyHosts.Add($h) }
         }
 
         $this.ManualRebootQueue.Clear()
@@ -414,14 +422,8 @@ class HomePresenter : AsyncJobPresenter {
             return
         }
 
-        if ($this.Config.GetActiveCommand() -eq 'applyUpdates') {
-            $confirmed = $this.DialogPresenter.ShowConfirmation(
-                "Confirm Apply Updates",
-                "Apply updates to $hostName now?",
-                @($hostName)
-            )
-            if (-not $confirmed) { return }
-        }
+        # Apply-updates no longer pre-confirms: the scan runs, then a single confirm gates
+        # the apply (with the readable list in the detail pane).
         $this.MoveRowToTop($hostName)
         $this.StartProcess($hostName)
     }
@@ -451,6 +453,8 @@ class HomePresenter : AsyncJobPresenter {
 
     [void] StartProcess([string]$hostName) {
         $row = $this.EnsureRow($hostName)
+        # A new run supersedes any last-found updates list shown in the pane.
+        if ($row) { $row.Set('HasUpdates', $false) }
         $command = $this.Config.GetActiveCommand()
 
         # Never scan/apply an offline or unresolved host (reachability gating, .NOTES).
@@ -734,44 +738,37 @@ class HomePresenter : AsyncJobPresenter {
         $this.Detail.AppendLog($hostName, "Found $($updateNodes.Count) updates. Analyzing driver matches...")
 
         $installedDrivers = $this.GetInstalledDriversFromReport($report)
-        $displayList = @()
-        $clipboardList = @()
+        $updateRows = $this.BuildUpdateRows($report, $installedDrivers)
 
-        foreach ($updateNode in $updateNodes) {
-            $name = $updateNode.InnerText.Trim()
-            $version = $updateNode.GetAttribute("version")
-            if ([string]::IsNullOrEmpty($version)) { $version = "N/A" }
-
-            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
-
-            if ($match) {
-                $currentVer = $match.Driver.DriverVersion
-                $comparison = $this.DriverMatcher.CompareVersions($currentVer, $version)
-                $tag = if ($comparison.IsNewer) { "↑NEW" } else { "=" }
-                $displayList += $name
-                $displayList += "   [$($match.Category)] $currentVer → $version $tag"
-                $clipboardList += "$name, $currentVer -> $version"
-            }
-            else {
-                $displayList += "$name ($version)"
-                $displayList += "   [No matching driver found]"
-                $clipboardList += "$name, $version (latest)"
-            }
-        }
-
-        # Show the identity verdict in the dialog (the parallel check may not have landed).
+        # Identity verdict (the parallel check may not have landed yet).
         $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
-            "Identity verified: the machine answers as '$($this.Resolver.GetVerifiedName($hostName))'."
+            "Identity verified: answers as '$($this.Resolver.GetVerifiedName($hostName))'."
         }
         else {
-            "Identity not verified yet (name check still pending) - proceed with care."
+            "Identity not verified yet (name check pending) - proceed with care."
         }
-        $displayList = @($identityLine, '') + $displayList
 
-        $this.Detail.AppendLog($hostName, "Driver analysis complete. Waiting for confirmation...")
-        $confirmed = $this.DialogPresenter.ShowConfirmation("Updates Available",
-            "Updates found for $hostName", $displayList)
+        # Render the readable list in the detail pane (per host; shows on selection).
+        $vm = $this.GetRow($hostName)
+        if ($null -ne $vm) {
+            $vm.Set('Updates', $updateRows)
+            $vm.Set('UpdatesHeader', "UPDATES FOUND ($($updateRows.Count))")
+            $vm.Set('UpdatesIdentityText', $identityLine)
+            $vm.Set('HasUpdates', $true)
+        }
+        $this.CopyUpdatesToClipboard($hostName, @($updateRows | ForEach-Object { "$($_.Name), $($_.VersionText)" }))
 
+        # Run all consented up front: apply straight away, no per-host dialog.
+        if ($this.BatchApplyHosts.Contains($hostName)) {
+            [void]$this.BatchApplyHosts.Remove($hostName)
+            $this.Detail.AppendLog($hostName, "Applying $($updateRows.Count) update(s)...")
+            return $this.StartApply($hostName)
+        }
+
+        # Single run: one small confirm (the list itself lives in the pane, not the dialog).
+        $this.Detail.AppendLog($hostName, "Review the updates in the pane, then confirm.")
+        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply Updates",
+            "Apply $($updateRows.Count) update(s) to ${hostName}? Review the list in the detail pane.", @())
         if (-not $confirmed) {
             $this.Detail.AppendLog($hostName, "Cancelled by user.")
             return $false
@@ -779,11 +776,48 @@ class HomePresenter : AsyncJobPresenter {
 
         # Re-check after the dialog: a Mismatch may have landed while it was open.
         if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
+        return $this.StartApply($hostName)
+    }
 
+    # Parses each <update>'s child elements into typed DcuUpdate rows (read explicitly - the
+    # fields are child elements, so $node.InnerText would mash them). See NodeText.
+    hidden [array] BuildUpdateRows([xml]$report, [array]$installedDrivers) {
+        $updateRows = @()
+        foreach ($node in $report.SelectNodes("//update")) {
+            $name = $this.NodeText($node, 'name')
+            $newVersion = $this.NodeText($node, 'version')
+            $category = $this.NodeText($node, 'category')
+            $bytesText = $this.NodeText($node, 'bytes')
+            [long]$bytes = 0
+            [void][long]::TryParse($bytesText, [ref]$bytes)
+
+            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
+            $currentVersion = ''
+            $isNewer = $false
+            $hasMatch = $false
+            if ($match) {
+                $hasMatch = $true
+                $currentVersion = $match.Driver.DriverVersion
+                $isNewer = $this.DriverMatcher.CompareVersions($currentVersion, $newVersion).IsNewer
+                if ([string]::IsNullOrWhiteSpace($category)) { $category = $match.Category }
+            }
+            $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
+                $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
+        }
+        return $updateRows
+    }
+
+    # First child element's trimmed text (empty when absent). SelectSingleNode('name'), never
+    # $node.name - the latter collides with XmlElement.Name and returns the tag ("update").
+    hidden [string] NodeText([System.Xml.XmlNode]$node, [string]$child) {
+        $c = $node.SelectSingleNode($child)
+        if ($null -eq $c) { return '' }
+        return $c.InnerText.Trim()
+    }
+
+    # Launches the apply (phase 2) job. Shared by the single-confirm and Run-all paths.
+    hidden [bool] StartApply([string]$hostName) {
         $this.Detail.AppendLog($hostName, "Confirmed. Phase 2: Applying updates...")
-        $this.CopyUpdatesToClipboard($hostName, $clipboardList)
-        $this.Detail.AppendLog($hostName, "Updates list copied to clipboard.")
-
         try {
             # The apply re-emits the scan milestones; restart the ratchet.
             $this.ScanSteps.Remove($hostName)
