@@ -66,7 +66,7 @@
                             <Button x:Name="btnClose"
                                     Command="{Binding CloseCommand}"
                                     Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentPink}">
+                                    Tag="{DynamicResource Destructive}">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource xMark}" />
                             </Button>
@@ -89,7 +89,7 @@
                             <Button x:Name="btnSettings"
                                     Command="{Binding OpenSettingsCommand}"
                                     Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentBlue}"
+                                    Tag="{DynamicResource Primary}"
                                     ToolTip="Settings">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Width="14"
@@ -121,7 +121,7 @@
                 <KeyBinding Key="Escape" Command="{Binding CloseSettingsCommand}" />
             </Grid.InputBindings>
             <!-- Dim backdrop, a sibling BEHIND the card so card clicks don't bubble here. -->
-            <Border Background="#B0000000">
+            <Border Background="{DynamicResource DimBackdrop}">
                 <Border.InputBindings>
                     <MouseBinding MouseAction="LeftClick" Command="{Binding CloseSettingsCommand}" />
                 </Border.InputBindings>
@@ -145,7 +145,7 @@
                     <Grid Grid.Row="0"
                           Margin="20,14,12,0">
                         <TextBlock Text="Configuration"
-                                   FontFamily="Montserrat"
+                                   FontFamily="{DynamicResource FontSans}"
                                    FontSize="18"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource TitleTextPrimary}"
@@ -156,7 +156,7 @@
                                 Height="30"
                                 Command="{Binding CloseSettingsCommand}"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource AccentPink}"
+                                Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Width="12"
@@ -180,7 +180,7 @@
                 <KeyBinding Key="Escape" Command="{Binding CloseQrCommand}" />
             </Grid.InputBindings>
             <!-- Dim backdrop, a sibling BEHIND the card so card clicks don't bubble here. -->
-            <Border Background="#B0000000">
+            <Border Background="{DynamicResource DimBackdrop}">
                 <Border.InputBindings>
                     <MouseBinding MouseAction="LeftClick" Command="{Binding CloseQrCommand}" />
                 </Border.InputBindings>
@@ -202,7 +202,7 @@
                     <!-- Header: caption + close, mirroring the settings card. -->
                     <Grid Grid.Row="0">
                         <TextBlock Text="{Binding QrCaption}"
-                                   FontFamily="Montserrat"
+                                   FontFamily="{DynamicResource FontSans}"
                                    FontSize="14"
                                    FontWeight="Bold"
                                    TextWrapping="Wrap"
@@ -216,7 +216,7 @@
                                 Height="30"
                                 Command="{Binding CloseQrCommand}"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource AccentPink}"
+                                Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Width="12"
@@ -231,7 +231,7 @@
                     <Border Grid.Row="1"
                             Margin="0,14,0,0"
                             Padding="12"
-                            Background="#F5F3FF"
+                            Background="{DynamicResource QrPlate}"
                             BorderBrush="{DynamicResource WindowBorderAccent}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -245,7 +245,7 @@
                     <TextBlock Grid.Row="2"
                                Margin="0,12,0,0"
                                Text="Scan to read the recovery key, then close this."
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="11"
                                TextAlignment="Center"
                                TextWrapping="Wrap"
@@ -273,7 +273,9 @@
                             CornerRadius="10" Margin="0,0,0,10" Cursor="Hand"
                             Opacity="0">
                         <Border.Background>
-                            <SolidColorBrush Color="#EB18181B" />
+                            <!-- Arcane surface (#171717) at ~92%, matching the glass toast -->
+                            <SolidColorBrush Color="{DynamicResource SurfaceSolidColor}"
+                                             Opacity="0.92" />
                         </Border.Background>
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="slide" X="40" />
@@ -293,10 +295,10 @@
                             <Border Grid.Column="0" Background="{Binding Accent}" CornerRadius="10,0,0,10" />
                             <StackPanel Grid.Column="1" Margin="14,12,14,12">
                                 <TextBlock Text="{Binding Title}" Foreground="{Binding Accent}"
-                                           FontFamily="Montserrat" FontWeight="SemiBold" FontSize="14"
+                                           FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TitleTextTertiary}"
-                                           FontFamily="Montserrat" FontSize="12.5" TextWrapping="Wrap"
+                                           FontFamily="{DynamicResource FontSans}" FontSize="12.5" TextWrapping="Wrap"
                                            Margin="0,4,0,0"
                                            Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
                             </StackPanel>

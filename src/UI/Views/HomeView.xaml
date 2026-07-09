@@ -117,7 +117,7 @@
               <DataTemplate>
                 <Grid>
                   <!-- Section header ("COMPUTERS" / "USERS") -->
-                  <TextBlock Text="{Binding HeaderText}" FontFamily="Montserrat" FontSize="10"
+                  <TextBlock Text="{Binding HeaderText}" FontFamily="{DynamicResource FontSans}" FontSize="10"
                              FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}"
                              Margin="6,6,0,4">
                     <TextBlock.Style>
@@ -160,9 +160,9 @@
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
                       <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Primary}" FontFamily="Montserrat" FontSize="13"
+                        <TextBlock Text="{Binding Primary}" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                    Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Secondary}" FontFamily="Montserrat" FontSize="11"
+                        <TextBlock Text="{Binding Secondary}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
                                    TextTrimming="CharacterEllipsis" />
                       </StackPanel>
@@ -192,7 +192,7 @@
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
         <TextBlock Text="&#x27F3;" FontFamily="Segoe UI Symbol" FontSize="13"
                    Foreground="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" Margin="0,0,7,0" />
-        <TextBlock x:Name="txtMode" Text="Scan" FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+        <TextBlock x:Name="txtMode" Text="Scan" FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                    Foreground="{DynamicResource TitleTextPrimary}" VerticalAlignment="Center" />
       </StackPanel>
     </Button>
@@ -202,9 +202,9 @@
       x:Name="btnRunAll"
       Grid.Column="2"
       Content="Run all"
-      Style="{DynamicResource ButtonOutline}"
+      Style="{DynamicResource ButtonTintPrimary}"
       Width="100"
-      Height="36"
+      Height="32"
       Margin="12,0,0,0"
     />
   </Grid>
@@ -233,11 +233,11 @@
     <Border Grid.Column="0" Margin="0,0,6,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="MACHINE" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBox x:Name="txtOvModel" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}"
+                   />
+        <TextBox x:Name="txtOvModel" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
                  Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvModelSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="Montserrat" FontSize="11.5"
+        <TextBox x:Name="txtOvModelSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -246,11 +246,11 @@
     <Border Grid.Column="1" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="BATTERY HEALTH" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBox x:Name="txtOvBattery" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}"
+                   />
+        <TextBox x:Name="txtOvBattery" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
                  Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvBatterySub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="Montserrat" FontSize="11.5"
+        <TextBox x:Name="txtOvBatterySub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -259,11 +259,11 @@
     <Border Grid.Column="2" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="DISK" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBox x:Name="txtOvDisk" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}"
+                   />
+        <TextBox x:Name="txtOvDisk" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
                  Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvDiskSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="Montserrat" FontSize="11.5"
+        <TextBox x:Name="txtOvDiskSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -272,11 +272,11 @@
     <Border Grid.Column="3" Margin="6,0,0,0" CornerRadius="10" Padding="16,14"
             Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
       <StackPanel>
-        <TextBlock Text="UPDATES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" />
-        <TextBox x:Name="txtOvUpdates" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="Montserrat" FontSize="16" FontWeight="Bold"
+        <TextBlock Text="UPDATES" Style="{DynamicResource MicroLabel}"
+                   />
+        <TextBox x:Name="txtOvUpdates" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
                  Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvUpdatesSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="Montserrat" FontSize="11.5"
+        <TextBox x:Name="txtOvUpdatesSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -301,8 +301,8 @@
 
       <!-- List header -->
       <Grid Grid.Row="0" Margin="14,12,14,8">
-        <TextBlock Text="MACHINES" FontFamily="Montserrat" FontSize="11" FontWeight="SemiBold"
-                   Foreground="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" />
+        <TextBlock Text="MACHINES" Style="{DynamicResource MicroLabel}"
+                   VerticalAlignment="Center" />
         <Button x:Name="btnClearTabs" Content="Clear completed" Style="{DynamicResource ButtonGhost}"
                 FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
       </Grid>
@@ -329,17 +329,20 @@
             <DataTemplate>
               <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"
                       Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
+                <!-- Arcane table-row states: quiet resting row, violet-tinted hover,
+                     stronger violet tint + primary edge when selected. -->
                 <Border.Style>
                   <Style TargetType="Border">
-                    <Setter Property="Background" Value="#1F1F1F" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+                    <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource RowSeparator}" />
                     <Setter Property="BorderThickness" Value="1" />
                     <Style.Triggers>
                       <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Background" Value="#27272A" />
+                        <Setter Property="Background" Value="{DynamicResource RowHover}" />
                       </Trigger>
                       <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                        <Setter Property="BorderBrush" Value="{DynamicResource AccentPurple}" />
+                        <Setter Property="Background" Value="{DynamicResource RowSelected}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
                         <Setter Property="BorderThickness" Value="1.5" />
                       </DataTrigger>
                     </Style.Triggers>
@@ -361,18 +364,18 @@
                            VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                   <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
-                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="14"
+                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                               FontFamily="Montserrat" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                               FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
                   <StackPanel Grid.Column="2" Width="120" Margin="12,0,12,0" VerticalAlignment="Center"
                               Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}">
-                    <ProgressBar Height="4" Minimum="0" Maximum="100"
+                    <ProgressBar Style="{DynamicResource ThinProgressBar}" Minimum="0" Maximum="100"
                                  Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
-                                 Foreground="{Binding ProgressBrush}" BorderThickness="0" />
+                                 Foreground="{Binding ProgressBrush}" />
                     <!-- Live milestone from dcu-cli's outputLog, e.g. "3/5 scanning devices". -->
-                    <TextBlock Text="{Binding StepText}" FontFamily="Montserrat" FontSize="9.5"
+                    <TextBlock Text="{Binding StepText}" FontFamily="{DynamicResource FontSans}" FontSize="9.5"
                                Foreground="{DynamicResource BodyTextSecondary}" Margin="0,3,0,0"
                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis">
                       <TextBlock.Style>
@@ -386,14 +389,17 @@
                       </TextBlock.Style>
                     </TextBlock>
                   </StackPanel>
-                  <Border Grid.Column="3" CornerRadius="8" Padding="10,3,10,3" VerticalAlignment="Center"
+                  <!-- Status chip = Arcane StatusBadge: rounded (not a pill), tinted
+                       fill + 30% border, 400-shade text (all VM-driven). -->
+                  <Border Grid.Column="3" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
                           Margin="0,0,8,0" Background="{Binding ChipBackground}"
+                          BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                           Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
-                               FontFamily="Montserrat" FontWeight="SemiBold" FontSize="11" />
+                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="11" />
                   </Border>
                   <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
-                          Style="{DynamicResource ButtonPrimary}" FontSize="11.5" Height="28"
+                          Style="{DynamicResource ButtonTintPrimary}" FontSize="11.5" Height="28"
                           Padding="14,4" VerticalAlignment="Center"
                           ToolTip="Run the active command on this machine" />
                 </Grid>
@@ -405,7 +411,7 @@
           x:Name="FleetEmptyHint"
           Text="No machines yet. Enter computer names above and run a scan or update."
           Foreground="{DynamicResource BodyTextTertiary}"
-          FontFamily="Montserrat"
+          FontFamily="{DynamicResource FontSans}"
           FontSize="14"
           TextWrapping="Wrap"
           TextAlignment="Center"
@@ -429,7 +435,7 @@
         <!-- Empty state -->
         <TextBlock x:Name="DetailEmptyHint"
                    Text="Select a machine, or search a person to open their Lens."
-                   Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="14"
+                   Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="14"
                    TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
           <TextBlock.Style>
             <Style TargetType="TextBlock">
@@ -472,9 +478,9 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}" />
-              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="Montserrat" FontSize="11"
+              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
@@ -492,11 +498,11 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+              <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
+                         Margin="0,0,0,8" />
               <TextBlock Grid.Row="1"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
-                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
+                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                          TextWrapping="Wrap">
                 <TextBlock.Style>
                   <Style TargetType="TextBlock">
@@ -526,7 +532,7 @@
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
-                                 FontFamily="Montserrat" FontSize="12" VerticalAlignment="Center">
+                                 FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
                           <TextBox.Style>
                             <!-- Selectable (mirrors SelectableText), with root rows brighter.
                                  Inlined rather than BasedOn: the codebase resolves styles via
@@ -555,7 +561,7 @@
                           </TextBox.Style>
                         </TextBox>
                         <TextBox Grid.Column="1" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
-                                 FontFamily="Montserrat" FontSize="12" FontWeight="SemiBold"
+                                 FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                                  Foreground="{DynamicResource BodyTextSecondary}"
                                  Margin="10,0,0,0" VerticalAlignment="Center" />
                       </Grid>
@@ -567,18 +573,27 @@
           </Border>
 
           <!-- Live job log -->
-          <Border Grid.Row="2" CornerRadius="8" Background="#0B0B0E" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+          <Border Grid.Row="2" CornerRadius="8" Background="{DynamicResource TerminalBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
               <ProgressBar x:Name="DetailProgress" Grid.Row="0" Height="3" Minimum="0" Maximum="100"
-                           Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource AccentPurple}" />
+                           Style="{DynamicResource ThinProgressBar}"
+                           Visibility="Collapsed" Background="Transparent">
+                <!-- Arcane dash-meter fill: primary -> violet gradient -->
+                <ProgressBar.Foreground>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="{DynamicResource PrimaryColor}" Offset="0" />
+                    <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}" Offset="1" />
+                  </LinearGradientBrush>
+                </ProgressBar.Foreground>
+              </ProgressBar>
               <!-- Wrap + no horizontal scrollbar: the themed ScrollBar template is
                    vertical-only, so a horizontal bar renders as a stray white box. -->
               <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" Background="Transparent" BorderThickness="0"
-                       Foreground="#D4D4D8" FontFamily="Consolas" FontSize="12"
+                       Foreground="{DynamicResource TerminalText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
                        TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="6" />
             </Grid>
           </Border>
@@ -607,14 +622,14 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Margin="0,0,0,10">
-              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" FontFamily="Montserrat" FontSize="18" FontWeight="Bold"
+              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}" />
-              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="Montserrat" FontSize="11.5"
+              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
 
             <!-- Loading / error status -->
-            <TextBlock Grid.Row="1" Text="{Binding StatusText}" FontFamily="Montserrat" FontSize="12"
+            <TextBlock Grid.Row="1" Text="{Binding StatusText}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                        TextWrapping="Wrap" Margin="0,0,0,10">
               <TextBlock.Style>
                 <Style TargetType="TextBlock">
@@ -643,20 +658,20 @@
                 <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
               <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
-                <TextBlock Text="EMAIL" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
-                <TextBlock Text="MANAGER" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
-                <TextBlock Text="SAM" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="1">
-                <TextBlock Text="OFFICE" FontFamily="Montserrat" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" FontFamily="Montserrat" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
               </StackPanel>
             </Grid>
 
@@ -666,8 +681,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Text="DEVICES" FontFamily="Montserrat" FontSize="10.5" FontWeight="SemiBold"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+              <TextBlock Grid.Row="0" Text="DEVICES" Style="{DynamicResource MicroLabel}"
+                         Margin="0,0,0,8" />
               <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Devices}">
                   <ItemsControl.ItemTemplate>
@@ -680,9 +695,9 @@
                             <ColumnDefinition Width="Auto" />
                           </Grid.ColumnDefinitions>
                           <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="Montserrat" FontSize="13.5" FontWeight="SemiBold"
+                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
                                      Foreground="{DynamicResource TitleTextPrimary}" />
-                            <TextBox Style="{DynamicResource SelectableText}" FontFamily="Montserrat" FontSize="11.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
+                            <TextBox Style="{DynamicResource SelectableText}" FontFamily="{DynamicResource FontMono}" FontSize="10.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
                               <TextBox.Text>
                                 <MultiBinding StringFormat="{}{0}   ·   {1}">
                                   <Binding Path="Os" />
@@ -691,11 +706,11 @@
                               </TextBox.Text>
                             </TextBox>
                             <!-- BitLocker key: hidden until revealed (a recovery secret); selectable to copy -->
-                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="Consolas" FontSize="12"
+                            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
                                      Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
                                      Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}" />
                             <!-- Note when there's no BitLocker / device not found -->
-                            <TextBox Text="{Binding Note}" FontFamily="Montserrat" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,4,0,0">
+                            <TextBox Text="{Binding Note}" FontFamily="{DynamicResource FontSans}" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,4,0,0">
                               <TextBox.Style>
                                 <!-- Selectable (mirrors SelectableText) + Wrap; collapses when empty. -->
                                 <Style TargetType="TextBox">
@@ -740,14 +755,14 @@
                                 </Style>
                               </ContentControl.Style>
                               <Button Content="Reveal key" Command="{Binding RevealCommand}"
-                                      Style="{DynamicResource ButtonOutline}" FontSize="11" Height="28" />
+                                      Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28" />
                             </ContentControl>
                             <!-- QR of the latest recovery key: shown whenever the device has
                                  BitLocker (an alternate reveal - stays available after reveal). -->
                             <ContentControl Margin="0,0,6,0"
                                             Visibility="{Binding HasBitLocker, Converter={StaticResource BoolToVis}}">
                               <Button Content="QR" Command="{Binding ShowQrCommand}"
-                                      Style="{DynamicResource ButtonOutline}" FontSize="11" Height="28"
+                                      Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28"
                                       ToolTip="Show a QR code of the latest BitLocker recovery key" />
                             </ContentControl>
                             <Button Content="Add" Command="{Binding AddCommand}"
@@ -762,7 +777,7 @@
               </ScrollViewer>
               <!-- Empty-devices hint (only once loaded with no devices) -->
               <TextBlock Grid.Row="1" Text="No SCCM devices for this user."
-                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="Montserrat" FontSize="12"
+                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                          HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
                 <TextBlock.Style>
                   <Style TargetType="TextBlock">
