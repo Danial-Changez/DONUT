@@ -20,6 +20,9 @@ class AppConfig {
     static [hashtable] $Defaults = @{
         activeCommand    = 'scan'
         throttleLimit    = 8
+        # How long a run keeps trying to reconnect + resume after a network drop (either
+        # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
+        recoveryWindowMinutes = 30
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
         domains          = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
@@ -186,6 +189,19 @@ class AppConfig {
 
     [void] SetThrottleLimit([int]$limit) {
         $this.SetSetting('throttleLimit', $limit)
+    }
+
+    # Minutes a dropped run keeps reconnecting + resuming before settling Unconfirmed.
+    # Clamped to >= 1 so a bad/zero config can't disable recovery outright.
+    [int] GetRecoveryWindowMinutes() {
+        $val = 30
+        if ($null -ne $this.Settings -and $this.Settings.ContainsKey('recoveryWindowMinutes')) {
+            $raw = $this.Settings['recoveryWindowMinutes']
+            if ($raw -is [int]) { $val = $raw }
+            elseif ($raw -is [string] -and $raw -match '^\d+$') { $val = [int]$raw }
+        }
+        if ($val -lt 1) { return 1 }
+        return $val
     }
 
     # Builds the dcu-cli argument string; DCU's format is -option=value (not /option).

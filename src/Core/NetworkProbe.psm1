@@ -182,6 +182,20 @@ class NetworkProbe {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
     }
 
+    # True when THIS machine (the operator's laptop) has a usable network at all. A cheap,
+    # local, non-blocking check - it stays fast even while offline (unlike a DC probe, which
+    # would trigger blocking AD discovery on the worker's fresh probe). The reconnect loop
+    # uses it to tell "my own Wi-Fi is down" from "the target is unreachable". Overridable
+    # seam so the worker tests can force offline/online without a real NIC.
+    [bool] IsLocalOnline() {
+        try {
+            return [System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()
+        }
+        catch {
+            return $false
+        }
+    }
+
     [bool] IsOnline([string]$hostName) {
         try {
             return (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)

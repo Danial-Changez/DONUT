@@ -11,6 +11,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [bool] $IsSmbAvailableResult = $true
+    [bool] $IsLocalOnlineResult = $true
     [string] $ResolveHostResult = "127.0.0.1"
     [string] $ActiveDcResult = "DC1.contoso.local"
     [string[]] $DcListResult = @("DC1.contoso.local", "DC2.contoso.local")
@@ -19,6 +20,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [bool] IsSmbAvailable([string]$hostName) { return $this.IsSmbAvailableResult }
+    [bool] IsLocalOnline() { return $this.IsLocalOnlineResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
     [string] GetActiveDomainController() { return $this.ActiveDcResult }
     [string[]] GetDomainControllers() { return $this.DcListResult }
@@ -39,6 +41,16 @@ class TestExecutionService : ExecutionService {
         # Capture params for verification; return the configured dcu-cli code.
         $this.LastPsExecParams = $params
         return $this.PsExecReturnCode
+    }
+
+    # Canned TailAndScanLog results so RecoverByResumeTail can be driven without a network;
+    # when the queue empties, reports "reachable, no verdict yet" at the current offset.
+    [System.Collections.Generic.Queue[hashtable]] $TailResults = [System.Collections.Generic.Queue[hashtable]]::new()
+    [int] $TailCalls = 0
+    [hashtable] TailAndScanLog([string]$ip, [string]$remoteLog, [int]$seenChars) {
+        $this.TailCalls++
+        if ($this.TailResults.Count -gt 0) { return $this.TailResults.Dequeue() }
+        return @{ Seen = $seenChars; Code = @{ Found = $false; Code = 0 } }
     }
 
     [string] $LastCopiedOutputLog = $null
@@ -504,6 +516,69 @@ Describe "WorkerServices" {
             [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
             @(0, 1, 5, 64, 109, 121, 232, 233, 1236) |
                 Should -Not -Contain ([ExecutionService]::DcuNotFoundExit)
+        }
+    }
+
+    Context "TailAndScanLog" {
+        It "streams new whole lines, advances the offset, and surfaces the return code" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()   # IsSmbAvailable = $true
+            $matcher = [DriverMatchingService]::new()
+            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $logFile = Join-Path $script:tempDir 'apply-tail.log'
+            "[2026-07-09 15:00:00] : Installing updates (4 of 4)...`n[2026-07-09 15:00:30] : The program exited with return code: 1" |
+                Set-Content -LiteralPath $logFile -Encoding UTF8
+
+            # A local temp file stands in for the admin-share UNC path; SMB gate is mocked open.
+            $r = $service.TailAndScanLog('10.0.0.7', $logFile, 0)
+            $r.Seen       | Should -BeGreaterThan 0
+            $r.Code.Found | Should -BeTrue
+            $r.Code.Code  | Should -Be 1
+        }
+
+        It "returns Found=false and the old offset when the share is unreachable (never blocks)" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new(); $probe.IsSmbAvailableResult = $false
+            $matcher = [DriverMatchingService]::new()
+            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $r = $service.TailAndScanLog('10.0.0.7', 'C:\temp\DONUT\apply.log', 42)
+            $r.Seen       | Should -Be 42
+            $r.Code.Found | Should -BeFalse
+        }
+    }
+
+    Context "RecoverByResumeTail" {
+        It "returns the recovered code as soon as a reachable read yields a verdict" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()   # local + SMB both online
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.TailResults.Enqueue(@{ Seen = 10; Code = @{ Found = $true; Code = 5 } })
+
+            $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
+            $r.Found          | Should -BeTrue
+            $r.Code           | Should -Be 5
+            $service.TailCalls | Should -Be 1   # returned on the first reachable read, no waiting
+        }
+
+        It "resumes past a not-yet-written verdict and recovers the code on a later read" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.TailResults.Enqueue(@{ Seen = 5;  Code = @{ Found = $false; Code = 0 } })  # dcu still installing
+            $service.TailResults.Enqueue(@{ Seen = 20; Code = @{ Found = $true;  Code = 0 } })  # then the verdict
+
+            $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
+            $r.Found           | Should -BeTrue
+            $r.Code            | Should -Be 0
+            $service.TailCalls | Should -Be 2
         }
     }
 

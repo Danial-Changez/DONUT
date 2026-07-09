@@ -63,4 +63,26 @@ class DcuProgress {
         }
         return ''
     }
+
+    # --- Reconnect / resume status lines ---
+
+    # The worker prefixes reconnect/resume status lines with this token so the pump can turn
+    # them into a "Reconnecting…" card (and strip it for display). ASCII with a leading '[r'
+    # so it renders in any font and never collides with a dcu-cli line (those start "[<date>").
+    static [string] $ReconnectMarker = '[reconnect] '
+
+    # True when a tailed line is one of the worker's reconnect/resume status lines. It never
+    # matches ParsePercent/ParseScanStep, so it can't disturb the determinate bar.
+    static [bool] IsReconnectLine([string]$line) {
+        if ([string]::IsNullOrEmpty($line)) { return $false }
+        return $line.StartsWith([DcuProgress]::ReconnectMarker, [System.StringComparison]::Ordinal)
+    }
+
+    # The human message with the detection token removed (for the detail terminal).
+    static [string] StripReconnectMarker([string]$line) {
+        if ([DcuProgress]::IsReconnectLine($line)) {
+            return $line.Substring([DcuProgress]::ReconnectMarker.Length)
+        }
+        return $line
+    }
 }

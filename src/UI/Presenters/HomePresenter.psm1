@@ -122,6 +122,11 @@ class HomePresenter : AsyncJobPresenter {
     # or drops them - never left queued silently.
     hidden [hashtable] $PendingRuns = @{}
 
+    # Hosts whose running job announced a connection drop (worker emits reconnect lines):
+    # the card shows "Reconnecting…" until the resumed tail streams a normal dcu line, or
+    # the job settles. Set/cleared in OnJobPolled; cleared on terminal in OnJobCompleted.
+    hidden [hashtable] $Reconnecting = @{}
+
     # Gathers queued the same way; value = strongest $force flag seen while queued.
     hidden [hashtable] $PendingGathers = @{}
 
@@ -566,13 +571,29 @@ class HomePresenter : AsyncJobPresenter {
 
         $latestPct = -1
         $latestStep = 0
+        $sawReconnect = $false
+        $sawNormalLine = $false
+        # Reconnect status lines drive the "Reconnecting…" card; strip their marker for the
+        # terminal. Any other line means the tail resumed, which clears the reconnect state.
+        $display = [System.Collections.Generic.List[string]]::new()
         foreach ($entry in $lines) {
+            if ([DcuProgress]::IsReconnectLine($entry)) {
+                $sawReconnect = $true
+                $display.Add([DcuProgress]::StripReconnectMarker($entry))
+                continue
+            }
+            $sawNormalLine = $true
+            $display.Add($entry)
             $pct = [DcuProgress]::ParsePercent($entry)
             if ($pct -ge 0) { $latestPct = $pct }
             $step = [DcuProgress]::ParseScanStep($entry)
             if ($step -gt $latestStep) { $latestStep = $step }
         }
-        if ($lines.Count -gt 0) { $this.Detail.AppendLogLines($job.HostName, $lines.ToArray()) }
+        if ($display.Count -gt 0) { $this.Detail.AppendLogLines($job.HostName, $display.ToArray()) }
+
+        # A drop was announced -> Reconnecting; a resumed (non-reconnect) line clears it.
+        if ($sawReconnect) { $this.Reconnecting[$job.HostName] = $true }
+        elseif ($sawNormalLine) { [void]$this.Reconnecting.Remove($job.HostName) }
 
         $row = $this.GetRow($job.HostName)
         if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
@@ -606,6 +627,10 @@ class HomePresenter : AsyncJobPresenter {
             $this.Detail.CompleteDiskScan($job)
             return
         }
+
+        # The run reached a terminal state: drop any lingering "Reconnecting…" flag so the
+        # settled card reflects the outcome (Completed / Reboot / Unconfirmed / Failed).
+        [void]$this.Reconnecting.Remove($job.HostName)
 
         # No end-of-job log dump: the worker already live-tailed dcu-cli's output, and
         # a dump would replay a stale previous-run file after a failed job.
@@ -701,6 +726,11 @@ class HomePresenter : AsyncJobPresenter {
     [void] RefreshCardStatus([AsyncJob]$job) {
         $row = $this.GetRow($job.HostName)
         if (-not $row) { return }
+        # A running job whose connection dropped shows "Reconnecting…" until the tail resumes.
+        if ($job.Status -eq 'Running' -and $this.Reconnecting.ContainsKey($job.HostName)) {
+            $row.ApplyStatus([FleetCardStatus]::Reconnecting())
+            return
+        }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
         $row.ApplyStatus([FleetCardStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
     }

@@ -94,4 +94,26 @@ Describe "DcuProgress" {
             [DcuProgress]::ScanStepLabel(0) | Should -Be ''
         }
     }
+
+    Context "Reconnect status lines" {
+        It "recognizes and strips the worker's reconnect marker" {
+            $line = "$([DcuProgress]::ReconnectMarker)Reconnecting to WS-5330 to resume…"
+            [DcuProgress]::IsReconnectLine($line)         | Should -BeTrue
+            [DcuProgress]::StripReconnectMarker($line)    | Should -Be 'Reconnecting to WS-5330 to resume…'
+        }
+
+        It "does not flag a normal dcu-cli line, and leaves it untouched" {
+            $dcu = '[2026-07-09 14:55:43] : Installing updates (4 of 4)...'
+            [DcuProgress]::IsReconnectLine($dcu)      | Should -BeFalse
+            [DcuProgress]::StripReconnectMarker($dcu) | Should -Be $dcu
+            [DcuProgress]::IsReconnectLine('')        | Should -BeFalse
+            [DcuProgress]::IsReconnectLine($null)     | Should -BeFalse
+        }
+
+        It "a reconnect line never registers as a percent or a scan step (can't disturb the bar)" {
+            $line = "$([DcuProgress]::ReconnectMarker)this machine is offline. Waiting to reconnect…"
+            [DcuProgress]::ParsePercent($line)  | Should -Be -1
+            [DcuProgress]::ParseScanStep($line) | Should -Be 0
+        }
+    }
 }

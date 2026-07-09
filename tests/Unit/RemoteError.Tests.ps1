@@ -73,6 +73,13 @@ Describe "RemoteError" {
                 [RemoteConnectionLostException]::IsConnectionLost($dcu) | Should -BeFalse
             }
         }
+        It "IsConnectionLost also matches the LOCAL-side (client Wi-Fi drop) network codes" {
+            # These surface when the operator's own laptop loses connectivity mid-run
+            # (psexec exits 59 etc.) - they must recover, not hard-fail. None are dcu codes.
+            foreach ($net in 51, 53, 54, 55, 58, 59, 1231, 1232) {
+                [RemoteConnectionLostException]::IsConnectionLost($net) | Should -BeTrue
+            }
+        }
         It "RemoteConnectionLostException.Describe names known codes, bare-formats others" {
             [RemoteConnectionLostException]::Describe(64)  | Should -Be 'code 64 ERROR_NETNAME_DELETED'
             [RemoteConnectionLostException]::Describe(999) | Should -Be 'code 999'
