@@ -20,6 +20,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [bool] IsSmbAvailable([string]$hostName) { return $this.IsSmbAvailableResult }
+    [bool] IsSmbReachableQuiet([string]$hostName) { return $this.IsSmbAvailableResult }
     [bool] IsLocalOnline() { return $this.IsLocalOnlineResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
     [string] GetActiveDomainController() { return $this.ActiveDcResult }

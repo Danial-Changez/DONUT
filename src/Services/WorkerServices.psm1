@@ -640,7 +640,8 @@ class ExecutionService {
     [hashtable] TailAndScanLog([string]$ip, [string]$remoteLog, [int]$seenChars) {
         $result = @{ Seen = $seenChars; Code = @{ Found = $false; Code = 0 } }
         if ([string]::IsNullOrWhiteSpace($remoteLog)) { return $result }
-        if (-not $this.Probe.IsSmbAvailable($ip)) { return $result }
+        # Quiet gate: this runs every tick, so a down host must not spam a DEBUG line per tick.
+        if (-not $this.Probe.IsSmbReachableQuiet($ip)) { return $result }
         try {
             if (-not (Test-Path -LiteralPath $remoteLog)) { return $result }
             $text = Get-Content -LiteralPath $remoteLog -Raw -ErrorAction Stop

@@ -149,9 +149,16 @@ class NetworkProbe {
     # --- Connectivity probes ---
 
     # Shared bounded (2s) TCP connect probe behind IsRpcAvailable/IsSmbAvailable. The two
-    # label params preserve each wrapper's exact log strings.
+    # label params preserve each wrapper's exact log strings. Logs a DEBUG line on failure.
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel) {
+        return $this.IsPortOpen($hostName, $port, $portDesc, $checkLabel, $true)
+    }
+
+    # $logFailure=$false silences the failure DEBUG line for hot, high-frequency callers
+    # (the per-tick tail gate) that would otherwise log every ~1.5s while a host is down.
+    hidden [bool] IsPortOpen([string]$hostName, [int]$port,
+        [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
             $client = [TcpClient]::new()
             $result = $client.BeginConnect($hostName, $port, $null, $null)
@@ -162,11 +169,11 @@ class NetworkProbe {
                 return $true
             }
             $client.Close()
-            $this.Logger.LogDebug("$portDesc (port $port) not reachable on '$hostName'.")
+            if ($logFailure) { $this.Logger.LogDebug("$portDesc (port $port) not reachable on '$hostName'.") }
             return $false
         }
         catch {
-            $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)")
+            if ($logFailure) { $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)") }
             return $false
         }
     }
@@ -180,6 +187,13 @@ class NetworkProbe {
     # 445; when blocked, UNC ops hang with no timeout - so check it up front.
     [bool] IsSmbAvailable([string]$hostName) {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
+    }
+
+    # Same 445 reachability check, but silent on failure. The live-tail gate calls this every
+    # ~1.5s; when a host drops mid-run the noisy variant spammed a DEBUG line per tick (and
+    # every write takes LogService's mutex, which can aggravate STA UI-thread stalls).
+    [bool] IsSmbReachableQuiet([string]$hostName) {
+        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $false)
     }
 
     # True when THIS machine (the operator's laptop) has a usable network at all. A cheap,
