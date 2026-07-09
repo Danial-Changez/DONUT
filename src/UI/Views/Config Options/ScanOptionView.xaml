@@ -16,7 +16,7 @@
                 <ToggleButton x:Name="silent"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Silent"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="13.5"
                            Foreground="{DynamicResource TitleTextSecondary}"
                            Margin="12,0,0,0"
@@ -36,7 +36,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Severity"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -49,7 +49,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Type"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -63,7 +63,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Device Category"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -91,7 +91,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Output Log"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -101,7 +101,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Catalog Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -111,7 +111,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Report"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />

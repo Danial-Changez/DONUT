@@ -20,7 +20,7 @@
                 <ToggleButton x:Name="silent"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Silent"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="13.5"
                            Foreground="{DynamicResource TitleTextSecondary}"
                            Margin="12,0,0,0"
@@ -30,7 +30,7 @@
                 <ToggleButton x:Name="reboot"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Reboot"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="13.5"
                            Foreground="{DynamicResource TitleTextSecondary}"
                            Margin="12,0,0,0"
@@ -49,7 +49,7 @@
                       Margin="0,2,0,0" />
                 <TextBlock Text="This restarts the target machine(s) automatically."
                            Foreground="{DynamicResource AccentYellow}"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12"
                            TextWrapping="Wrap"
                            Margin="8,0,0,0"
@@ -60,7 +60,7 @@
                 <ToggleButton x:Name="autoSuspendBitLocker"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Auto Suspend BitLocker"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="13.5"
                            Foreground="{DynamicResource TitleTextSecondary}"
                            Margin="12,0,0,0"
@@ -71,7 +71,7 @@
                 <ToggleButton x:Name="forceupdate"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Force Update"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="13.5"
                            Foreground="{DynamicResource TitleTextSecondary}"
                            Margin="12,0,0,0"
@@ -91,7 +91,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Severity"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -104,7 +104,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Type"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -118,7 +118,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Device Category"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,8" />
@@ -146,7 +146,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Output Log"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -156,7 +156,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Catalog Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -166,7 +166,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Encrypted Password"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -176,7 +176,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Encrypted Password File"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />
@@ -186,7 +186,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Encryption Key"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="12.5"
                            Foreground="{DynamicResource BodyTextPrimary}"
                            Margin="0,0,0,4" />

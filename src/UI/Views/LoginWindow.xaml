@@ -75,7 +75,7 @@
                                VerticalAlignment="Center"
                                Margin="14,8,0,0"
                                Foreground="{DynamicResource TitleTextPrimary}"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="12" />
                 </DockPanel>
                 <!-- OAuth Section -->
@@ -92,7 +92,7 @@
                         <TextBlock Text="Login"
                                    HorizontalAlignment="Center"
                                    Foreground="{DynamicResource TitleTextPrimary}"
-                                   FontFamily="Montserrat"
+                                   FontFamily="{DynamicResource FontSans}"
                                    FontWeight="Bold"
                                    FontSize="40"
                                    Margin="0,0,0,8" />
@@ -145,7 +145,7 @@
                                      TextAlignment="Center"
                                      AcceptsReturn="True"
                                      IsReadOnly="True"
-                                     FontFamily="Consolas"
+                                     FontFamily="{DynamicResource FontMono}"
                                      FontSize="13.5"
                                      Background="Transparent"
                                      BorderBrush="Transparent"

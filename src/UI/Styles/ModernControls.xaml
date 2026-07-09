@@ -568,8 +568,9 @@
                 Value="11" />
         <Setter Property="FontWeight"
                 Value="SemiBold" />
+        <!-- Arcane table-header/stat-label muted tone (matches MicroLabel). -->
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextTertiary}" />
+                Value="{DynamicResource BodyTextPrimary}" />
         <Setter Property="Margin"
                 Value="0,0,0,10" />
     </Style>

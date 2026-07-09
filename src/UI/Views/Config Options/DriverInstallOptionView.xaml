@@ -9,7 +9,7 @@
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
             <TextBlock Text="Flags"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
@@ -21,7 +21,7 @@
                     <ToggleButton x:Name="silent"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Silent"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -30,42 +30,41 @@
                 <StackPanel Orientation="Horizontal">
                     <ToggleButton x:Name="reboot"
                                   Style="{DynamicResource ModernToggleSwitch}" />
-                    <Path x:Name="rebootWarningIcon"
-                          Data="{DynamicResource Warning}"
-                          Fill="Yellow"
-                          Width="20"
-                          Height="20"
-                          Margin="8,0,-4,0"
-                          VerticalAlignment="Center"
-                          Stretch="Uniform"
-                          Visibility="{Binding IsChecked, ElementName=reboot, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Text="Reboot"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center" />
-                    <TextBlock x:Name="rebootWarningText"
-                               Text="(WARNING: This will cause the target machine(s) to automatically restart)"
-                               Foreground="Yellow"
-                               FontWeight="Bold"
-                               FontSize="14"
-                               FontFamily="Montserrat"
-                               Margin="8,0,0,0"
-                               VerticalAlignment="Center"
-                               Visibility="{Binding IsChecked, ElementName=reboot, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <!-- Arcane amber warning badge, shown only while the toggle is on. -->
+                    <Border Style="{DynamicResource BadgeAmber}"
+                            Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding IsChecked, ElementName=reboot, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{DynamicResource Warning}"
+                                  Fill="{DynamicResource AccentYellow}"
+                                  Width="11"
+                                  Height="11"
+                                  Margin="0,0,5,0"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Center" />
+                            <TextBlock Style="{DynamicResource BadgeAmberText}"
+                                       Text="Auto-restarts the target machine(s)" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </StackPanel>
             <!-- Text Options -->
             <TextBlock Text="Text Options"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
                 <TextBlock Text="Output Log"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -85,7 +84,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Driver Library Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -105,7 +104,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Catalog Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"

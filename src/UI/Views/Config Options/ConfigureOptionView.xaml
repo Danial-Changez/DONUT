@@ -9,7 +9,7 @@
         <StackPanel Margin="30,20,30,20">
             <!-- Flags -->
             <TextBlock Text="Flags"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
@@ -21,7 +21,7 @@
                     <ToggleButton x:Name="silent"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Silent"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -32,7 +32,7 @@
                     <ToggleButton x:Name="allowXML"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Allow Xml"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -43,7 +43,7 @@
                     <ToggleButton x:Name="lockSettings"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Lock Settings"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -54,7 +54,7 @@
                     <ToggleButton x:Name="advancedDriverRestore"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Advanced Driver Restore"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -65,7 +65,7 @@
                     <ToggleButton x:Name="userConsent"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="User Consent"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -76,7 +76,7 @@
                     <ToggleButton x:Name="customProxy"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Custom Proxy"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -87,7 +87,7 @@
                     <ToggleButton x:Name="proxyAuthentication"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Proxy Authentication"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -98,7 +98,7 @@
                     <ToggleButton x:Name="proxyFallbackToDirectConnection"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Proxy Fallback To Direct Connection"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -109,7 +109,7 @@
                     <ToggleButton x:Name="scheduleAuto"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Schedule Auto"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -120,7 +120,7 @@
                     <ToggleButton x:Name="scheduleManual"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Schedule Manual"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -131,7 +131,7 @@
                     <ToggleButton x:Name="restoreDefaults"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Restore Defaults"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -143,7 +143,7 @@
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <Path x:Name="rebootWarningIcon"
                           Data="{DynamicResource Warning}"
-                          Fill="Yellow"
+                          Fill="{DynamicResource AccentYellow}"
                           Width="20"
                           Height="20"
                           Margin="8,0,-4,0"
@@ -151,17 +151,17 @@
                           Stretch="Uniform"
                           Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Text="Force Restart"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center" />
                     <TextBlock x:Name="rebootWarningText"
                                Text="(WARNING: This will cause the target machine(s) to automatically restart)"
-                               Foreground="Yellow"
+                               Foreground="{DynamicResource AccentYellow}"
                                FontWeight="Bold"
                                FontSize="14"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
                                Visibility="{Binding IsChecked, ElementName=forceRestart, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -171,7 +171,7 @@
                     <ToggleButton x:Name="autoSuspendBitLocker"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Auto Suspend Bit Locker"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -182,7 +182,7 @@
                     <ToggleButton x:Name="defaultSourceLocation"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Default Source Location"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -193,7 +193,7 @@
                     <ToggleButton x:Name="installationDeferral"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Installation Deferral"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -204,7 +204,7 @@
                     <ToggleButton x:Name="systemRestartDeferral"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="System Restart Deferral"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -214,7 +214,7 @@
                     <ToggleButton x:Name="updatesNotification"
                                   Style="{DynamicResource ModernToggleSwitch}" />
                     <TextBlock Text="Updates Notification"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                Foreground="{DynamicResource BodyTextSecondary}"
                                Margin="12,0,0,0"
@@ -223,7 +223,7 @@
             </StackPanel>
             <!-- Dropdown / Multi-Select Options -->
             <TextBlock Text="Dropdown / Multi-Select Options"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
@@ -244,7 +244,7 @@
                         <!-- Severity -->
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Severity"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                FontWeight="Bold"
                                Foreground="{DynamicResource BodyTextPrimary}"
@@ -292,7 +292,7 @@
                         <!-- Type -->
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Type"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                FontWeight="Bold"
                                Foreground="{DynamicResource BodyTextPrimary}"
@@ -345,7 +345,7 @@
                         <!-- Device Category -->
                     </Grid.RowDefinitions>
                     <TextBlock Text="Update Device Category"
-                               FontFamily="Montserrat"
+                               FontFamily="{DynamicResource FontSans}"
                                FontSize="14"
                                FontWeight="Bold"
                                Foreground="{DynamicResource BodyTextPrimary}"
@@ -391,7 +391,7 @@
                               Grid.Column="6" />
                 </Grid>
                 <TextBlock Text="Schedule Action"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -411,14 +411,14 @@
             </StackPanel>
             <!-- Text/Number Options -->
             <TextBlock Text="Text/Number Options"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
                        Margin="0,0,0,8" />
             <StackPanel Margin="0,0,0,18">
                 <TextBlock Text="Output Log"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -438,7 +438,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Catalog Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -458,7 +458,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Driver Library Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -478,7 +478,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Download Location"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -498,7 +498,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Import Settings"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -518,7 +518,7 @@
                              Margin="0,8,0,0" />
                 </StackPanel>
                 <TextBlock Text="Export Settings"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -537,7 +537,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Bios Password"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -556,7 +556,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Secure Bios Password"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -575,7 +575,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Proxy Host"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -594,7 +594,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Proxy User Name"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -613,7 +613,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Proxy Password"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -632,7 +632,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Secure Proxy Password"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -651,7 +651,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Proxy Port"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -670,7 +670,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Schedule Weekly"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -689,7 +689,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Schedule Monthly"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -708,7 +708,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Schedule Daily"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -727,7 +727,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Deferral Install Interval"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -746,7 +746,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Deferral Install Count"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -765,7 +765,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Deferral Restart Interval"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -784,7 +784,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Deferral Restart Count"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -803,7 +803,7 @@
                              Style="{DynamicResource ModernTextBox}" />
                 </StackPanel>
                 <TextBlock Text="Max Retry"
-                           FontFamily="Montserrat"
+                           FontFamily="{DynamicResource FontSans}"
                            FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource BodyTextPrimary}"
@@ -824,7 +824,7 @@
             </StackPanel>
             <!-- Throttle Limit -->
             <TextBlock Text="Throttle Limit"
-                       FontFamily="Montserrat"
+                       FontFamily="{DynamicResource FontSans}"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}"
