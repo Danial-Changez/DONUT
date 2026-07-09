@@ -356,10 +356,12 @@
          hover lifts to @20%/@40%. Arcane uses these (not solid fills) for
          start/stop/scan-style actions.
          ============================================================ -->
+    <!-- Arcane outline-primary: dark violet tint with NEAR-WHITE text (not violet),
+         so the primary action reads deep/subtle rather than loud. -->
     <Style x:Key="ButtonTintPrimary"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource TintViolet}" />
-        <Setter Property="Foreground" Value="{DynamicResource AccentPurple}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Height" Value="32" />

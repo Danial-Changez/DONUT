@@ -169,7 +169,7 @@
                         Width="120"
                         Height="40"
                         Margin="0,8,8,0"
-                        Style="{DynamicResource ButtonPrimary}" />
+                        Style="{DynamicResource ButtonTintPrimary}" />
                 <Button x:Name="btnSecondary"
                         Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"

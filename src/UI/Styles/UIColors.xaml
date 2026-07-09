@@ -272,6 +272,11 @@
     <Color x:Key="TintRedBorderHoverColor"> #66EF4444</Color>
     <SolidColorBrush x:Key="TintRedBorderHover"
                      Color="{StaticResource TintRedBorderHoverColor}" />
+    <!-- Focus ring: Arcane's ring/50 reads as a muted, darker violet (not solid
+         bright Primary). Primary @ 60% composites to a deep violet on inputs. -->
+    <Color x:Key="FocusRingColor"> #998022FE</Color>
+    <SolidColorBrush x:Key="FocusRing"
+                     Color="{StaticResource FocusRingColor}" />
     <!-- Sky (info tone, sky-500 #0EA5E9; text shade is AccentCyan = sky-400) -->
     <Color x:Key="TintSkyColor"> #1A0EA5E9</Color>
     <SolidColorBrush x:Key="TintSky"

@@ -23,7 +23,7 @@
     <Button x:Name="btnSaveConfig"
             Content="Save"
             Command="{Binding SaveCommand}"
-            Style="{DynamicResource ButtonPrimary}"
+            Style="{DynamicResource ButtonTintPrimary}"
             HorizontalAlignment="Right"
             Margin="0,16,0,0" />
 </StackPanel>

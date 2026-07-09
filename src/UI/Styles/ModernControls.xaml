@@ -270,7 +270,7 @@
                                  Value="True">
                             <Setter TargetName="Bd"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource Primary}" />
+                                    Value="{DynamicResource FocusRing}" />
                             <Setter TargetName="Bd"
                                     Property="Background"
                                     Value="{DynamicResource InputBorder}" />
@@ -427,7 +427,7 @@
                                  Value="True">
                             <Setter TargetName="Bd"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource Primary}" />
+                                    Value="{DynamicResource FocusRing}" />
                         </Trigger>
                         <Trigger Property="IsEnabled"
                                  Value="False">
@@ -583,7 +583,7 @@
                                  Value="True">
                             <Setter TargetName="chip"
                                     Property="BorderBrush"
-                                    Value="{DynamicResource Primary}" />
+                                    Value="{DynamicResource FocusRing}" />
                         </Trigger>
                         <Trigger Property="IsChecked"
                                  Value="True">

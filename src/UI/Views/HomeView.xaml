@@ -59,7 +59,7 @@
           <Setter Property="BorderBrush" Value="Transparent" />
           <Style.Triggers>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-              <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+              <Setter Property="BorderBrush" Value="{DynamicResource FocusRing}" />
               <Setter Property="Background" Value="{DynamicResource InputBorder}" />
             </Trigger>
           </Style.Triggers>
@@ -95,7 +95,7 @@
           x:Name="btnSearch"
           Grid.Column="2"
           Content="Add"
-          Style="{DynamicResource ButtonPrimary}"
+          Style="{DynamicResource ButtonTintPrimary}"
           FontSize="12"
           Height="30"
           MinWidth="96"
@@ -353,8 +353,7 @@
                       </Trigger>
                       <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                         <Setter Property="Background" Value="{DynamicResource RowSelected}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
-                        <Setter Property="BorderThickness" Value="1.5" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
                       </DataTrigger>
                     </Style.Triggers>
                   </Style>
