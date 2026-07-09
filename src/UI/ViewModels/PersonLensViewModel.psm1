@@ -31,6 +31,20 @@ class PersonLensViewModel : ObservableObject {
         $this.Devices = [ObservableCollection[object]]::new()
     }
 
+    # Devices newest-seen first: sort by parsed LastLogon (ISO8601) descending, blanks last.
+    # Only reorders when a person has multiple devices; a no-op for 0/1.
+    hidden [object[]] SortByLastSeen([LensDevice[]]$devices) {
+        return @($devices | Sort-Object -Descending -Stable -Property @{
+                Expression = {
+                    $at = [datetime]::MinValue
+                    [void][datetime]::TryParse([string]$_.LastLogon,
+                        [System.Globalization.CultureInfo]::InvariantCulture,
+                        [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)
+                    $at
+                }
+            })
+    }
+
     # Loading state while the de-elevated lookup runs (shows the picked name immediately).
     [void] SetLoading([string]$who) {
         $this.Set('DisplayName', $who)
@@ -54,7 +68,8 @@ class PersonLensViewModel : ObservableObject {
         if ($lens.Office) { $this.Set('Office', $lens.Office) }
         if ($lens.Devices.Count -gt 0) {
             $this.Devices.Clear()
-            foreach ($d in $lens.Devices) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
+            $sorted = $this.SortByLastSeen($lens.Devices)
+            foreach ($d in $sorted) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
             $this.Set('HasDevices', $true)
             $this.Set('StatusText', 'Loading device details…')
         }
@@ -76,7 +91,8 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('Office', $lens.Office)
 
         $this.Devices.Clear()
-        foreach ($d in $lens.Devices) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
+        $sorted = $this.SortByLastSeen($lens.Devices)
+        foreach ($d in $sorted) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
         $this.Set('HasDevices', ($this.Devices.Count -gt 0))
 
         if ($lens.Errors.Count -gt 0) {
