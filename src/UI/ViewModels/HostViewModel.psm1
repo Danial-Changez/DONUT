@@ -35,6 +35,7 @@ class HostViewModel : ObservableObject {
     [Brush]  $DotBrush
     [Brush]  $ChipForeground
     [Brush]  $ChipBackground
+    [Brush]  $ChipBorderBrush
     [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
@@ -239,6 +240,7 @@ class HostViewModel : ObservableObject {
         $this.ChipKey = $key
         $this.Set('ChipForeground', [HostViewModel]::BrushFor($key))
         $this.Set('ChipBackground', [HostViewModel]::TintFor($key))
+        $this.Set('ChipBorderBrush', [HostViewModel]::TintBorderFor($key))
         $this.Set('ProgressBrush', [HostViewModel]::BrushFor($key))
     }
 
@@ -265,15 +267,15 @@ class HostViewModel : ObservableObject {
         return $lastStatus
     }
 
-    # Accent hexes mirror UIColors.xaml. Kept here because the app has no WPF Application,
-    # so resource-key lookup isn't available to a value-less view-model.
+    # Accent hexes mirror UIColors.xaml (change both together). Kept here because these
+    # brushes are built statically, before/outside resource-dictionary lookup.
     static [hashtable] $Accents = @{
-        AccentGreen      = '#22C55E'
-        AccentRed        = '#EF4444'
+        AccentGreen      = '#34D399'
+        AccentRed        = '#F87171'
         AccentYellow     = '#FBBF24'
         AccentOrange     = '#FB923C'
         AccentCyan       = '#38BDF8'
-        AccentPurple     = '#8B5CF6'
+        AccentPurple     = '#8E51FF'
         BodyTextTertiary = '#525252'
     }
 
@@ -285,12 +287,22 @@ class HostViewModel : ObservableObject {
         return $b
     }
 
-    # Chip background = the accent at ~15% alpha, so the chip reads as a soft pill.
+    # Chip background = the accent at 10% alpha (Arcane's status-badge fill).
     static [Brush] TintFor([string]$key) {
         $hex = [HostViewModel]::Accents[$key]
         if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
         $c = [Color]([ColorConverter]::ConvertFromString($hex))
-        $b = [SolidColorBrush]::new([Color]::FromArgb(38, $c.R, $c.G, $c.B))
+        $b = [SolidColorBrush]::new([Color]::FromArgb(26, $c.R, $c.G, $c.B))
+        $b.Freeze()
+        return $b
+    }
+
+    # Chip border = the accent at 30% alpha (the badge's hairline edge).
+    static [Brush] TintBorderFor([string]$key) {
+        $hex = [HostViewModel]::Accents[$key]
+        if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
+        $c = [Color]([ColorConverter]::ConvertFromString($hex))
+        $b = [SolidColorBrush]::new([Color]::FromArgb(77, $c.R, $c.G, $c.B))
         $b.Freeze()
         return $b
     }

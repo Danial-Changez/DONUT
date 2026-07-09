@@ -8,7 +8,7 @@
     <Color x:Key="PrimaryBackgroundDarkColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackgroundDark"
                      Color="{StaticResource PrimaryBackgroundDarkColor}" />
-    <Color x:Key="PrimaryBackgroundColor"> #0C0C0C</Color>
+    <Color x:Key="PrimaryBackgroundColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackground"
                      Color="{StaticResource PrimaryBackgroundColor}" />
     <Color x:Key="SecondaryBackgroundDarkColor"> #0D0D0D</Color>
@@ -23,28 +23,29 @@
     <Color x:Key="LoginBackgroundColor"> #121214</Color>
     <SolidColorBrush x:Key="LoginBackground"
                      Color="{StaticResource LoginBackgroundColor}" />
-    <!-- Window Border Colors (subtle violet -> zinc gradient) -->
-    <Color x:Key="WindowBorderPrimaryColor"> #8B5CF6</Color>
+    <!-- Window Border Colors (subtle violet -> zinc gradient; Arcane violet ramp) -->
+    <Color x:Key="WindowBorderPrimaryColor"> #8E51FF</Color>
     <SolidColorBrush x:Key="WindowBorderPrimary"
                      Color="{StaticResource WindowBorderPrimaryColor}" />
-    <Color x:Key="WindowBorderAccentColor"> #7C3AED</Color>
+    <Color x:Key="WindowBorderAccentColor"> #8022FE</Color>
     <SolidColorBrush x:Key="WindowBorderAccent"
                      Color="{StaticResource WindowBorderAccentColor}" />
     <Color x:Key="WindowBorderSecondaryColor"> #3F3F46</Color>
     <SolidColorBrush x:Key="WindowBorderSecondary"
                      Color="{StaticResource WindowBorderSecondaryColor}" />
     <!-- Login Window Border Colors -->
-    <Color x:Key="LoginWindowBorderPrimaryColor"> #7C3AED</Color>
+    <Color x:Key="LoginWindowBorderPrimaryColor"> #8022FE</Color>
     <SolidColorBrush x:Key="LoginWindowBorderPrimary"
                      Color="{StaticResource LoginWindowBorderPrimaryColor}" />
-    <Color x:Key="LoginWindowBorderAccentColor"> #8B5CF6</Color>
+    <Color x:Key="LoginWindowBorderAccentColor"> #8E51FF</Color>
     <SolidColorBrush x:Key="LoginWindowBorderAccent"
                      Color="{StaticResource LoginWindowBorderAccentColor}" />
     <Color x:Key="LoginWindowBorderSecondaryColor"> #3F3F46</Color>
     <SolidColorBrush x:Key="LoginWindowBorderSecondary"
                      Color="{StaticResource LoginWindowBorderSecondaryColor}" />
-    <!-- Button/Accent Colors -->
-    <Color x:Key="AccentPurpleColor"> #8B5CF6</Color>
+    <!-- Button/Accent Colors. Status accents follow Arcane's dark recipe: the visible
+         text/dot shade is the Tailwind 400 step (tints derive from the 500 step below). -->
+    <Color x:Key="AccentPurpleColor"> #8E51FF</Color>
     <SolidColorBrush x:Key="AccentPurple"
                      Color="{StaticResource AccentPurpleColor}" />
     <Color x:Key="AccentPurpleHoverColor"> #A78BFA</Color>
@@ -67,10 +68,10 @@
     <Color x:Key="AccentCyanColor"> #38BDF8</Color>
     <SolidColorBrush x:Key="AccentCyan"
                      Color="{StaticResource AccentCyanColor}" />
-    <Color x:Key="AccentGreenColor"> #22C55E</Color>
+    <Color x:Key="AccentGreenColor"> #34D399</Color>
     <SolidColorBrush x:Key="AccentGreen"
                      Color="{StaticResource AccentGreenColor}" />
-    <Color x:Key="AccentRedColor"> #EF4444</Color>
+    <Color x:Key="AccentRedColor"> #F87171</Color>
     <SolidColorBrush x:Key="AccentRed"
                      Color="{StaticResource AccentRedColor}" />
     <Color x:Key="AccentBlueLightColor"> #93C5FD</Color>
@@ -104,14 +105,13 @@
     <Color x:Key="TerminalTextColor"> #D4D4D4</Color>
     <SolidColorBrush x:Key="TerminalText"
                      Color="{StaticResource TerminalTextColor}" />
-    <!-- Panel Colors. Arcane's base card token is oklch(0.205 0 0)=#171717, but its
-         rendered cards are translucent (72-80% over #0A0A0A), so a deep #141414
-         matches the screenshot's near-black, low-contrast cards (border defines edge). -->
-    <Color x:Key="PanelBackgroundColor"> #141414</Color>
+    <!-- Panel Colors. Arcane's card token is oklch(0.205 0 0)=#171717, rendered as
+         glass (bg-card/60 + blur over #0A0A0A); #121212 is that composite, solid. -->
+    <Color x:Key="PanelBackgroundColor"> #121212</Color>
     <SolidColorBrush x:Key="PanelBackground"
                      Color="{StaticResource PanelBackgroundColor}" />
-    <!-- outline/ghost hover = card lightened (~card/90 over dark) -->
-    <Color x:Key="PanelBackgroundHoverColor"> #1F1F1F</Color>
+    <!-- outline/ghost hover = hover:bg-muted/60 over the card, composited -->
+    <Color x:Key="PanelBackgroundHoverColor"> #1E1E1E</Color>
     <SolidColorBrush x:Key="PanelBackgroundHover"
                      Color="{StaticResource PanelBackgroundHoverColor}" />
     <!-- secondary oklch(0.274 0.006 286) = #27272A -->
@@ -129,7 +129,7 @@
     <Color x:Key="GroupBoxBackgroundColor"> #14FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground"
                      Color="{StaticResource GroupBoxBackgroundColor}" />
-    <Color x:Key="ThrottleLimitColor"> #EF4444</Color>
+    <Color x:Key="ThrottleLimitColor"> #F87171</Color>
     <SolidColorBrush x:Key="ThrottleLimit"
                      Color="{StaticResource ThrottleLimitColor}" />
     <!-- ============================================================
@@ -137,16 +137,16 @@
          Used by the button variant styles in ButtonStyles.xaml so the
          button system matches Arcane exactly (primary = violet-600,
          everything else neutral zinc/translucent). -->
-    <!-- primary oklch(0.541 0.281 293) = violet-600 #7C3AED,
-         hover = primary/90 ~= violet-700 #6D28D9 -->
-    <Color x:Key="PrimaryColor"> #7C3AED</Color>
+    <!-- primary oklch(0.541 0.281 293.009) = #8022FE (Arcane violet),
+         hover = primary/90 composited over the base background -->
+    <Color x:Key="PrimaryColor"> #8022FE</Color>
     <SolidColorBrush x:Key="Primary"
                      Color="{StaticResource PrimaryColor}" />
-    <Color x:Key="PrimaryHoverColor"> #6D28D9</Color>
+    <Color x:Key="PrimaryHoverColor"> #7420E6</Color>
     <SolidColorBrush x:Key="PrimaryHover"
                      Color="{StaticResource PrimaryHoverColor}" />
-    <!-- primary-foreground oklch(0.969 0.016 293.756) = violet-50 #F5F3FF -->
-    <Color x:Key="PrimaryForegroundColor"> #F5F3FF</Color>
+    <!-- primary-foreground oklch(0.969 0.016 293.756) = #F3EDFE -->
+    <Color x:Key="PrimaryForegroundColor"> #F3EDFE</Color>
     <SolidColorBrush x:Key="PrimaryForeground"
                      Color="{StaticResource PrimaryForegroundColor}" />
     <!-- secondary #27272A / secondary-foreground #FAFAFA, hover = secondary/80 -->
@@ -180,4 +180,90 @@
     <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
     <SolidColorBrush x:Key="InputBorder"
                      Color="{StaticResource InputBorderColor}" />
+    <!-- ============================================================
+         Arcane recipe tokens (extracted from getarcaneapp/arcane frontend).
+         Tint recipe (dark): fill = status-500 @10% (0x1A), border = @30% (0x4D);
+         hover lifts to @20% (0x33) / @40% (0x66). Visible text uses the 400
+         Accent* shades above. -->
+    <!-- Solid zinc surface: popovers, toasts, segmented-active -->
+    <Color x:Key="SurfaceSolidColor"> #171717</Color>
+    <SolidColorBrush x:Key="SurfaceSolid"
+                     Color="{StaticResource SurfaceSolidColor}" />
+    <!-- Input fill: Arcane inputs are borderless white@12% fills (bg-input/80) -->
+    <Color x:Key="InputFillColor"> #1FFFFFFF</Color>
+    <SolidColorBrush x:Key="InputFill"
+                     Color="{StaticResource InputFillColor}" />
+    <!-- Dim backdrop behind modal-style overlays -->
+    <Color x:Key="DimBackdropColor"> #B0000000</Color>
+    <SolidColorBrush x:Key="DimBackdrop"
+                     Color="{StaticResource DimBackdropColor}" />
+    <!-- Terminal/log well -->
+    <Color x:Key="TerminalBackgroundColor"> #0B0B0E</Color>
+    <SolidColorBrush x:Key="TerminalBackground"
+                     Color="{StaticResource TerminalBackgroundColor}" />
+    <!-- QR plate: stays LIGHT for scannability - never dark-theme this -->
+    <Color x:Key="QrPlateColor"> #F5F3FF</Color>
+    <SolidColorBrush x:Key="QrPlate"
+                     Color="{StaticResource QrPlateColor}" />
+    <!-- List rows (Arcane table): hover = primary@10%, selected = primary@20%,
+         separator = white@4% (border/40 over the 10% hairline) -->
+    <Color x:Key="RowHoverColor"> #1A8022FE</Color>
+    <SolidColorBrush x:Key="RowHover"
+                     Color="{StaticResource RowHoverColor}" />
+    <Color x:Key="RowSelectedColor"> #338022FE</Color>
+    <SolidColorBrush x:Key="RowSelected"
+                     Color="{StaticResource RowSelectedColor}" />
+    <Color x:Key="RowSeparatorColor"> #0AFFFFFF</Color>
+    <SolidColorBrush x:Key="RowSeparator"
+                     Color="{StaticResource RowSeparatorColor}" />
+    <!-- Status tints: violet #8022FE / emerald-500 #10B981 / amber-500 #F59E0B /
+         red-500 #EF4444 at the recipe alphas -->
+    <Color x:Key="TintVioletColor"> #1A8022FE</Color>
+    <SolidColorBrush x:Key="TintViolet"
+                     Color="{StaticResource TintVioletColor}" />
+    <Color x:Key="TintVioletBorderColor"> #4D8022FE</Color>
+    <SolidColorBrush x:Key="TintVioletBorder"
+                     Color="{StaticResource TintVioletBorderColor}" />
+    <Color x:Key="TintVioletHoverColor"> #338022FE</Color>
+    <SolidColorBrush x:Key="TintVioletHover"
+                     Color="{StaticResource TintVioletHoverColor}" />
+    <Color x:Key="TintVioletBorderHoverColor"> #668022FE</Color>
+    <SolidColorBrush x:Key="TintVioletBorderHover"
+                     Color="{StaticResource TintVioletBorderHoverColor}" />
+    <Color x:Key="TintGreenColor"> #1A10B981</Color>
+    <SolidColorBrush x:Key="TintGreen"
+                     Color="{StaticResource TintGreenColor}" />
+    <Color x:Key="TintGreenBorderColor"> #4D10B981</Color>
+    <SolidColorBrush x:Key="TintGreenBorder"
+                     Color="{StaticResource TintGreenBorderColor}" />
+    <Color x:Key="TintGreenHoverColor"> #3310B981</Color>
+    <SolidColorBrush x:Key="TintGreenHover"
+                     Color="{StaticResource TintGreenHoverColor}" />
+    <Color x:Key="TintGreenBorderHoverColor"> #6610B981</Color>
+    <SolidColorBrush x:Key="TintGreenBorderHover"
+                     Color="{StaticResource TintGreenBorderHoverColor}" />
+    <Color x:Key="TintAmberColor"> #1AF59E0B</Color>
+    <SolidColorBrush x:Key="TintAmber"
+                     Color="{StaticResource TintAmberColor}" />
+    <Color x:Key="TintAmberBorderColor"> #4DF59E0B</Color>
+    <SolidColorBrush x:Key="TintAmberBorder"
+                     Color="{StaticResource TintAmberBorderColor}" />
+    <Color x:Key="TintAmberHoverColor"> #33F59E0B</Color>
+    <SolidColorBrush x:Key="TintAmberHover"
+                     Color="{StaticResource TintAmberHoverColor}" />
+    <Color x:Key="TintAmberBorderHoverColor"> #66F59E0B</Color>
+    <SolidColorBrush x:Key="TintAmberBorderHover"
+                     Color="{StaticResource TintAmberBorderHoverColor}" />
+    <Color x:Key="TintRedColor"> #1AEF4444</Color>
+    <SolidColorBrush x:Key="TintRed"
+                     Color="{StaticResource TintRedColor}" />
+    <Color x:Key="TintRedBorderColor"> #4DEF4444</Color>
+    <SolidColorBrush x:Key="TintRedBorder"
+                     Color="{StaticResource TintRedBorderColor}" />
+    <Color x:Key="TintRedHoverColor"> #33EF4444</Color>
+    <SolidColorBrush x:Key="TintRedHover"
+                     Color="{StaticResource TintRedHoverColor}" />
+    <Color x:Key="TintRedBorderHoverColor"> #66EF4444</Color>
+    <SolidColorBrush x:Key="TintRedBorderHover"
+                     Color="{StaticResource TintRedBorderHoverColor}" />
 </ResourceDictionary>
