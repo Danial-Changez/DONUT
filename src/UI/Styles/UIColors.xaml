@@ -272,4 +272,17 @@
     <Color x:Key="TintRedBorderHoverColor"> #66EF4444</Color>
     <SolidColorBrush x:Key="TintRedBorderHover"
                      Color="{StaticResource TintRedBorderHoverColor}" />
+    <!-- Sky (info tone, sky-500 #0EA5E9; text shade is AccentCyan = sky-400) -->
+    <Color x:Key="TintSkyColor"> #1A0EA5E9</Color>
+    <SolidColorBrush x:Key="TintSky"
+                     Color="{StaticResource TintSkyColor}" />
+    <Color x:Key="TintSkyBorderColor"> #4D0EA5E9</Color>
+    <SolidColorBrush x:Key="TintSkyBorder"
+                     Color="{StaticResource TintSkyBorderColor}" />
+    <Color x:Key="TintSkyHoverColor"> #330EA5E9</Color>
+    <SolidColorBrush x:Key="TintSkyHover"
+                     Color="{StaticResource TintSkyHoverColor}" />
+    <Color x:Key="TintSkyBorderHoverColor"> #660EA5E9</Color>
+    <SolidColorBrush x:Key="TintSkyBorderHover"
+                     Color="{StaticResource TintSkyBorderHoverColor}" />
 </ResourceDictionary>

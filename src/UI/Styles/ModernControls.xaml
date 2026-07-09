@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Arcane input recipe: borderless white@12% fill, rounded-lg, ring border on focus. -->
+    <!-- Embedded search input: fully transparent - the composed search bar (HomeView's
+         SearchBox border) carries the fill and focus ring, so icon, text, and button
+         read as one Arcane input surface instead of nested boxes. -->
     <Style x:Key="GoogleSearchBar"
            TargetType="TextBox">
         <Setter Property="Background"
-                Value="{DynamicResource InputFill}" />
+                Value="Transparent" />
         <Setter Property="Foreground"
                 Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="CaretBrush"
@@ -14,46 +16,31 @@
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="13.5" />
-        <Setter Property="Padding"
-                Value="12,0,40,0" />
         <Setter Property="BorderThickness"
                 Value="0" />
-        <Setter Property="Height"
-                Value="32" />
         <Setter Property="HorizontalAlignment"
                 Value="Stretch" />
         <Setter Property="VerticalContentAlignment"
                 Value="Center" />
         <Setter Property="HorizontalContentAlignment"
                 Value="Left" />
-        <Setter Property="Margin"
-                Value="0,0,0,0" />
         <Setter Property="MinWidth"
                 Value="200" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
                     <Grid>
-                        <Border x:Name="Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="Transparent"
-                                BorderThickness="1"
-                                CornerRadius="8.4"
-                                SnapsToDevicePixels="True">
-                            <Grid>
-                                <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="Center" />
-                                <!-- Placeholder watermark -->
-                                <TextBlock x:Name="Placeholder"
-                                           Text="WSID..."
-                                           Foreground="{DynamicResource BodyTextPrimary}"
-                                           IsHitTestVisible="False"
-                                           VerticalAlignment="Center"
-                                           Margin="13,0,0,0"
-                                           Visibility="Collapsed" />
-                            </Grid>
-                        </Border>
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Margin="0"
+                                      VerticalAlignment="Center" />
+                        <!-- Placeholder watermark -->
+                        <TextBlock x:Name="Placeholder"
+                                   Text="WSID..."
+                                   Foreground="{DynamicResource BodyTextPrimary}"
+                                   IsHitTestVisible="False"
+                                   VerticalAlignment="Center"
+                                   Margin="1,0,0,0"
+                                   Visibility="Collapsed" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="Text"
@@ -67,15 +54,6 @@
                             <Setter TargetName="Placeholder"
                                     Property="Visibility"
                                     Value="Visible" />
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocusWithin"
-                                 Value="True">
-                            <Setter TargetName="Border"
-                                    Property="BorderBrush"
-                                    Value="{DynamicResource Primary}" />
-                            <Setter TargetName="Border"
-                                    Property="Background"
-                                    Value="{DynamicResource InputBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

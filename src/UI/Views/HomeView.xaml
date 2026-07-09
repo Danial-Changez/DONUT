@@ -42,29 +42,41 @@
       <ColumnDefinition Width="Auto" />
     </Grid.ColumnDefinitions>
 
-    <!-- Add / run input (still accepts a pasted batch of WSIDs) -->
+    <!-- Add / run input (still accepts a pasted batch of WSIDs). One Arcane input
+         surface: the bar carries the fill + focus ring; the icon, the (transparent)
+         TextBox, and the embedded Add sit ON it rather than as separate chrome. -->
     <Border
       x:Name="SearchBox"
       Grid.Column="0"
-      Background="{DynamicResource PanelBackground}"
-      BorderBrush="{DynamicResource PanelBorder}"
       BorderThickness="1"
-      CornerRadius="10"
-      Padding="10,0"
-      Height="44"
+      CornerRadius="8.4"
+      Padding="12,0,5,0"
+      Height="40"
     >
+      <Border.Style>
+        <Style TargetType="Border">
+          <Setter Property="Background" Value="{DynamicResource InputFill}" />
+          <Setter Property="BorderBrush" Value="Transparent" />
+          <Style.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+              <Setter Property="Background" Value="{DynamicResource InputBorder}" />
+            </Trigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
       <Grid>
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="30" />
+          <ColumnDefinition Width="26" />
           <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="130" />
+          <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <Path
           Data="{DynamicResource Search}"
-          Height="18"
-          Width="18"
+          Height="16"
+          Width="16"
           Stretch="Uniform"
-          Fill="{DynamicResource BodyTextTertiary}"
+          Fill="{DynamicResource BodyTextPrimary}"
           VerticalAlignment="Center"
           Grid.Column="0"
         />
@@ -72,7 +84,7 @@
           x:Name="GoogleSearchBar"
           Style="{DynamicResource GoogleSearchBar}"
           Grid.Column="1"
-          Margin="4,0"
+          Margin="2,0,6,0"
           AcceptsReturn="True"
           TextWrapping="Wrap"
           VerticalScrollBarVisibility="Auto"
@@ -84,10 +96,9 @@
           Grid.Column="2"
           Content="Add"
           Style="{DynamicResource ButtonPrimary}"
-          FontSize="12.5"
-          Height="32"
-          MinWidth="120"
-          Margin="6,0,0,0"
+          FontSize="12"
+          Height="30"
+          MinWidth="96"
           VerticalAlignment="Center"
         />
       </Grid>
@@ -202,7 +213,7 @@
       x:Name="btnRunAll"
       Grid.Column="2"
       Content="Run all"
-      Style="{DynamicResource ButtonTintPrimary}"
+      Style="{DynamicResource ButtonTintSuccess}"
       Width="100"
       Height="32"
       Margin="12,0,0,0"
@@ -399,7 +410,7 @@
                                FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="11" />
                   </Border>
                   <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
-                          Style="{DynamicResource ButtonTintPrimary}" FontSize="11.5" Height="28"
+                          Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="28"
                           Padding="14,4" VerticalAlignment="Center"
                           ToolTip="Run the active command on this machine" />
                 </Grid>
@@ -755,18 +766,18 @@
                                 </Style>
                               </ContentControl.Style>
                               <Button Content="Reveal key" Command="{Binding RevealCommand}"
-                                      Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28" />
+                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="28" />
                             </ContentControl>
                             <!-- QR of the latest recovery key: shown whenever the device has
                                  BitLocker (an alternate reveal - stays available after reveal). -->
                             <ContentControl Margin="0,0,6,0"
                                             Visibility="{Binding HasBitLocker, Converter={StaticResource BoolToVis}}">
                               <Button Content="QR" Command="{Binding ShowQrCommand}"
-                                      Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28"
+                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="28"
                                       ToolTip="Show a QR code of the latest BitLocker recovery key" />
                             </ContentControl>
                             <Button Content="Add" Command="{Binding AddCommand}"
-                                    Style="{DynamicResource ButtonPrimary}" FontSize="11" Height="28" Padding="14,4"
+                                    Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28" Padding="14,4"
                                     ToolTip="Add this machine to the list" />
                           </StackPanel>
                         </Grid>
