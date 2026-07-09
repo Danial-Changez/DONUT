@@ -209,9 +209,24 @@ class FinderPresenter {
     }
 
     # Best-effort dispose of a pool job's PowerShell handle (logs at debug, never throws).
+    # A job stuck in a non-interruptible native call (a hung LDAP/SCCM/socket query on a dead
+    # network) can't be cancelled, so Dispose()/Stop() BLOCK until it returns - and these run
+    # on the STA UI thread (AbortSearch / ReapAdWarm / ReapLensWarm), so a synchronous dispose
+    # freezes the whole app. So: stop it ASYNCHRONOUSLY and dispose in the callback; a job
+    # that's already finished disposes directly (fast, no risk of blocking).
     hidden [void] DisposeJob([object]$ps) {
         if ($null -eq $ps) { return }
-        try { $ps.Dispose() }
+        try {
+            if ($ps.InvocationStateInfo.State -eq 'Running') {
+                $ps.BeginStop({ param($ar)
+                        try { $ps.EndStop($ar) } catch { }
+                        try { $ps.Dispose() } catch { }
+                    }.GetNewClosure(), $null) | Out-Null
+            }
+            else {
+                $ps.Dispose()
+            }
+        }
         catch { $this.Logger.LogDebug("Job dispose failed: $($_.Exception.Message)") }
     }
 
@@ -265,7 +280,9 @@ class FinderPresenter {
                 if ($reason) { $this.Logger.LogWarning("Lens agent warm-up: $reason") }
                 else { $this.Logger.LogInfo("Lens agent warmed and ready.") }
             }
-            $job.Ps.Dispose()
+            # DisposeJob, not $job.Ps.Dispose(): a warm agent still hung on the network must be
+            # stopped asynchronously or it blocks the UI thread (see DisposeJob).
+            $this.DisposeJob($job.Ps)
         }
         catch { $this.DisposeJob($job.Ps) }
     }
