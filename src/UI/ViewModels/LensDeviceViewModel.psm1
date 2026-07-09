@@ -36,25 +36,24 @@ class LensDeviceViewModel : ObservableObject {
             $this.Note = $d.Note
             $this.LastSeenText = [LensFormat]::LogonLabel($d.LastLogon)
             $this.HasBitLocker = $d.HasBitLocker()
-            $this.BitLockerText = (@($d.BitLockerKeys | ForEach-Object {
-                        if ($_.Created) { "$($_.Password)  ($($_.Created))" } else { $_.Password }
-                    }) -join "`n")
-            # Newest key wins. Created is agent-normalized ISO8601; parse to a DateTime and
-            # compare chronologically (unparseable/blank sorts earliest, so a dated rotation
-            # supersedes an undated one). A later key at the same instant still wins the tie.
-            $latest = $null
-            $latestAt = [datetime]::MinValue
-            foreach ($k in $d.BitLockerKeys) {
+            # Order keys newest-first by parsed (agent-normalized ISO8601) Created; blank/
+            # unparseable sort last. Drives both the revealed list and the QR's LatestKey (first).
+            $dated = foreach ($k in $d.BitLockerKeys) {
                 $at = [datetime]::MinValue
                 [void][datetime]::TryParse([string]$k.Created,
                     [System.Globalization.CultureInfo]::InvariantCulture,
                     [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)
-                if ($null -eq $latest -or $at -ge $latestAt) {
-                    $latest = $k
-                    $latestAt = $at
-                }
+                [pscustomobject]@{ Key = $k; At = $at }
             }
-            if ($null -ne $latest) { $this.LatestKey = $latest.Password }
+            $ordered = @($dated | Sort-Object -Descending -Stable -Property At)
+            $this.BitLockerText = (@($ordered | ForEach-Object {
+                        if ($_.At -gt [datetime]::MinValue) {
+                            "$($_.Key.Password)  ($($_.At.ToString('yyyy-MM-dd HH:mm')))"
+                        }
+                        elseif ($_.Key.Created) { "$($_.Key.Password)  ($($_.Key.Created))" }
+                        else { $_.Key.Password }
+                    }) -join "`n")
+            if ($ordered.Count -gt 0) { $this.LatestKey = $ordered[0].Key.Password }
         }
         $self = $this
         $reveal = { param($p) $self.Set('IsBitLockerRevealed', $true) }.GetNewClosure()
