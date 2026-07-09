@@ -44,6 +44,13 @@
 using module "..\Services\WorkerServices.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Core\ConfigManager.psm1"
+# Not used by this worker - imported so the startup pre-warm (WarmPool runs this script on
+# EVERY pool runspace) cold-loads the Lens + AD-search class graphs too. Otherwise the first
+# user lookup / AD search lands on a runspace that must cold-load them under the CLR loader
+# lock, which stalls the STA UI thread (see DispatcherWatchdog). Both are leaf graphs
+# (LogService/PersonLens/AdSearchResult), so there's no import cycle back to this worker.
+using module "..\Services\PersonLensService.psm1"
+using module "..\Services\ActiveDirectoryService.psm1"
 
 param(
     [string]$HostName,
