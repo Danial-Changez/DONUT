@@ -52,6 +52,8 @@ class FinderPresenter {
     [ActiveDirectoryService] $AdService
     # System.Windows.Controls.Primitives.Popup; its rows render via binding.
     [object]          $SearchPopup
+    # The dropdown ListBox; SelectedIndex is driven by the search bar's Down/Up keys.
+    [object]          $ResultsList
     [DispatcherTimer] $SearchDebounce
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
@@ -126,15 +128,58 @@ class FinderPresenter {
     [void] Initialize() {
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
         $this.SearchPopup = $this.ViewContent.FindName('SearchResultsPopup')
+        $this.ResultsList = $this.ViewContent.FindName('SearchResultsList')
 
         $presenter = $this
         if ($this.SearchBar) {
             $this.SearchBar.Add_TextChanged({ $presenter.OnSearchTextChanged() }.GetNewClosure())
+            # Down/Up move the dropdown highlight; Enter picks the highlighted row or, with
+            # none highlighted, adds the typed WSID(s); Escape closes the dropdown.
             $this.SearchBar.Add_PreviewKeyDown({
                     param($s, $e)
-                    if ($e.Key -eq 'Escape') { $presenter.CloseSearchPopup() }
+                    switch ([string]$e.Key) {
+                        'Escape' { $presenter.CloseSearchPopup(); $e.Handled = $true }
+                        'Down' { $presenter.MoveHighlight(1); $e.Handled = $true }
+                        'Up' { $presenter.MoveHighlight(-1); $e.Handled = $true }
+                        'Return' { $presenter.CommitSelection(); $e.Handled = $true }
+                    }
                 }.GetNewClosure())
         }
+    }
+
+    # Move the dropdown highlight by $dir (+1 down / -1 up), skipping header rows and
+    # wrapping; opens the dropdown if it was closed but results are present.
+    [void] MoveHighlight([int]$dir) {
+        if ($null -eq $this.ResultsList -or $null -eq $this.SearchPopup) { return }
+        $items = $this.HomeVm.SearchResults
+        $count = $items.Count
+        if ($count -eq 0) { return }
+        if (-not $this.SearchPopup.IsOpen) { $this.SearchPopup.IsOpen = $true }
+
+        $idx = $this.ResultsList.SelectedIndex
+        for ($step = 0; $step -lt $count; $step++) {
+            $idx += $dir
+            if ($idx -lt 0) { $idx = $count - 1 }
+            elseif ($idx -ge $count) { $idx = 0 }
+            if (-not $items[$idx].IsHeader) { break }
+        }
+        if ($idx -ge 0 -and $idx -lt $count -and -not $items[$idx].IsHeader) {
+            $this.ResultsList.SelectedIndex = $idx
+            $this.ResultsList.ScrollIntoView($items[$idx])
+        }
+    }
+
+    # Enter: a highlighted dropdown row acts as if clicked (computer -> fills the bar,
+    # user -> opens the Lens); otherwise the typed WSID(s) are added to the machine list.
+    [void] CommitSelection() {
+        if ($this.SearchPopup -and $this.SearchPopup.IsOpen -and $null -ne $this.ResultsList) {
+            $sel = $this.ResultsList.SelectedItem
+            if ($null -ne $sel -and -not $sel.IsHeader -and $null -ne $sel.PickCommand) {
+                $sel.PickCommand.Execute($null)
+                return
+            }
+        }
+        $this.Home.OnSearch()
     }
 
     # Tears down the Lens agent via the pool worker so the UI never parse-loads
@@ -345,6 +390,9 @@ class FinderPresenter {
 
         $this.HomeVm.SearchResults.Clear()
         foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
+        # Fresh result set: nothing highlighted until the operator arrows into it, so a
+        # bare Enter adds the typed text rather than picking a stale row.
+        if ($this.ResultsList) { $this.ResultsList.SelectedIndex = -1 }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
     }
 
@@ -553,6 +601,7 @@ class FinderPresenter {
 
     [void] CloseSearchPopup() {
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $false }
+        if ($this.ResultsList) { $this.ResultsList.SelectedIndex = -1 }
     }
 
     # Nudges the open popup's offset to force WPF to recompute its placement

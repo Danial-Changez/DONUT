@@ -74,7 +74,6 @@ class HomePresenter : AsyncJobPresenter {
     [object] $ConfigManager           # duck-typed; used to persist recents
     [System.Windows.FrameworkElement] $ViewContent
     [TextBox] $SearchBar
-    [Button] $SearchButton
     [Button] $ClearButton
     [Button] $RunAllButton
     [ListBox] $MachineList
@@ -194,7 +193,6 @@ class HomePresenter : AsyncJobPresenter {
 
     [void] Initialize() {
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
-        $this.SearchButton = $this.ViewContent.FindName('btnSearch')
         $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
         $this.RunAllButton = $this.ViewContent.FindName('btnRunAll')
         $this.MachineList = $this.ViewContent.FindName('MachineList')
@@ -212,9 +210,6 @@ class HomePresenter : AsyncJobPresenter {
                     $presenter.Detail.OnMachineSelectionChanged() }.GetNewClosure())
         }
 
-        if ($this.SearchButton) {
-            $this.SearchButton.Add_Click({ $presenter.OnSearch() }.GetNewClosure())
-        }
         if ($this.ClearButton) {
             $this.ClearButton.Add_Click({ $presenter.ClearCompleted() }.GetNewClosure())
         }
@@ -341,13 +336,13 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateEmptyHint()
     }
 
-    # "Add": queue the typed host(s) into the machine list and gather inventory.
-    # Never scans/applies - running the active command is a separate, deliberate step.
+    # "Add" (Enter): queue the comma/space-separated host(s) into the list and gather. Never
+    # scans/applies - running the active command is a separate, deliberate step.
     [void] OnSearch() {
         $rawInput = $this.SearchBar.Text
         if ([string]::IsNullOrWhiteSpace($rawInput)) { return }
 
-        $targetHosts = $rawInput -split "[\r\n,]+" |
+        $targetHosts = $rawInput -split "[\s,]+" |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_ }
 

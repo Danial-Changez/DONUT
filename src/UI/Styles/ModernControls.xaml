@@ -35,7 +35,7 @@
                                       VerticalAlignment="Center" />
                         <!-- Placeholder watermark -->
                         <TextBlock x:Name="Placeholder"
-                                   Text="WSID..."
+                                   Text="WSID, WSID …  ·  Enter to add"
                                    Foreground="{DynamicResource BodyTextPrimary}"
                                    IsHitTestVisible="False"
                                    VerticalAlignment="Center"
