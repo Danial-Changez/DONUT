@@ -645,10 +645,12 @@
         </Setter>
     </Style>
     <!-- Scrollbar Styles moved from ButtonStyles.xaml -->
+    <!-- Thumb has no fixed length: the Track sizes it from the viewport/content ratio
+         (see ViewportSize below). MinHeight keeps a tiny thumb grabbable on long content. -->
     <Style x:Key="ScrollBarTrackThumb"
            TargetType="Thumb">
-        <Setter Property="Height"
-                Value="20" />
+        <Setter Property="MinHeight"
+                Value="24" />
         <Setter Property="Width"
                 Value="7" />
         <Setter Property="Background"
@@ -718,10 +720,12 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
+                        <!-- ViewportSize bound (not NaN) so the thumb length tracks how much
+                             content overflows - a big thumb when there's little to scroll. -->
                         <Track x:Name="PART_Track"
                                Grid.Row="0"
                                IsDirectionReversed="true"
-                               ViewportSize="NaN"
+                               ViewportSize="{TemplateBinding ViewportSize}"
                                Focusable="false">
                             <Track.Thumb>
                                 <Thumb x:Name="Thumb"
