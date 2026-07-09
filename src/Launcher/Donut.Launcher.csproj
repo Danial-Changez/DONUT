@@ -36,6 +36,12 @@
       <LogicalName>assets/Images/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
 
+    <!-- Embedded UI fonts (Geist Mono; OFL). Extracted beside the styles so the
+         ./Fonts/#Geist Mono FontFamily token resolves from the app tree. -->
+    <EmbeddedResource Include="$(DonutSrcDir)\UI\Styles\Fonts\*.*">
+      <LogicalName>src/UI/Styles/Fonts/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+
     <!-- Native tool pushed to remote shares for disk scans; not in git, so it embeds only
          when the operator has dropped it into src\Tools\ before building. -->
     <EmbeddedResource Include="$(DonutSrcDir)\Tools\wiztree64.exe"

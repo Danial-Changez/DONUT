@@ -8,7 +8,7 @@
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextTertiary}" />
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="16" />
         <Setter Property="Padding"
@@ -75,7 +75,7 @@
         <Setter Property="Foreground"
                 Value="{DynamicResource TerminalText}" />
         <Setter Property="FontFamily"
-                Value="Cascadia Code" />
+                Value="{DynamicResource FontMono}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="BorderThickness"
@@ -94,7 +94,7 @@
         <Setter Property="Foreground"
                 Value="{DynamicResource TerminalText}" />
         <Setter Property="FontFamily"
-                Value="Cascadia Code" />
+                Value="{DynamicResource FontMono}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="BorderThickness"
@@ -151,7 +151,7 @@
     <Style x:Key="TerminalTabItemStyle"
            TargetType="TabItem">
         <Setter Property="FontFamily"
-                Value="Cascadia Code" />
+                Value="{DynamicResource FontMono}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="Margin"
@@ -233,7 +233,7 @@
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="Foreground"
@@ -259,7 +259,7 @@
     <Style x:Key="ModernComboBox"
            TargetType="ComboBox">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="Foreground"
@@ -366,7 +366,7 @@
         <Setter Property="Padding"
                 Value="10" />
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontWeight"
                 Value="Bold" />
         <Setter Property="Background"
@@ -380,7 +380,7 @@
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="Foreground"
@@ -448,7 +448,7 @@
     <Style x:Key="ModernSectionSubtitle"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="FontWeight"
@@ -462,7 +462,7 @@
     <Style x:Key="SettingsSectionLabel"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="11" />
         <Setter Property="FontWeight"
@@ -477,7 +477,7 @@
     <Style x:Key="ChipCheckBox"
            TargetType="CheckBox">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="12.5" />
         <Setter Property="Foreground"
@@ -526,7 +526,7 @@
     <Style x:Key="SegmentToggle"
            TargetType="RadioButton">
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="13" />
         <Setter Property="FontWeight"
@@ -575,7 +575,7 @@
         <Setter Property="Foreground"
                 Value="{DynamicResource PrimaryForeground}" />
         <Setter Property="FontFamily"
-                Value="Montserrat" />
+                Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
                 Value="14" />
         <Setter Property="FontWeight"
