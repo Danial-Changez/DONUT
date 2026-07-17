@@ -9,7 +9,7 @@
          excluded - those aren't our code.
       2. TypeNotFound is a PARSER diagnostic that ExcludeRules can't suppress; the only
          hits are the runtime-compiled C# types (ObservableObject / RelayCommand /
-         WindowChromeHelper), so they're filtered here by name.
+         WindowChromeHelper / Donut.Qr.QrCode), so they're filtered here by name.
 
     Rule calibration lives in PSScriptAnalyzerSettings.psd1 at the repo root.
 
@@ -43,7 +43,7 @@ $results = $files | ForEach-Object {
 } | Where-Object {
     # Drop the known-unresolvable runtime-compiled C# types (see .DESCRIPTION).
     -not ($_.RuleName -eq 'TypeNotFound' -and
-        $_.Message -match 'ObservableObject|RelayCommand|WindowChromeHelper')
+        $_.Message -match 'ObservableObject|RelayCommand|WindowChromeHelper|Donut\.Qr\.QrCode')
 }
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"

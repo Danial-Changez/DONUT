@@ -102,8 +102,16 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 1. **Clone the repository** and open in VS Code or PowerShell Studio.
 2. **Install dependencies** (see [Prerequisites](#prerequisites)).
-3. **Review configuration files** and XAML UI files in `Views/` and `Styles/`.
-4. **Package and publish updates via GitHub Releases.**
+3. **Run from source** — no MSI, exe, or Defender exclusion needed:
+
+   ```powershell
+   pwsh -File src\Start-Donut.ps1
+   ```
+
+   The script compiles the C# helpers (`ObservableObject`, `RelayCommand`, `WindowChromeHelper`, `QrCode`) in-process, so it needs nothing beyond PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host (e.g. right-click "Run with PowerShell"), it relaunches itself under `pwsh -Sta` automatically.
+
+4. **Review configuration files** and XAML UI files in `Views/` and `Styles/`.
+5. **Package and publish updates via GitHub Releases.**
    - Build the MSI with Visual Studio's packager (set the Product Version to your release tag).
    - Create a GitHub release with that tag and upload the MSI asset (matches `MsiAssetPattern`, default `*.msi`).
    - The app authenticates via your GitHub App (Device Flow), compares the installed version to the latest release tag, and self-updates or rolls back accordingly.
