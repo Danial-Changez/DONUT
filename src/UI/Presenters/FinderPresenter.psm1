@@ -66,6 +66,10 @@ class FinderPresenter {
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
 
+    # Pool jobs mid-async-stop (DisposeJob); the reaper disposes each once it goes terminal.
+    [List[object]]    $StoppingJobs
+    [DispatcherTimer] $ReapTimer
+
     # User Lens: a pick runs LensLookupWorker over the persistent de-elevated agent;
     # mirrors the search/unlock poll pattern.
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
@@ -114,6 +118,12 @@ class FinderPresenter {
         $this.UnlockPollTimer = [DispatcherTimer]::new()
         $this.UnlockPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
         $this.UnlockPollTimer.Add_Tick({ $presenter.PollUnlock() }.GetNewClosure())
+
+        # Reaper for async-stopped pool jobs (see DisposeJob); runs only while some are pending.
+        $this.StoppingJobs = [List[object]]::new()
+        $this.ReapTimer = [DispatcherTimer]::new()
+        $this.ReapTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+        $this.ReapTimer.Add_Tick({ $presenter.ReapStoppingJobs() }.GetNewClosure())
 
         # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
@@ -208,26 +218,37 @@ class FinderPresenter {
         return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
     }
 
-    # Best-effort dispose of a pool job's PowerShell handle (logs at debug, never throws).
-    # A job stuck in a non-interruptible native call (a hung LDAP/SCCM/socket query on a dead
-    # network) can't be cancelled, so Dispose()/Stop() BLOCK until it returns - and these run
-    # on the STA UI thread (AbortSearch / ReapAdWarm / ReapLensWarm), so a synchronous dispose
-    # freezes the whole app. So: stop it ASYNCHRONOUSLY and dispose in the callback; a job
-    # that's already finished disposes directly (fast, no risk of blocking).
+    # Dispose a pool job's handle without ever blocking the UI thread: a finished job disposes
+    # now; a still-running one (even a native-stuck LDAP/SCCM query) is stopped async and reaped.
     hidden [void] DisposeJob([object]$ps) {
         if ($null -eq $ps) { return }
         try {
             if ($ps.InvocationStateInfo.State -eq 'Running') {
-                $ps.BeginStop({ param($ar)
-                        try { $ps.EndStop($ar) } catch { }
-                        try { $ps.Dispose() } catch { }
-                    }.GetNewClosure(), $null) | Out-Null
+                # No scriptblock callback: BeginStop fires it on a runspace-less threadpool
+                # thread, where any scriptblock throws before its body runs (crashing the app).
+                $ps.BeginStop($null, $null) | Out-Null
+                $this.StoppingJobs.Add($ps)
+                if (-not $this.ReapTimer.IsEnabled) { $this.ReapTimer.Start() }
             }
             else {
                 $ps.Dispose()
             }
         }
         catch { $this.Logger.LogDebug("Job dispose failed: $($_.Exception.Message)") }
+    }
+
+    # Disposes each async-stopped job once its pipeline goes terminal; disposing a still-Stopping
+    # one would block, so those wait for a later tick. Stops the timer when the list drains.
+    hidden [void] ReapStoppingJobs() {
+        for ($i = $this.StoppingJobs.Count - 1; $i -ge 0; $i--) {
+            $ps = $this.StoppingJobs[$i]
+            $state = [string]$ps.InvocationStateInfo.State
+            if ($state -ne 'Running' -and $state -ne 'Stopping') {
+                try { $ps.Dispose() } catch { }
+                $this.StoppingJobs.RemoveAt($i)
+            }
+        }
+        if ($this.StoppingJobs.Count -eq 0) { $this.ReapTimer.Stop() }
     }
 
     # Fire-and-forget warm: one throwaway search per forest primes the worker graph
@@ -500,6 +521,9 @@ class FinderPresenter {
         $this.CloseSearchPopup()
         $this.LensVm.SetLoading($who)
         $this.HomeVm.SetPerson($this.LensVm)
+        # The person is now the detail pane; drop the machine highlight so clicking any machine
+        # (even the previously selected one) re-fires selection and returns to its detail.
+        if ($this.Home.MachineList) { $this.Home.MachineList.SelectedItem = $null }
 
         # Session cache: re-picking the same person within the TTL renders instantly
         # instead of re-running the de-elevated lookup.
