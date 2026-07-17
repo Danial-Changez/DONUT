@@ -503,14 +503,125 @@
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
-                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonTintScan}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
             <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
-                    Style="{DynamicResource ButtonOutline}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonTintInfo}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
           </Grid>
+
+          <!-- Available updates (populated after an apply-updates scan). Display-only; the
+               apply is gated by a separate confirm dialog. Shares the folders cell and is
+               shown when HasUpdates (the folders panel collapses below). -->
+          <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
+                  Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+                  Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Text="{Binding SelectedMachine.UpdatesHeader}"
+                         Style="{DynamicResource MicroLabel}" Margin="0,0,0,4" />
+              <TextBlock Grid.Row="1" Text="{Binding SelectedMachine.UpdatesIdentityText}"
+                         FontFamily="{DynamicResource FontSans}" FontSize="11" TextWrapping="Wrap"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding SelectedMachine.Updates}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="{DynamicResource PanelBackgroundHover}" BorderBrush="{DynamicResource PanelBorder}"
+                              BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
+                        <Grid>
+                          <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                          </Grid.RowDefinitions>
+                          <!-- Line 1: update name + urgency badge -->
+                          <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}"
+                                       FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <!-- Urgency badge: Urgent=red, Recommended=sky, Optional=muted (inline
+                                 so its colour varies without a BasedOn chain). -->
+                            <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                                    CornerRadius="8.4" Padding="8,0" Height="20" BorderThickness="1">
+                              <Border.Style>
+                                <Style TargetType="Border">
+                                  <Setter Property="Background" Value="{DynamicResource TintSky}" />
+                                  <Setter Property="BorderBrush" Value="{DynamicResource TintSkyBorder}" />
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Urgency}" Value="Urgent">
+                                      <Setter Property="Background" Value="{DynamicResource TintRed}" />
+                                      <Setter Property="BorderBrush" Value="{DynamicResource TintRedBorder}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Urgency}" Value="Optional">
+                                      <Setter Property="Background" Value="{DynamicResource SurfaceMuted}" />
+                                      <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Urgency}" Value="">
+                                      <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </Border.Style>
+                              <TextBlock Text="{Binding Urgency}" VerticalAlignment="Center"
+                                         FontFamily="{DynamicResource FontSans}" FontSize="11" FontWeight="SemiBold">
+                                <TextBlock.Style>
+                                  <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentCyan}" />
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding Urgency}" Value="Urgent">
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentRed}" />
+                                      </DataTrigger>
+                                      <DataTrigger Binding="{Binding Urgency}" Value="Optional">
+                                        <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
+                                      </DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </TextBlock.Style>
+                              </TextBlock>
+                            </Border>
+                          </Grid>
+                          <!-- Line 2: category badge + version change + NEW + size -->
+                          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+                            <Border Style="{DynamicResource BadgeMuted}" Margin="0,0,8,0" VerticalAlignment="Center">
+                              <TextBlock Style="{DynamicResource BadgeMutedText}" Text="{Binding Category}" />
+                            </Border>
+                            <TextBlock Text="{Binding VersionText}" FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                       Foreground="{DynamicResource BodyTextPrimary}" VerticalAlignment="Center" />
+                            <Border Style="{DynamicResource BadgeGreen}" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Visibility="{Binding IsNewer, Converter={StaticResource BoolToVis}}">
+                              <TextBlock Style="{DynamicResource BadgeGreenText}" Text="NEW" />
+                            </Border>
+                            <TextBlock Text="{Binding SizeText}" FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                       Foreground="{DynamicResource BodyTextTertiary}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </Border>
 
           <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
           <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
                   Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+            <Border.Style>
+              <!-- Collapse while the updates list occupies this cell. -->
+              <Style TargetType="Border">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding SelectedMachine.HasUpdates}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Border.Style>
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

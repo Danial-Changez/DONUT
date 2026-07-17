@@ -43,8 +43,8 @@ loop while job running
     activate Job
     Job -> Exec: (pool thread) RunScanPhase
     activate Exec
-    Exec -> Exec: FindDcuCli (SMB-445 gated, bounded 2s)
-    Exec -> Exec: DCU-CLI scan via PsExec (-r DonutDcu,\nwatchdog kills the client after 30m)
+    Exec -> Exec: SMB-445 gate (bounded 2s) — the only pre-launch touch
+    Exec -> Exec: DCU-CLI scan via PsExec -EncodedCommand (BuildRemoteDcuScript:\ndiscover dcu-cli + clear on target; -r DonutDcu, watchdog kills the client after 30m)
     Exec -> Exec: live-tail scan.log -> Information stream\n(milestones + every line, while psexec runs)
     Exec -> Exec: CopyRemoteArtifacts() (SMB-gated, non-fatal)
     Exec --> Job: scan result + report path

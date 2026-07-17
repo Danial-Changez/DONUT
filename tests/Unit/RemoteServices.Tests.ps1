@@ -123,22 +123,39 @@ Describe "RemoteServices" {
             $matcher = [DriverMatchingService]::new()
             $service = [RemoteUpdateService]::new($config, $probe, $matcher)
 
-            # Create a test XML report
+            # Real DCU report shape: each field is a CHILD element, not an attribute.
             $testXml = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <updates>
-    <update name="BIOS Update" version="1.2.3" category="BIOS"/>
-    <update name="Audio Driver" version="6.0.1" category="Audio"/>
+    <update>
+        <name>Dell Latitude 5330 System BIOS</name>
+        <version>1.36.0</version>
+        <urgency>Urgent</urgency>
+        <type>BIOS</type>
+        <category>BIOS</category>
+        <bytes>28033352</bytes>
+    </update>
+    <update>
+        <name>Realtek High Definition Audio Driver</name>
+        <version>6.0.9954.2</version>
+        <urgency>Recommended</urgency>
+        <type>Driver</type>
+        <category>Audio</category>
+        <bytes>264884984</bytes>
+    </update>
 </updates>
 "@
             $reportPath = Join-Path $script:reportsDir "TestHost-Updates.xml"
             Set-Content -Path $reportPath -Value $testXml
 
             $result = $service.ParseUpdateReport("TestHost")
-            
+
             $result | Should -Not -BeNullOrEmpty
-            $result.updates.update.Count | Should -Be 2
-            $result.updates.update[0].name | Should -Be "BIOS Update"
+            $nodes = $result.SelectNodes("//update")
+            $nodes.Count | Should -Be 2
+            # Read fields via SelectSingleNode (never $node.name - it collides with XmlElement.Name).
+            $nodes[0].SelectSingleNode("name").InnerText | Should -Be "Dell Latitude 5330 System BIOS"
+            $nodes[0].SelectSingleNode("urgency").InnerText | Should -Be "Urgent"
 
             # Cleanup
             Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue

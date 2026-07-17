@@ -16,6 +16,7 @@ enum FleetCardState {
     Queued
     Scanning
     Updating
+    Reconnecting
     Completed
     RebootRequired
     Failed
@@ -65,5 +66,13 @@ class FleetCardStatus {
 
         # Unknown status: treat as queued so a card still renders something sane.
         return [FleetCardStatus]::new([FleetCardState]::Queued, 'Queued', 'BodyTextTertiary', $false)
+    }
+
+    # A run whose connection dropped (either end) and is reconnecting + resuming. The job is
+    # still Running, so this isn't a FromJob status - the pump applies it when the worker
+    # emits reconnect lines. Amber (mirrors the 'Unconfirmed' ConnectionLost tone) + busy so
+    # the bar keeps pulsing while we wait to get back online.
+    static [FleetCardStatus] Reconnecting() {
+        return [FleetCardStatus]::new([FleetCardState]::Reconnecting, 'Reconnecting…', 'AccentOrange', $true)
     }
 }

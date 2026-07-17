@@ -132,9 +132,9 @@ else fresh Online
     P -> J : UpdateScan
     P -> J : Resolve{Name}  (StartVerifyName — parallel identity check, applyUpdates mode only)
     J -> W : RunScanPhase -> InvokePsExec  (ResolvedIpFor: seeded IP; un-seeded fallback now logs a slow-path warning)
-    W -> N : FindDcuCli -> IsSmbAvailable(ip) (445, 2s gate)
-    W -> H : psexec -s -h  dcu-cli /scan  (-outputLog scan.log)
-    W -> H : live-tail scan.log while psexec runs -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
+    W -> N : InvokePsExec SMB gate -> IsSmbAvailable(ip) (445, 2s) — the ONLY pre-launch touch
+    W -> H : psexec -s -h  pwsh -EncodedCommand (BuildRemoteDcuScript: discover dcu-cli on target, clear + /scan)
+    W -> H : live-tail scan.log while psexec runs (each tick SMB-gated 2s) -> Information stream\n(scan steps "N/5" + percents -> card bar; every line -> detail terminal)
     W -> H : CopyRemoteArtifacts (scan.log + newest *.xml report;\nSMB-gated with a brief retry - warns + skips instead of hanging)
     J --> P : Complete(UpdateScan)
   end
@@ -161,16 +161,16 @@ else Match OR Unknown
   P -> R : re-check IdentityVerdict  (late Mismatch -> ABORT + re-resolve)
   P -> J : UpdateApply
   J -> W : RunApplyPhase -> InvokePsExec
-  W -> N : FindDcuCli -> IsSmbAvailable(ip)
-  W -> H : clear apply.log over C$ (controller-side, + freshness baseline)
-  W -> H : psexec: clear again remotely ; dcu-cli /applyUpdates (-outputLog apply.log)
-  W -> H : live-tail apply.log while psexec runs -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
+  W -> N : InvokePsExec SMB gate -> IsSmbAvailable(ip) (445, 2s) — the ONLY pre-launch touch
+  W -> H : psexec: pwsh -EncodedCommand (BuildRemoteDcuScript: kill DCU, discover dcu-cli, clear apply.log, /applyUpdates)
+  W -> H : live-tail apply.log while psexec runs (each tick SMB-gated 2s) -> Information stream\n(percent lines drive the determinate bar; every line -> detail terminal)
   note right of W #E8F5E9
-    [FIXED] the log is cleared from the CONTROLLER before psexec starts -
-    the remote-side clear only runs if the remote command does. A leftover
-    that can't be deleted stamps a LastWriteTimeUtc baseline (target-vs-
-    target, skew-immune), so a stale log from a previous run can never
-    "confirm" a run that never happened.
+    [FIXED] NO controller-side UNC before launch. dcu-cli discovery and the
+    pre-run log clear both run ON the target (BuildRemoteDcuScript), so an
+    open-but-wedged C$ share (e.g. a host mid-reboot after a BIOS flash) can
+    no longer stall the worker before psexec is even sent. The remote clear
+    runs after killing any live DCU, so a recovered code is always this run's.
+    A missing dcu-cli returns the $DcuNotFoundExit sentinel -> DcuNotInstalled.
   end note
 end
 
@@ -178,19 +178,23 @@ end
 H --> W : psexec exit code
 alt exit < 0  (NTSTATUS, e.g. 0xC0000142)
   W -> J : throw RemoteProcessStartException  (remote pwsh never ran)
-else transport code  (233 PIPE_NOT_CONNECTED / 64 NETNAME_DELETED / ...)
+else transport code  (233 / 64 / 59 UNEXP_NET_ERR / 1232 HOST_UNREACHABLE / ...)
   note right of W #E8F5E9
-    [FIXED] a network-driver install resets the NIC that psexec's own
-    SMB pipe rides over -> psexec loses the pipe though dcu-cli finished.
+    [FIXED] the drop can be at EITHER end: the target's NIC reset (a network-driver
+    install), or the operator's OWN laptop losing Wi-Fi (59/1232/...). dcu-cli keeps
+    running on the target regardless, so the run does not fail - it reconnects + resumes.
   end note
-  W -> H : ReadDcuReturnCode: retry <=5x, each gated by IsSmbAvailable (2s)
-  W -> H : read \\ip\C$\...\apply.log  (wait for the NIC to re-init;\nonly trusted if written AFTER the pre-run baseline)
-  W -> W : DcuLog.ParseReturnCode (last "return code: N")
-  alt N in {0,1,5}   -> treat as completed (1/5 = reboot)
+  W -> W : RecoverByResumeTail (bounded AppConfig.GetRecoveryWindowMinutes ~30m, backoff 5->60s)
+  loop until code found OR window elapsed
+    W -> W : IsLocalOnline? no -> emit "[reconnect] this machine is offline…" (card: Reconnecting)
+    W -> H : IsSmbAvailable? no -> emit "[reconnect] reconnecting to <target>…"
+    W -> H : reachable -> TailAndScanLog: RESUME tail from last seenChars\n(stream missed lines) + DcuLog.ParseReturnCode
+  end
+  alt N in {0,1,5}   -> reconnected + confirmed (1/5 = reboot)
     W --> J : return N
   else N is a real DCU error
     W -> J : throw RemoteExecutionException(N, decoded)
-  else log unreadable / unfinished
+  else window elapsed, no code (mid-install / laptop died)
     W -> J : throw RemoteConnectionLostException  (amber "Unconfirmed"; re-scan)
   end
 else normal exit N

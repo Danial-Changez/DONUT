@@ -125,8 +125,9 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
-# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...),
-# not a dcu-cli code. Classic trigger: a network driver reset the NIC.
+# psexec's connection dropped mid-command - a Win32 transport error (233, 64, 59, ...),
+# not a dcu-cli code. The drop can be at EITHER end: a network driver resetting the
+# target's NIC, or the operator's own laptop losing Wi-Fi (surfaces as 59/1232/...).
 class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
 
@@ -137,13 +138,23 @@ class RemoteConnectionLostException : RemoteOperationException {
     }
 
     # The Win32 codes psexec surfaces on a mid-command drop. None collide with dcu-cli's
-    # own codes (0-5, 1xx, 5xx, 1000s), so seeing one means the transport died.
+    # own codes (0-8, 100-113, 500-503, 1000-1002, 1505-1506, 2000-2007), so seeing one
+    # means the transport died. The 5x / 59 / 123x codes are the ones that show up when the
+    # LOCAL side (the operator's laptop) loses connectivity rather than the target.
     static [hashtable] $Codes = @{
+        51   = 'ERROR_REM_NOT_LIST'
+        53   = 'ERROR_BAD_NETPATH'
+        54   = 'ERROR_NETWORK_BUSY'
+        55   = 'ERROR_DEV_NOT_EXIST'
+        58   = 'ERROR_BAD_NET_RESP'
+        59   = 'ERROR_UNEXP_NET_ERR'
         64   = 'ERROR_NETNAME_DELETED'
         109  = 'ERROR_BROKEN_PIPE'
         121  = 'ERROR_SEM_TIMEOUT'
         232  = 'ERROR_NO_DATA'
         233  = 'ERROR_PIPE_NOT_CONNECTED'
+        1231 = 'ERROR_NETWORK_UNREACHABLE'
+        1232 = 'ERROR_HOST_UNREACHABLE'
         1236 = 'ERROR_CONNECTION_ABORTED'
     }
 

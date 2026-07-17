@@ -68,4 +68,15 @@ Describe "FleetCardStatus" {
             $s.State | Should -Be ([FleetCardState]::Queued)
         }
     }
+
+    Context "Reconnecting - drop recovery" {
+        It "Reconnecting() is amber and busy (mirrors the Unconfirmed tone, keeps pulsing)" {
+            $s = [FleetCardStatus]::Reconnecting()
+
+            $s.State    | Should -Be ([FleetCardState]::Reconnecting)
+            $s.Label    | Should -Be 'Reconnecting…'
+            $s.ColorKey | Should -Be 'AccentOrange'
+            $s.IsBusy   | Should -Be $true
+        }
+    }
 }

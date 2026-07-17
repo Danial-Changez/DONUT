@@ -11,6 +11,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [bool] $IsSmbAvailableResult = $true
+    [bool] $IsLocalOnlineResult = $true
     [string] $ResolveHostResult = "127.0.0.1"
     [string] $ActiveDcResult = "DC1.contoso.local"
     [string[]] $DcListResult = @("DC1.contoso.local", "DC2.contoso.local")
@@ -19,6 +20,8 @@ class MockNetworkProbeWorker : NetworkProbe {
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [bool] IsSmbAvailable([string]$hostName) { return $this.IsSmbAvailableResult }
+    [bool] IsSmbReachableQuiet([string]$hostName) { return $this.IsSmbAvailableResult }
+    [bool] IsLocalOnline() { return $this.IsLocalOnlineResult }
     [string] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
     [string] GetActiveDomainController() { return $this.ActiveDcResult }
     [string[]] GetDomainControllers() { return $this.DcListResult }
@@ -39,6 +42,16 @@ class TestExecutionService : ExecutionService {
         # Capture params for verification; return the configured dcu-cli code.
         $this.LastPsExecParams = $params
         return $this.PsExecReturnCode
+    }
+
+    # Canned TailAndScanLog results so RecoverByResumeTail can be driven without a network;
+    # when the queue empties, reports "reachable, no verdict yet" at the current offset.
+    [System.Collections.Generic.Queue[hashtable]] $TailResults = [System.Collections.Generic.Queue[hashtable]]::new()
+    [int] $TailCalls = 0
+    [hashtable] TailAndScanLog([string]$ip, [string]$remoteLog, [int]$seenChars) {
+        $this.TailCalls++
+        if ($this.TailResults.Count -gt 0) { return $this.TailResults.Dequeue() }
+        return @{ Seen = $seenChars; Code = @{ Found = $false; Code = 0 } }
     }
 
     [string] $LastCopiedOutputLog = $null
@@ -133,17 +146,18 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli" {
+    Context "InvokePsExec SMB gate" {
         It "Fails fast (RpcUnavailable) when the admin share (SMB/445) is unreachable" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
-            $probe.IsSmbAvailableResult = $false   # short-circuits before any UNC Test-Path
+            $probe.IsSmbAvailableResult = $false   # gate throws before psexec is ever launched
             $matcher = [DriverMatchingService]::new()
             $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
+            $params = @{ ComputerName = 'PC-5'; Command = 'scan'; Arguments = '-silent'; OutputLog = 'C:\temp\DONUT\scan.log' }
             $threw = $false; $errName = ''
-            try { $service.FindDcuCli('203.0.113.9') } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
+            try { $service.InvokePsExec($params) } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
             $threw  | Should -BeTrue
             $errName | Should -Be 'RpcUnavailableException'
         }
@@ -324,23 +338,6 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli" {
-        It "Should return null when DCU CLI is not found" {
-            # This test verifies the method exists and returns expected type
-            # The actual DCU path lookup would fail in test environments
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
-            # FindDcuCli is hidden, so we can't call it directly
-            # This test validates the service can be constructed and used
-            $service | Should -Not -BeNullOrEmpty
-        }
-    }
-
     Context "Integration with AppConfig" {
         It "Should use AppConfig settings for BuildDcuArgs" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{
@@ -492,17 +489,97 @@ Describe "WorkerServices" {
         }
     }
 
-    Context "FindDcuCli Path Resolution" {
-        It "Should throw when DCU CLI not found at expected paths" {
+    Context "BuildRemoteDcuScript" {
+        It "resolves dcu-cli on the target and clears the prior log (no controller-side UNC)" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('applyUpdates',
+                '-silent -outputLog=C:\temp\DONUT\apply.log', 'C:\temp\DONUT\apply.log')
+
+            # dcu-cli is discovered ON the target (Test-Path there), not over a controller UNC.
+            $s.Contains('C:\Program Files (x86)\Dell\CommandUpdate\dcu-cli.exe') | Should -BeTrue
+            $s.Contains('C:\Program Files\Dell\CommandUpdate\dcu-cli.exe')       | Should -BeTrue
+            $s.Contains('Test-Path -LiteralPath')                               | Should -BeTrue
+            # The prior log is cleared remotely, and dcu-cli runs with the given args.
+            $s.Contains("Remove-Item -LiteralPath 'C:\temp\DONUT\apply.log'")    | Should -BeTrue
+            $s.Contains('/applyUpdates -silent -outputLog=C:\temp\DONUT\apply.log') | Should -BeTrue
+            # A missing dcu-cli comes back as the sentinel, not a hung path.
+            $s.Contains("exit $([ExecutionService]::DcuNotFoundExit)")           | Should -BeTrue
+        }
+
+        It "omits the clear line when no outputLog is supplied" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('scan', '-silent', '')
+            $s.Contains('Remove-Item') | Should -BeFalse
+            $s.Contains('/scan -silent') | Should -BeTrue
+        }
+
+        It "uses a not-found sentinel outside every dcu-cli and psexec transport code" {
+            # Past the driver-install range (2000-2007) so DescribeReturnCode never claims it,
+            # and not one of the connection-lost transport codes.
+            [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
+            @(0, 1, 5, 64, 109, 121, 232, 233, 1236) |
+                Should -Not -Contain ([ExecutionService]::DcuNotFoundExit)
+        }
+    }
+
+    Context "TailAndScanLog" {
+        It "streams new whole lines, advances the offset, and surfaces the return code" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()   # IsSmbAvailable = $true
+            $matcher = [DriverMatchingService]::new()
+            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $logFile = Join-Path $script:tempDir 'apply-tail.log'
+            "[2026-07-09 15:00:00] : Installing updates (4 of 4)...`n[2026-07-09 15:00:30] : The program exited with return code: 1" |
+                Set-Content -LiteralPath $logFile -Encoding UTF8
+
+            # A local temp file stands in for the admin-share UNC path; SMB gate is mocked open.
+            $r = $service.TailAndScanLog('10.0.0.7', $logFile, 0)
+            $r.Seen       | Should -BeGreaterThan 0
+            $r.Code.Found | Should -BeTrue
+            $r.Code.Code  | Should -Be 1
+        }
+
+        It "returns Found=false and the old offset when the share is unreachable (never blocks)" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new(); $probe.IsSmbAvailableResult = $false
+            $matcher = [DriverMatchingService]::new()
+            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $r = $service.TailAndScanLog('10.0.0.7', 'C:\temp\DONUT\apply.log', 42)
+            $r.Seen       | Should -Be 42
+            $r.Code.Found | Should -BeFalse
+        }
+    }
+
+    Context "RecoverByResumeTail" {
+        It "returns the recovered code as soon as a reachable read yields a verdict" {
+            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()   # local + SMB both online
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.TailResults.Enqueue(@{ Seen = 10; Code = @{ Found = $true; Code = 5 } })
+
+            $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
+            $r.Found          | Should -BeTrue
+            $r.Code           | Should -Be 5
+            $service.TailCalls | Should -Be 1   # returned on the first reachable read, no waiting
+        }
+
+        It "resumes past a not-yet-written verdict and recovers the code on a later read" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
-            # FindDcuCli checks UNC paths which won't exist in test
-            { $service.FindDcuCli("127.0.0.1") } | Should -Throw "*not installed*"
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.TailResults.Enqueue(@{ Seen = 5;  Code = @{ Found = $false; Code = 0 } })  # dcu still installing
+            $service.TailResults.Enqueue(@{ Seen = 20; Code = @{ Found = $true;  Code = 0 } })  # then the verdict
+
+            $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
+            $r.Found           | Should -BeTrue
+            $r.Code            | Should -Be 0
+            $service.TailCalls | Should -Be 2
         }
     }
 

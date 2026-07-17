@@ -469,6 +469,43 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style x:Key="ButtonTintScan"
+           TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource TintScan}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentIndigo}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TintScanBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8.4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintScanHover}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintScanBorderHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <Style x:Key="ButtonTintInfo"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource TintSky}" />

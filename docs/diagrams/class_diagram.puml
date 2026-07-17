@@ -357,9 +357,10 @@ package "Donut.Services" #221634 {
         +RunDiskScanPhase(device, options): Hashtable
         +InvokePsExec(parameters): int
         +InvokeRemotePwsh(target, script, serviceName, maxMinutes): void
-        +ReadDcuReturnCode(ip, outputLog, baseline): Hashtable
-        -EmitNewDcuLogLines(remoteLog, seenChars): int
-        -ClearRemoteOutputLog(ip, outputLog): object
+        +RecoverByResumeTail(ip, computer, remoteLog, seenChars): Hashtable
+        -TailAndScanLog(ip, remoteLog, seenChars): Hashtable
+        -EmitNewDcuLogLines(ip, remoteLog, seenChars): int
+        +{static} BuildRemoteDcuScript(command, argsString, outputLog): string
         +CopyRemoteArtifacts(host): Hashtable
     }
 

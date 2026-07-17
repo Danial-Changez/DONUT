@@ -202,10 +202,33 @@ Describe "AppConfig" {
 
         It "Should set throttle limit" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+
             $config.SetThrottleLimit(20)
-            
+
             $config.GetThrottleLimit() | Should -Be 20
+        }
+    }
+
+    Context "GetRecoveryWindowMinutes" {
+        It "Should default to 30 when not set" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config.Settings.Remove('recoveryWindowMinutes')
+            $config.GetRecoveryWindowMinutes() | Should -Be 30
+        }
+
+        It "Should return the configured window, tolerating a string" {
+            (([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                recoveryWindowMinutes = 45
+            })).GetRecoveryWindowMinutes()) | Should -Be 45
+            (([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                recoveryWindowMinutes = '10'
+            })).GetRecoveryWindowMinutes()) | Should -Be 10
+        }
+
+        It "Should clamp a zero/negative window to >= 1 so recovery can't be disabled outright" {
+            (([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                recoveryWindowMinutes = 0
+            })).GetRecoveryWindowMinutes()) | Should -Be 1
         }
     }
 
