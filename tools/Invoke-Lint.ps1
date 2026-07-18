@@ -9,7 +9,8 @@
          excluded - those aren't our code.
       2. TypeNotFound is a PARSER diagnostic that ExcludeRules can't suppress; the only
          hits are the runtime-compiled C# types (ObservableObject / RelayCommand /
-         WindowChromeHelper / Donut.Qr.QrCode), so they're filtered here by name.
+         WindowChromeHelper / Donut.Qr.QrCode / Donut.Interop.HotkeyManager), so
+         they're filtered here by name.
 
     Rule calibration lives in PSScriptAnalyzerSettings.psd1 at the repo root.
 
@@ -38,12 +39,14 @@ $settings = Join-Path $PSScriptRoot '..\PSScriptAnalyzerSettings.psd1'
 $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
     Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
 
+# Runtime-compiled C# types the static analyzer can't resolve (see .DESCRIPTION).
+$runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
+'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager'
+
 $results = $files | ForEach-Object {
     Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings -ErrorAction SilentlyContinue
 } | Where-Object {
-    # Drop the known-unresolvable runtime-compiled C# types (see .DESCRIPTION).
-    -not ($_.RuleName -eq 'TypeNotFound' -and
-        $_.Message -match 'ObservableObject|RelayCommand|WindowChromeHelper|Donut\.Qr\.QrCode')
+    -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
 }
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"

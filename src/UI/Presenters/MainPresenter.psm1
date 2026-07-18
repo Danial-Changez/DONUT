@@ -1,5 +1,6 @@
 using namespace System.Windows
 using module "..\..\Models\AppConfig.psm1"
+using module "..\..\Models\HotkeyGesture.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
@@ -42,6 +43,10 @@ class MainPresenter {
     # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
     [bool] $ExitRequested
     [object] $PendingUpdateCheck
+
+    # Global-hotkey interop (Donut.Interop.HotkeyManager) and the HWND it binds to.
+    hidden [object] $Hotkey
+    hidden [IntPtr] $Hwnd = [IntPtr]::Zero
 
     # The DONUT wordmark shown in the branding bar.
     hidden [System.Windows.Media.Imaging.BitmapImage] $LogoImage
@@ -178,7 +183,9 @@ class MainPresenter {
                     try { $global:LensTeardownJob.Ps.Dispose() } catch { }
                     $global:LensTeardownJob = $null
                 }
-                # Remove the tray icon before the hard exit, else it ghosts until hovered.
+                # Release the global hotkey and remove the tray icon before the hard exit
+                # (the icon would otherwise ghost in the tray until hovered).
+                if ($presenter.Hotkey) { try { $presenter.Hotkey.Detach() } catch { } }
                 if ($presenter.TrayPresenter) { try { $presenter.TrayPresenter.Dispose() } catch { } }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Shutdown()
@@ -207,6 +214,8 @@ class MainPresenter {
                     $hwnd = [Interop.WindowInteropHelper]::new($presenter.Window).Handle
                     if ($hwnd -ne [IntPtr]::Zero) {
                         [WindowChromeHelper]::ConstrainMaximize($hwnd)
+                        # The HWND now exists, so RegisterHotKey can bind to it.
+                        $presenter.AttachHotkey($hwnd)
                     }
                 }
                 catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
@@ -232,6 +241,46 @@ class MainPresenter {
         $w.Topmost = $true
         $w.Topmost = $false
         $w.Focus()
+    }
+
+    # Stores the window HWND (once it exists) and registers the configured hotkey.
+    [void] AttachHotkey([IntPtr]$hwnd) {
+        $this.Hwnd = $hwnd
+        $this.ApplyHotkey()
+    }
+
+    # (Re)registers the global hotkey from the current config on the stored HWND. Detaches
+    # first so a Settings change swaps cleanly; a taken combo toasts and the app continues.
+    [void] ApplyHotkey() {
+        if ($this.Hwnd -eq [IntPtr]::Zero) { return }
+        try {
+            if ($null -eq $this.Hotkey) {
+                $this.Hotkey = [Donut.Interop.HotkeyManager]::new()
+                # Pressed fires on the UI thread (WM_HOTKEY -> WndProc), so this is safe.
+                $presenter = $this
+                $this.Hotkey.add_Pressed(
+                    { param($s, $e) $presenter.TrayPresenter.ShowMainWindow() }.GetNewClosure())
+            }
+            $this.Hotkey.Detach()
+
+            $gestureText = $this.Config.GetGlobalHotkey()
+            if ([string]::IsNullOrWhiteSpace($gestureText)) { return }   # blank = disabled
+
+            $gesture = [HotkeyGesture]::Parse($gestureText)
+            if (-not $gesture.Valid) {
+                $this.Logger.LogWarning("Global hotkey '$gestureText' invalid: $($gesture.Reason)")
+                return
+            }
+            if ($this.Hotkey.Attach($this.Hwnd, $gesture.Modifiers, $gesture.VirtualKey)) {
+                $this.Logger.LogInfo("Global hotkey registered: $($gesture.Normalized)")
+            }
+            else {
+                $msg = "Hotkey $($gesture.Normalized) is unavailable (already in use) - pick another in Settings."
+                $this.Logger.LogWarning("$msg (Win32 error $($this.Hotkey.LastError))")
+                if ($this.ToastService) { $this.ToastService.ShowError('Global hotkey', $msg) }
+            }
+        }
+        catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
     }
 
     [void] LoadImages() {
@@ -383,6 +432,9 @@ class MainPresenter {
             return
         }
         try {
+            # Create the native HWND without showing the window (raises SourceInitialized),
+            # so the global hotkey registers even when we start straight to the tray.
+            [void][System.Windows.Interop.WindowInteropHelper]::new($this.Window).EnsureHandle()
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.Run()
             }

@@ -92,4 +92,15 @@ if (-not ('Donut.Qr.QrCode' -as [type])) {
     }
 }
 
+# Global-hotkey interop (Donut.Interop.HotkeyManager): a RegisterHotKey wrapper. Prod
+# compiles it into Donut.Launcher (guard skips); the dev path compiles it here.
+if (-not ('Donut.Interop.HotkeyManager' -as [type])) {
+    $loaded = [AppDomain]::CurrentDomain.GetAssemblies()
+    $refs = foreach ($name in 'WindowsBase', 'PresentationCore') {
+        $asm = $loaded | Where-Object { $_.GetName().Name -eq $name } | Select-Object -First 1
+        if ($asm -and $asm.Location) { $asm.Location } else { $name }
+    }
+    Add-Type -Path "$PSScriptRoot\Launcher\HotkeyManager.cs" -ReferencedAssemblies $refs
+}
+
 . "$PSScriptRoot\Scripts\DonutApp.ps1"
