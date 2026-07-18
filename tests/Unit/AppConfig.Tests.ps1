@@ -232,6 +232,73 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetStartWithWindows / GetCloseToTray" {
+        It "Should default to false when the key is absent" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config.Settings.Remove('startWithWindows')
+            $config.Settings.Remove('closeToTray')
+
+            $config.GetStartWithWindows() | Should -Be $false
+            $config.GetCloseToTray() | Should -Be $false
+        }
+
+        It "Should return a configured real boolean" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    startWithWindows = $true
+                    closeToTray      = $true
+                })
+
+            $config.GetStartWithWindows() | Should -Be $true
+            $config.GetCloseToTray() | Should -Be $true
+        }
+
+        It "Should tolerate JSON string booleans case-insensitively" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    startWithWindows = 'TRUE'
+                    closeToTray      = 'False'
+                })
+
+            $config.GetStartWithWindows() | Should -Be $true
+            $config.GetCloseToTray() | Should -Be $false
+        }
+
+        It "Should fall back to the default on garbage values" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    startWithWindows = 'yes-please'
+                    closeToTray      = 3
+                })
+
+            $config.GetStartWithWindows() | Should -Be $false
+            $config.GetCloseToTray() | Should -Be $false
+        }
+    }
+
+    Context "GetGlobalHotkey" {
+        It "Should return the default gesture when unset" {
+            [AppConfig]::Defaults.globalHotkey | Should -Be 'Ctrl+Alt+D'
+        }
+
+        It "Should return the configured gesture, trimmed" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    globalHotkey = '  Ctrl+Shift+K  '
+                })
+
+            $config.GetGlobalHotkey() | Should -Be 'Ctrl+Shift+K'
+        }
+
+        It "Should treat whitespace/empty as disabled ('')" {
+            $configBlank = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    globalHotkey = '   '
+                })
+            $configEmpty = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    globalHotkey = ''
+                })
+
+            $configBlank.GetGlobalHotkey() | Should -Be ''
+            $configEmpty.GetGlobalHotkey() | Should -Be ''
+        }
+    }
+
     Context "BuildDcuArgs" {
         It "Should build empty string when args are all empty or false" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{

@@ -28,6 +28,11 @@ class AppConfig {
         domains               = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
         adminServiceHost      = 'sccm01.contoso.com'
+        # Start elevated at logon (scheduled task), hide the X into the tray, and the
+        # global show/restore hotkey. All opt-in; blank hotkey disables it.
+        startWithWindows      = $false
+        closeToTray           = $false
+        globalHotkey          = 'Ctrl+Alt+D'
         commands              = @{
             scan         = @{
                 args = @{
@@ -202,6 +207,37 @@ class AppConfig {
         }
         if ($val -lt 1) { return 1 }
         return $val
+    }
+
+    # Start DONUT elevated at logon via a scheduled task. Tolerates JSON's string
+    # booleans ('true'/'false') the same way GetThrottleLimit tolerates string ints.
+    [bool] GetStartWithWindows() {
+        return [AppConfig]::AsBool($this.GetSetting('startWithWindows', $null), $false)
+    }
+
+    # Hide the window into the tray on X instead of exiting. String-bool tolerant.
+    [bool] GetCloseToTray() {
+        return [AppConfig]::AsBool($this.GetSetting('closeToTray', $null), $false)
+    }
+
+    # Global show/restore hotkey gesture (e.g. 'Ctrl+Alt+D'). Blank/whitespace
+    # means the feature is disabled; returns '' in that case.
+    [string] GetGlobalHotkey() {
+        $val = [string]$this.GetSetting('globalHotkey', $null)
+        if ([string]::IsNullOrWhiteSpace($val)) { return '' }
+        return $val.Trim()
+    }
+
+    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case)
+    # by parse, everything else to the supplied default.
+    hidden static [bool] AsBool([object]$value, [bool]$default) {
+        if ($value -is [bool]) { return $value }
+        if ($value -is [string]) {
+            $t = $value.Trim()
+            if ($t -match '^(?i:true)$') { return $true }
+            if ($t -match '^(?i:false)$') { return $false }
+        }
+        return $default
     }
 
     # Builds the dcu-cli argument string; DCU's format is -option=value (not /option).
