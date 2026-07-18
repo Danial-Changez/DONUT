@@ -18,17 +18,17 @@ class AppConfig {
     # DCU option reference:
     # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
     static [hashtable] $Defaults = @{
-        activeCommand    = 'scan'
-        throttleLimit    = 8
+        activeCommand         = 'scan'
+        throttleLimit         = 8
         # How long a run keeps trying to reconnect + resume after a network drop (either
         # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
         recoveryWindowMinutes = 30
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
-        domains          = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        domains               = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
-        adminServiceHost = 'sccm01.contoso.com'
-        commands         = @{
+        adminServiceHost      = 'sccm01.contoso.com'
+        commands              = @{
             scan         = @{
                 args = @{
                     silent               = $false
