@@ -8,20 +8,39 @@ namespace Donut.Launcher;
 
 /// <summary>
 /// Launcher entry point. Shows the startup splash on the main (UI) thread, then hosts the
-/// DONUT PowerShell/WPF app on a dedicated STA worker thread while a tray icon keeps the
-/// message loop alive; the process hard-exits when the app window closes.
+/// DONUT PowerShell/WPF app on a dedicated STA worker thread while a bare WinForms message
+/// loop keeps it alive; the process hard-exits when the app window closes. The tray icon is
+/// owned by the PowerShell/WPF side, not here.
 /// </summary>
 static class Program
 {
     /// <summary>Process entry point; STA is required by WPF and WinForms.</summary>
+    /// <param name="args"><c>--tray</c> starts hidden in the tray (autostart).</param>
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        bool tray = args.Contains("--tray");
+
+        // Single instance: the first launch owns the mutex; a later launch signals the
+        // running instance to surface its window and exits without a second UI.
+        var instanceMutex = new Mutex(true, "Local\\DONUT.SingleInstance", out bool createdNew);
+        if (!createdNew)
+        {
+            try
+            {
+                using var evt = EventWaitHandle.OpenExisting("Local\\DONUT.ShowRequest");
+                evt.Set();
+            }
+            catch { /* first instance not fully up yet - nothing to signal */ }
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
 
         // Splash art is embedded, so it paints immediately - no wait on disk or extraction.
+        // A tray start constructs it but never shows it (StartupProgress then no-ops).
         var splash = new SplashForm();
-        splash.Show();
+        if (!tray) { splash.Show(); }
         var progress = new StartupProgress(splash);
 
         try
@@ -50,6 +69,13 @@ static class Program
                     // Exposed to DonutApp.ps1 as $Splash for milestone reporting.
                     iss.Variables.Add(new SessionStateVariableEntry(
                         "Splash", progress, "DONUT startup splash reporter"));
+
+                    // $StartHidden drives the tray (no-window) boot; $SingleInstanceOwned
+                    // tells the PS side the launcher already holds the single-instance lock.
+                    iss.Variables.Add(new SessionStateVariableEntry(
+                        "StartHidden", tray, "DONUT hidden (tray) start"));
+                    iss.Variables.Add(new SessionStateVariableEntry(
+                        "SingleInstanceOwned", true, "Launcher owns the single-instance mutex"));
 
                     using (var ps = PowerShell.Create(iss))
                     {
@@ -83,7 +109,10 @@ static class Program
             psThread.IsBackground = true;
             psThread.Start();
 
-            Application.Run(new TrayApplicationContext());
+            // Bare message loop: the tray icon now lives on the PS/WPF side; this only
+            // keeps the process (and its single-instance mutex) alive until the app exits.
+            Application.Run(new ApplicationContext());
+            GC.KeepAlive(instanceMutex);
         }
         catch (Exception ex)
         {
@@ -159,52 +188,5 @@ static class Program
                     try { File.Delete(f); } catch { /* file in use */ }
         }
         catch { /* nothing to prune */ }
-    }
-}
-
-/// <summary>
-/// Hosts the WinForms message loop and the DONUT system-tray icon while the WPF app runs on
-/// the worker thread. The "Exit" menu item hard-terminates the process.
-/// </summary>
-public class TrayApplicationContext : ApplicationContext
-{
-    private NotifyIcon trayIcon;
-    private bool cleaned;
-    public TrayApplicationContext()
-    {
-        trayIcon = new NotifyIcon()
-        {
-            Icon = EmbeddedAssets.LoadIcon("assets/Images/donut icon48x48.ico") ?? System.Drawing.SystemIcons.Application,
-            Text = "DONUT",
-            ContextMenuStrip = new ContextMenuStrip(),
-            Visible = true
-        };
-
-        trayIcon.ContextMenuStrip.Items.Add("Exit", null, Exit);
-
-        // The window-close and startup-backstop paths hard-exit via Environment.Exit, which
-        // skips Dispose; hook ProcessExit so the icon is removed instead of ghosting until hover.
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanupTray();
-    }
-
-    // Idempotent: ProcessExit can fire after the Exit menu already cleaned up.
-    void CleanupTray()
-    {
-        if (cleaned) { return; }
-        cleaned = true;
-        try
-        {
-            trayIcon.Visible = false;
-            trayIcon.Icon?.Dispose();
-            trayIcon.Dispose();
-        }
-        catch { /* already disposed */ }
-    }
-
-    void Exit(object? sender, EventArgs e)
-    {
-        CleanupTray();
-        Application.Exit();
-        Environment.Exit(0);
     }
 }

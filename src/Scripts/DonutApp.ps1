@@ -98,16 +98,27 @@ try {
     # (a login or update prompt may appear), not unattended loading.
     Close-Splash
 
-    try {
-        # Sign-in (if needed) + update check / prompt, before the main window shows.
-        $updatePresenter.CheckAndPrompt()
-    }
-    catch {
-        $logger.LogException("Update check failed", $_)
-    }
+    # Hidden (tray) start: launcher sets $global:StartHidden; the dev path sets
+    # $global:TrayStart from Start-Donut.ps1's -Tray switch.
+    $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
 
     if ($null -ne $mainPresenter) {
-        $mainPresenter.Show()
+        if ($hidden) {
+            $logger.LogInfo("Starting hidden in the system tray.")
+            # Defer sign-in/update to the first time the user surfaces the window.
+            $mainPresenter.PendingUpdateCheck = $updatePresenter
+            $mainPresenter.ShowHidden()
+        }
+        else {
+            try {
+                # Sign-in (if needed) + update check / prompt, before the window shows.
+                $updatePresenter.CheckAndPrompt()
+            }
+            catch {
+                $logger.LogException("Update check failed", $_)
+            }
+            $mainPresenter.Show()
+        }
     }
     else {
         $logger.LogError("Main window could not be built.")

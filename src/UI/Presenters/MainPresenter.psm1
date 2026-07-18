@@ -9,6 +9,7 @@ using namespace Donut.Mvvm
 using namespace Donut.Interop
 using module ".\ConfigPresenter.psm1"
 using module ".\HomePresenter.psm1"
+using module ".\TrayPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\MainViewModel.psm1"
 
@@ -29,12 +30,18 @@ class MainPresenter {
     [hashtable] $Views
     [ConfigPresenter] $ConfigPresenter
     [HomePresenter] $HomePresenter
+    [TrayPresenter] $TrayPresenter
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [DispatcherWatchdog] $Watchdog   # diagnostic: logs UI-thread stalls (loader-lock freeze)
     [ResourceService] $Resources
     [ToastService] $ToastService
     [MainViewModel] $MainVm
+
+    # Set true before a real exit (tray "Exit") so the close-to-tray Closing hook
+    # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
+    [bool] $ExitRequested
+    [object] $PendingUpdateCheck
 
     # The DONUT wordmark shown in the branding bar.
     hidden [System.Windows.Media.Imaging.BitmapImage] $LogoImage
@@ -171,22 +178,27 @@ class MainPresenter {
                     try { $global:LensTeardownJob.Ps.Dispose() } catch { }
                     $global:LensTeardownJob = $null
                 }
+                # Remove the tray icon before the hard exit, else it ghosts until hovered.
+                if ($presenter.TrayPresenter) { try { $presenter.TrayPresenter.Dispose() } catch { } }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Shutdown()
                 }
                 [System.Environment]::Exit(0)
             }.GetNewClosure())
 
-        # Shown from the worker STA thread, so Windows won't foreground it. Once rendered,
-        # the brief Topmost toggle forces it to the front (needs no foreground-activation right).
-        $this.Window.Add_ContentRendered({
-                $w = $presenter.Window
-                if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
-                $w.Activate()
-                $w.Topmost = $true
-                $w.Topmost = $false
-                $w.Focus()
+        # Close-to-tray: the X hides the window instead of exiting, unless a real exit
+        # was requested (tray "Exit") or the setting is off. $_ is the CancelEventArgs.
+        $this.Window.Add_Closing({
+                if ($presenter.Config.GetCloseToTray() -and -not $presenter.ExitRequested) {
+                    $_.Cancel = $true
+                    $presenter.Window.Hide()
+                    if ($presenter.TrayPresenter) { $presenter.TrayPresenter.ShowCloseToTrayHint() }
+                }
             }.GetNewClosure())
+
+        # Shown from the worker STA thread, so Windows won't foreground it; the
+        # BringToFront Topmost toggle does the front-bringing on first render.
+        $this.Window.Add_ContentRendered({ $presenter.BringToFront() }.GetNewClosure())
 
         # Constrain maximize to the monitor work area - a WindowChrome window otherwise
         # overflows the screen edges and covers the taskbar. Needs the HWND, so wait.
@@ -204,7 +216,22 @@ class MainPresenter {
         $this.Watchdog = [DispatcherWatchdog]::new($this.Logger, 1000)
         $this.Watchdog.Start()
 
+        # Tray icon lives on this (the UI) thread and is present in both show paths.
+        $this.TrayPresenter = [TrayPresenter]::new($this, $this.Logger)
+
         $this.ShowHome()
+    }
+
+    # Forces the window to the foreground from the worker STA thread (which has no
+    # foreground-activation right): restore-if-minimized, then a brief Topmost toggle.
+    [void] BringToFront() {
+        $w = $this.Window
+        if ($null -eq $w) { return }
+        if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
+        $w.Activate()
+        $w.Topmost = $true
+        $w.Topmost = $false
+        $w.Focus()
     }
 
     [void] LoadImages() {
@@ -345,6 +372,24 @@ class MainPresenter {
         }
         else {
             $this.Logger.LogError("MainWindow is null.")
+        }
+    }
+
+    # Hidden (tray) start: runs the WPF message loop WITHOUT showing the window
+    # (ShutdownMode is OnExplicitShutdown, so it neither auto-shows nor auto-quits).
+    [void] ShowHidden() {
+        if (-not $this.Window) {
+            $this.Logger.LogError("MainWindow is null.")
+            return
+        }
+        try {
+            if ([System.Windows.Application]::Current) {
+                [System.Windows.Application]::Current.Run()
+            }
+        }
+        catch {
+            $this.Logger.LogException("ShowHidden failed", $_)
+            throw
         }
     }
 }

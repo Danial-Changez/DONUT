@@ -15,6 +15,9 @@
     script can be started from any shell or Explorer without touching the exe.
 #>
 
+# -Tray starts hidden in the system tray (used by the autostart scheduled task).
+param([switch]$Tray)
+
 # WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
 # instead of failing later in the XAML load.
 if ($PSVersionTable.PSVersion.Major -lt 7 -or
@@ -24,9 +27,33 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -or
         Write-Error "DONUT requires PowerShell 7+ (pwsh). Install it from https://aka.ms/powershell"
         exit 1
     }
-    & $pwsh.Source -NoProfile -Sta -ExecutionPolicy Bypass -File $PSCommandPath @args
+    # The param() block empties $args, so forward the switch explicitly.
+    $childArgs = @('-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+    if ($Tray) { $childArgs += '-Tray' }
+    & $pwsh.Source @childArgs
     exit $LASTEXITCODE
 }
+
+# Single instance (dev path only; the launcher owns it in prod via the injected
+# $global:SingleInstanceOwned). Acquired below the guard so its parent can't clash.
+if (-not $global:SingleInstanceOwned) {
+    $createdNew = $false
+    $global:DonutInstanceMutex = [System.Threading.Mutex]::new(
+        $true, 'Local\DONUT.SingleInstance', [ref]$createdNew)
+    if (-not $createdNew) {
+        # Another instance is running: ask it to surface its window, then exit quietly.
+        try {
+            $evt = [System.Threading.EventWaitHandle]::OpenExisting('Local\DONUT.ShowRequest')
+            [void]$evt.Set()
+            $evt.Dispose()
+        }
+        catch { }
+        exit 0
+    }
+}
+
+# Read by DonutApp.ps1 for the hidden-start decision on the dev path.
+$global:TrayStart = [bool]$Tray
 
 # Assemblies are resolved at runtime (not parse time), so load them before
 # dot-sourcing the app graph.
