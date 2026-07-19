@@ -8,7 +8,9 @@
             Padding="3"
             HorizontalAlignment="Center"
             Margin="0,4,0,16">
-        <StackPanel Orientation="Horizontal">
+        <!-- UniformGrid = equal-width segments (Apple HIG): unequal widths would imply
+             unequal importance, and the control's footprint stays stable. -->
+        <UniformGrid Rows="1">
             <RadioButton x:Name="cmdScan"
                          Content="Scan"
                          GroupName="cmd"
@@ -21,13 +23,14 @@
                          Content="General"
                          GroupName="cmd"
                          Style="{DynamicResource SegmentToggle}" />
-        </StackPanel>
+        </UniformGrid>
     </Border>
     <ContentControl x:Name="ConfigOptionsContent" />
     <Button x:Name="btnSaveConfig"
             Content="Save"
             Command="{Binding SaveCommand}"
             Style="{DynamicResource ButtonTintPrimary}"
-            HorizontalAlignment="Right"
+            HorizontalAlignment="Center"
+            Width="200"
             Margin="0,16,0,0" />
 </StackPanel>
