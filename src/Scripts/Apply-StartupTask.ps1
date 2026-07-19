@@ -26,5 +26,12 @@ param(
     [string]$LogsPath
 )
 
+# ScheduledTasks auto-loads lazily; under the boot-time pool storm its module analysis can
+# hit a transient "Collection was modified" race, so import it explicitly with a short retry.
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    try { Import-Module ScheduledTasks -ErrorAction Stop; break }
+    catch { if ($attempt -lt 5) { Start-Sleep -Milliseconds 200 } }
+}
+
 $service = [StartupTaskService]::new([LogService]::new($LogsPath), $null, $SourceRoot)
 return @{ Ok = $service.Apply($Enabled) }
