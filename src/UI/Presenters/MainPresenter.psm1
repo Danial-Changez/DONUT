@@ -433,16 +433,15 @@ class MainPresenter {
         $this.Views['Config'] = $configView
         if ($configView) {
             $presenter = $this
-            # After a save, re-apply the settings that live outside the config file:
-            # the global hotkey registration and the startup scheduled task.
-            $onSaved = {
-                $presenter.CloseSettings()
-                $presenter.ApplyHotkey()
-                $presenter.ApplyWindowShortcuts()
-                $presenter.ApplyStartupTask()
-            }.GetNewClosure()
+            # Real-time settings re-apply the bits that live outside the config file, each
+            # when its own control changes (the overlay closes via its X / Esc / backdrop).
+            $sideEffects = @{
+                Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
+                WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
+                StartupTask    = { $presenter.ApplyStartupTask() }.GetNewClosure()
+            }
             $this.ConfigPresenter = [ConfigPresenter]::new(
-                $this.Config, $this.ConfigManager, $configView, $this.ToastService, $onSaved)
+                $this.Config, $this.ConfigManager, $configView, $this.ToastService, $sideEffects)
             if ($this.Controls['settingsContent']) {
                 $this.Controls['settingsContent'].Content = $configView
             }

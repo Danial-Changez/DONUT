@@ -25,12 +25,6 @@
                          Style="{DynamicResource SegmentToggle}" />
         </UniformGrid>
     </Border>
+    <!-- No Save button: every setting persists the moment it changes (ConfigPresenter). -->
     <ContentControl x:Name="ConfigOptionsContent" />
-    <Button x:Name="btnSaveConfig"
-            Content="Save"
-            Command="{Binding SaveCommand}"
-            Style="{DynamicResource ButtonTintPrimary}"
-            HorizontalAlignment="Center"
-            Width="200"
-            Margin="0,16,0,0" />
 </StackPanel>

@@ -1,20 +1,25 @@
 using namespace System.Windows
 using namespace System.Windows.Controls
-using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
-using module "..\..\Models\HotkeyGesture.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
-using module "..\ViewModels\ConfigViewModel.psm1"
+using module ".\KeybindRecorder.psm1"
 using module ".\ToastService.psm1"
 
 <#
 .SYNOPSIS
-    Drives the Config page: command selection and DCU option persistence.
+    Drives the Config page: command selection and real-time option persistence.
 
 .DESCRIPTION
     Loads the active command and its option sub-view, binds the controls to the
-    AppConfig command args, and saves edited options back through ConfigManager.
+    AppConfig command args, and persists every edit the moment it changes (no Save
+    button) - toggles/chips on change, text fields on lost-focus, keybinds via the
+    recorder. Config lives under %LOCALAPPDATA%\DONUT so it survives reinstalls.
+
+.NOTES
+    Side-effects that live outside the JSON (global hotkey, window shortcut, startup
+    task) are re-applied per change via the SideEffects callbacks passed in by
+    MainPresenter. Event scriptblocks capture $self, since a WPF handler rebinds $this.
 #>
 class ConfigPresenter {
     [AppConfig] $Config
@@ -25,20 +30,21 @@ class ConfigPresenter {
     [RadioButton] $CmdApplyUpdates
     [RadioButton] $CmdGeneral
     [ContentControl] $ConfigOptionsContent
-    [ConfigViewModel] $ConfigVm
     [FrameworkElement] $CurrentOptionView
     [string] $CurrentSection
     [ToastService] $Toast
-    [object] $OnSaved             # invoked after a successful save (closes the overlay)
+    [hashtable] $SideEffects       # @{ Hotkey; WindowShortcut; StartupTask } scriptblocks
+    hidden [object] $HotkeyRecorder
+    hidden [object] $ShortcutRecorder
 
     ConfigPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
-        [ToastService] $toast, [object] $onSaved) {
+        [ToastService] $toast, [hashtable] $sideEffects) {
         $this.Config = $config
         $this.ConfigManager = $configManager
         $this.Logger = $configManager.Logger
         $this.ViewContent = $view
         $this.Toast = $toast
-        $this.OnSaved = $onSaved
+        $this.SideEffects = $sideEffects
         $this.Initialize()
     }
 
@@ -48,26 +54,17 @@ class ConfigPresenter {
         $this.CmdGeneral = $this.ViewContent.FindName('cmdGeneral')
         $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
 
-        # Page VM: Save binds SaveCommand; the command segments stay events - picking
-        # one is view navigation (which option form shows), not data.
-        $this.ConfigVm = [ConfigViewModel]::new()
+        # Picking a segment is view navigation (which option form shows), not data.
         $presenter = $this
-        $save = { param($p) $presenter.OnSave() }.GetNewClosure()
-        $this.ConfigVm.SaveCommand = [RelayCommand]::new([System.Action[object]]$save)
-        $this.ViewContent.DataContext = $this.ConfigVm
-
         if ($this.CmdScan) {
-            $scan = { $presenter.LoadOptionView('Scan') }.GetNewClosure()
-            $this.CmdScan.Add_Checked($scan)
+            $this.CmdScan.Add_Checked({ $presenter.LoadOptionView('Scan') }.GetNewClosure())
         }
         if ($this.CmdApplyUpdates) {
-            $apply = { $presenter.LoadOptionView('ApplyUpdates') }.GetNewClosure()
-            $this.CmdApplyUpdates.Add_Checked($apply)
+            $this.CmdApplyUpdates.Add_Checked({ $presenter.LoadOptionView('ApplyUpdates') }.GetNewClosure())
         }
         if ($this.CmdGeneral) {
-            # The General view holds the app-wide settings (throttle, startup, tray, hotkey).
-            $general = { $presenter.LoadOptionView('General') }.GetNewClosure()
-            $this.CmdGeneral.Add_Checked($general)
+            # The General view holds the app-wide settings (throttle, startup, tray, hotkeys).
+            $this.CmdGeneral.Add_Checked({ $presenter.LoadOptionView('General') }.GetNewClosure())
         }
 
         $this.LoadCurrentConfig()
@@ -114,8 +111,7 @@ class ConfigPresenter {
             return
         }
 
-        $cmd = $this.CurrentSection.Substring(0, 1).ToLower() + $this.CurrentSection.Substring(1)
-
+        $cmd = $this.SectionCommand()
         $cmdArgs = @{}
         if ($this.Config.Settings.ContainsKey('commands') -and
             $this.Config.Settings['commands'].ContainsKey($cmd) -and
@@ -152,6 +148,9 @@ class ConfigPresenter {
                 }
             }
         }
+
+        # Wire live-persist AFTER populating, so setting initial values doesn't fire it.
+        $this.WireDcuPersistence($allControls)
     }
 
     [System.Collections.ArrayList] GetAllControls([FrameworkElement] $parent) {
@@ -178,79 +177,140 @@ class ConfigPresenter {
         return $controls
     }
 
-    [void] OnSave() {
-        # The General view saves the app-wide settings on its own path (it rejects an
-        # invalid hotkey before persisting anything).
-        if ($this.CurrentSection -eq 'General') {
-            $this.SaveGeneralSettings()
-            return
-        }
-
-        $activeCommand = "Unknown"
-
-        if ($this.CurrentSection) {
-            $activeCommand = $this.CurrentSection.Substring(0, 1).ToLower() +
-            $this.CurrentSection.Substring(1)
-            # Persist the dropdown choice so it round-trips on reload.
-            $this.Config.SetActiveCommand($activeCommand)
-
-            if ($this.Config.Settings.ContainsKey('commands')) {
-                $commands = $this.Config.Settings['commands']
-
-                foreach ($cmdKey in $commands.Keys) {
-                    if ($commands[$cmdKey] -is [hashtable]) {
-                        $commands[$cmdKey]['enabled'] = ($cmdKey -eq $activeCommand)
-                    }
-                }
-
-                if ($commands.ContainsKey($activeCommand)) {
-                    $cmdConfig = $commands[$activeCommand]
-                    if (-not $cmdConfig.ContainsKey('args')) { $cmdConfig['args'] = @{} }
-
-                    foreach ($ctrl in $this.GetAllControls($this.CurrentOptionView)) {
-                        $this.UpdateArgFromControl($cmdConfig['args'], $ctrl)
+    # Attaches change/lost-focus handlers so each DCU control persists its arg live.
+    hidden [void] WireDcuPersistence([object]$allControls) {
+        $self = $this
+        foreach ($ctrl in $allControls) {
+            if ([string]::IsNullOrWhiteSpace($ctrl.Name)) { continue }
+            if ($ctrl -is [Controls.Primitives.ToggleButton]) {
+                $h = { param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure()
+                $ctrl.Add_Checked($h)
+                $ctrl.Add_Unchecked($h)
+            }
+            elseif ($ctrl -is [Controls.TextBox]) {
+                $ctrl.Add_LostFocus({ param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure())
+            }
+            elseif ($ctrl -is [Controls.Panel]) {
+                $panel = $ctrl
+                foreach ($child in $ctrl.Children) {
+                    if ($child -is [Controls.CheckBox]) {
+                        $h = { param($s, $e) $self.PersistDcuArg($panel) }.GetNewClosure()
+                        $child.Add_Checked($h)
+                        $child.Add_Unchecked($h)
                     }
                 }
             }
-            else {
-                $this.Config.SetSetting('EnabledCmdOption', $activeCommand)
-            }
-        }
-
-        try {
-            $this.ConfigManager.SaveConfig($this.Config)
-            if ($this.Toast) {
-                $this.Toast.ShowSuccess('Config saved', "Active command: $activeCommand")
-            }
-            if ($this.OnSaved) { & $this.OnSaved }
-        }
-        catch {
-            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
         }
     }
 
-    # Fills the Configure view's app-wide controls from the current config.
+    # Writes one DCU control's value into its command args and flushes. Does NOT change the
+    # active command - editing a command's options is separate from selecting it to run.
+    hidden [void] PersistDcuArg([object]$ctrl) {
+        if ($this.CurrentSection -eq 'General' -or [string]::IsNullOrWhiteSpace($this.CurrentSection)) { return }
+        if (-not $this.Config.Settings.ContainsKey('commands')) { return }
+        $cmd = $this.SectionCommand()
+        $commands = $this.Config.Settings['commands']
+        if (-not $commands.ContainsKey($cmd)) { return }
+        if (-not $commands[$cmd].ContainsKey('args')) { $commands[$cmd]['args'] = @{} }
+        $this.UpdateArgFromControl($commands[$cmd]['args'], $ctrl)
+        $this.SaveConfigSafely()
+    }
+
+    # Section name ('Scan'/'ApplyUpdates') -> command key ('scan'/'applyUpdates').
+    hidden [string] SectionCommand() {
+        if ([string]::IsNullOrWhiteSpace($this.CurrentSection)) { return '' }
+        return $this.CurrentSection.Substring(0, 1).ToLower() + $this.CurrentSection.Substring(1)
+    }
+
+    # Fills the General controls from config and wires each to persist live.
     hidden [void] PopulateGeneralSettings() {
-        $throttle = $this.CurrentOptionView.FindName('throttleLimit')
-        if ($throttle) { $throttle.Text = [string]$this.Config.GetThrottleLimit() }
+        $self = $this
+        $view = $this.CurrentOptionView
 
-        $startWin = $this.CurrentOptionView.FindName('chkStartWithWindows')
-        if ($startWin) { $startWin.IsChecked = $this.Config.GetStartWithWindows() }
+        $throttle = $view.FindName('throttleLimit')
+        if ($throttle) {
+            $throttle.Text = [string]$this.Config.GetThrottleLimit()
+            $throttle.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())   # clear error while editing
+            $throttle.Add_LostFocus({ param($s, $e) $self.PersistThrottle($s) }.GetNewClosure())
+        }
 
-        $closeTray = $this.CurrentOptionView.FindName('chkCloseToTray')
-        if ($closeTray) { $closeTray.IsChecked = $this.Config.GetCloseToTray() }
+        $startWin = $view.FindName('chkStartWithWindows')
+        if ($startWin) {
+            $startWin.IsChecked = $this.Config.GetStartWithWindows()
+            $h = { param($s, $e) $self.PersistToggle('startWithWindows', [bool]$s.IsChecked, 'StartupTask') }.GetNewClosure()
+            $startWin.Add_Checked($h)
+            $startWin.Add_Unchecked($h)
+        }
 
-        $hotkey = $this.CurrentOptionView.FindName('txtGlobalHotkey')
-        if ($hotkey) { $hotkey.Text = $this.Config.GetGlobalHotkey() }
+        $closeTray = $view.FindName('chkCloseToTray')
+        if ($closeTray) {
+            $closeTray.IsChecked = $this.Config.GetCloseToTray()
+            $h = { param($s, $e) $self.PersistToggle('closeToTray', [bool]$s.IsChecked, $null) }.GetNewClosure()
+            $closeTray.Add_Checked($h)
+            $closeTray.Add_Unchecked($h)
+        }
 
-        $openShortcut = $this.CurrentOptionView.FindName('txtOpenSettingsShortcut')
-        if ($openShortcut) { $openShortcut.Text = $this.Config.GetOpenSettingsShortcut() }
+        # Keybind recorders (replace the old typed text boxes).
+        $hkValue = $view.FindName('recGlobalHotkeyValue')
+        $hkRecord = $view.FindName('recGlobalHotkeyRecord')
+        $hkClear = $view.FindName('recGlobalHotkeyClear')
+        if ($hkValue -and $hkRecord) {
+            $commit = { param($v) $self.PersistGesture('globalHotkey', $v, 'Hotkey') }.GetNewClosure()
+            $this.HotkeyRecorder = [KeybindRecorder]::new($hkValue, $hkRecord, $hkClear, $this.Config.GetGlobalHotkey(), $commit)
+        }
 
-        # Clear a field's inline error the moment the user starts fixing it.
-        $clear = { param($s, $e) $s.Tag = $null }
-        if ($throttle) { $throttle.Add_TextChanged($clear) }
-        if ($hotkey) { $hotkey.Add_TextChanged($clear) }
-        if ($openShortcut) { $openShortcut.Add_TextChanged($clear) }
+        $osValue = $view.FindName('recOpenSettingsValue')
+        $osRecord = $view.FindName('recOpenSettingsRecord')
+        $osClear = $view.FindName('recOpenSettingsClear')
+        if ($osValue -and $osRecord) {
+            $commit = { param($v) $self.PersistGesture('openSettingsShortcut', $v, 'WindowShortcut') }.GetNewClosure()
+            $this.ShortcutRecorder = [KeybindRecorder]::new($osValue, $osRecord, $osClear, $this.Config.GetOpenSettingsShortcut(), $commit)
+        }
+    }
+
+    # Persists a boolean setting and re-applies its side-effect (if any).
+    hidden [void] PersistToggle([string]$key, [bool]$value, [object]$sideEffect) {
+        $this.Config.SetSetting($key, $value)
+        $this.SaveConfigSafely()
+        if ($sideEffect) { $this.InvokeSideEffect([string]$sideEffect) }
+    }
+
+    # Validates the throttle on lost-focus and persists when it's a whole number >= 1.
+    hidden [void] PersistThrottle([object]$box) {
+        $text = ([string]$box.Text).Trim()
+        if ($text -match '^\d+$' -and [int]$text -ge 1) {
+            $this.SetFieldError($box, $false)
+            $this.Config.SetThrottleLimit([int]$text)
+            $this.SaveConfigSafely()
+        }
+        else {
+            $this.SetFieldError($box, $true)
+            if ($this.Toast) { $this.Toast.ShowError('Throttle limit', 'Enter a whole number of 1 or more.') }
+        }
+    }
+
+    # Persists a recorded gesture ('' disables it) and re-applies it. The recorder only
+    # commits a valid or empty value, so no re-validation is needed here.
+    hidden [void] PersistGesture([string]$key, [string]$value, [string]$sideEffect) {
+        $this.Config.SetSetting($key, $value)
+        $this.SaveConfigSafely()
+        $this.InvokeSideEffect($sideEffect)
+    }
+
+    hidden [void] InvokeSideEffect([string]$name) {
+        if ($this.SideEffects -and $this.SideEffects.ContainsKey($name) -and $this.SideEffects[$name]) {
+            & $this.SideEffects[$name]
+        }
+    }
+
+    hidden [void] SaveConfigSafely() {
+        try {
+            $this.ConfigManager.SaveConfig($this.Config)
+        }
+        catch {
+            $this.Logger.LogException('Config save failed', $_)
+            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
+        }
     }
 
     # Flags or clears a field's inline validation error (the red border comes from the
@@ -258,71 +318,6 @@ class ConfigPresenter {
     hidden [void] SetFieldError([object]$box, [bool]$hasError) {
         if ($null -eq $box) { return }
         $box.Tag = if ($hasError) { 'error' } else { $null }
-    }
-
-    # Blank => '' (disabled); a valid gesture => its normalized form; otherwise marks the
-    # field inline and adds a reason. Returns the value to persist ('' when blank/invalid).
-    hidden [string] ValidateGestureField([object]$box, [string]$label, [object]$errors) {
-        $text = if ($box) { [string]$box.Text } else { '' }
-        if ([string]::IsNullOrWhiteSpace($text)) { return '' }
-        $g = [HotkeyGesture]::Parse($text)
-        if ($g.Valid) { return $g.Normalized }
-        $this.SetFieldError($box, $true)
-        $errors.Add("$label - $($g.Reason)")
-        return ''
-    }
-
-    # Validates every field first, marking each invalid one inline (red border); on any
-    # error nothing is written. Blank hotkey/shortcut disables it; throttle must be >= 1.
-    hidden [void] SaveGeneralSettings() {
-        $hotkeyBox = $this.CurrentOptionView.FindName('txtGlobalHotkey')
-        $shortcutBox = $this.CurrentOptionView.FindName('txtOpenSettingsShortcut')
-        $throttleBox = $this.CurrentOptionView.FindName('throttleLimit')
-        $this.SetFieldError($hotkeyBox, $false)
-        $this.SetFieldError($shortcutBox, $false)
-        $this.SetFieldError($throttleBox, $false)
-        $errors = [System.Collections.Generic.List[string]]::new()
-
-        $hotkeyText = $this.ValidateGestureField($hotkeyBox, 'Hotkey', $errors)
-        $shortcutText = $this.ValidateGestureField($shortcutBox, 'Settings shortcut', $errors)
-
-        $throttleText = if ($throttleBox) { ([string]$throttleBox.Text).Trim() } else { '' }
-        $throttleValue = 0
-        if ($throttleText -match '^\d+$' -and [int]$throttleText -ge 1) {
-            $throttleValue = [int]$throttleText
-        }
-        else {
-            $this.SetFieldError($throttleBox, $true)
-            $errors.Add('Throttle limit - enter a whole number of 1 or more.')
-        }
-
-        if ($errors.Count -gt 0) {
-            $summary = $errors -join '  ·  '
-            if ($this.Toast) { $this.Toast.ShowError('Check your settings', $summary) }
-            return
-        }
-
-        $this.Config.SetThrottleLimit($throttleValue)
-
-        $startWin = $this.CurrentOptionView.FindName('chkStartWithWindows')
-        if ($startWin) { $this.Config.SetSetting('startWithWindows', [bool]$startWin.IsChecked) }
-
-        $closeTray = $this.CurrentOptionView.FindName('chkCloseToTray')
-        if ($closeTray) { $this.Config.SetSetting('closeToTray', [bool]$closeTray.IsChecked) }
-
-        $this.Config.SetSetting('globalHotkey', $hotkeyText)
-        $this.Config.SetSetting('openSettingsShortcut', $shortcutText)
-
-        try {
-            $this.ConfigManager.SaveConfig($this.Config)
-            if ($this.Toast) {
-                $this.Toast.ShowSuccess('Settings saved', 'Startup, tray, and hotkey updated.')
-            }
-            if ($this.OnSaved) { & $this.OnSaved }
-        }
-        catch {
-            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
-        }
     }
 
     hidden [void] UpdateArgFromControl([hashtable]$cmdArgs, [FrameworkElement]$ctrl) {

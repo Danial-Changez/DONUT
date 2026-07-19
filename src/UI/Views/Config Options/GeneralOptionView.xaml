@@ -29,22 +29,55 @@
         <StackPanel>
             <TextBlock Text="SHORTCUTS"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="Global hotkey - shows/restores DONUT from anywhere. Blank to disable. e.g. Ctrl+Alt+D"
+            <TextBlock Text="Global hotkey - shows/restores DONUT from anywhere. Hit Record, then press a combo (e.g. Ctrl+Alt+D). Clear to disable."
                        Style="{DynamicResource SettingsFieldLabel}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8" />
-            <TextBox x:Name="txtGlobalHotkey"
-                     Width="200"
-                     HorizontalAlignment="Left"
-                     Style="{DynamicResource ModernTextBox}" />
-            <TextBlock Text="Open Settings (while DONUT is focused). Blank to disable. e.g. Ctrl+,"
+            <!-- Keybind recorder: display + Clear + Record, wired by ConfigPresenter. -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" CornerRadius="8.4" Height="36" Padding="12,0"
+                        VerticalAlignment="Center" Background="{DynamicResource SurfaceMuted}"
+                        BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+                    <TextBlock x:Name="recGlobalHotkeyValue" Text="No keybind set" VerticalAlignment="Center"
+                               FontFamily="{DynamicResource FontSans}" FontSize="13"
+                               Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                </Border>
+                <Button x:Name="recGlobalHotkeyClear" Grid.Column="1" Content="Clear"
+                        Style="{DynamicResource ButtonGhost}" FontSize="12" Height="36" Margin="8,0,0,0"
+                        VerticalAlignment="Center" />
+                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="2" Content="Record Keybind"
+                        Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Height="36" Margin="8,0,0,0"
+                        VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Text="Open Settings (while DONUT is focused). Hit Record, then press a combo (e.g. Ctrl+,). Clear to disable."
                        Style="{DynamicResource SettingsFieldLabel}"
                        TextWrapping="Wrap"
-                       Margin="0,10,0,8" />
-            <TextBox x:Name="txtOpenSettingsShortcut"
-                     Width="200"
-                     HorizontalAlignment="Left"
-                     Style="{DynamicResource ModernTextBox}" />
+                       Margin="0,12,0,8" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" CornerRadius="8.4" Height="36" Padding="12,0"
+                        VerticalAlignment="Center" Background="{DynamicResource SurfaceMuted}"
+                        BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+                    <TextBlock x:Name="recOpenSettingsValue" Text="No keybind set" VerticalAlignment="Center"
+                               FontFamily="{DynamicResource FontSans}" FontSize="13"
+                               Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                </Border>
+                <Button x:Name="recOpenSettingsClear" Grid.Column="1" Content="Clear"
+                        Style="{DynamicResource ButtonGhost}" FontSize="12" Height="36" Margin="8,0,0,0"
+                        VerticalAlignment="Center" />
+                <Button x:Name="recOpenSettingsRecord" Grid.Column="2" Content="Record Keybind"
+                        Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Height="36" Margin="8,0,0,0"
+                        VerticalAlignment="Center" />
+            </Grid>
         </StackPanel>
     </Border>
     <!-- Throttle limit -->
