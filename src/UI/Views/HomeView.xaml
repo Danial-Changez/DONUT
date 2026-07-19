@@ -537,24 +537,54 @@
                     Style="{DynamicResource ButtonTintInfo}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
           </Grid>
 
+          <!-- Row 1: available updates (left) + largest folders (right), side by side so a
+               machine's pending updates and disk usage are visible together. Each card is
+               populated independently (updates by a scan, folders by the Storage scan button),
+               scrolls on its own, and shows a hint until it has data. -->
+          <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="12" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
           <!-- Available updates (populated after an apply-updates scan). Display-only; the
-               apply is gated by a separate confirm dialog. Shares the folders cell and is
-               shown when HasUpdates (the folders panel collapses below). -->
-          <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
-                  Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
-                  Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
+               apply is gated by a separate confirm dialog. -->
+          <Border Grid.Column="0" CornerRadius="10" Padding="14,12"
+                  Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Text="{Binding SelectedMachine.UpdatesHeader}"
-                         Style="{DynamicResource MicroLabel}" Margin="0,0,0,4" />
-              <TextBlock Grid.Row="1" Text="{Binding SelectedMachine.UpdatesIdentityText}"
-                         FontFamily="{DynamicResource FontSans}" FontSize="11" TextWrapping="Wrap"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
-              <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+              <TextBlock Grid.Row="0" Text="AVAILABLE UPDATES"
+                         Style="{DynamicResource MicroLabel}" Margin="0,0,0,8" />
+              <!-- Hint until an update scan has populated the list. -->
+              <TextBlock Grid.Row="1" VerticalAlignment="Top"
+                         Text="Run a scan on this machine to list its available updates."
+                         Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
+                         TextWrapping="Wrap">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding SelectedMachine.HasUpdates}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <!-- Populated list (identity line + updates), shown once a scan has landed. -->
+              <Grid Grid.Row="1" Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="{Binding SelectedMachine.UpdatesIdentityText}"
+                           FontFamily="{DynamicResource FontSans}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding SelectedMachine.Updates}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -636,22 +666,13 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </ScrollViewer>
+              </Grid>
             </Grid>
           </Border>
 
-          <!-- Largest folders on C: (populated on demand by the "Find big folders" scan) -->
-          <Border Grid.Row="1" Margin="0,0,0,12" CornerRadius="10" Padding="14,12"
+          <!-- Largest folders on C: (populated on demand by the "Storage scan" button) -->
+          <Border Grid.Column="2" CornerRadius="10" Padding="14,12"
                   Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-            <Border.Style>
-              <!-- Collapse while the updates list occupies this cell. -->
-              <Style TargetType="Border">
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding SelectedMachine.HasUpdates}" Value="True">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </Border.Style>
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -731,6 +752,7 @@
               </ScrollViewer>
             </Grid>
           </Border>
+          </Grid>
 
           <!-- Live job log -->
           <Border Grid.Row="2" CornerRadius="8" Background="{DynamicResource TerminalBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
