@@ -1,6 +1,7 @@
 using namespace Donut.Mvvm
 using namespace System.Windows.Media
 using module "..\..\Models\FleetCardStatus.psm1"
+using module "..\..\Models\MachineListShaper.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
@@ -40,6 +41,13 @@ class HostViewModel : ObservableObject {
     [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
+
+    # Machine-list shaping keys (maintained by RefreshShape / SetPendingUpdates): the Home
+    # list's CollectionView sorts on the rank/count/activity and filters on StatusCategory.
+    [string]   $StatusCategory = 'Unknown'
+    [int]      $SortStatusRank = 4
+    [int]      $PendingUpdateCount = 0
+    [datetime] $LastActivity = [datetime]::MinValue
 
     # Detail-header + overview-strip bindables: both mirror the selected machine via
     # SelectedMachine.*, populated from inventory by ApplyInventory.
@@ -102,6 +110,7 @@ class HostViewModel : ObservableObject {
             $this.Set('Percent', [double]0)
             $this.Set('StepText', '')
         }
+        $this.RefreshShape()
     }
 
     # Feeds a parsed DCU percentage (0-100) into the bar. (Param name avoids colliding
@@ -128,11 +137,14 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressIndeterminate', $false)
         $this.Set('Percent', [double]0)
 
-        $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
-            'never run'
+        if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
+            $when = 'never run'
+            $this.Set('LastActivity', [datetime]::MinValue)
         }
         else {
-            [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
+            $seen = [RecentConnectionsStore]::ParseSeen($rc.LastSeen)
+            $when = [TimeFormat]::Relative($seen)
+            $this.Set('LastActivity', $seen)
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
 
@@ -144,6 +156,7 @@ class HostViewModel : ObservableObject {
         # facts immediately (no re-probe needed).
         $this.SetPendingUpdates($rc.UpdateCount)
         if ($null -ne $rc.Inventory) { $this.ApplyInventory($rc.Inventory) }
+        $this.RefreshShape()
     }
 
     # Fills the overview-strip / probed bindables from an inventory probe (cached or
@@ -184,6 +197,15 @@ class HostViewModel : ObservableObject {
 
     [void] SetPendingUpdates([int]$count) {
         $this.Set('OvUpdates', "$count")
+        $this.Set('PendingUpdateCount', $count)
+    }
+
+    # Recompute the list-shaping category + rank from the current running/reachability/idle
+    # state; called whenever any of those change so the CollectionView re-sorts/re-filters.
+    hidden [void] RefreshShape() {
+        $cat = [MachineListShaper]::Categorize($this.ProgressVisible, $this.Reachability, $this.IdleStatus)
+        $this.Set('StatusCategory', $cat)
+        $this.Set('SortStatusRank', [MachineListShaper]::StatusRank($cat))
     }
 
     # Rebuilds the largest-folders tree from a disk report; a re-applied same instance
@@ -210,6 +232,7 @@ class HostViewModel : ObservableObject {
         $title = if ($state -eq 'Offline') { "$($this.HostName)  -  offline" }
         else { $this.HostName }
         $this.Set('DetailTitle', $title)
+        $this.RefreshShape()
     }
 
     # --- Internal composition helpers ---
