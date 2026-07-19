@@ -145,6 +145,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -182,6 +183,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -220,6 +222,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -259,6 +262,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -299,6 +303,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -338,6 +343,7 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="14,7" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -382,6 +388,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -422,6 +429,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -462,6 +470,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -502,6 +511,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -542,6 +552,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -582,6 +593,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="Medium" />

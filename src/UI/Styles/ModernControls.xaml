@@ -471,6 +471,8 @@
     <!-- Modern CheckBox: shadcn-sized 16px box, primary fill when checked. -->
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">
+        <Setter Property="FocusVisualStyle"
+                Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
@@ -568,6 +570,8 @@
          when checked. Stays a CheckBox so the binder reads Content + IsChecked. -->
     <Style x:Key="ChipCheckBox"
            TargetType="CheckBox">
+        <Setter Property="FocusVisualStyle"
+                Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
@@ -617,6 +621,8 @@
          picker. Checked segment fills accent; RadioButton keeps them exclusive. -->
     <Style x:Key="SegmentToggle"
            TargetType="RadioButton">
+        <Setter Property="FocusVisualStyle"
+                Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
@@ -815,6 +821,8 @@
     <!-- Modern Toggle Switch: shadcn switch - 36x20 muted track, primary when on. -->
     <Style x:Key="ModernToggleSwitch"
            TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle"
+                Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="Width"
                 Value="36" />
         <Setter Property="Height"

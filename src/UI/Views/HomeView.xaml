@@ -18,6 +18,7 @@
          HomeViewModel.Machines; each item is a HostViewModel. -->
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
     <Style x:Key="MachineListItem" TargetType="ListBoxItem">
+      <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="Margin" Value="0" />

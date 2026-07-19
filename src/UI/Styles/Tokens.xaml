@@ -10,6 +10,24 @@
     <CornerRadius x:Key="RadiusControl">8.4</CornerRadius>
     <CornerRadius x:Key="RadiusCard">10</CornerRadius>
 
+    <!-- Keyboard focus ring (WCAG 2.4.7). WPF's default focus adorner is a faint dotted
+         rectangle that's invisible on the near-black theme; this violet outline is applied
+         via a FocusVisualStyle setter on buttons/toggles/segments/rows. -->
+    <Style x:Key="FocusRingVisual">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-3"
+                               StrokeThickness="2"
+                               Stroke="{DynamicResource Primary}"
+                               RadiusX="9"
+                               RadiusY="9"
+                               SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Shared card container: the PanelBackground + PanelBorder recipe every settings
          and Home sub-card repeated by hand. Instances still set Margin (and override
          Padding where a denser card is wanted). -->
