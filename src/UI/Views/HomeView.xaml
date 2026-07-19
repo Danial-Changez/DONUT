@@ -182,13 +182,14 @@
                       </Grid.ColumnDefinitions>
                       <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Primary}" FontFamily="{DynamicResource FontSans}" FontSize="13"
-                                   Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis" />
+                                   Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Primary}" />
                         <TextBlock Text="{Binding Secondary}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
-                                   TextTrimming="CharacterEllipsis" />
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                       </StackPanel>
                       <Button Grid.Column="1" Content="Unlock" Command="{Binding UnlockCommand}"
-                              Style="{DynamicResource ButtonOutline}" Height="28" FontSize="11"
+                              Style="{DynamicResource ButtonOutline}" Height="32" FontSize="11"
                               VerticalAlignment="Center"
                               Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
                     </Grid>
@@ -385,9 +386,10 @@
                   <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
                                FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
-                               TextTrimming="CharacterEllipsis" />
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
                     <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                               FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis" />
+                               FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Subtitle}" />
                   </StackPanel>
                   <StackPanel Grid.Column="2" Width="120" Margin="12,0,12,0" VerticalAlignment="Center"
                               Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}">
@@ -437,7 +439,7 @@
                     </StackPanel>
                   </Border>
                   <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
-                          Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="28"
+                          Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="32"
                           Padding="14,4" VerticalAlignment="Center"
                           ToolTip="Run the active command on this machine" />
                 </Grid>
@@ -573,7 +575,8 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}"
                                        FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}"
-                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       ToolTip="{Binding Name}" />
                             <!-- Urgency badge: Urgent=red, Recommended=sky, Optional=muted (inline
                                  so its colour varies without a BasedOn chain). -->
                             <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
@@ -784,7 +787,7 @@
               <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}" />
               <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
-                       Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+                       Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" ToolTip="{Binding Upn}" />
             </StackPanel>
 
             <!-- Loading / error status -->
@@ -855,7 +858,7 @@
                           </Grid.ColumnDefinitions>
                           <StackPanel Grid.Column="0" VerticalAlignment="Center">
                             <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
-                                     Foreground="{DynamicResource TitleTextPrimary}" />
+                                     Foreground="{DynamicResource TitleTextPrimary}" ToolTip="{Binding Name}" />
                             <TextBox Style="{DynamicResource SelectableText}" FontFamily="{DynamicResource FontMono}" FontSize="10.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
                               <TextBox.Text>
                                 <MultiBinding StringFormat="{}{0}   ·   {1}">
@@ -914,18 +917,18 @@
                                 </Style>
                               </ContentControl.Style>
                               <Button Content="Reveal key" Command="{Binding RevealCommand}"
-                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="28" />
+                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="32" />
                             </ContentControl>
                             <!-- QR of the latest recovery key: shown whenever the device has
                                  BitLocker (an alternate reveal - stays available after reveal). -->
                             <ContentControl Margin="0,0,6,0"
                                             Visibility="{Binding HasBitLocker, Converter={StaticResource BoolToVis}}">
                               <Button Content="QR" Command="{Binding ShowQrCommand}"
-                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="28"
+                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="32"
                                       ToolTip="Show a QR code of the latest BitLocker recovery key" />
                             </ContentControl>
                             <Button Content="Add" Command="{Binding AddCommand}"
-                                    Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="28" Padding="14,4"
+                                    Style="{DynamicResource ButtonTintPrimary}" FontSize="11" Height="32" Padding="14,4"
                                     ToolTip="Add this machine to the list" />
                           </StackPanel>
                         </Grid>
