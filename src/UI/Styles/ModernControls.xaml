@@ -281,6 +281,15 @@
                                     Property="Opacity"
                                     Value="0.5" />
                         </Trigger>
+                        <!-- Validation error: red border, flagged via Tag='error' set
+                             imperatively when a field fails to save. Last, so it wins
+                             over the focus ring. -->
+                        <Trigger Property="Tag"
+                                 Value="error">
+                            <Setter TargetName="Bd"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource Destructive}" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

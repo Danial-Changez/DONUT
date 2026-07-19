@@ -242,28 +242,61 @@ class ConfigPresenter {
 
         $hotkey = $this.CurrentOptionView.FindName('txtGlobalHotkey')
         if ($hotkey) { $hotkey.Text = $this.Config.GetGlobalHotkey() }
+
+        # Clear a field's inline error the moment the user starts fixing it.
+        $clear = { param($s, $e) $s.Tag = $null }
+        if ($throttle) { $throttle.Add_TextChanged($clear) }
+        if ($hotkey) { $hotkey.Add_TextChanged($clear) }
     }
 
-    # Persists the app-wide settings. A non-blank hotkey must parse first, or the whole
-    # save is rejected with the reason shown (blank disables the hotkey).
+    # Flags or clears a field's inline validation error (the red border comes from the
+    # ModernTextBox Tag='error' trigger).
+    hidden [void] SetFieldError([object]$box, [bool]$hasError) {
+        if ($null -eq $box) { return }
+        $box.Tag = if ($hasError) { 'error' } else { $null }
+    }
+
+    # Validates every field first, marking each invalid one inline (red border); on any
+    # error nothing is written. Blank hotkey disables it; throttle must be a whole # >= 1.
     hidden [void] SaveGeneralSettings() {
         $hotkeyBox = $this.CurrentOptionView.FindName('txtGlobalHotkey')
-        $hotkeyText = if ($hotkeyBox) { [string]$hotkeyBox.Text } else { '' }
-
-        if (-not [string]::IsNullOrWhiteSpace($hotkeyText)) {
-            $gesture = [HotkeyGesture]::Parse($hotkeyText)
-            if (-not $gesture.Valid) {
-                if ($this.Toast) { $this.Toast.ShowError('Invalid hotkey', $gesture.Reason) }
-                return
-            }
-            $hotkeyText = $gesture.Normalized
-        }
-        else { $hotkeyText = '' }
-
         $throttleBox = $this.CurrentOptionView.FindName('throttleLimit')
-        if ($throttleBox -and [string]$throttleBox.Text -match '^\d+$') {
-            $this.Config.SetThrottleLimit([int]$throttleBox.Text)
+        $this.SetFieldError($hotkeyBox, $false)
+        $this.SetFieldError($throttleBox, $false)
+        $errors = [System.Collections.Generic.List[string]]::new()
+
+        $hotkeyText = if ($hotkeyBox) { [string]$hotkeyBox.Text } else { '' }
+        if ([string]::IsNullOrWhiteSpace($hotkeyText)) {
+            $hotkeyText = ''
         }
+        else {
+            $gesture = [HotkeyGesture]::Parse($hotkeyText)
+            if ($gesture.Valid) {
+                $hotkeyText = $gesture.Normalized
+            }
+            else {
+                $this.SetFieldError($hotkeyBox, $true)
+                $errors.Add("Hotkey - $($gesture.Reason)")
+            }
+        }
+
+        $throttleText = if ($throttleBox) { ([string]$throttleBox.Text).Trim() } else { '' }
+        $throttleValue = 0
+        if ($throttleText -match '^\d+$' -and [int]$throttleText -ge 1) {
+            $throttleValue = [int]$throttleText
+        }
+        else {
+            $this.SetFieldError($throttleBox, $true)
+            $errors.Add('Throttle limit - enter a whole number of 1 or more.')
+        }
+
+        if ($errors.Count -gt 0) {
+            $summary = $errors -join '  ·  '
+            if ($this.Toast) { $this.Toast.ShowError('Check your settings', $summary) }
+            return
+        }
+
+        $this.Config.SetThrottleLimit($throttleValue)
 
         $startWin = $this.CurrentOptionView.FindName('chkStartWithWindows')
         if ($startWin) { $this.Config.SetSetting('startWithWindows', [bool]$startWin.IsChecked) }
