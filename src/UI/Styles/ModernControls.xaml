@@ -566,6 +566,31 @@
         <Setter Property="Margin"
                 Value="0,0,0,10" />
     </Style>
+    <!-- Label sitting to the right of a ModernToggleSwitch in the settings forms. -->
+    <Style x:Key="SettingsToggleLabel"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="13.5" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource TitleTextSecondary}" />
+        <Setter Property="Margin"
+                Value="12,0,0,0" />
+        <Setter Property="VerticalAlignment"
+                Value="Center" />
+    </Style>
+    <!-- Caption above a settings field or chip group. Instances set Margin (4 above
+         a textbox, 8 above chips) and TextWrapping where the copy is long. -->
+    <Style x:Key="SettingsFieldLabel"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="12.5" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextPrimary}" />
+    </Style>
     <!-- Chip-style CheckBox for multi-select config tokens: a pill that fills accent
          when checked. Stays a CheckBox so the binder reads Content + IsChecked. -->
     <Style x:Key="ChipCheckBox"

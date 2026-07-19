@@ -16,21 +16,13 @@
                 <ToggleButton x:Name="silent"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Silent"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="13.5"
-                           Foreground="{DynamicResource TitleTextSecondary}"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
+                           Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="reboot"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Reboot"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="13.5"
-                           Foreground="{DynamicResource TitleTextSecondary}"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
+                           Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <!-- Warning shown only when Reboot is on (pure-XAML via the converter). -->
             <StackPanel Orientation="Horizontal"
@@ -56,22 +48,14 @@
                 <ToggleButton x:Name="autoSuspendBitLocker"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Auto Suspend BitLocker"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="13.5"
-                           Foreground="{DynamicResource TitleTextSecondary}"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
+                           Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal"
                         Margin="0,10,0,0">
                 <ToggleButton x:Name="forceupdate"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Force Update"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="13.5"
-                           Foreground="{DynamicResource TitleTextSecondary}"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
+                           Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>
     </Border>
@@ -83,9 +67,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Severity"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,8" />
                 <WrapPanel x:Name="updateSeverity">
                     <CheckBox Content="Security" Style="{DynamicResource ChipCheckBox}" />
@@ -96,9 +78,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Type"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,8" />
                 <WrapPanel x:Name="updateType">
                     <CheckBox Content="Bios" Style="{DynamicResource ChipCheckBox}" />
@@ -110,9 +90,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Device Category"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,8" />
                 <WrapPanel x:Name="updateDeviceCategory">
                     <CheckBox Content="Audio" Style="{DynamicResource ChipCheckBox}" />
@@ -133,9 +111,7 @@
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Output Log"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="outputLog"
                          Style="{DynamicResource ModernTextBox}"
@@ -143,9 +119,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Catalog Location"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="catalogLocation"
                          Style="{DynamicResource ModernTextBox}"
@@ -153,9 +127,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Encrypted Password"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptedPassword"
                          Style="{DynamicResource ModernTextBox}"
@@ -163,9 +135,7 @@
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Encrypted Password File"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptedPasswordFile"
                          Style="{DynamicResource ModernTextBox}"
@@ -173,9 +143,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Encryption Key"
-                           FontFamily="{DynamicResource FontSans}"
-                           FontSize="12.5"
-                           Foreground="{DynamicResource BodyTextPrimary}"
+                           Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptionKey"
                          Style="{DynamicResource ModernTextBox}"
