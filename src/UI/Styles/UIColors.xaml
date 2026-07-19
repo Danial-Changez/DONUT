@@ -96,10 +96,12 @@
     <Color x:Key="BodyTextPrimaryColor"> #A1A1A1</Color>
     <SolidColorBrush x:Key="BodyTextPrimary"
                      Color="{StaticResource BodyTextPrimaryColor}" />
-    <Color x:Key="BodyTextSecondaryColor"> #737373</Color>
+    <!-- Lightened from #737373 / #525252 to clear WCAG 1.4.3 (4.5:1) on the panels -
+         both were used for real content (subtitles, UPNs, device OS, stat subs). -->
+    <Color x:Key="BodyTextSecondaryColor"> #9A9A9A</Color>
     <SolidColorBrush x:Key="BodyTextSecondary"
                      Color="{StaticResource BodyTextSecondaryColor}" />
-    <Color x:Key="BodyTextTertiaryColor"> #525252</Color>
+    <Color x:Key="BodyTextTertiaryColor"> #8C8C8C</Color>
     <SolidColorBrush x:Key="BodyTextTertiary"
                      Color="{StaticResource BodyTextTertiaryColor}" />
     <Color x:Key="TerminalTextColor"> #D4D4D4</Color>

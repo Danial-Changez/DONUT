@@ -300,7 +300,7 @@ class HostViewModel : ObservableObject {
         AccentOrange     = '#FB923C'
         AccentCyan       = '#38BDF8'
         AccentPurple     = '#8E51FF'
-        BodyTextTertiary = '#525252'
+        BodyTextTertiary = '#8C8C8C'
     }
 
     static [Brush] BrushFor([string]$key) {
