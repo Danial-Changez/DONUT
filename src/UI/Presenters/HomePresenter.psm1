@@ -316,7 +316,7 @@ class HomePresenter : AsyncJobPresenter {
     # Only the mode pill reflects the active command; the Add button is static.
     [void] UpdateModePill() {
         $command = $this.Config.GetActiveCommand()
-        $label = if ($command -eq 'applyUpdates') { "Apply Updates" } else { "Scan" }
+        $label = if ($command -eq 'applyUpdates') { "Apply" } else { "Scan" }
         if ($this.ModePill) { $this.ModePill.Text = $label }
     }
 

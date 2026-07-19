@@ -207,10 +207,11 @@
       x:Name="btnMode"
       Grid.Column="1"
       VerticalAlignment="Center"
-      Width="150"
+      Width="100"
+      Height="32"
       Margin="12,0,0,0"
       Style="{DynamicResource ButtonPill}"
-      ToolTip="Click to cycle the active command (Scan / Apply Updates) using its defaults"
+      ToolTip="Click to cycle the active command (Scan / Apply) using its defaults"
     >
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
         <TextBlock Text="&#x27F3;" FontFamily="Segoe UI Symbol" FontSize="13"

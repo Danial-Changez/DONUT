@@ -11,16 +11,16 @@
         <!-- UniformGrid = equal-width segments (Apple HIG): unequal widths would imply
              unequal importance, and the control's footprint stays stable. -->
         <UniformGrid Rows="1">
+            <RadioButton x:Name="cmdGeneral"
+                         Content="General"
+                         GroupName="cmd"
+                         Style="{DynamicResource SegmentToggle}" />
             <RadioButton x:Name="cmdScan"
                          Content="Scan"
                          GroupName="cmd"
                          Style="{DynamicResource SegmentToggle}" />
             <RadioButton x:Name="cmdApplyUpdates"
-                         Content="Apply Updates"
-                         GroupName="cmd"
-                         Style="{DynamicResource SegmentToggle}" />
-            <RadioButton x:Name="cmdGeneral"
-                         Content="General"
+                         Content="Apply"
                          GroupName="cmd"
                          Style="{DynamicResource SegmentToggle}" />
         </UniformGrid>
