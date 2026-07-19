@@ -1,5 +1,5 @@
 <!-- Config form chrome, hosted in the settings overlay card. The command segments and
-     ConfigOptionsContent are looked up by name; Save binds the ConfigViewModel. -->
+     ConfigOptionsContent are looked up by name; edits persist live (no Save button). -->
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Command picker: a segmented pill; the presenter loads the matching view. -->
