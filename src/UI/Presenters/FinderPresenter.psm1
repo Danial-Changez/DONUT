@@ -399,21 +399,26 @@ class FinderPresenter {
         $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
         if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
 
-        $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns())
         $presenter = $this
         # $items, not $rows/$searchResults: a local colliding case-insensitively with
         # a property breaks assignment inside PS class methods.
         $items = [System.Collections.Generic.List[object]]::new()
 
-        # Explicit add action, always first; a bare Enter still falls through to Add too.
-        $addRow = [SearchRowViewModel]::AddMachine($text, $machineLike)
-        $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
-        $items.Add($addRow)
-
         $raw = $this.SearchResults.ToArray()
         $computers = @($raw | Where-Object { $_.Kind -eq 'Computer' })
         $users = @($raw | Where-Object { $_.Kind -eq 'User' })
         $firstUserIndex = -1
+
+        # Machine-like = matches a naming pattern OR an AD computer answers to exactly this
+        # name (so a real machine outside the patterns still leads with Add, un-dimmed).
+        $names = @($computers | ForEach-Object { [string]$_.Name })
+        $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns()) -or
+        [MachineNameMatcher]::AnyExactMatch($names, $text)
+
+        # Explicit add action, always first; a bare Enter still falls through to Add too.
+        $addRow = [SearchRowViewModel]::AddMachine($text, $machineLike)
+        $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
+        $items.Add($addRow)
 
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
@@ -445,8 +450,8 @@ class FinderPresenter {
         $this.HomeVm.SearchResults.Clear()
         foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
 
-        # Pre-select what Enter does: a WSID -> the add row; a name -> the top user (so it
-        # opens the Lens, not a junk card); nothing to pick -> clear, and a bare Enter adds.
+        # Pre-select what Enter does: a machine (pattern or AD-confirmed) -> the add row; a
+        # name -> the top user (opens the Lens, not a junk card); nothing -> clear (bare Enter adds).
         $sel = if ($machineLike) { 0 } elseif ($firstUserIndex -ge 0) { $firstUserIndex } else { -1 }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }

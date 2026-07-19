@@ -66,4 +66,20 @@ Describe "MachineNameMatcher" {
             [MachineNameMatcher]::LooksLikeMachine('CAP-1024', @('', '  ', '^CAP-')) | Should -BeTrue
         }
     }
+
+    Context "AnyExactMatch" {
+        It "Matches a name exactly, case-insensitively and trimmed" {
+            [MachineNameMatcher]::AnyExactMatch(@('WS-5331', 'CAP-1024'), 'WS-5331') | Should -BeTrue
+            [MachineNameMatcher]::AnyExactMatch(@('WS-5331'), '  WS-5331  ') | Should -BeTrue
+        }
+        It "Requires a full match, not a prefix" {
+            [MachineNameMatcher]::AnyExactMatch(@('WS-5331'), 'WS') | Should -BeFalse
+            [MachineNameMatcher]::AnyExactMatch(@('WS-5331-EXTRA'), 'WS-5331') | Should -BeFalse
+        }
+        It "Returns false for blank text, null list, or blank entries" {
+            [MachineNameMatcher]::AnyExactMatch(@('WS-5331'), '') | Should -BeFalse
+            [MachineNameMatcher]::AnyExactMatch($null, 'WS-5331') | Should -BeFalse
+            [MachineNameMatcher]::AnyExactMatch(@('', '  '), 'WS-5331') | Should -BeFalse
+        }
+    }
 }

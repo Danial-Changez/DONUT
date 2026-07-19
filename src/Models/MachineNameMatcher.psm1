@@ -36,4 +36,17 @@ class MachineNameMatcher {
         }
         return $false
     }
+
+    # True when any name equals the text (case-insensitive, trimmed). Lets the finder treat
+    # an AD-confirmed computer as a machine even when it's outside the naming patterns.
+    static [bool] AnyExactMatch([string[]]$names, [string]$text) {
+        if ([string]::IsNullOrWhiteSpace($text) -or $null -eq $names) { return $false }
+        $t = $text.Trim()
+        foreach ($n in $names) {
+            if (-not [string]::IsNullOrWhiteSpace($n) -and $n.Trim().Equals($t, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+        return $false
+    }
 }
