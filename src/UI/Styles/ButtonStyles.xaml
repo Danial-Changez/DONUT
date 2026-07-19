@@ -327,10 +327,10 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Arcane secondary "pill": filled zinc surface used for the Mode cycle
-         button. Same family as ButtonSecondary; kept as a distinct key because
-         existing views reference GhostButton. -->
-    <Style x:Key="GhostButton"
+    <!-- Arcane secondary "pill": a filled zinc surface used for the Mode cycle button.
+         Same family as ButtonSecondary but pill-padded (14,7). Named ButtonPill because
+         it is NOT a ghost button - the real ghost variant is ButtonGhost above. -->
+    <Style x:Key="ButtonPill"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource Secondary}" />
         <Setter Property="Foreground" Value="{DynamicResource SecondaryForeground}" />
