@@ -105,8 +105,10 @@ class UpdatePresenter {
             [System.Windows.Application]::Current.Shutdown()
         }
         catch {
-            [System.Windows.MessageBox]::Show("Update Failed: $_", "Error",
-                [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            # Themed alert (not a raw MessageBox) so the failure matches the app's dialogs;
+            # ShowAlert falls back to Topmost when the main window isn't up yet.
+            $this.Logger.LogException("Update failed", $_)
+            $this.Dialog.ShowAlert('Update failed', "$_", @())
         }
     }
 }
