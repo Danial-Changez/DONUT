@@ -1,0 +1,83 @@
+<!-- General settings form: app-wide options as Arcane sub-cards. Control x:Names are
+     read/written by ConfigPresenter's General-section binder (not dcu-cli args). -->
+<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Startup & tray -->
+    <Border CornerRadius="10"
+            Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource PanelBorder}"
+            BorderThickness="1"
+            Padding="16,14"
+            Margin="0,0,0,12">
+        <StackPanel>
+            <TextBlock Text="STARTUP &amp; TRAY"
+                       Style="{DynamicResource SettingsSectionLabel}" />
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,0,0,10">
+                <ToggleButton x:Name="chkStartWithWindows"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Start with Windows (as admin)"
+                           FontFamily="{DynamicResource FontSans}"
+                           FontSize="13.5"
+                           Foreground="{DynamicResource TitleTextSecondary}"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton x:Name="chkCloseToTray"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Close to tray (X hides instead of exits)"
+                           FontFamily="{DynamicResource FontSans}"
+                           FontSize="13.5"
+                           Foreground="{DynamicResource TitleTextSecondary}"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+    <!-- Global hotkey -->
+    <Border CornerRadius="10"
+            Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource PanelBorder}"
+            BorderThickness="1"
+            Padding="16,14"
+            Margin="0,0,0,12">
+        <StackPanel>
+            <TextBlock Text="GLOBAL HOTKEY"
+                       Style="{DynamicResource SettingsSectionLabel}" />
+            <TextBlock Text="Shows/restores DONUT from anywhere. Blank to disable. e.g. Ctrl+Alt+D"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="12.5"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource BodyTextPrimary}"
+                       Margin="0,0,0,8" />
+            <TextBox x:Name="txtGlobalHotkey"
+                     Width="200"
+                     HorizontalAlignment="Left"
+                     Style="{DynamicResource ModernTextBox}" />
+        </StackPanel>
+    </Border>
+    <!-- Throttle limit -->
+    <Border CornerRadius="10"
+            Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource PanelBorder}"
+            BorderThickness="1"
+            Padding="16,14">
+        <StackPanel>
+            <TextBlock Text="THROTTLE LIMIT"
+                       Style="{DynamicResource SettingsSectionLabel}" />
+            <StackPanel Orientation="Horizontal">
+                <Path Data="{DynamicResource Rocket}"
+                      Fill="{DynamicResource ThrottleLimit}"
+                      Width="16"
+                      Height="16"
+                      Stretch="Uniform"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center" />
+                <TextBox x:Name="throttleLimit"
+                         Width="120"
+                         Style="{DynamicResource ModernTextBox}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</StackPanel>

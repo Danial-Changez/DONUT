@@ -139,8 +139,7 @@
             Background="{DynamicResource PanelBackground}"
             BorderBrush="{DynamicResource PanelBorder}"
             BorderThickness="1"
-            Padding="16,14"
-            Margin="0,0,0,12">
+            Padding="16,14">
         <StackPanel>
             <TextBlock Text="TEXT OPTIONS"
                        Style="{DynamicResource SettingsSectionLabel}" />
@@ -193,29 +192,6 @@
                 <TextBox x:Name="encryptionKey"
                          Style="{DynamicResource ModernTextBox}"
                          Foreground="{DynamicResource BodyTextPrimary}" />
-            </StackPanel>
-        </StackPanel>
-    </Border>
-    <!-- Throttle limit -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14">
-        <StackPanel>
-            <TextBlock Text="THROTTLE LIMIT"
-                       Style="{DynamicResource SettingsSectionLabel}" />
-            <StackPanel Orientation="Horizontal">
-                <Path Data="{DynamicResource Rocket}"
-                      Fill="{DynamicResource ThrottleLimit}"
-                      Width="16"
-                      Height="16"
-                      Stretch="Uniform"
-                      Margin="0,0,8,0"
-                      VerticalAlignment="Center" />
-                <TextBox x:Name="throttleLimit"
-                         Width="120"
-                         Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
     </Border>

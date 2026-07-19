@@ -65,8 +65,8 @@ class ConfigPresenter {
             $this.CmdApplyUpdates.Add_Checked($apply)
         }
         if ($this.CmdGeneral) {
-            # The Configure view holds the app-wide settings (throttle, startup, tray, hotkey).
-            $general = { $presenter.LoadOptionView('Configure') }.GetNewClosure()
+            # The General view holds the app-wide settings (throttle, startup, tray, hotkey).
+            $general = { $presenter.LoadOptionView('General') }.GetNewClosure()
             $this.CmdGeneral.Add_Checked($general)
         }
 
@@ -108,8 +108,8 @@ class ConfigPresenter {
             return
         }
 
-        # The Configure view isn't a DCU command - it edits the app-wide settings.
-        if ($this.CurrentSection -eq 'Configure') {
+        # The General view isn't a DCU command - it edits the app-wide settings.
+        if ($this.CurrentSection -eq 'General') {
             $this.PopulateGeneralSettings()
             return
         }
@@ -179,9 +179,9 @@ class ConfigPresenter {
     }
 
     [void] OnSave() {
-        # The Configure view saves the app-wide settings on its own path (it rejects an
+        # The General view saves the app-wide settings on its own path (it rejects an
         # invalid hotkey before persisting anything).
-        if ($this.CurrentSection -eq 'Configure') {
+        if ($this.CurrentSection -eq 'General') {
             $this.SaveGeneralSettings()
             return
         }
