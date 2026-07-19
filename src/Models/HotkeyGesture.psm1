@@ -96,6 +96,18 @@ class HotkeyGesture {
         return $g
     }
 
+    # Builds a gesture from a live key event (the recorder): held modifiers + the single
+    # non-modifier key. Routes through Parse so it validates/normalizes like a typed one.
+    static [HotkeyGesture] FromKeys([ModifierKeys]$mods, [Key]$key) {
+        $parts = [System.Collections.Generic.List[string]]::new()
+        if ($mods -band [ModifierKeys]::Control) { $parts.Add('Ctrl') }
+        if ($mods -band [ModifierKeys]::Alt) { $parts.Add('Alt') }
+        if ($mods -band [ModifierKeys]::Shift) { $parts.Add('Shift') }
+        if ($mods -band [ModifierKeys]::Windows) { $parts.Add('Win') }
+        $parts.Add($key.ToString())
+        return [HotkeyGesture]::Parse($parts -join '+')
+    }
+
     # Resolves a key token to a [Key] via WPF's KeyConverter (case-insensitive), mapping
     # bare punctuation to its Oem* name first; $null when the token isn't a key name.
     hidden static [object] ResolveKey([string]$token) {

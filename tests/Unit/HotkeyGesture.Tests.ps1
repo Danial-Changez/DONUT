@@ -127,3 +127,43 @@ Describe "HotkeyGesture.Parse" {
         }
     }
 }
+
+Describe "HotkeyGesture.FromKeys" {
+    BeforeAll {
+        Add-Type -AssemblyName PresentationCore -ErrorAction SilentlyContinue
+        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+    }
+
+    It "Builds Ctrl+Alt+D from held modifiers + a key" {
+        $mods = [System.Windows.Input.ModifierKeys]::Control -bor [System.Windows.Input.ModifierKeys]::Alt
+        $g = [HotkeyGesture]::FromKeys($mods, [System.Windows.Input.Key]::D)
+        $g.Valid | Should -BeTrue
+        $g.Normalized | Should -Be 'Ctrl+Alt+D'
+    }
+
+    It "Normalizes a punctuation key back to its symbol (Ctrl+,)" {
+        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::Control, [System.Windows.Input.Key]::OemComma)
+        $g.Valid | Should -BeTrue
+        $g.Normalized | Should -Be 'Ctrl+,'
+    }
+
+    It "Rejects a Shift-only recording (matches Parse rules)" {
+        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::Shift, [System.Windows.Input.Key]::A)
+        $g.Valid | Should -BeFalse
+        $g.Reason | Should -Match 'Shift'
+    }
+
+    It "Rejects a bare key with no Ctrl/Alt/Win" {
+        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::None, [System.Windows.Input.Key]::F8)
+        $g.Valid | Should -BeFalse
+    }
+
+    It "Round-trips through Parse (recorded == typed)" {
+        $recorded = [HotkeyGesture]::FromKeys(
+            [System.Windows.Input.ModifierKeys]::Control -bor [System.Windows.Input.ModifierKeys]::Shift,
+            [System.Windows.Input.Key]::F5)
+        $typed = [HotkeyGesture]::Parse('Ctrl+Shift+F5')
+        $recorded.Normalized | Should -Be $typed.Normalized
+        $recorded.VirtualKey | Should -Be $typed.VirtualKey
+    }
+}
