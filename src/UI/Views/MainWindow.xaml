@@ -18,6 +18,10 @@
                       CornerRadius="0"
                       UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
+    <!-- App-wide shortcut: Ctrl+, opens Settings (the overlay's Esc already closes it). -->
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="OemComma" Command="{Binding OpenSettingsCommand}" />
+    </Window.InputBindings>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </Window.Resources>

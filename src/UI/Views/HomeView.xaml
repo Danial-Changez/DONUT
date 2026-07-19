@@ -253,8 +253,7 @@
     </Grid.ColumnDefinitions>
 
     <!-- Machine (model + service tag) -->
-    <Border Grid.Column="0" Margin="0,0,6,0" CornerRadius="10" Padding="16,14"
-            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+    <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
         <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}"
                    />
@@ -266,8 +265,7 @@
     </Border>
 
     <!-- Battery health -->
-    <Border Grid.Column="1" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
-            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+    <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
         <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}"
                    />
@@ -279,8 +277,7 @@
     </Border>
 
     <!-- Disk free -->
-    <Border Grid.Column="2" Margin="6,0,6,0" CornerRadius="10" Padding="16,14"
-            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+    <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
         <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}"
                    />
@@ -292,8 +289,7 @@
     </Border>
 
     <!-- Updates pending -->
-    <Border Grid.Column="3" Margin="6,0,0,0" CornerRadius="10" Padding="16,14"
-            Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+    <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}">
       <StackPanel>
         <TextBlock Text="UPDATES" Style="{DynamicResource MicroLabel}"
                    />
