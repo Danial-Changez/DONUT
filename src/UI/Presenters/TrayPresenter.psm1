@@ -115,6 +115,19 @@ class TrayPresenter {
         }
     }
 
+    # Hotkey toggle: minimise DONUT when it's already up front, otherwise surface it (so
+    # a not-focused or minimised/hidden window is brought forward, not sent down).
+    [void] ToggleMainWindow() {
+        $w = $this.Main.Window
+        if ($null -eq $w) { return }
+        if ($w.IsVisible -and $w.WindowState -ne 'Minimized' -and $w.IsActive) {
+            $w.WindowState = 'Minimized'
+        }
+        else {
+            $this.ShowMainWindow()
+        }
+    }
+
     # Requests a real exit (vs. close-to-tray hide): flags it so the window's Closing
     # handler won't cancel, then closes - the existing Closed teardown is the exit path.
     [void] ExitApp() {

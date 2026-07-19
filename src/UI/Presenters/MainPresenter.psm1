@@ -263,9 +263,10 @@ class MainPresenter {
             if ($null -eq $this.Hotkey) {
                 $this.Hotkey = [Donut.Interop.HotkeyManager]::new()
                 # Pressed fires on the UI thread (WM_HOTKEY -> WndProc), so this is safe.
+                # Toggle: surface DONUT, or minimise it when it's already up front.
                 $presenter = $this
                 $this.Hotkey.add_Pressed(
-                    { param($s, $e) $presenter.TrayPresenter.ShowMainWindow() }.GetNewClosure())
+                    { param($s, $e) $presenter.TrayPresenter.ToggleMainWindow() }.GetNewClosure())
             }
             $this.Hotkey.Detach()
 
