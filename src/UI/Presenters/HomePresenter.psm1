@@ -83,12 +83,8 @@ class HomePresenter : AsyncJobPresenter {
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
-    [TextBox] $MachineSearch
-    [object] $SortSelector          # the sort ComboBox
-    [object] $MachineView           # the ListBox's CollectionView (sort + filter live here)
-    [string] $ListQuery = ''
+    [object] $MachineView           # the ListBox's CollectionView (status filter + sort live here)
     [string] $ListStatusFilter = 'All'
-    [string] $ListSortKey = 'Status'
     [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
@@ -216,8 +212,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
         $this.ModePill = $this.ViewContent.FindName('txtMode')
         $this.ModeButton = $this.ViewContent.FindName('btnMode')
-        $this.MachineSearch = $this.ViewContent.FindName('MachineSearch')
-        $this.SortSelector = $this.ViewContent.FindName('MachineSortSelector')
 
         # The detail panel (header, log, progress, probe buttons) is owned by
         # InventoryPresenter and wired in its own Initialize.
@@ -238,21 +232,12 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ModeButton) {
             $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure())
         }
-        # Machine-list filter/sort controls: search text, status chips, and the sort combo
-        # all funnel into ApplyMachineShaping via the setters (see .NOTES on handler $this).
-        if ($this.MachineSearch) {
-            $this.MachineSearch.Add_TextChanged({ $presenter.SetListQuery($presenter.MachineSearch.Text) }.GetNewClosure())
-        }
+        # Status filter chips funnel into ApplyMachineShaping (see .NOTES on handler $this).
         $chips = $this.ViewContent.FindName('StatusFilterChips')
         if ($chips) {
             foreach ($chip in $chips.Children) {
                 $chip.Add_Checked({ param($s, $e) $presenter.SetListStatusFilter([string]$s.Tag) }.GetNewClosure())
             }
-        }
-        if ($this.SortSelector) {
-            $this.SortSelector.Add_SelectionChanged({
-                    $item = $presenter.SortSelector.SelectedItem
-                    if ($item) { $presenter.SetListSortKey([string]$item.Tag) } }.GetNewClosure())
         }
         $this.Finder.Initialize()
 
@@ -925,66 +910,32 @@ class HomePresenter : AsyncJobPresenter {
         if ($view -is [System.Windows.Data.ListCollectionView]) {
             $view.IsLiveSorting = $true
             $view.IsLiveFiltering = $true
-            foreach ($p in @('SortStatusRank', 'PendingUpdateCount', 'LastActivity', 'HostName')) {
-                [void]$view.LiveSortingProperties.Add($p)
-            }
-            foreach ($p in @('StatusCategory', 'HostName', 'Subtitle')) {
-                [void]$view.LiveFilteringProperties.Add($p)
-            }
+            foreach ($p in @('SortStatusRank', 'HostName')) { [void]$view.LiveSortingProperties.Add($p) }
+            [void]$view.LiveFilteringProperties.Add('StatusCategory')
         }
+        # Status-grouped order is fixed; only the status filter changes at runtime.
+        $asc = [System.ComponentModel.ListSortDirection]::Ascending
+        [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('SortStatusRank', $asc))
+        [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
         $this.ApplyMachineShaping()
     }
 
-    # (Re)applies the current query/status/sort to the CollectionView; setting Filter and
-    # SortDescriptions each refresh the view, so the list reshapes at once.
+    # (Re)applies the current status filter to the CollectionView; setting Filter refreshes
+    # the view, so the list re-filters at once.
     [void] ApplyMachineShaping() {
         $view = $this.MachineView
         if ($null -eq $view) { return }
-        $query = $this.ListQuery
         $status = $this.ListStatusFilter
-        # No $this inside: the closure captures $query/$status; types resolve at module scope.
+        # No $this inside: the closure captures $status; types resolve at module scope.
         $view.Filter = [System.Predicate[object]] {
             param($o)
-            $m = [HostViewModel]$o
-            return ([MachineListShaper]::MatchesQuery($m.HostName, $m.Subtitle, $query) -and
-                [MachineListShaper]::MatchesStatus($m.StatusCategory, $status))
+            return [MachineListShaper]::MatchesStatus(([HostViewModel]$o).StatusCategory, $status)
         }.GetNewClosure()
-        $view.SortDescriptions.Clear()
-        $asc = [System.ComponentModel.ListSortDirection]::Ascending
-        $desc = [System.ComponentModel.ListSortDirection]::Descending
-        switch ($this.ListSortKey) {
-            'Name' {
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
-            }
-            'Updates' {
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('PendingUpdateCount', $desc))
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
-            }
-            'Recent' {
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('LastActivity', $desc))
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
-            }
-            default {
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('SortStatusRank', $asc))
-                [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
-            }
-        }
-    }
-
-    [void] SetListQuery([string]$text) {
-        $this.ListQuery = [string]$text
-        $this.ApplyMachineShaping()
     }
 
     [void] SetListStatusFilter([string]$filter) {
         if ([string]::IsNullOrWhiteSpace($filter)) { return }
         $this.ListStatusFilter = $filter
-        $this.ApplyMachineShaping()
-    }
-
-    [void] SetListSortKey([string]$key) {
-        if ([string]::IsNullOrWhiteSpace($key)) { return }
-        $this.ListSortKey = $key
         $this.ApplyMachineShaping()
     }
 
@@ -995,7 +946,6 @@ class HomePresenter : AsyncJobPresenter {
         $vm = $this.GetRow($hostName)
         if ($null -eq $vm) { return }
         $this.Store.Touch($hostName)
-        $vm.TouchActivity()   # so the "Recently active" sort reflects this in-session action
         $idx = $this.HomeVm.Machines.IndexOf($vm)
         if ($idx -gt 0) { $this.HomeVm.Machines.Move($idx, 0) }
     }

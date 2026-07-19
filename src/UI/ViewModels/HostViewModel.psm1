@@ -42,12 +42,10 @@ class HostViewModel : ObservableObject {
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
 
-    # Machine-list shaping keys (maintained by RefreshShape / SetPendingUpdates): the Home
-    # list's CollectionView sorts on the rank/count/activity and filters on StatusCategory.
-    [string]   $StatusCategory = 'Unknown'
-    [int]      $SortStatusRank = 4
-    [int]      $PendingUpdateCount = 0
-    [datetime] $LastActivity = [datetime]::MinValue
+    # Machine-list shaping keys (maintained by RefreshShape): the Home list's CollectionView
+    # sorts on SortStatusRank (then HostName) and filters on StatusCategory.
+    [string] $StatusCategory = 'Unknown'
+    [int]    $SortStatusRank = 4
 
     # Detail-header + overview-strip bindables: both mirror the selected machine via
     # SelectedMachine.*, populated from inventory by ApplyInventory.
@@ -137,14 +135,11 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressIndeterminate', $false)
         $this.Set('Percent', [double]0)
 
-        if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
-            $when = 'never run'
-            $this.Set('LastActivity', [datetime]::MinValue)
+        $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
+            'never run'
         }
         else {
-            $seen = [RecentConnectionsStore]::ParseSeen($rc.LastSeen)
-            $when = [TimeFormat]::Relative($seen)
-            $this.Set('LastActivity', $seen)
+            [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
 
@@ -197,12 +192,6 @@ class HostViewModel : ObservableObject {
 
     [void] SetPendingUpdates([int]$count) {
         $this.Set('OvUpdates', "$count")
-        $this.Set('PendingUpdateCount', $count)
-    }
-
-    # Marks the row as acted-on now, so the list's "Recently active" sort floats it up.
-    [void] TouchActivity() {
-        $this.Set('LastActivity', [datetime]::Now)
     }
 
     # Recompute the list-shaping category + rank from the current running/reachability/idle

@@ -35,31 +35,6 @@ Describe "MachineListShaper" {
         }
     }
 
-    Context "MatchesQuery" {
-        It "Matches everything on a blank query" {
-            [MachineListShaper]::MatchesQuery('WSID-1', 'online', '') | Should -BeTrue
-            [MachineListShaper]::MatchesQuery('WSID-1', 'online', '   ') | Should -BeTrue
-            [MachineListShaper]::MatchesQuery('WSID-1', 'online', $null) | Should -BeTrue
-        }
-        It "Matches host name case-insensitively" {
-            [MachineListShaper]::MatchesQuery('WSID-1024', 'never run', 'wsid') | Should -BeTrue
-            [MachineListShaper]::MatchesQuery('WSID-1024', 'never run', '1024') | Should -BeTrue
-        }
-        It "Matches on the subtitle too" {
-            [MachineListShaper]::MatchesQuery('WSID-1024', '2m ago - 3 update(s)', 'update') | Should -BeTrue
-        }
-        It "Trims surrounding whitespace on the query" {
-            [MachineListShaper]::MatchesQuery('WSID-1024', 'x', '  1024  ') | Should -BeTrue
-        }
-        It "Returns false when neither field contains the query" {
-            [MachineListShaper]::MatchesQuery('WSID-1024', 'never run', 'zzz') | Should -BeFalse
-        }
-        It "Does not crash on a null subtitle" {
-            [MachineListShaper]::MatchesQuery('WSID-1024', $null, '1024') | Should -BeTrue
-            [MachineListShaper]::MatchesQuery('WSID-1024', $null, 'zzz') | Should -BeFalse
-        }
-    }
-
     Context "MatchesStatus" {
         It "Matches everything for All or blank" {
             [MachineListShaper]::MatchesStatus('Offline', 'All') | Should -BeTrue

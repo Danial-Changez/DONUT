@@ -4,8 +4,7 @@
 
 .DESCRIPTION
     Turns a machine's raw state (running flag, reachability, last idle status) into a
-    single status category and a sort rank, and answers the two filter questions the
-    list header asks: does a row match the free-text query, and does it match the
+    single status category and a sort rank, and answers whether a row matches the
     selected status chip. HostViewModel exposes StatusCategory/SortStatusRank from
     Categorize/StatusRank so a WPF CollectionView can sort and filter declaratively.
 
@@ -36,16 +35,6 @@ class MachineListShaper {
             default { return 4 }
         }
         return 4
-    }
-
-    # Free-text match: case-insensitive substring across host name + subtitle. A blank
-    # query matches everything.
-    static [bool] MatchesQuery([string]$hostName, [string]$subtitle, [string]$query) {
-        if ([string]::IsNullOrWhiteSpace($query)) { return $true }
-        $q = $query.Trim()
-        if ($hostName -and $hostName.IndexOf($q, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-        if ($subtitle -and $subtitle.IndexOf($q, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-        return $false
     }
 
     # Status-chip match. 'All' (or blank) matches everything; otherwise the category
