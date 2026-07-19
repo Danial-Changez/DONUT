@@ -38,6 +38,8 @@ class AppConfig {
         # Regex patterns that mark search text as a machine name (vs. a person), so the
         # finder pre-selects "Add as a machine". Editable as naming conventions change.
         machineNamePatterns   = @('^CAP-', '^B[0-9]{4}', '^WVD')
+        # Set once the first-run guided tour is shown/skipped; the ? button replays it.
+        hasSeenTour           = $false
         commands              = @{
             scan         = @{
                 args = @{
@@ -235,6 +237,11 @@ class AppConfig {
     # Hide the window into the tray on X instead of exiting. String-bool tolerant.
     [bool] GetCloseToTray() {
         return [AppConfig]::AsBool($this.GetSetting('closeToTray', $null), $false)
+    }
+
+    # Whether the first-run guided tour has already been shown (or skipped).
+    [bool] GetHasSeenTour() {
+        return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
     }
 
     # Global show/restore hotkey gesture (e.g. 'Ctrl+Alt+D'). Blank/whitespace

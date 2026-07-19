@@ -273,6 +273,19 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetHasSeenTour" {
+        It "Should default to false and read a real/string boolean" {
+            [AppConfig]::Defaults.hasSeenTour | Should -Be $false
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})).GetHasSeenTour() | Should -Be $false
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                        hasSeenTour = $true
+                    })).GetHasSeenTour() | Should -Be $true
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                        hasSeenTour = 'true'
+                    })).GetHasSeenTour() | Should -Be $true
+        }
+    }
+
     Context "GetGlobalHotkey" {
         It "Should return the default gesture when unset" {
             [AppConfig]::Defaults.globalHotkey | Should -Be 'Ctrl+Alt+D'
