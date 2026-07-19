@@ -205,6 +205,7 @@
       x:Name="btnMode"
       Grid.Column="1"
       VerticalAlignment="Center"
+      Width="150"
       Margin="12,0,0,0"
       Style="{DynamicResource ButtonPill}"
       ToolTip="Click to cycle the active command (Scan / Apply Updates) using its defaults"
@@ -447,10 +448,10 @@
         <!-- Blank slate: a first-time user has no machines, so spell out how to start. -->
         <StackPanel
           x:Name="FleetEmptyHint"
-          HorizontalAlignment="Center"
+          HorizontalAlignment="Stretch"
           VerticalAlignment="Center"
-          MaxWidth="380"
-          Margin="40"
+          MaxWidth="520"
+          Margin="24"
           IsHitTestVisible="False"
         >
           <TextBlock Text="No machines yet"
@@ -460,11 +461,11 @@
           <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
                      FontFamily="{DynamicResource FontSans}" FontSize="13"
                      TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
-            <Run Text="1.  Type or paste computer names above, then press Enter to add them." />
+            <Run Text="1.  Add machines: paste names, then Enter." />
             <LineBreak />
-            <Run Text="2.  Or search a person or PC name to open its Lens." />
+            <Run Text="2.  Or search a name to open its Lens." />
             <LineBreak />
-            <Run Text="3.  Then use Run (or Run all) to scan or apply updates." />
+            <Run Text="3.  Run (or Run all) to scan or apply updates." />
           </TextBlock>
         </StackPanel>
       </Grid>
