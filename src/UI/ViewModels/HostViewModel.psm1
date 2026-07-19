@@ -200,6 +200,11 @@ class HostViewModel : ObservableObject {
         $this.Set('PendingUpdateCount', $count)
     }
 
+    # Marks the row as acted-on now, so the list's "Recently active" sort floats it up.
+    [void] TouchActivity() {
+        $this.Set('LastActivity', [datetime]::Now)
+    }
+
     # Recompute the list-shaping category + rank from the current running/reachability/idle
     # state; called whenever any of those change so the CollectionView re-sorts/re-filters.
     hidden [void] RefreshShape() {

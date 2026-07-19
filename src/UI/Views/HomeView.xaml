@@ -319,13 +319,61 @@
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- List header -->
-      <Grid Grid.Row="0" Margin="14,12,14,8">
-        <TextBlock Text="MACHINES" Style="{DynamicResource MicroLabel}"
-                   VerticalAlignment="Center" />
-        <Button x:Name="btnClearTabs" Content="Clear completed" Style="{DynamicResource ButtonGhost}"
-                FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
-      </Grid>
+      <!-- List header: title + clear, then the filter/sort controls (wired by the presenter,
+           which drives the ListBox's CollectionView). -->
+      <StackPanel Grid.Row="0" Margin="14,12,14,8">
+        <Grid Margin="0,0,0,10">
+          <TextBlock Text="MACHINES" Style="{DynamicResource MicroLabel}"
+                     VerticalAlignment="Center" />
+          <Button x:Name="btnClearTabs" Content="Clear completed" Style="{DynamicResource ButtonGhost}"
+                  FontSize="12.5" Width="150" Height="32" HorizontalAlignment="Right" />
+        </Grid>
+        <!-- Free-text filter with a placeholder overlay (WPF TextBox has none natively). -->
+        <Grid Margin="0,0,0,8">
+          <TextBox x:Name="MachineSearch" Height="32" Style="{DynamicResource ModernTextBox}" />
+          <TextBlock Text="Filter machines…" IsHitTestVisible="False"
+                     Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}"
+                     FontSize="12.5" VerticalAlignment="Center" Margin="12,0,0,0">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Text, ElementName=MachineSearch}" Value="">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </Grid>
+        <!-- Status chips (single-select) -->
+        <Border CornerRadius="9" Background="{DynamicResource Secondary}" Padding="3"
+                HorizontalAlignment="Left" Margin="0,0,0,8">
+          <StackPanel x:Name="StatusFilterChips" Orientation="Horizontal">
+            <RadioButton Content="All" Tag="All" GroupName="statusFilter" IsChecked="True"
+                         Style="{DynamicResource SegmentToggle}" />
+            <RadioButton Content="Online" Tag="Online" GroupName="statusFilter"
+                         Style="{DynamicResource SegmentToggle}" />
+            <RadioButton Content="Offline" Tag="Offline" GroupName="statusFilter"
+                         Style="{DynamicResource SegmentToggle}" />
+            <RadioButton Content="Attention" Tag="NeedsAttention" GroupName="statusFilter"
+                         ToolTip="Failed or reboot required"
+                         Style="{DynamicResource SegmentToggle}" />
+          </StackPanel>
+        </Border>
+        <!-- Sort selector -->
+        <Grid>
+          <TextBlock Text="Sort by" Style="{DynamicResource MicroLabel}" Margin="0"
+                     VerticalAlignment="Center" />
+          <ComboBox x:Name="MachineSortSelector" Width="160" Height="30" HorizontalAlignment="Right"
+                    Style="{DynamicResource ModernComboBox}">
+            <ComboBoxItem Content="Status" Tag="Status" IsSelected="True" />
+            <ComboBoxItem Content="Name" Tag="Name" />
+            <ComboBoxItem Content="Pending updates" Tag="Updates" />
+            <ComboBoxItem Content="Recently active" Tag="Recent" />
+          </ComboBox>
+        </Grid>
+      </StackPanel>
 
       <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
            a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
