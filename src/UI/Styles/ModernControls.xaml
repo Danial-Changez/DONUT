@@ -243,8 +243,10 @@
                 Value="10,0" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
+        <!-- Stretch so a width-less field fills its card instead of collapsing to
+             content width (~1 char); fields with an explicit Width keep it. -->
         <Setter Property="HorizontalAlignment"
-                Value="Left" />
+                Value="Stretch" />
         <Setter Property="VerticalContentAlignment"
                 Value="Center" />
         <Setter Property="Template">
