@@ -22,11 +22,23 @@ class HotkeyGesture {
     [uint32] $Modifiers
     [uint32] $VirtualKey
     [string] $Normalized
+    [object] $WpfKey     # the resolved [System.Windows.Input.Key] (for a WPF KeyBinding)
 
     static [uint32] $MOD_ALT = [uint32]0x1
     static [uint32] $MOD_CONTROL = [uint32]0x2
     static [uint32] $MOD_SHIFT = [uint32]0x4
     static [uint32] $MOD_WIN = [uint32]0x8
+
+    # Punctuation the WPF KeyConverter only accepts by Oem* name; aliased both ways so a
+    # user can type "Ctrl+," and see it normalized back to "Ctrl+," (not "Ctrl+OemComma").
+    static [hashtable] $PunctToKey = @{
+        ',' = 'OemComma'; '.' = 'OemPeriod'; '/' = 'OemQuestion'; ';' = 'OemSemicolon'
+        '-' = 'OemMinus'; '=' = 'OemPlus'; '[' = 'OemOpenBrackets'; ']' = 'Oem6'
+    }
+    static [hashtable] $KeyToPunct = @{
+        'OemComma' = ','; 'OemPeriod' = '.'; 'OemQuestion' = '/'; 'OemSemicolon' = ';'
+        'OemMinus' = '-'; 'OemPlus' = '='; 'OemOpenBrackets' = '['; 'Oem6' = ']'
+    }
 
     static [HotkeyGesture] Parse([string]$text) {
         $g = [HotkeyGesture]::new()
@@ -78,14 +90,18 @@ class HotkeyGesture {
 
         $g.Modifiers = $mods
         $g.VirtualKey = [uint32][KeyInterop]::VirtualKeyFromKey($key)
+        $g.WpfKey = $key
         $g.Normalized = [HotkeyGesture]::Normalize($mods, $key)
         $g.Valid = $true
         return $g
     }
 
-    # Resolves a key token to a [Key] via WPF's KeyConverter (case-insensitive); $null
-    # when the token isn't a key name.
+    # Resolves a key token to a [Key] via WPF's KeyConverter (case-insensitive), mapping
+    # bare punctuation to its Oem* name first; $null when the token isn't a key name.
     hidden static [object] ResolveKey([string]$token) {
+        if ([HotkeyGesture]::PunctToKey.ContainsKey($token)) {
+            $token = [HotkeyGesture]::PunctToKey[$token]
+        }
         try {
             $conv = [KeyConverter]::new()
             $key = $conv.ConvertFromInvariantString($token)
@@ -102,7 +118,11 @@ class HotkeyGesture {
         if ($mods -band [HotkeyGesture]::MOD_ALT) { $parts.Add('Alt') }
         if ($mods -band [HotkeyGesture]::MOD_SHIFT) { $parts.Add('Shift') }
         if ($mods -band [HotkeyGesture]::MOD_WIN) { $parts.Add('Win') }
-        $parts.Add([KeyConverter]::new().ConvertToInvariantString($key))
+        $name = [KeyConverter]::new().ConvertToInvariantString($key)
+        if ([HotkeyGesture]::KeyToPunct.ContainsKey($name)) {
+            $name = [HotkeyGesture]::KeyToPunct[$name]
+        }
+        $parts.Add($name)
         return $parts -join '+'
     }
 }

@@ -41,6 +41,20 @@ Describe "HotkeyGesture.Parse" {
             $g.Modifiers | Should -Be ($script:CTRL -bor $script:WIN)
         }
 
+        It "Accepts bare punctuation and round-trips it (Ctrl+, for settings)" {
+            $g = [HotkeyGesture]::Parse('Ctrl+,')
+            $g.Valid | Should -BeTrue
+            $g.Modifiers | Should -Be $script:CTRL
+            $g.Normalized | Should -Be 'Ctrl+,'
+            $g.VirtualKey | Should -Be 188      # VK_OEM_COMMA
+        }
+
+        It "Exposes the resolved WPF Key for a KeyBinding" {
+            $g = [HotkeyGesture]::Parse('Ctrl+,')
+            [string]$g.WpfKey | Should -Be 'OemComma'
+            ([System.Windows.Input.ModifierKeys]$g.Modifiers) | Should -Be ([System.Windows.Input.ModifierKeys]::Control)
+        }
+
         It "Tolerates whitespace and mixed order around tokens" {
             $g = [HotkeyGesture]::Parse('  alt +  ctrl + d ')
             $g.Valid | Should -BeTrue

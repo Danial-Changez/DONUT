@@ -243,10 +243,14 @@ class ConfigPresenter {
         $hotkey = $this.CurrentOptionView.FindName('txtGlobalHotkey')
         if ($hotkey) { $hotkey.Text = $this.Config.GetGlobalHotkey() }
 
+        $openShortcut = $this.CurrentOptionView.FindName('txtOpenSettingsShortcut')
+        if ($openShortcut) { $openShortcut.Text = $this.Config.GetOpenSettingsShortcut() }
+
         # Clear a field's inline error the moment the user starts fixing it.
         $clear = { param($s, $e) $s.Tag = $null }
         if ($throttle) { $throttle.Add_TextChanged($clear) }
         if ($hotkey) { $hotkey.Add_TextChanged($clear) }
+        if ($openShortcut) { $openShortcut.Add_TextChanged($clear) }
     }
 
     # Flags or clears a field's inline validation error (the red border comes from the
@@ -256,29 +260,31 @@ class ConfigPresenter {
         $box.Tag = if ($hasError) { 'error' } else { $null }
     }
 
+    # Blank => '' (disabled); a valid gesture => its normalized form; otherwise marks the
+    # field inline and adds a reason. Returns the value to persist ('' when blank/invalid).
+    hidden [string] ValidateGestureField([object]$box, [string]$label, [object]$errors) {
+        $text = if ($box) { [string]$box.Text } else { '' }
+        if ([string]::IsNullOrWhiteSpace($text)) { return '' }
+        $g = [HotkeyGesture]::Parse($text)
+        if ($g.Valid) { return $g.Normalized }
+        $this.SetFieldError($box, $true)
+        $errors.Add("$label - $($g.Reason)")
+        return ''
+    }
+
     # Validates every field first, marking each invalid one inline (red border); on any
-    # error nothing is written. Blank hotkey disables it; throttle must be a whole # >= 1.
+    # error nothing is written. Blank hotkey/shortcut disables it; throttle must be >= 1.
     hidden [void] SaveGeneralSettings() {
         $hotkeyBox = $this.CurrentOptionView.FindName('txtGlobalHotkey')
+        $shortcutBox = $this.CurrentOptionView.FindName('txtOpenSettingsShortcut')
         $throttleBox = $this.CurrentOptionView.FindName('throttleLimit')
         $this.SetFieldError($hotkeyBox, $false)
+        $this.SetFieldError($shortcutBox, $false)
         $this.SetFieldError($throttleBox, $false)
         $errors = [System.Collections.Generic.List[string]]::new()
 
-        $hotkeyText = if ($hotkeyBox) { [string]$hotkeyBox.Text } else { '' }
-        if ([string]::IsNullOrWhiteSpace($hotkeyText)) {
-            $hotkeyText = ''
-        }
-        else {
-            $gesture = [HotkeyGesture]::Parse($hotkeyText)
-            if ($gesture.Valid) {
-                $hotkeyText = $gesture.Normalized
-            }
-            else {
-                $this.SetFieldError($hotkeyBox, $true)
-                $errors.Add("Hotkey - $($gesture.Reason)")
-            }
-        }
+        $hotkeyText = $this.ValidateGestureField($hotkeyBox, 'Hotkey', $errors)
+        $shortcutText = $this.ValidateGestureField($shortcutBox, 'Settings shortcut', $errors)
 
         $throttleText = if ($throttleBox) { ([string]$throttleBox.Text).Trim() } else { '' }
         $throttleValue = 0
@@ -305,6 +311,7 @@ class ConfigPresenter {
         if ($closeTray) { $this.Config.SetSetting('closeToTray', [bool]$closeTray.IsChecked) }
 
         $this.Config.SetSetting('globalHotkey', $hotkeyText)
+        $this.Config.SetSetting('openSettingsShortcut', $shortcutText)
 
         try {
             $this.ConfigManager.SaveConfig($this.Config)

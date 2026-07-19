@@ -50,6 +50,9 @@ class MainPresenter {
     hidden [object] $Hotkey
     hidden [IntPtr] $Hwnd = [IntPtr]::Zero
 
+    # The window-level Open-Settings KeyBinding, rebuilt from config (removed on re-apply).
+    hidden [object] $SettingsKeyBinding
+
     # Fire-and-forget pool jobs (e.g. the scheduled-task Apply) reaped on the UI thread.
     hidden [System.Collections.Generic.List[object]] $PoolJobs
     hidden [DispatcherTimer] $PoolReapTimer
@@ -234,6 +237,9 @@ class MainPresenter {
         # Tray icon lives on this (the UI) thread and is present in both show paths.
         $this.TrayPresenter = [TrayPresenter]::new($this, $this.Logger)
 
+        # In-app keyboard shortcuts (config-driven; global hotkey attaches on SourceInitialized).
+        $this.ApplyWindowShortcuts()
+
         $this.ShowHome()
     }
 
@@ -288,6 +294,32 @@ class MainPresenter {
             }
         }
         catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
+    }
+
+    # (Re)builds the window-level Open-Settings shortcut from config. In-app only (a WPF
+    # KeyBinding, not a global RegisterHotKey); a settings change re-applies it.
+    [void] ApplyWindowShortcuts() {
+        if ($null -eq $this.Window) { return }
+        if ($this.SettingsKeyBinding) {
+            $this.Window.InputBindings.Remove($this.SettingsKeyBinding)
+            $this.SettingsKeyBinding = $null
+        }
+        $text = $this.Config.GetOpenSettingsShortcut()
+        if ([string]::IsNullOrWhiteSpace($text)) { return }   # blank = disabled
+
+        $gesture = [HotkeyGesture]::Parse($text)
+        if (-not $gesture.Valid) {
+            $this.Logger.LogWarning("Open-Settings shortcut '$text' invalid: $($gesture.Reason)")
+            return
+        }
+        try {
+            $key = [System.Windows.Input.Key]$gesture.WpfKey
+            $mods = [System.Windows.Input.ModifierKeys]$gesture.Modifiers
+            $kb = [System.Windows.Input.KeyBinding]::new($this.MainVm.OpenSettingsCommand, $key, $mods)
+            [void]$this.Window.InputBindings.Add($kb)
+            $this.SettingsKeyBinding = $kb
+        }
+        catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
     }
 
     # Registers/unregisters the elevated startup task to match the setting. Runs on the
@@ -406,6 +438,7 @@ class MainPresenter {
             $onSaved = {
                 $presenter.CloseSettings()
                 $presenter.ApplyHotkey()
+                $presenter.ApplyWindowShortcuts()
                 $presenter.ApplyStartupTask()
             }.GetNewClosure()
             $this.ConfigPresenter = [ConfigPresenter]::new(

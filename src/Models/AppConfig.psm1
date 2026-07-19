@@ -33,6 +33,8 @@ class AppConfig {
         startWithWindows      = $false
         closeToTray           = $false
         globalHotkey          = 'Ctrl+Alt+D'
+        # In-app shortcut (only while DONUT is focused) to open Settings; blank disables.
+        openSettingsShortcut  = 'Ctrl+,'
         commands              = @{
             scan         = @{
                 args = @{
@@ -224,6 +226,13 @@ class AppConfig {
     # means the feature is disabled; returns '' in that case.
     [string] GetGlobalHotkey() {
         $val = [string]$this.GetSetting('globalHotkey', $null)
+        if ([string]::IsNullOrWhiteSpace($val)) { return '' }
+        return $val.Trim()
+    }
+
+    # In-app Open-Settings shortcut gesture (e.g. 'Ctrl+,'). Blank/whitespace disables it.
+    [string] GetOpenSettingsShortcut() {
+        $val = [string]$this.GetSetting('openSettingsShortcut', $null)
         if ([string]::IsNullOrWhiteSpace($val)) { return '' }
         return $val.Trim()
     }

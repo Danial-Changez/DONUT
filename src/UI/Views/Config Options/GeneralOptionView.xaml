@@ -35,15 +35,25 @@
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="GLOBAL HOTKEY"
+            <TextBlock Text="SHORTCUTS"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="Shows/restores DONUT from anywhere. Blank to disable. e.g. Ctrl+Alt+D"
+            <TextBlock Text="Global hotkey - shows/restores DONUT from anywhere. Blank to disable. e.g. Ctrl+Alt+D"
                        FontFamily="{DynamicResource FontSans}"
                        FontSize="12.5"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource BodyTextPrimary}"
                        Margin="0,0,0,8" />
             <TextBox x:Name="txtGlobalHotkey"
+                     Width="200"
+                     HorizontalAlignment="Left"
+                     Style="{DynamicResource ModernTextBox}" />
+            <TextBlock Text="Open Settings (while DONUT is focused). Blank to disable. e.g. Ctrl+,"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="12.5"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource BodyTextPrimary}"
+                       Margin="0,10,0,8" />
+            <TextBox x:Name="txtOpenSettingsShortcut"
                      Width="200"
                      HorizontalAlignment="Left"
                      Style="{DynamicResource ModernTextBox}" />

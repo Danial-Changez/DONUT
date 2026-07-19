@@ -299,6 +299,18 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetOpenSettingsShortcut" {
+        It "Should default to Ctrl+, and trim/disable like the hotkey" {
+            [AppConfig]::Defaults.openSettingsShortcut | Should -Be 'Ctrl+,'
+            (([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                            openSettingsShortcut = '  Ctrl+P  '
+                        })).GetOpenSettingsShortcut()) | Should -Be 'Ctrl+P'
+            (([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                            openSettingsShortcut = '   '
+                        })).GetOpenSettingsShortcut()) | Should -Be ''
+        }
+    }
+
     Context "BuildDcuArgs" {
         It "Should build empty string when args are all empty or false" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
