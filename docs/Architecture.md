@@ -157,6 +157,32 @@ runspace-pool warm) — following a consistent seam:
   remainder (pump + run/apply + shell) is the irreducible core and is left intact
   rather than fragmented into further back-ref indirection.
 
+#### Tray, autostart, and global hotkey
+
+- **One tray icon, owned by the WPF UI thread.** `TrayPresenter` creates the
+  `NotifyIcon` on the STA UI thread whose dispatcher pumps its messages, so surfacing
+  the window needs no cross-thread marshalling. It replaces the launcher's old icon, so
+  the dev path (`Start-Donut.ps1`) and prod launcher behave identically. A hidden
+  (`-Tray` / `--tray`) start runs the message loop with no window
+  (`MainPresenter.ShowHidden`, `EnsureHandle` so the HWND exists for the hotkey) and
+  defers the sign-in/update check until the window is first surfaced.
+- **RegisterHotKey, never a keyboard hook.** The global hotkey uses
+  `Donut.Interop.HotkeyManager` (user32 `RegisterHotKey` + a WndProc `HwndSource` hook)
+  so it never observes the global keystroke stream. `SetWindowsHookEx`, key-state
+  polling, and Raw Input are deliberately avoided — they trip AV/EDR keylogger
+  heuristics. `WM_HOTKEY` arrives on the UI thread, so the PS `Pressed` handler is
+  runspace-safe like any WPF event handler.
+- **Autostart is a scheduled task, not a Run key.** `StartupTaskService` registers a
+  per-user `DONUT-<user>` task (RunLevel Highest, logon trigger) so DONUT starts
+  elevated with no per-logon UAC prompt (an HKCU Run key or `highestAvailable` manifest
+  cannot). Registering needs elevation, which DONUT already has (PsExec). The CIM calls
+  run off the UI thread on the pool (`Apply-StartupTask.ps1`, reaped by a
+  `DispatcherTimer`).
+- **Single instance via named handles.** A `Local\DONUT.SingleInstance` mutex plus a
+  `Local\DONUT.ShowRequest` auto-reset event: the launcher owns them in prod,
+  `Start-Donut.ps1` in dev, and a second launch signals the event (polled on a
+  `DispatcherTimer`) so the running instance surfaces and the newcomer exits silently.
+
 ## 3. Key Classes
 
 Many models are deliberately WPF-free **pure mappers/DTOs** (no UI, no I/O) so the

@@ -108,7 +108,9 @@ This PowerShell project automates remote execution of the Dell Command Update (D
    pwsh -File src\Start-Donut.ps1
    ```
 
-   The script compiles the C# helpers (`ObservableObject`, `RelayCommand`, `WindowChromeHelper`, `QrCode`) in-process, so it needs nothing beyond PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host (e.g. right-click "Run with PowerShell"), it relaunches itself under `pwsh -Sta` automatically.
+   The script compiles the C# helpers (`ObservableObject`, `RelayCommand`, `WindowChromeHelper`, `QrCode`, `HotkeyManager`) in-process, so it needs nothing beyond PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host (e.g. right-click "Run with PowerShell"), it relaunches itself under `pwsh -Sta` automatically.
+
+   Add `-Tray` to start hidden in the system tray (`pwsh -File src\Start-Donut.ps1 -Tray`); the packaged launcher takes the equivalent `--tray`. This is what the "Start with Windows" scheduled task uses. Left-click the tray icon (or the hotkey, default `Ctrl+Alt+D`) to surface the window; a second launch just foregrounds the first instance.
 
 4. **Review configuration files** and XAML UI files in `Views/` and `Styles/`.
 5. **Package and publish updates via GitHub Releases.**
