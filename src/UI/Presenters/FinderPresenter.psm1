@@ -7,6 +7,7 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\PersonLens.psm1"
+using module "..\..\Models\MachineNameMatcher.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
@@ -322,6 +323,10 @@ class FinderPresenter {
             $this.CloseSearchPopup()
             return
         }
+        # Show the add-machine row at once; drop stale AD hits so they can't linger under
+        # the new text. The debounced fan-out re-renders with fresh matches as they land.
+        $this.AbortSearch()
+        $this.RenderDropdown()
         $this.SearchDebounce.Stop()
         $this.SearchDebounce.Start()
     }
@@ -383,23 +388,33 @@ class FinderPresenter {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
                 if ($this.SearchSeen.Add($key)) { $this.SearchResults.Add($row) }
             }
-            $this.RenderAdResults($this.SearchResults.ToArray())
+            $this.RenderDropdown()
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
-    # Maps the accumulated hits to display rows (headers + results, one flat list) and
-    # swaps them into the bound collection; commands close over the presenter's handlers.
-    [void] RenderAdResults([object[]]$results) {
-        if ($null -eq $results -or $results.Count -eq 0) { $this.CloseSearchPopup(); return }
+    # Rebuilds the dropdown: the "Add as a machine" action first, then the AD hits so far;
+    # pre-selects the add row for a WSID or the top user otherwise. Called per keystroke.
+    [void] RenderDropdown() {
+        $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
+        if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
 
-        $computers = @($results | Where-Object { $_.Kind -eq 'Computer' })
-        $users = @($results | Where-Object { $_.Kind -eq 'User' })
-
+        $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns())
         $presenter = $this
         # $items, not $rows/$searchResults: a local colliding case-insensitively with
         # a property breaks assignment inside PS class methods.
         $items = [System.Collections.Generic.List[object]]::new()
+
+        # Explicit add action, always first; a bare Enter still falls through to Add too.
+        $addRow = [SearchRowViewModel]::AddMachine($text, $machineLike)
+        $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
+        $items.Add($addRow)
+
+        $raw = $this.SearchResults.ToArray()
+        $computers = @($raw | Where-Object { $_.Kind -eq 'Computer' })
+        $users = @($raw | Where-Object { $_.Kind -eq 'User' })
+        $firstUserIndex = -1
+
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
             foreach ($c in $computers) {
@@ -412,6 +427,7 @@ class FinderPresenter {
         }
         if ($users.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('USERS'))
+            $firstUserIndex = $items.Count   # the next item added is the first user row
             foreach ($u in $users) {
                 $vm = [SearchRowViewModel]::FromResult($u)
                 # Clicking a user row opens the Lens (its directory + SCCM devices).
@@ -428,9 +444,11 @@ class FinderPresenter {
 
         $this.HomeVm.SearchResults.Clear()
         foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
-        # Fresh result set: nothing highlighted until the operator arrows into it, so a
-        # bare Enter adds the typed text rather than picking a stale row.
-        if ($this.ResultsList) { $this.ResultsList.SelectedIndex = -1 }
+
+        # Pre-select what Enter does: a WSID -> the add row; a name -> the top user (so it
+        # opens the Lens, not a junk card); nothing to pick -> clear, and a bare Enter adds.
+        $sel = if ($machineLike) { 0 } elseif ($firstUserIndex -ge 0) { $firstUserIndex } else { -1 }
+        if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
     }
 

@@ -23,6 +23,8 @@ class SearchRowViewModel {
     [string] $Secondary = ''
     [bool]   $IsComputer = $false
     [bool]   $CanUnlock = $false
+    [bool]   $IsAction = $false   # the "Add as a machine" row (draws a + and a hint)
+    [bool]   $Dim = $false        # action row shown but the text isn't a machine name
     [object] $Result        # the raw worker row, for the presenter's handlers
     [object] $PickCommand   # RelayCommand (computers), assigned by the presenter
     [object] $UnlockCommand # RelayCommand (locked users), assigned by the presenter
@@ -32,6 +34,17 @@ class SearchRowViewModel {
         $vm = [SearchRowViewModel]::new()
         $vm.IsHeader = $true
         $vm.HeaderText = $text
+        return $vm
+    }
+
+    # The explicit "Add <typed> as a machine" action, shown first in the dropdown.
+    # $machineLike drives the hint + whether it's dimmed (it's still pickable when dim).
+    static [SearchRowViewModel] AddMachine([string]$typed, [bool]$machineLike) {
+        $vm = [SearchRowViewModel]::new()
+        $vm.IsAction = $true
+        $vm.Dim = -not $machineLike
+        $vm.Primary = "Add `u{201C}$typed`u{201D} as a machine"
+        $vm.Secondary = if ($machineLike) { 'matches a machine name' } else { "doesn't match a known machine name" }
         return $vm
     }
 

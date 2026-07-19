@@ -40,4 +40,20 @@ Describe "SearchRowViewModel" {
         $h.CanUnlock  | Should -BeFalse
         $h.IsComputer | Should -BeFalse
     }
+
+    It "builds a machine-like add row: not dimmed, positive hint" {
+        $vm = [SearchRowViewModel]::AddMachine('CAP-1024', $true)
+        $vm.IsAction  | Should -BeTrue
+        $vm.Dim       | Should -BeFalse
+        $vm.Primary   | Should -Be "Add `u{201C}CAP-1024`u{201D} as a machine"
+        $vm.Secondary | Should -Be 'matches a machine name'
+        $vm.IsHeader  | Should -BeFalse
+    }
+
+    It "builds a non-machine add row: dimmed, cautionary hint" {
+        $vm = [SearchRowViewModel]::AddMachine('jsmith', $false)
+        $vm.IsAction  | Should -BeTrue
+        $vm.Dim       | Should -BeTrue
+        $vm.Secondary | Should -Be "doesn't match a known machine name"
+    }
 }

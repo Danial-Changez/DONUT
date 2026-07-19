@@ -35,6 +35,9 @@ class AppConfig {
         globalHotkey          = 'Ctrl+Alt+D'
         # In-app shortcut (only while DONUT is focused) to open Settings; blank disables.
         openSettingsShortcut  = 'Ctrl+,'
+        # Regex patterns that mark search text as a machine name (vs. a person), so the
+        # finder pre-selects "Add as a machine". Editable as naming conventions change.
+        machineNamePatterns   = @('^CAP-', '^B[-0-9]', '^WVD')
         commands              = @{
             scan         = @{
                 args = @{
@@ -176,6 +179,18 @@ class AppConfig {
             if ($list.Count -gt 0) { return $list }
         }
         return @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+    }
+
+    # Regex patterns marking search text as a machine name. Tolerates the JSON round-trip
+    # (Object[]/strings) and falls back to the org defaults when absent/blank.
+    [string[]] GetMachineNamePatterns() {
+        $val = $this.GetSetting('machineNamePatterns', $null)
+        if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
+            $list = @($val | ForEach-Object { [string]$_ } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($list.Count -gt 0) { return $list }
+        }
+        return @('^CAP-', '^B[-0-9]', '^WVD')
     }
 
     # SCCM AdminService host for the user Lens device lookup. Falls back to the org default.

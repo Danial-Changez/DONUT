@@ -158,16 +158,24 @@
                     <Border.Style>
                       <Style TargetType="Border">
                         <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
                         <Setter Property="Cursor" Value="Hand" />
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding IsHeader}" Value="True">
                             <Setter Property="Visibility" Value="Collapsed" />
                           </DataTrigger>
+                          <!-- Add row shown but the text isn't a machine name: dim, still pickable. -->
+                          <DataTrigger Binding="{Binding Dim}" Value="True">
+                            <Setter Property="Opacity" Value="0.55" />
+                          </DataTrigger>
                           <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
                           </Trigger>
+                          <!-- Keyboard-selected row = what Enter will do; violet so it reads at a glance. -->
                           <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
+                            <Setter Property="Background" Value="{DynamicResource RowSelected}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
@@ -178,10 +186,19 @@
                     </Border.InputBindings>
                     <Grid>
                       <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
-                      <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                      <!-- "+" badge for the Add-as-a-machine action row only -->
+                      <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6" Margin="0,0,10,0"
+                              VerticalAlignment="Center" Background="{DynamicResource PanelBackgroundActive}"
+                              Visibility="{Binding IsAction, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="+" FontFamily="{DynamicResource FontSans}" FontSize="15" FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentPurpleLight}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Primary}" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                    Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding Primary}" />
@@ -189,7 +206,7 @@
                                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                       </StackPanel>
-                      <Button Grid.Column="1" Content="Unlock" Command="{Binding UnlockCommand}"
+                      <Button Grid.Column="2" Content="Unlock" Command="{Binding UnlockCommand}"
                               Style="{DynamicResource ButtonOutline}" Height="32" FontSize="11"
                               VerticalAlignment="Center"
                               Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
