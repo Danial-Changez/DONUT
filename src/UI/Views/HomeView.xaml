@@ -444,19 +444,29 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock
+        <!-- Blank slate: a first-time user has no machines, so spell out how to start. -->
+        <StackPanel
           x:Name="FleetEmptyHint"
-          Text="No machines yet. Enter computer names above and run a scan or update."
-          Foreground="{DynamicResource BodyTextTertiary}"
-          FontFamily="{DynamicResource FontSans}"
-          FontSize="14"
-          TextWrapping="Wrap"
-          TextAlignment="Center"
           HorizontalAlignment="Center"
           VerticalAlignment="Center"
+          MaxWidth="380"
           Margin="40"
           IsHitTestVisible="False"
-        />
+        >
+          <TextBlock Text="No machines yet"
+                     Foreground="{DynamicResource TitleTextSecondary}"
+                     FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="SemiBold"
+                     TextAlignment="Center" Margin="0,0,0,8" />
+          <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
+                     FontFamily="{DynamicResource FontSans}" FontSize="13"
+                     TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
+            <Run Text="1.  Type or paste computer names above, then press Enter to add them." />
+            <LineBreak />
+            <Run Text="2.  Or search a person or PC name to open its Lens." />
+            <LineBreak />
+            <Run Text="3.  Then use Run (or Run all) to scan or apply updates." />
+          </TextBlock>
+        </StackPanel>
       </Grid>
     </Grid>
   </Border>

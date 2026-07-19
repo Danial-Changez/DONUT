@@ -33,9 +33,10 @@
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="0"
                                       VerticalAlignment="Center" />
-                        <!-- Placeholder watermark -->
+                        <!-- Placeholder watermark: conveys both modes of the bar (add
+                             machines vs. search a person/PC) for a first-time user. -->
                         <TextBlock x:Name="Placeholder"
-                                   Text="WSID, WSID …  ·  Enter to add"
+                                   Text="WSID to add  ·  or search a name"
                                    Foreground="{DynamicResource BodyTextPrimary}"
                                    IsHitTestVisible="False"
                                    VerticalAlignment="Center"
