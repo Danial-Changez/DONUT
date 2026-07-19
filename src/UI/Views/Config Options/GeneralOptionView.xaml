@@ -3,11 +3,7 @@
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Startup & tray -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14"
+    <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="STARTUP &amp; TRAY"
@@ -36,11 +32,7 @@
         </StackPanel>
     </Border>
     <!-- Global hotkey -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14"
+    <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="GLOBAL HOTKEY"
@@ -58,11 +50,7 @@
         </StackPanel>
     </Border>
     <!-- Throttle limit -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14">
+    <Border Style="{DynamicResource Card}">
         <StackPanel>
             <TextBlock Text="THROTTLE LIMIT"
                        Style="{DynamicResource SettingsSectionLabel}" />

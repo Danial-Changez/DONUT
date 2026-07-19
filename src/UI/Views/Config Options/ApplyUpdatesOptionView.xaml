@@ -6,11 +6,7 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </StackPanel.Resources>
     <!-- Flags -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14"
+    <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="FLAGS"
@@ -80,11 +76,7 @@
         </StackPanel>
     </Border>
     <!-- Update options (multi-select chips) -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14"
+    <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="UPDATE OPTIONS"
@@ -135,11 +127,7 @@
         </StackPanel>
     </Border>
     <!-- Text options -->
-    <Border CornerRadius="10"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}"
-            BorderThickness="1"
-            Padding="16,14">
+    <Border Style="{DynamicResource Card}">
         <StackPanel>
             <TextBlock Text="TEXT OPTIONS"
                        Style="{DynamicResource SettingsSectionLabel}" />
