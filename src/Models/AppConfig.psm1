@@ -37,7 +37,7 @@ class AppConfig {
         openSettingsShortcut  = 'Ctrl+,'
         # Regex patterns that mark search text as a machine name (vs. a person), so the
         # finder pre-selects "Add as a machine". Editable as naming conventions change.
-        machineNamePatterns   = @('^CAP-', '^B[-0-9]', '^WVD')
+        machineNamePatterns   = @('^CAP-', '^B[0-9]{4}', '^WVD')
         commands              = @{
             scan         = @{
                 args = @{
@@ -190,7 +190,7 @@ class AppConfig {
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($list.Count -gt 0) { return $list }
         }
-        return @('^CAP-', '^B[-0-9]', '^WVD')
+        return @('^CAP-', '^B[0-9]{4}', '^WVD')
     }
 
     # SCCM AdminService host for the user Lens device lookup. Falls back to the org default.

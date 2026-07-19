@@ -3,15 +3,16 @@ using module "..\..\src\Models\MachineNameMatcher.psm1"
 Describe "MachineNameMatcher" {
 
     BeforeAll {
-        $script:P = @('^CAP-', '^B[-0-9]', '^WVD')
+        $script:P = @('^CAP-', '^B[0-9]{4}', '^WVD')
     }
 
     Context "LooksLikeMachine - default org patterns" {
         It "Matches the common CAP- prefix" {
             [MachineNameMatcher]::LooksLikeMachine('CAP-1024', $P) | Should -BeTrue
         }
-        It "Matches B followed by a digit" {
-            [MachineNameMatcher]::LooksLikeMachine('B12345', $P) | Should -BeTrue
+        It "Matches B followed by 4-plus digits, then more" {
+            [MachineNameMatcher]::LooksLikeMachine('B3132', $P) | Should -BeTrue
+            [MachineNameMatcher]::LooksLikeMachine('B30120099-01', $P) | Should -BeTrue
         }
         It "Matches the WVD virtual-machine prefix" {
             [MachineNameMatcher]::LooksLikeMachine('WVD-EAST-07', $P) | Should -BeTrue
@@ -26,8 +27,13 @@ Describe "MachineNameMatcher" {
         It "Rejects a SAM-style name with no machine prefix" {
             [MachineNameMatcher]::LooksLikeMachine('jsmith', $P) | Should -BeFalse
         }
-        It "Rejects a first name that starts with B but not B+digit" {
+        It "Rejects a first name that starts with B but not B+4digits" {
             [MachineNameMatcher]::LooksLikeMachine('Bob', $P) | Should -BeFalse
+            [MachineNameMatcher]::LooksLikeMachine('Brian', $P) | Should -BeFalse
+        }
+        It "Rejects B with fewer than 4 digits" {
+            [MachineNameMatcher]::LooksLikeMachine('B312', $P) | Should -BeFalse
+            [MachineNameMatcher]::LooksLikeMachine('B3', $P) | Should -BeFalse
         }
         It "Rejects a two-word person name (has whitespace)" {
             [MachineNameMatcher]::LooksLikeMachine('John Smith', $P) | Should -BeFalse

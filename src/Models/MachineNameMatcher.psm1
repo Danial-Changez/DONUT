@@ -15,7 +15,8 @@
 #>
 class MachineNameMatcher {
     # Org defaults, mirrored in AppConfig.Defaults.machineNamePatterns (keep in sync).
-    static [string[]] $DefaultPatterns = @('^CAP-', '^B[-0-9]', '^WVD')
+    # B + 4-plus digits (e.g. B3132...), CAP- and WVD prefixes.
+    static [string[]] $DefaultPatterns = @('^CAP-', '^B[0-9]{4}', '^WVD')
 
     # True when the text is a single token matching any machine-name pattern. A blank
     # value, or text with whitespace (usually a "First Last" person search), is not a match.
