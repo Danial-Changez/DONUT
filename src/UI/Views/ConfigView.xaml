@@ -17,6 +17,10 @@
                          Content="Apply Updates"
                          GroupName="cmd"
                          Style="{DynamicResource SegmentToggle}" />
+            <RadioButton x:Name="cmdGeneral"
+                         Content="General"
+                         GroupName="cmd"
+                         Style="{DynamicResource SegmentToggle}" />
         </StackPanel>
     </Border>
     <ContentControl x:Name="ConfigOptionsContent" />

@@ -841,6 +841,45 @@
                          Width="120"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
+            <!-- Startup & tray -->
+            <TextBlock Text="Startup &amp; tray"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TitleTextPrimary}"
+                       Margin="0,18,0,8" />
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,0,0,8">
+                <ToggleButton x:Name="chkStartWithWindows"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Start with Windows (as admin)"
+                           FontFamily="{DynamicResource FontSans}"
+                           FontSize="14"
+                           Foreground="{DynamicResource BodyTextSecondary}"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,0,0,8">
+                <ToggleButton x:Name="chkCloseToTray"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Close to tray (X hides instead of exits)"
+                           FontFamily="{DynamicResource FontSans}"
+                           FontSize="14"
+                           Foreground="{DynamicResource BodyTextSecondary}"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="Global hotkey (blank to disable)"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="13"
+                       FontWeight="Medium"
+                       Foreground="{DynamicResource BodyTextPrimary}"
+                       Margin="0,10,0,6" />
+            <TextBox x:Name="txtGlobalHotkey"
+                     Width="200"
+                     HorizontalAlignment="Left"
+                     Style="{DynamicResource ModernTextBox}" />
         </StackPanel>
     </ScrollViewer>
 </Grid>

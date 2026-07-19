@@ -1,10 +1,12 @@
 using namespace System.Windows
+using namespace System.Windows.Threading
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\HotkeyGesture.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
+using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using namespace Donut.Interop
@@ -47,6 +49,10 @@ class MainPresenter {
     # Global-hotkey interop (Donut.Interop.HotkeyManager) and the HWND it binds to.
     hidden [object] $Hotkey
     hidden [IntPtr] $Hwnd = [IntPtr]::Zero
+
+    # Fire-and-forget pool jobs (e.g. the scheduled-task Apply) reaped on the UI thread.
+    hidden [System.Collections.Generic.List[object]] $PoolJobs
+    hidden [DispatcherTimer] $PoolReapTimer
 
     # The DONUT wordmark shown in the branding bar.
     hidden [System.Windows.Media.Imaging.BitmapImage] $LogoImage
@@ -283,6 +289,76 @@ class MainPresenter {
         catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
     }
 
+    # Registers/unregisters the elevated startup task to match the setting. Runs on the
+    # pool (Get/Register-ScheduledTask can stall) and toasts on failure from the reap.
+    [void] ApplyStartupTask() {
+        $enabled = [bool]$this.Config.GetStartWithWindows()
+        $workerPath = Join-Path $this.Config.SourceRoot 'Scripts\Apply-StartupTask.ps1'
+        $presenter = $this
+
+        $onDone = {
+            param($result)
+            $r = @($result)[-1]
+            if ($r -is [hashtable] -and -not $r.Ok -and $presenter.ToastService) {
+                $presenter.ToastService.ShowError('Startup task',
+                    'Could not update the startup task - is DONUT running as administrator?')
+            }
+        }.GetNewClosure()
+
+        $this.RunOnPool($workerPath, @{
+                Enabled    = $enabled
+                SourceRoot = $this.Config.SourceRoot
+                LogsPath   = $this.ConfigManager.LogsPath
+            }, $onDone)
+    }
+
+    # Runs a pool worker script (a .ps1 whose using-module class types resolve in the
+    # runspace) and reaps it on the UI thread - no runspace-less callback (see repo notes).
+    hidden [void] RunOnPool([string]$scriptPath, [hashtable]$params, [object]$onDone) {
+        try {
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            $ps.RunspacePool = [RunspaceManager]::GetPool()
+            $ps.AddCommand($scriptPath) | Out-Null
+            foreach ($k in $params.Keys) { $ps.AddParameter($k, $params[$k]) | Out-Null }
+            $async = $ps.BeginInvoke()
+
+            if ($null -eq $this.PoolJobs) {
+                $this.PoolJobs = [System.Collections.Generic.List[object]]::new()
+            }
+            $this.PoolJobs.Add(@{ Ps = $ps; Async = $async; OnDone = $onDone })
+
+            if ($null -eq $this.PoolReapTimer) {
+                $presenter = $this
+                $this.PoolReapTimer = [DispatcherTimer]::new()
+                $this.PoolReapTimer.Interval = [TimeSpan]::FromMilliseconds(300)
+                $this.PoolReapTimer.Add_Tick({ $presenter.ReapPoolJobs() }.GetNewClosure())
+            }
+            if (-not $this.PoolReapTimer.IsEnabled) { $this.PoolReapTimer.Start() }
+        }
+        catch { $this.Logger.LogException("Pool job start failed", $_) }
+    }
+
+    # Completes finished pool jobs, hands each result to its callback, and stops the
+    # timer once the queue drains. Polled from a DispatcherTimer (never a wait-callback).
+    hidden [void] ReapPoolJobs() {
+        if ($null -eq $this.PoolJobs -or $this.PoolJobs.Count -eq 0) {
+            if ($this.PoolReapTimer) { $this.PoolReapTimer.Stop() }
+            return
+        }
+        foreach ($job in @($this.PoolJobs | Where-Object { $_.Async.IsCompleted })) {
+            $result = $null
+            try { $result = $job.Ps.EndInvoke($job.Async) }
+            catch { $this.Logger.LogException("Pool job failed", $_) }
+            try { $job.Ps.Dispose() } catch { }
+            $this.PoolJobs.Remove($job) | Out-Null
+            if ($job.OnDone) {
+                try { & $job.OnDone $result }
+                catch { $this.Logger.LogException("Pool job callback failed", $_) }
+            }
+        }
+        if ($this.PoolJobs.Count -eq 0) { $this.PoolReapTimer.Stop() }
+    }
+
     [void] LoadImages() {
         $assetsPath = Join-Path (Split-Path $this.Config.SourceRoot -Parent) "assets\Images"
         $logoPath = Join-Path $assetsPath "logo yellow arrow.png"
@@ -324,7 +400,13 @@ class MainPresenter {
         $this.Views['Config'] = $configView
         if ($configView) {
             $presenter = $this
-            $onSaved = { $presenter.CloseSettings() }.GetNewClosure()
+            # After a save, re-apply the settings that live outside the config file:
+            # the global hotkey registration and the startup scheduled task.
+            $onSaved = {
+                $presenter.CloseSettings()
+                $presenter.ApplyHotkey()
+                $presenter.ApplyStartupTask()
+            }.GetNewClosure()
             $this.ConfigPresenter = [ConfigPresenter]::new(
                 $this.Config, $this.ConfigManager, $configView, $this.ToastService, $onSaved)
             if ($this.Controls['settingsContent']) {

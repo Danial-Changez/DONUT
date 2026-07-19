@@ -103,6 +103,10 @@ try {
     $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
 
     if ($null -ne $mainPresenter) {
+        # Heal the startup task on every boot (re-registers a moved install); runs on
+        # the pool and is reaped once the message loop below starts.
+        $mainPresenter.ApplyStartupTask()
+
         if ($hidden) {
             $logger.LogInfo("Starting hidden in the system tray.")
             # Defer sign-in/update to the first time the user surfaces the window.

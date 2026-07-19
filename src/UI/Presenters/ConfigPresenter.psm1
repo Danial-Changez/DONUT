@@ -2,6 +2,7 @@ using namespace System.Windows
 using namespace System.Windows.Controls
 using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
+using module "..\..\Models\HotkeyGesture.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\ViewModels\ConfigViewModel.psm1"
@@ -22,6 +23,7 @@ class ConfigPresenter {
     [FrameworkElement] $ViewContent
     [RadioButton] $CmdScan
     [RadioButton] $CmdApplyUpdates
+    [RadioButton] $CmdGeneral
     [ContentControl] $ConfigOptionsContent
     [ConfigViewModel] $ConfigVm
     [FrameworkElement] $CurrentOptionView
@@ -43,6 +45,7 @@ class ConfigPresenter {
     [void] Initialize() {
         $this.CmdScan = $this.ViewContent.FindName('cmdScan')
         $this.CmdApplyUpdates = $this.ViewContent.FindName('cmdApplyUpdates')
+        $this.CmdGeneral = $this.ViewContent.FindName('cmdGeneral')
         $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
 
         # Page VM: Save binds SaveCommand; the command segments stay events - picking
@@ -60,6 +63,11 @@ class ConfigPresenter {
         if ($this.CmdApplyUpdates) {
             $apply = { $presenter.LoadOptionView('ApplyUpdates') }.GetNewClosure()
             $this.CmdApplyUpdates.Add_Checked($apply)
+        }
+        if ($this.CmdGeneral) {
+            # The Configure view holds the app-wide settings (throttle, startup, tray, hotkey).
+            $general = { $presenter.LoadOptionView('Configure') }.GetNewClosure()
+            $this.CmdGeneral.Add_Checked($general)
         }
 
         $this.LoadCurrentConfig()
@@ -97,6 +105,12 @@ class ConfigPresenter {
 
     [void] PopulateFields() {
         if (-not $this.CurrentSection -or -not $this.CurrentOptionView) {
+            return
+        }
+
+        # The Configure view isn't a DCU command - it edits the app-wide settings.
+        if ($this.CurrentSection -eq 'Configure') {
+            $this.PopulateGeneralSettings()
             return
         }
 
@@ -165,6 +179,13 @@ class ConfigPresenter {
     }
 
     [void] OnSave() {
+        # The Configure view saves the app-wide settings on its own path (it rejects an
+        # invalid hotkey before persisting anything).
+        if ($this.CurrentSection -eq 'Configure') {
+            $this.SaveGeneralSettings()
+            return
+        }
+
         $activeCommand = "Unknown"
 
         if ($this.CurrentSection) {
@@ -200,6 +221,62 @@ class ConfigPresenter {
             $this.ConfigManager.SaveConfig($this.Config)
             if ($this.Toast) {
                 $this.Toast.ShowSuccess('Config saved', "Active command: $activeCommand")
+            }
+            if ($this.OnSaved) { & $this.OnSaved }
+        }
+        catch {
+            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
+        }
+    }
+
+    # Fills the Configure view's app-wide controls from the current config.
+    hidden [void] PopulateGeneralSettings() {
+        $throttle = $this.CurrentOptionView.FindName('throttleLimit')
+        if ($throttle) { $throttle.Text = [string]$this.Config.GetThrottleLimit() }
+
+        $startWin = $this.CurrentOptionView.FindName('chkStartWithWindows')
+        if ($startWin) { $startWin.IsChecked = $this.Config.GetStartWithWindows() }
+
+        $closeTray = $this.CurrentOptionView.FindName('chkCloseToTray')
+        if ($closeTray) { $closeTray.IsChecked = $this.Config.GetCloseToTray() }
+
+        $hotkey = $this.CurrentOptionView.FindName('txtGlobalHotkey')
+        if ($hotkey) { $hotkey.Text = $this.Config.GetGlobalHotkey() }
+    }
+
+    # Persists the app-wide settings. A non-blank hotkey must parse first, or the whole
+    # save is rejected with the reason shown (blank disables the hotkey).
+    hidden [void] SaveGeneralSettings() {
+        $hotkeyBox = $this.CurrentOptionView.FindName('txtGlobalHotkey')
+        $hotkeyText = if ($hotkeyBox) { [string]$hotkeyBox.Text } else { '' }
+
+        if (-not [string]::IsNullOrWhiteSpace($hotkeyText)) {
+            $gesture = [HotkeyGesture]::Parse($hotkeyText)
+            if (-not $gesture.Valid) {
+                if ($this.Toast) { $this.Toast.ShowError('Invalid hotkey', $gesture.Reason) }
+                return
+            }
+            $hotkeyText = $gesture.Normalized
+        }
+        else { $hotkeyText = '' }
+
+        $throttleBox = $this.CurrentOptionView.FindName('throttleLimit')
+        if ($throttleBox -and [string]$throttleBox.Text -match '^\d+$') {
+            $this.Config.SetThrottleLimit([int]$throttleBox.Text)
+        }
+
+        $startWin = $this.CurrentOptionView.FindName('chkStartWithWindows')
+        if ($startWin) { $this.Config.SetSetting('startWithWindows', [bool]$startWin.IsChecked) }
+
+        $closeTray = $this.CurrentOptionView.FindName('chkCloseToTray')
+        if ($closeTray) { $this.Config.SetSetting('closeToTray', [bool]$closeTray.IsChecked) }
+
+        $this.Config.SetSetting('globalHotkey', $hotkeyText)
+
+        try {
+            $this.ConfigManager.SaveConfig($this.Config)
+            if ($this.Toast) {
+                $this.Toast.ShowSuccess('Settings saved', 'Startup, tray, and hotkey updated.')
             }
             if ($this.OnSaved) { & $this.OnSaved }
         }
