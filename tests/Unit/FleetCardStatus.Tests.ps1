@@ -10,6 +10,7 @@ Describe "FleetCardStatus" {
             $s.Label    | Should -Be 'Updating…'
             $s.ColorKey | Should -Be 'AccentPurple'
             $s.IsBusy   | Should -Be $true
+            $s.Glyph    | Should -Be '↻'
         }
 
         It "Maps a running Scan to Scanning (cyan, busy)" {
@@ -34,6 +35,7 @@ Describe "FleetCardStatus" {
             $s.Label    | Should -Be 'Completed'
             $s.ColorKey | Should -Be 'AccentGreen'
             $s.IsBusy   | Should -Be $false
+            $s.Glyph    | Should -Be '✓'
         }
 
         It "Maps Completed with reboot flag to RebootRequired (yellow)" {
@@ -43,6 +45,7 @@ Describe "FleetCardStatus" {
             $s.Label    | Should -Be 'Reboot required'
             $s.ColorKey | Should -Be 'AccentYellow'
             $s.IsBusy   | Should -Be $false
+            $s.Glyph    | Should -Be '⚠'
         }
 
         It "Maps Failed to Failed (red), reboot flag ignored" {
@@ -51,6 +54,7 @@ Describe "FleetCardStatus" {
             $s.State    | Should -Be ([FleetCardState]::Failed)
             $s.ColorKey | Should -Be 'AccentRed'
             $s.IsBusy   | Should -Be $false
+            $s.Glyph    | Should -Be '✕'
         }
     }
 
@@ -77,6 +81,7 @@ Describe "FleetCardStatus" {
             $s.Label    | Should -Be 'Reconnecting…'
             $s.ColorKey | Should -Be 'AccentOrange'
             $s.IsBusy   | Should -Be $true
+            $s.Glyph    | Should -Be '↻'
         }
     }
 }

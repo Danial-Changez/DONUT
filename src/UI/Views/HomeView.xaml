@@ -414,8 +414,26 @@
                           Margin="0,0,8,0" Background="{Binding ChipBackground}"
                           BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                           Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
-                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="11" />
+                    <!-- Glyph + label so status reads by shape, not colour alone. Segoe UI
+                         Symbol is pinned so the symbols never fall back to tofu. -->
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding ChipForeground}"
+                                 FontFamily="Segoe UI Symbol" FontWeight="SemiBold" FontSize="11"
+                                 Margin="0,0,5,0" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding StatusGlyph}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                      <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
+                                 FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="11"
+                                 VerticalAlignment="Center" />
+                    </StackPanel>
                   </Border>
                   <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
                           Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="28"

@@ -27,12 +27,15 @@ class FleetCardStatus {
     [string]     $Label
     [string]     $ColorKey   # resource key into UIColors.xaml
     [bool]       $IsBusy     # true => indeterminate progress bar is animating
+    [string]     $Glyph      # status symbol so the chip reads by shape, not colour alone
 
-    FleetCardStatus([FleetCardState]$state, [string]$label, [string]$colorKey, [bool]$isBusy) {
+    FleetCardStatus([FleetCardState]$state, [string]$label, [string]$colorKey, [bool]$isBusy,
+        [string]$glyph) {
         $this.State    = $state
         $this.Label    = $label
         $this.ColorKey = $colorKey
         $this.IsBusy   = $isBusy
+        $this.Glyph    = $glyph
     }
 
     # Maps a job's coordinates (jobType Scan/UpdateScan/UpdateApply, status Created/
@@ -40,39 +43,41 @@ class FleetCardStatus {
     static [FleetCardStatus] FromJob([string]$jobType, [string]$status, [bool]$rebootRequired) {
         switch ($status) {
             'Failed' {
-                return [FleetCardStatus]::new([FleetCardState]::Failed, 'Failed', 'AccentRed', $false)
+                return [FleetCardStatus]::new(
+                    [FleetCardState]::Failed, 'Failed', 'AccentRed', $false, '✕')
             }
             'Created' {
                 return [FleetCardStatus]::new([FleetCardState]::Queued, 'Queued',
-                    'BodyTextTertiary', $false)
+                    'BodyTextTertiary', $false, '○')
             }
             'Running' {
                 if ($jobType -eq 'UpdateApply') {
                     return [FleetCardStatus]::new([FleetCardState]::Updating, 'Updating…',
-                        'AccentPurple', $true)
+                        'AccentPurple', $true, '↻')
                 }
                 # Scan and UpdateScan are both "scanning" from the user's view.
-                return [FleetCardStatus]::new([FleetCardState]::Scanning, 'Scanning…', 'AccentCyan', $true)
+                return [FleetCardStatus]::new(
+                    [FleetCardState]::Scanning, 'Scanning…', 'AccentCyan', $true, '↻')
             }
             'Completed' {
                 if ($rebootRequired) {
-                    return [FleetCardStatus]::new([FleetCardState]::RebootRequired, 'Reboot required',
-                        'AccentYellow', $false)
+                    return [FleetCardStatus]::new([FleetCardState]::RebootRequired,
+                        'Reboot required', 'AccentYellow', $false, '⚠')
                 }
                 return [FleetCardStatus]::new([FleetCardState]::Completed, 'Completed',
-                    'AccentGreen', $false)
+                    'AccentGreen', $false, '✓')
             }
         }
 
         # Unknown status: treat as queued so a card still renders something sane.
-        return [FleetCardStatus]::new([FleetCardState]::Queued, 'Queued', 'BodyTextTertiary', $false)
+        return [FleetCardStatus]::new(
+            [FleetCardState]::Queued, 'Queued', 'BodyTextTertiary', $false, '○')
     }
 
-    # A run whose connection dropped (either end) and is reconnecting + resuming. The job is
-    # still Running, so this isn't a FromJob status - the pump applies it when the worker
-    # emits reconnect lines. Amber (mirrors the 'Unconfirmed' ConnectionLost tone) + busy so
-    # the bar keeps pulsing while we wait to get back online.
+    # A still-Running job whose connection dropped and is reconnecting + resuming (applied by
+    # the pump on reconnect lines). Amber (the 'Unconfirmed' tone) + busy so the bar pulses.
     static [FleetCardStatus] Reconnecting() {
-        return [FleetCardStatus]::new([FleetCardState]::Reconnecting, 'Reconnecting…', 'AccentOrange', $true)
+        return [FleetCardStatus]::new(
+            [FleetCardState]::Reconnecting, 'Reconnecting…', 'AccentOrange', $true, '↻')
     }
 }

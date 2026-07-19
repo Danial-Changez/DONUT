@@ -27,6 +27,7 @@ class HostViewModel : ObservableObject {
     [string] $HostName = ''
     [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
+    [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone
     [bool]   $ChipVisible = $false
     [double] $Percent = 0
     [bool]   $ProgressVisible = $false
@@ -86,6 +87,7 @@ class HostViewModel : ObservableObject {
         $this.SetDotKey($status.ColorKey)
         $this.SetChipKey($status.ColorKey)
         $this.Set('ChipText', $status.Label)
+        $this.Set('StatusGlyph', $status.Glyph)
         $this.Set('ChipVisible', $true)
 
         if ($status.IsBusy) {
@@ -220,6 +222,7 @@ class HostViewModel : ObservableObject {
         }
         $this.SetChipKey([HostViewModel]::IdleColorKey($status))
         $this.Set('ChipText', [HostViewModel]::HumanStatus($status))
+        $this.Set('StatusGlyph', [HostViewModel]::StatusGlyph($status))
         $this.Set('ChipVisible', $true)
     }
 
@@ -272,6 +275,20 @@ class HostViewModel : ObservableObject {
             default { return $lastStatus }
         }
         return $lastStatus
+    }
+
+    # Status symbol for idle rows so the chip reads by shape, not colour alone (mirrors
+    # the glyphs FleetCardStatus assigns to running rows).
+    static [string] StatusGlyph([string]$lastStatus) {
+        switch ($lastStatus) {
+            'Completed' { return '✓' }
+            'Failed' { return '✕' }
+            'Offline' { return '✕' }
+            'RebootRequired' { return '⚠' }
+            'ConnectionLost' { return '?' }
+            default { return '' }
+        }
+        return ''
     }
 
     # Accent hexes mirror UIColors.xaml (change both together). Kept here because these
