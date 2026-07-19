@@ -658,12 +658,15 @@
                 Value="{DynamicResource BodyTextSecondary}" />
         <Setter Property="Cursor"
                 Value="Hand" />
+        <!-- Default segment padding; instances (e.g. the compact Home filter) can override. -->
+        <Setter Property="Padding"
+                Value="18,7" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
                     <Border x:Name="seg"
                             CornerRadius="7"
-                            Padding="18,7"
+                            Padding="{TemplateBinding Padding}"
                             Background="Transparent">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
