@@ -12,6 +12,7 @@ using namespace Donut.Mvvm
 using namespace Donut.Interop
 using module ".\ConfigPresenter.psm1"
 using module ".\HomePresenter.psm1"
+using module ".\TourPresenter.psm1"
 using module ".\TrayPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\MainViewModel.psm1"
@@ -34,6 +35,7 @@ class MainPresenter {
     [ConfigPresenter] $ConfigPresenter
     [HomePresenter] $HomePresenter
     [TrayPresenter] $TrayPresenter
+    [object] $Tour                   # TourPresenter (guided first-run tour)
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
     [DispatcherWatchdog] $Watchdog   # diagnostic: logs UI-thread stalls (loader-lock freeze)
@@ -168,6 +170,13 @@ class MainPresenter {
         if ($this.HomePresenter -and $this.HomePresenter.Finder) {
             $this.HomePresenter.Finder.OnShowQr = $showQr
         }
+        # Guided tour: the ? button replays it; Esc closes it.
+        $this.Tour = [TourPresenter]::new(
+            $this.Window, $this.MainVm, $this.HomePresenter, $this.Config, $this.ConfigManager, $this.Logger)
+        $openTour = { param($p) $presenter.Tour.Start() }.GetNewClosure()
+        $this.MainVm.OpenTourCommand = [RelayCommand]::new([System.Action[object]]$openTour)
+        $closeTour = { param($p) $presenter.Tour.Finish() }.GetNewClosure()
+        $this.MainVm.CloseTourCommand = [RelayCommand]::new([System.Action[object]]$closeTour)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -215,6 +224,14 @@ class MainPresenter {
         # Shown from the worker STA thread, so Windows won't foreground it; the
         # BringToFront Topmost toggle does the front-bringing on first render.
         $this.Window.Add_ContentRendered({ $presenter.BringToFront() }.GetNewClosure())
+
+        # First-run guided tour: fires the first time the window is shown (interactive or
+        # tray-surface); hasSeenTour keeps it to once, and MaybeStartFirstRun guards re-entry.
+        $this.Window.Add_IsVisibleChanged({
+                if ($presenter.Window.IsVisible -and $presenter.Tour) {
+                    $presenter.Tour.MaybeStartFirstRun()
+                }
+            }.GetNewClosure())
 
         # Constrain maximize to the monitor work area - a WindowChrome window otherwise
         # overflows the screen edges and covers the taskbar. Needs the HWND, so wait.

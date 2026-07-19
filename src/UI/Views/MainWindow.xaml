@@ -87,6 +87,17 @@
                                       Width="13"
                                       Data="{DynamicResource Minimize}" />
                             </Button>
+                            <!-- Help replays the guided tour. -->
+                            <Button x:Name="btnHelp"
+                                    Command="{Binding OpenTourCommand}"
+                                    Style="{DynamicResource controlButton}"
+                                    Tag="{DynamicResource Primary}"
+                                    ToolTip="Take a quick tour">
+                                <Path Style="{DynamicResource controlButtonIcon}"
+                                      Width="14"
+                                      Height="14"
+                                      Data="{DynamicResource Help}" />
+                            </Button>
                             <!-- Gear opens the settings overlay (the only config entry point). -->
                             <Button x:Name="btnSettings"
                                     Command="{Binding OpenSettingsCommand}"
@@ -253,6 +264,50 @@
                                TextWrapping="Wrap"
                                Foreground="{DynamicResource BodyTextTertiary}" />
                 </Grid>
+            </Border>
+        </Grid>
+        <!-- Guided-tour overlay: four dim panels frame a spotlight hole over the current
+             target, with a callout card. TourPresenter positions everything per step; the
+             backdrop is inert (no accidental dismiss) - Esc / Skip exit. -->
+        <Grid x:Name="tourOverlay"
+              Visibility="{Binding IsTourOpen, Converter={StaticResource BoolToVis}}">
+            <Grid.InputBindings>
+                <KeyBinding Key="Escape" Command="{Binding CloseTourCommand}" />
+            </Grid.InputBindings>
+            <Border x:Name="tourDimFull" Background="{DynamicResource DimBackdrop}" Visibility="Collapsed" />
+            <Border x:Name="tourDimTop" Background="{DynamicResource DimBackdrop}"
+                    VerticalAlignment="Top" HorizontalAlignment="Stretch" Height="0" />
+            <Border x:Name="tourDimBottom" Background="{DynamicResource DimBackdrop}"
+                    VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Height="0" />
+            <Border x:Name="tourDimLeft" Background="{DynamicResource DimBackdrop}"
+                    VerticalAlignment="Top" HorizontalAlignment="Left" Width="0" Height="0" />
+            <Border x:Name="tourDimRight" Background="{DynamicResource DimBackdrop}"
+                    VerticalAlignment="Top" HorizontalAlignment="Right" Width="0" Height="0" />
+            <Border x:Name="tourSpotlight" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    IsHitTestVisible="False" Width="0" Height="0" Visibility="Collapsed"
+                    BorderBrush="{DynamicResource Primary}" BorderThickness="2" CornerRadius="10" />
+            <Border x:Name="tourCallout" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}"
+                    BorderThickness="1" CornerRadius="12" Padding="16,16,16,14">
+                <StackPanel>
+                    <TextBlock x:Name="tourStepLabel" Text="Step 1 of 5"
+                               FontFamily="{DynamicResource FontSans}" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AccentPurpleLight}" Margin="0,0,0,6" />
+                    <TextBlock x:Name="tourTitle" Text="Welcome"
+                               FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="Bold"
+                               Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <TextBlock x:Name="tourBody" Text=""
+                               FontFamily="{DynamicResource FontSans}" FontSize="13.5"
+                               Foreground="{DynamicResource BodyTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,14" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="btnTourSkip" Content="Skip tour" Style="{DynamicResource ButtonGhost}"
+                                FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                        <Button x:Name="btnTourBack" Content="Back" Style="{DynamicResource ButtonOutline}"
+                                FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                        <Button x:Name="btnTourNext" Content="Next" Style="{DynamicResource ButtonPrimary}"
+                                FontSize="12.5" Height="32" MinWidth="72" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
         <!-- Toast overlay: non-modal notifications stack here, top-right, above

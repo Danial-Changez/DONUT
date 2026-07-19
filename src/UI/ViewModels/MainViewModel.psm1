@@ -28,4 +28,10 @@ class MainViewModel : ObservableObject {
     [object] $QrImage             # ImageSource; bound to the overlay's Image.Source
     [string] $QrCaption = ''      # e.g. "BitLocker recovery key - WSID123"
     [object] $CloseQrCommand
+
+    # Guided tour: the ? button binds OpenTourCommand; Esc binds CloseTourCommand.
+    # IsTourOpen gates the overlay; TourPresenter drives step navigation.
+    [bool]   $IsTourOpen = $false
+    [object] $OpenTourCommand
+    [object] $CloseTourCommand
 }
