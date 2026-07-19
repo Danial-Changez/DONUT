@@ -144,6 +144,7 @@
                                      TextWrapping="Wrap"
                                      TextAlignment="Center"
                                      AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto"
                                      IsReadOnly="True"
                                      FontFamily="{DynamicResource FontMono}"
                                      FontSize="13.5"

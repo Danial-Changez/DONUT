@@ -166,6 +166,11 @@
     <Color x:Key="SurfaceMutedForegroundColor"> #A1A1A1</Color>
     <SolidColorBrush x:Key="SurfaceMutedForeground"
                      Color="{StaticResource SurfaceMutedForegroundColor}" />
+    <!-- Scrollbar thumb at rest: visible enough to be discoverable on near-black
+         (the old #27272A was nearly invisible); brightens further on hover/drag. -->
+    <Color x:Key="ScrollThumbColor"> #3F3F46</Color>
+    <SolidColorBrush x:Key="ScrollThumb"
+                     Color="{StaticResource ScrollThumbColor}" />
     <!-- destructive oklch(0.704 0.191 22.216) ~= #FF6467 -->
     <Color x:Key="DestructiveColor"> #FF6467</Color>
     <SolidColorBrush x:Key="Destructive"
