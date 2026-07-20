@@ -32,14 +32,14 @@ public sealed class SplashForm : Form
         TopMost = true;
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.FromArgb(0x0A, 0x0A, 0x0A);
-        ClientSize = new Size(360, 240);
+        ClientSize = new Size(420, 300);
         DoubleBuffered = true;
 
         _art = new PictureBox
         {
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.Transparent,
-            Bounds = new Rectangle((360 - 120) / 2, 26, 120, 120),
+            Bounds = new Rectangle((420 - 132) / 2, 40, 132, 132),
         };
         TryLoadArtFromResources();
 
@@ -47,9 +47,9 @@ public sealed class SplashForm : Form
         {
             Text = "DONUT",
             ForeColor = Color.White,
-            Font = new Font("Segoe UI", 15f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 20f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleCenter,
-            Bounds = new Rectangle(0, 150, 360, 26),
+            Bounds = new Rectangle(0, 190, 420, 34),
             BackColor = Color.Transparent,
         };
 
@@ -57,9 +57,9 @@ public sealed class SplashForm : Form
         {
             Text = "Starting up…",
             ForeColor = Color.FromArgb(0x9A, 0x9A, 0x9A),
-            Font = new Font("Segoe UI", 9f),
+            Font = new Font("Segoe UI", 10.5f),
             TextAlign = ContentAlignment.MiddleLeft,
-            Bounds = new Rectangle(40, 188, 200, 18),
+            Bounds = new Rectangle(44, 240, 250, 20),
             BackColor = Color.Transparent,
         };
 
@@ -67,15 +67,15 @@ public sealed class SplashForm : Form
         {
             Text = "",
             ForeColor = Violet,
-            Font = new Font("Consolas", 9f),
+            Font = new Font("Consolas", 10.5f),
             TextAlign = ContentAlignment.MiddleRight,
-            Bounds = new Rectangle(240, 188, 80, 18),
+            Bounds = new Rectangle(286, 240, 90, 20),
             BackColor = Color.Transparent,
         };
 
         _bar = new SmoothProgressBar
         {
-            Bounds = new Rectangle(40, 212, 280, 8),
+            Bounds = new Rectangle(44, 268, 332, 10),
             FillColor = Violet,
         };
 
