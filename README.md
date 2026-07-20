@@ -1,6 +1,8 @@
 <h1> DONUT </h1>
 
-This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [Architecture](docs/Architecture.md) reference describes how it is built. Refer to it for more details.
+This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [architecture overview](docs/development/architecture/overview.md) describes how it is built.
+
+**Full documentation lives at <https://danial-changez.github.io/DONUT/>** — feature guides, the `config.json` reference, and the architecture pages, built from [`docs/`](docs/README.md).
 
 ---
 
@@ -23,6 +25,8 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 - **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
 - **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI). Cards are kept newest-action-first: adding a machine or running a scan/gather/storage scan moves its card to the top.
+- **Status Filter:** Chips above the machine list filter rows by status — All / Online / Offline / Attention (failed or reboot-needed) — grouped worst-first, with one-click Clear completed.
+- **Guided First-Run Tour:** A five-step spotlight tour introduces the search bar, mode toggle, machine list, and settings on first launch; replay it anytime with the `?` button.
 - **Per-Machine Detail Panel:** Selecting a machine prefetches a lightweight inventory probe (model, Dell service tag, battery health, disk, uptime) and offers an on-demand **Storage scan** of the biggest folders on `C:` (WizTree), shown as an expandable tree.
 - **24h Scan Reuse:** A scan run within the last 24 hours is reused instead of re-scanning; it's only re-run after an apply.
 - **Live AD Finder:** The search bar searches Active Directory (computers + users) across the org's forests, and can unlock locked-out accounts inline.
@@ -121,7 +125,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 ### Key Concepts
 
 - **Runspaces:** Used for parallel remote execution, runspace management, and UI updates.
-- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture reference](docs/Architecture.md#2-architecture-mvvm).
+- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture overview](docs/development/architecture/overview.md).
 - **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
 - **GitHub App Updates:** Requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256.
 
