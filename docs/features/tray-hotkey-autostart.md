@@ -21,8 +21,10 @@ Windows. Record a different combo — or clear it to disable — in
 [Settings](./settings.md). If the combo is taken by another app, DONUT warns and
 keeps running without it.
 
-> Implementation note: this uses the Win32 `RegisterHotKey` API, **not** a keyboard
-> hook — DONUT never observes the global keystroke stream.
+:::note
+This uses the Win32 `RegisterHotKey` API, **not** a keyboard hook — DONUT never
+observes the global keystroke stream.
+:::
 
 ## Start with Windows
 

@@ -10,9 +10,11 @@ architecture reference; the visual counterpart is the diagram set on
 [Runtime flows](./runtime-flows.md) and [Key classes](./key-classes.md).
 Comment/layout conventions live in [Coding style](../coding-style.md).
 
-> The project began as a script-based tool and was refactored to an OOP structure,
-> first to a Passive-View MVP and then to MVVM. That migration is complete; this
-> document describes the result, not the plan.
+:::note
+The project began as a script-based tool and was refactored to an OOP structure,
+first to a Passive-View MVP and then to MVVM. That migration is complete; this
+document describes the result, not the plan.
+:::
 
 ## Directory structure
 

@@ -29,8 +29,10 @@ same content that lands in `%LOCALAPPDATA%\DONUT\logs\<hostname>.log`.
 folders on `C:` as an expandable tree with sizes. Useful before pushing large
 updates to a nearly-full disk.
 
-> WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there about
-> licensing); the scan deploys it to the target, parses the CSV export, and cleans up.
+:::note
+WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there about
+licensing); the scan deploys it to the target, parses the CSV export, and cleans up.
+:::
 
 ## Under the hood
 

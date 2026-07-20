@@ -1,4 +1,5 @@
 // @ts-check
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeDocsLinks from './plugins/rehype-docs-links.mjs';
@@ -6,6 +7,21 @@ import rehypeDocsLinks from './plugins/rehype-docs-links.mjs';
 export default defineConfig({
   site: 'https://danial-changez.github.io',
   base: '/DONUT',
+  vite: {
+    resolve: {
+      alias: [
+        // Content lives outside this project root (../docs), so bare imports in
+        // .mdx files can't walk up to our node_modules - pin the one they use.
+        // Exact match only: Starlight itself imports components/*.astro subpaths.
+        {
+          find: /^@astrojs\/starlight\/components$/,
+          replacement: fileURLToPath(
+            new URL('./node_modules/@astrojs/starlight/components.ts', import.meta.url)
+          ),
+        },
+      ],
+    },
+  },
   markdown: {
     rehypePlugins: [rehypeDocsLinks],
   },
@@ -14,7 +30,8 @@ export default defineConfig({
       title: 'DONUT',
       description:
         'Remote Dell Command Update runner - scan and update fleets of Dell machines in parallel from one app.',
-      logo: { src: './src/assets/logo.png', alt: 'DONUT' },
+      // The wordmark already spells DONUT, so it replaces the text title.
+      logo: { src: './src/assets/logo.png', alt: 'DONUT', replacesTitle: true },
       favicon: '/favicon.ico',
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/Danial-Changez/DONUT' },

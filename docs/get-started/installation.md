@@ -31,10 +31,15 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
 4. **Install DONUT** — the MSI is published under the repo's
    [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases).
 
-5. **Add a Defender exclusion** (DONUT is not digitally signed; it is not a virus):
+5. **Add a Defender exclusion**:
    - Open **Virus & threat protection → Manage settings → Add or remove exclusions**.
    - Click **Add an exclusion**, choose **Folder**.
    - Enter `C:\Program Files\Bakery\DONUT`.
+
+:::caution[Why the exclusion?]
+DONUT isn't digitally signed (yet), so Defender may quarantine it on sight. The
+exclusion is scoped to DONUT's own install folder only.
+:::
 
 ## Running from source (developers)
 

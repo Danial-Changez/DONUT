@@ -10,8 +10,10 @@ into the dcu-cli invocation. `AppConfig.BuildDcuArgs()` generates the
 `false` is omitted (or `=disable` where explicit), empty strings are omitted, and
 values with spaces are quoted.
 
-> If a command runs with none of the dropdown/multi-select options set, DCU uses the
-> **target machine's** own defaults.
+:::tip
+If a command runs with none of the dropdown/multi-select options set, DCU uses the
+**target machine's** own defaults.
+:::
 
 ## Options
 
