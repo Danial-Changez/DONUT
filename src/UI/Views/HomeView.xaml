@@ -328,7 +328,7 @@
     </Grid.ColumnDefinitions>
 
   <!-- Machine list -->
-  <Border Grid.Column="0" CornerRadius="10" Padding="2"
+  <Border x:Name="MachinePanel" Grid.Column="0" CornerRadius="10" Padding="2"
           Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>

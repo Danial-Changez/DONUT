@@ -44,6 +44,7 @@ class TourPresenter {
     hidden [object] $StepLabel
     hidden [object] $TitleBlock
     hidden [object] $BodyBlock
+    hidden [object] $Dots
     hidden [object] $BtnSkip
     hidden [object] $BtnBack
     hidden [object] $BtnNext
@@ -71,6 +72,7 @@ class TourPresenter {
         $this.StepLabel = $this.Window.FindName('tourStepLabel')
         $this.TitleBlock = $this.Window.FindName('tourTitle')
         $this.BodyBlock = $this.Window.FindName('tourBody')
+        $this.Dots = $this.Window.FindName('tourDots')
         $this.BtnSkip = $this.Window.FindName('btnTourSkip')
         $this.BtnBack = $this.Window.FindName('btnTourBack')
         $this.BtnNext = $this.Window.FindName('btnTourNext')
@@ -156,6 +158,7 @@ class TourPresenter {
         $this.BodyBlock.Text = $step.Body
         $this.BtnNext.Content = if ($last) { 'Done' } else { 'Next' }
         $this.BtnBack.Visibility = if ($index -eq 0) { 'Collapsed' } else { 'Visible' }
+        $this.BuildDots($index)
 
         $target = if ([string]::IsNullOrWhiteSpace($step.TargetKey)) { $null } else { $this.ResolveTarget($step.TargetKey) }
         if ($null -eq $target -or $target.ActualWidth -le 0 -or $target.ActualHeight -le 0) {
@@ -180,7 +183,7 @@ class TourPresenter {
         foreach ($d in @($this.DimTop, $this.DimBottom, $this.DimLeft, $this.DimRight)) { $d.Visibility = 'Visible' }
 
         $tl = $target.TransformToVisual($this.Overlay).Transform([Point]::new(0, 0))
-        $pad = 6.0
+        $pad = 3.0
         $ow = $this.Overlay.ActualWidth
         $oh = $this.Overlay.ActualHeight
         $x = [Math]::Max(0, $tl.X - $pad)
@@ -229,17 +232,40 @@ class TourPresenter {
         $this.Callout.Margin = [Thickness]::new($cx, $cy, 0, 0)
     }
 
+    # Resolve to the whole logical region (the search box incl. its icon, the full machine
+    # panel) so the spotlight frames the element the step is about, not just an inner control.
     hidden [object] ResolveTarget([string]$key) {
-        if ($null -eq $this.Home) { return $null }
         switch ($key) {
-            'search' { return $this.Home.SearchBar }
-            'mode' { return $this.Home.ModeButton }
-            'runAll' { return $this.Home.RunAllButton }
-            'list' { return $this.Home.MachineList }
+            'search' { return $this.HomeElement('SearchBox') }
+            'mode' { return $this.HomeElement('btnMode') }
+            'list' { return $this.HomeElement('MachinePanel') }
             'settings' { return $this.Window.FindName('btnSettings') }
             'help' { return $this.Window.FindName('btnHelp') }
             default { return $null }
         }
         return $null
+    }
+
+    # Progress dots (bottom-left of the callout): one per step, the current one violet.
+    hidden [void] BuildDots([int]$current) {
+        if ($null -eq $this.Dots) { return }
+        $this.Dots.Children.Clear()
+        $on = $this.Window.TryFindResource('Primary')
+        $off = $this.Window.TryFindResource('PanelBackgroundActive')
+        for ($i = 0; $i -lt $this.Steps.Count; $i++) {
+            $dot = [System.Windows.Shapes.Ellipse]::new()
+            $dot.Width = 6
+            $dot.Height = 6
+            $dot.VerticalAlignment = 'Center'
+            $dot.Margin = [Thickness]::new(0, 0, 6, 0)
+            $dot.Fill = if ($i -eq $current) { $on } else { $off }
+            [void]$this.Dots.Children.Add($dot)
+        }
+    }
+
+    # Finds a named element inside HomeView (its own namescope, so not Window.FindName).
+    hidden [object] HomeElement([string]$name) {
+        if ($null -eq $this.Home -or $null -eq $this.Home.ViewContent) { return $null }
+        return $this.Home.ViewContent.FindName($name)
     }
 }

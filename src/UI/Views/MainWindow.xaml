@@ -299,14 +299,19 @@
                     <TextBlock x:Name="tourBody" Text=""
                                FontFamily="{DynamicResource FontSans}" FontSize="13.5"
                                Foreground="{DynamicResource BodyTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,14" />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="btnTourSkip" Content="Skip tour" Style="{DynamicResource ButtonGhost}"
-                                FontSize="12.5" Height="32" Margin="0,0,8,0" />
-                        <Button x:Name="btnTourBack" Content="Back" Style="{DynamicResource ButtonOutline}"
-                                FontSize="12.5" Height="32" Margin="0,0,8,0" />
-                        <Button x:Name="btnTourNext" Content="Next" Style="{DynamicResource ButtonPrimary}"
-                                FontSize="12.5" Height="32" MinWidth="72" />
-                    </StackPanel>
+                    <Grid>
+                        <!-- Progress dots (built by TourPresenter) fill the left; actions on the right. -->
+                        <StackPanel x:Name="tourDots" Orientation="Horizontal"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="btnTourSkip" Content="Skip tour" Style="{DynamicResource ButtonGhost}"
+                                    FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                            <Button x:Name="btnTourBack" Content="Back" Style="{DynamicResource ButtonOutline}"
+                                    FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                            <Button x:Name="btnTourNext" Content="Next" Style="{DynamicResource ButtonTintPrimary}"
+                                    FontSize="12.5" Height="32" MinWidth="72" />
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
             </Border>
         </Grid>
