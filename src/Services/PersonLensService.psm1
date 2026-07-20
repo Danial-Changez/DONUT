@@ -14,8 +14,8 @@ using module "..\Models\PersonLens.psm1"
     under %ProgramData%\DONUT\lens-agent. This class is the agent's supervisor +
     client: start/heartbeat/restart, drive one lookup, stream partials, teardown.
 
-    See docs/Architecture.md ("De-elevating the user Lens") for the full exchange
-    protocol, security model, and performance rationale.
+    See docs/development/architecture/implementation-notes.md ("De-elevating the
+    user Lens") for the full exchange protocol, security model, and rationale.
 
 .NOTES
     Mirrors ActiveDirectoryService's seam pattern: the agent/task I/O is isolated in

@@ -1,12 +1,17 @@
 # DONUT Diagrams
 
 PlantUML (`.puml`) sources for DONUT's structure and runtime flows, the visual
-companion to [`../Architecture.md`](../Architecture.md).
+companion to the [architecture pages](../development/architecture/overview.md).
 
-> **Rendering.** GitHub does not render `.puml` inline without a plugin. Preview
-> locally with the [PlantUML VS Code extension](https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml)
-> or a PlantUML server. `network-flow.png` is a committed render, and the self-update
-> flow is inlined as [mermaid](#self-update-flow) below (which GitHub does render).
+> **Rendering.** GitHub does not render `.puml` inline without a plugin — but the
+> **docs site renders every diagram as SVG**: see
+> [Runtime flows](https://danial-changez.github.io/DONUT/development/architecture/runtime-flows/)
+> and [Key classes](https://danial-changez.github.io/DONUT/development/architecture/key-classes/).
+> To preview locally, use the [PlantUML VS Code extension](https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml)
+> or run `tools\Render-Diagrams.ps1`. `network-flow.png` is a committed render, and
+> the self-update flow is inlined as [mermaid](#self-update-flow) below (which GitHub
+> does render). Keep each file's `@startuml <name>` equal to its filename — it names
+> the rendered SVG.
 
 ## Structure
 

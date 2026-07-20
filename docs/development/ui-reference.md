@@ -1,4 +1,7 @@
-# UI reference
+---
+title: UI reference
+description: The canonical UI pattern source for DONUT and the patterns applied so far, plus the Arcane visual language.
+---
 
 **Canonical source for all UI/UX work on DONUT: <https://ui-patterns.com/patterns>.**
 

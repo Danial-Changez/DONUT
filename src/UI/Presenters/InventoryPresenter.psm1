@@ -16,9 +16,10 @@ using module "..\..\Models\JobEnums.psm1"
 
 .DESCRIPTION
     Extracted from HomePresenter to shed its detail/inventory responsibility (see
-    docs/Architecture.md, "Design decisions"). It owns the detail-panel + overview
-    controls and the inventory / disk-scan rendering, while HomePresenter keeps the
-    shared AsyncJob pump and forwards the Inventory / DiskScan job kinds here.
+    docs/development/architecture/overview.md, "Design decisions"). It owns the
+    detail-panel + overview controls and the inventory / disk-scan rendering, while
+    HomePresenter keeps the shared AsyncJob pump and forwards the Inventory /
+    DiskScan job kinds here.
 
 .NOTES
     Mirrors the FinderPresenter seam: a duck-typed [object] $Home back-ref reaches

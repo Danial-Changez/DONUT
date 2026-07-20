@@ -1,4 +1,7 @@
-# DONUT Coding Style
+---
+title: Coding style
+description: Comment and layout conventions for DONUT's PowerShell and C# sources, adapted from the Zephyr style.
+---
 
 Comment and layout conventions for the PowerShell sources under `src/`. The rules
 are adapted from the [Zephyr RTOS coding style](https://docs.zephyrproject.org/latest/contribute/style/code.html)
