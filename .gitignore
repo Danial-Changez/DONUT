@@ -28,5 +28,12 @@ tools/JaCoCoToHtml/
 # Claude Code (personal, machine-specific)
 .claude/settings.local.json
 
+# Docs site (website/ is the Astro Starlight scaffold; content lives in docs/)
+website/node_modules/
+website/dist/
+website/.astro/
+website/public/diagrams/
+tools/.cache/
+
 # Legacy
 MainWindow-*
