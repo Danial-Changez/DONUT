@@ -64,26 +64,30 @@ class ResolutionCoordinator {
         }
     }
 
-    # Warms every pool runspace's module graph synchronously. One-shot; loader-lock
-    # rationale in .NOTES.
+    # Warms every pool runspace's COMPLETE worker module graph synchronously. One-shot;
+    # loader-lock rationale in .NOTES.
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
         $n = $this.Config.GetThrottleLimit()
         if ($n -lt 1) { $n = 1 }
 
+        # Load the FULL pool-worker graph (WorkerServices + ActiveDirectoryService +
+        # PersonLensService) into every runspace, not just RemoteWorker's WorkerServices
+        # graph. Otherwise the first AD search / Lens lookup to land on an un-warmed
+        # runspace cold-loads its graph under the CLR loader lock, and if that happens
+        # while the dispatcher is rendering (e.g. mid-scan) the UI freezes. The N jobs run
+        # concurrently and the WaitOne barrier below holds each runspace, so all N warm.
+        $warmScript = Join-Path $this.Config.SourceRoot 'Scripts\Warm-Runspace.ps1'
         $pool = [RunspaceManager]::GetPool()
         $shells = [System.Collections.Generic.List[object]]::new()
         $handles = [System.Collections.Generic.List[object]]::new()
         for ($i = 0; $i -lt $n; $i++) {
             try {
-                $prep = $this.Resolver.PrepareWarmRunspace()
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
-                $ps.AddCommand($prep.ScriptPath) | Out-Null
-                foreach ($k in $prep.Arguments.Keys) {
-                    $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
-                }
+                $ps.AddCommand($warmScript) | Out-Null
+                $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
                 $handles.Add($ps.BeginInvoke())
                 $shells.Add($ps)
             }
