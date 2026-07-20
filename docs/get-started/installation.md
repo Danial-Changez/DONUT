@@ -1,0 +1,52 @@
+---
+title: Installation
+description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, and the Defender exclusion.
+---
+
+## Prerequisites
+
+- **PowerShell 7+** — required for parallel processing (the project currently runs on
+  7.5.x).
+- **Dell Command Update CLI (`dcu-cli.exe`)** — must be installed on each *target*
+  machine.
+- **PsExec (Sysinternals PsTools)** — for remote command execution (setup below).
+- **.NET Desktop Runtime 10.0+** — needed for WPF in the packaged version.
+- **Windows admin access** — remote execution runs elevated.
+- **GitHub App access** — so your team can sign in via Device Flow and receive
+  updates from your org's GitHub Releases.
+
+## Install steps
+
+1. Install the prerequisites above.
+
+2. **Set up PsTools** (skip if PsExec is already on the machine):
+   - Download PsTools from
+     [Microsoft Sysinternals](https://learn.microsoft.com/en-us/sysinternals/downloads/pstools).
+   - Extract the zip anywhere convenient (Documents, Downloads, or Desktop).
+   - Move the **contents** of the folder into `C:\Windows\System32`.
+
+3. **Install the .NET Desktop runtime** from
+   [dotnet.microsoft.com](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+
+4. **Install DONUT** — the MSI is published under the repo's
+   [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases).
+
+5. **Add a Defender exclusion** (DONUT is not digitally signed; it is not a virus):
+   - Open **Virus & threat protection → Manage settings → Add or remove exclusions**.
+   - Click **Add an exclusion**, choose **Folder**.
+   - Enter `C:\Program Files\Bakery\DONUT`.
+
+## Running from source (developers)
+
+Clone the repo and run — no MSI, exe, or Defender exclusion needed:
+
+```powershell
+pwsh -File src\Start-Donut.ps1
+```
+
+The script compiles the C# helpers in-process, so it needs nothing beyond
+PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host, it relaunches
+itself under `pwsh -Sta` automatically. Add `-Tray` to start hidden in the system
+tray (the packaged launcher takes the equivalent `--tray`).
+
+Next: [First launch](./first-launch.md).

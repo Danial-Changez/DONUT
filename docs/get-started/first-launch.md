@@ -1,0 +1,42 @@
+---
+title: First launch
+description: Signing in with the GitHub device flow, the guided tour, and where DONUT keeps its data.
+---
+
+## Sign in
+
+Open DONUT from the Start Menu. On first launch (or when the stored token expires),
+sign in with your org's GitHub App using the device-code prompt — the code is shown
+in the window and copied to your clipboard. This lets the updater pull releases; if
+an update is available you'll be prompted to apply it.
+
+## The guided tour
+
+The first time the window opens, a short **guided tour** walks the essentials — the
+search bar, the Scan/Apply mode toggle, the machine list and its status filter, and
+Settings. It's five steps, one idea each:
+
+- **Esc** exits at any point; **Skip tour** is offered on the welcome step.
+- Replay it anytime with the **`?`** button in the title bar.
+- It only auto-runs once (tracked by the `hasSeenTour` config key).
+
+## Tray, hotkey, and window basics
+
+- The **tray icon** is always present: left-click it to show or hide the window;
+  right-click for Open/Exit.
+- The **global hotkey** (default `Ctrl+Alt+D`) shows/restores DONUT from anywhere.
+  Change or disable it in [Settings](../features/settings.md).
+- Launching DONUT a second time just surfaces the running instance.
+
+## Where DONUT keeps its data
+
+Everything user-specific lives under `%LOCALAPPDATA%\DONUT`, so updates and
+reinstalls never touch it:
+
+| Folder | Contents |
+|--------|----------|
+| `config\` | `config.json` (settings) and the machine list |
+| `logs\` | The central `Donut.log` plus a per-host copy of each run's output log |
+| `reports\` | Scan report XMLs |
+
+Next: add machines and [run your first scan](../features/scanning.md).
