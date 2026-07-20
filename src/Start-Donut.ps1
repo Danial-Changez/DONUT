@@ -55,24 +55,24 @@ if (-not $global:SingleInstanceOwned) {
 # Read by DonutApp.ps1 for the hidden-start decision on the dev path.
 $global:TrayStart = [bool]$Tray
 
-# Resolve a runtime assembly to its on-disk path via a type it defines.
+# Resolve an already-loaded assembly to its on-disk path by simple name.
 #
-# Passing a bare simple name (e.g. 'WindowsBase') to Add-Type -ReferencedAssemblies
-# lets the C# compiler bind it to the 4.0.0.0 .NET Framework *reference* facade.
-# PresentationCore (resolved by path to the real runtime, 10.x on .NET 10) then pulls
-# in WindowsBase 10.x, and the compile dies with CS1705 ("WindowsBase 10.0.0.0 ... has
-# a higher version than referenced assembly WindowsBase 4.0.0.0"). Searching the loaded
-# assemblies by name is timing-dependent (WindowsBase loads lazily, so it may be absent
-# when we look and fall back to the bare name) — that mismatch surfaces only on some
-# runtimes. Anchoring on a type forces the correct runtime assembly to load and yields
-# its actual path, so the reference versions always match.
-function Get-RuntimeAssemblyPath([type]$TypeInAssembly) {
-    $location = $TypeInAssembly.Assembly.Location
-    if ([string]::IsNullOrEmpty($location)) {
-        $name = $TypeInAssembly.Assembly.GetName().Name
-        throw "Cannot resolve a file path for assembly '$name' (needed for the dev-path Add-Type)."
+# Add-Type -ReferencedAssemblies must get the *runtime* WPF assemblies by path. Passing
+# a bare simple name (e.g. 'WindowsBase') instead lets the C# compiler bind it to the
+# 4.0.0.0 .NET Framework reference facade; PresentationCore then pulls in the real 10.x
+# runtime WindowsBase and the compile dies with CS1705 ("WindowsBase 10.0.0.0 ... has a
+# higher version than referenced assembly WindowsBase 4.0.0.0"). The caller loads these
+# assemblies explicitly first (PresentationFramework loads them lazily, so they may not
+# be present otherwise), so this lookup finds them; if one is genuinely missing we throw
+# rather than fall back to the bare name and reintroduce the mismatch.
+function Get-RuntimeAssemblyPath([string]$SimpleName) {
+    $asm = [AppDomain]::CurrentDomain.GetAssemblies() |
+        Where-Object { $_.GetName().Name -eq $SimpleName -and $_.Location } |
+        Select-Object -First 1
+    if (-not $asm) {
+        throw "Assembly '$SimpleName' is not loaded with a file path (dev-path Add-Type)."
     }
-    return $location
+    return $asm.Location
 }
 
 # Everything that loads the WPF assemblies, compiles the dev-path C# helpers and
@@ -84,21 +84,25 @@ function Get-RuntimeAssemblyPath([type]$TypeInAssembly) {
 # load/compile/parse failures it can't reach.)
 try {
     # Assemblies are resolved at runtime (not parse time), so load them before
-    # dot-sourcing the app graph.
+    # dot-sourcing the app graph. PresentationCore and WindowsBase are dependencies of
+    # PresentationFramework that load lazily; load them explicitly so they're present
+    # (with a real runtime path) when Get-RuntimeAssemblyPath resolves references below.
     Add-Type -AssemblyName PresentationFramework
+    Add-Type -AssemblyName PresentationCore
+    Add-Type -AssemblyName WindowsBase
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Security
 
     # MVVM base types: compiled into Donut.Launcher in production (guard skips); on the
     # `pwsh -Sta` dev path compile them here, before the class graph parses against them.
     if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
-        # Anchor each reference on a type it defines so versions match the loaded runtime
-        # (see Get-RuntimeAssemblyPath): ICommand -> System.ObjectModel, DependencyObject ->
-        # WindowsBase, HwndSource -> PresentationCore.
+        # Reference the loaded runtime assemblies by path so versions match (see
+        # Get-RuntimeAssemblyPath). System.ObjectModel defines ICommand /
+        # INotifyPropertyChanged; WindowsBase + PresentationCore back the interop helpers.
         $refs = @(
-            Get-RuntimeAssemblyPath ([System.Windows.Input.ICommand])
-            Get-RuntimeAssemblyPath ([System.Windows.DependencyObject])
-            Get-RuntimeAssemblyPath ([System.Windows.Interop.HwndSource])
+            Get-RuntimeAssemblyPath 'System.ObjectModel'
+            Get-RuntimeAssemblyPath 'WindowsBase'
+            Get-RuntimeAssemblyPath 'PresentationCore'
         )
         Add-Type -Path @(
             "$PSScriptRoot\Launcher\ObservableObject.cs",
@@ -124,11 +128,10 @@ try {
     # Global-hotkey interop (Donut.Interop.HotkeyManager): a RegisterHotKey wrapper. Prod
     # compiles it into Donut.Launcher (guard skips); the dev path compiles it here.
     if (-not ('Donut.Interop.HotkeyManager' -as [type])) {
-        # Same version-safe resolution as the MVVM block above: DependencyObject ->
-        # WindowsBase, HwndSource -> PresentationCore.
+        # Same version-safe resolution as the MVVM block above.
         $refs = @(
-            Get-RuntimeAssemblyPath ([System.Windows.DependencyObject])
-            Get-RuntimeAssemblyPath ([System.Windows.Interop.HwndSource])
+            Get-RuntimeAssemblyPath 'WindowsBase'
+            Get-RuntimeAssemblyPath 'PresentationCore'
         )
         Add-Type -Path "$PSScriptRoot\Launcher\HotkeyManager.cs" -ReferencedAssemblies $refs
     }
