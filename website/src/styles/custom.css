@@ -1,0 +1,54 @@
+/* DONUT design tokens (src/UI/Styles/UIColors.xaml) mapped onto Starlight.
+   The site is dark-only: the same palette is pinned to both theme states so a
+   light-OS visitor never sees a light flash (the toggle itself is removed via
+   the ThemeSelect component override). */
+:root,
+:root[data-theme='light'],
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Violet accent (Primary #8022FE / AccentPurple #8E51FF / AccentPurpleLight #C4B5FD) */
+  --sl-color-accent-low: #2a1656;
+  --sl-color-accent: #8022fe;
+  --sl-color-accent-high: #c4b5fd;
+  --sl-color-text-accent: #8e51ff;
+  --sl-color-bg-accent: #8022fe;
+
+  /* Neutral scale */
+  --sl-color-white: #fafafa;   /* TitleTextPrimary - headings, emphasis */
+  --sl-color-gray-1: #d4d4d4;
+  --sl-color-gray-2: #a1a1a1;  /* BodyTextPrimary - body text */
+  --sl-color-gray-3: #8a8a8a;
+  --sl-color-gray-4: #3f3f46;
+  --sl-color-gray-5: #27272a;  /* PanelBackgroundActive */
+  --sl-color-gray-6: #121212;  /* PanelBackground */
+  --sl-color-black: #0a0a0a;   /* PrimaryBackground */
+
+  /* Surfaces */
+  --sl-color-bg: #0a0a0a;
+  --sl-color-bg-nav: #0a0a0a;
+  --sl-color-bg-sidebar: #0a0a0a;
+  --sl-color-bg-inline-code: #262626; /* SurfaceMuted */
+  --sl-color-text: #a1a1a1;
+  --sl-color-text-invert: #0a0a0a;
+
+  /* Hairlines = PanelBorder (white @ 10%) */
+  --sl-color-hairline-light: rgba(255, 255, 255, 0.1);
+  --sl-color-hairline: rgba(255, 255, 255, 0.1);
+  --sl-color-hairline-shade: rgba(255, 255, 255, 0.06);
+
+  /* Type */
+  --sl-font: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
+}
+
+/* Hero polish: violet gradient title, Arcane-style rounded primary action. */
+[data-has-hero] .hero h1 {
+  background: linear-gradient(90deg, #fafafa 30%, #c4b5fd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.sl-link-button.primary {
+  border-radius: 9999px;
+}
