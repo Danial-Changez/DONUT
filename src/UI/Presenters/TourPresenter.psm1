@@ -31,6 +31,7 @@ class TourPresenter {
     hidden [object[]] $Steps = @()
     hidden [int] $Index = 0
     hidden [bool] $Wired = $false
+    hidden [bool] $AutoRan = $false   # first-run auto-start fires at most once per session
 
     hidden [object] $Overlay
     hidden [object] $DimFull
@@ -91,17 +92,28 @@ class TourPresenter {
         $this.Steps = [TourSteps]::Build()
         $this.Index = 0
         $this.MainVm.Set('IsTourOpen', $true)
-        # Defer so the just-shown overlay has laid out (ActualWidth/Height, target bounds).
+        # Defer so the just-shown overlay has laid out. GetNewClosure captures $self; a render
+        # error is caught so it can't bubble out of Application.Run and kill startup.
         $self = $this
+        $action = {
+            try { $self.ShowStep($self.GetIndex()) }
+            catch { $self.OnTourError($_) }
+        }.GetNewClosure()
         $this.Window.Dispatcher.BeginInvoke(
-            [action] { $self.ShowStep($self.GetIndex()) },
-            [System.Windows.Threading.DispatcherPriority]::Loaded) | Out-Null
+            [action]$action, [System.Windows.Threading.DispatcherPriority]::Loaded) | Out-Null
     }
 
-    # Auto-run once on first launch (the ? button calls Start directly to replay).
+    hidden [void] OnTourError([object]$err) {
+        $this.Logger.LogException('Guided tour failed to render', $err)
+        if ($this.MainVm) { $this.MainVm.Set('IsTourOpen', $false) }
+    }
+
+    # Auto-run once per session on first launch (the ? button calls Start directly to replay).
     [void] MaybeStartFirstRun() {
+        if ($this.AutoRan) { return }
         if ($this.Config.GetHasSeenTour()) { return }
         if ($this.MainVm -and $this.MainVm.IsTourOpen) { return }
+        $this.AutoRan = $true
         $this.Start()
     }
 
