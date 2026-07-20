@@ -13,8 +13,9 @@ namespace Donut.Launcher;
 /// </summary>
 public sealed class SplashForm : Form
 {
-    // Dark splash; loading.gif is keyed transparent so the pink donut floats on it.
-    private static readonly Color Yellow = Color.FromArgb(0xF2, 0xB4, 0x17);
+    // Arcane splash: near-black ground + violet accent (matches the app's theme); the
+    // loading.gif is keyed transparent so the pink donut floats on it.
+    private static readonly Color Violet = Color.FromArgb(0x8E, 0x51, 0xFF);
 
     private readonly PictureBox _art;
     private readonly Label _word;
@@ -30,7 +31,7 @@ public sealed class SplashForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         AutoScaleMode = AutoScaleMode.Dpi;
-        BackColor = Color.FromArgb(0x22, 0x1F, 0x18);
+        BackColor = Color.FromArgb(0x0A, 0x0A, 0x0A);
         ClientSize = new Size(360, 240);
         DoubleBuffered = true;
 
@@ -55,7 +56,7 @@ public sealed class SplashForm : Form
         _status = new Label
         {
             Text = "Starting up…",
-            ForeColor = Color.FromArgb(0xC4, 0xBB, 0xA3),
+            ForeColor = Color.FromArgb(0x9A, 0x9A, 0x9A),
             Font = new Font("Segoe UI", 9f),
             TextAlign = ContentAlignment.MiddleLeft,
             Bounds = new Rectangle(40, 188, 200, 18),
@@ -65,7 +66,7 @@ public sealed class SplashForm : Form
         _pct = new Label
         {
             Text = "",
-            ForeColor = Yellow,
+            ForeColor = Violet,
             Font = new Font("Consolas", 9f),
             TextAlign = ContentAlignment.MiddleRight,
             Bounds = new Rectangle(240, 188, 80, 18),
@@ -75,7 +76,7 @@ public sealed class SplashForm : Form
         _bar = new SmoothProgressBar
         {
             Bounds = new Rectangle(40, 212, 280, 8),
-            FillColor = Yellow,
+            FillColor = Violet,
         };
 
         Controls.Add(_art);
@@ -114,7 +115,7 @@ public sealed class SplashForm : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        using var pen = new Pen(Color.FromArgb(90, Yellow), 2);
+        using var pen = new Pen(Color.FromArgb(90, Violet), 2);
         e.Graphics.DrawLine(pen, 0, 1, Width, 1);   // hairline accent along the top edge
     }
 
