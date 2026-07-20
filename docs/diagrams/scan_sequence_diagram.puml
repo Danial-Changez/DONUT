@@ -1,4 +1,4 @@
-@startuml Scan Sequence Diagram
+@startuml scan_sequence_diagram
 title Scan a Machine (async, non-blocking)
 
 actor User

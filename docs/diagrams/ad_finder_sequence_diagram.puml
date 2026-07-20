@@ -1,4 +1,4 @@
-@startuml AD Finder Sequence Diagram
+@startuml ad_finder_sequence_diagram
 title Home Search Bar — Live AD Finder + Unlock
 
 actor User

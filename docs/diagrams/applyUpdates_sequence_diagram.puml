@@ -1,4 +1,4 @@
-@startuml Apply Updates Sequence Diagram
+@startuml applyUpdates_sequence_diagram
 title Apply Updates (scan reuse + confirm)
 
 actor User

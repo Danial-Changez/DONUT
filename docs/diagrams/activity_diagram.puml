@@ -1,4 +1,4 @@
-@startuml Activity Diagram
+@startuml activity_diagram
 title Remote Worker Flow (ExecutionService, in a pool runspace)
 
 start

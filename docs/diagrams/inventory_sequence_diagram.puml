@@ -1,4 +1,4 @@
-@startuml Inventory and Storage Sequence Diagram
+@startuml inventory_sequence_diagram
 title Machine Detail — Inventory Prefetch + Storage Scan
 
 actor User

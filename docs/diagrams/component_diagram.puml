@@ -1,9 +1,10 @@
-@startuml Component Diagram
+@startuml component_diagram
 title DONUT — Component View
 
 component "C# Wrapper" #2A1320 {
     [Donut.Launcher.exe]
     [Donut.Mvvm\n(ObservableObject + RelayCommand)]
+    [Donut.Interop\n(HotkeyManager)]
 }
 
 component "UI (src/UI/Views)" #102A2E {
@@ -23,6 +24,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [LensLookupWorker.ps1]
     [LensAgent.ps1]
     [InstallWorker.ps1]
+    [Apply-StartupTask.ps1]
 }
 
 component "PowerShell Classes (src)" {
@@ -33,10 +35,13 @@ component "PowerShell Classes (src)" {
         [ResolutionCoordinator]
         [FinderPresenter]
         [ConfigPresenter]
+        [KeybindRecorder]
         [LoginPresenter]
         [UpdatePresenter]
         [DialogPresenter]
         [ToastService]
+        [TrayPresenter]
+        [TourPresenter]
     }
     package "ViewModels" #3A2A12 {
         [MainViewModel]
@@ -44,7 +49,6 @@ component "PowerShell Classes (src)" {
         [HostViewModel]
         [SearchRowViewModel]
         [FolderNodeViewModel]
-        [ConfigViewModel]
         [ToastViewModel]
         [DialogViewModel]
         [LoginViewModel]
@@ -62,6 +66,8 @@ component "PowerShell Classes (src)" {
         [ExecutionService]
         [DriverMatchingService]
         [SelfUpdateService]
+        [StartupTaskService]
+        [SystemInfoService]
         [LogService]
         [ResourceService]
     }
@@ -98,6 +104,12 @@ database "%LOCALAPPDATA%\\DONUT" {
 [MainPresenter] ..> [MainWindow.xaml] : manages
 [MainPresenter] ..> [HomePresenter] : creates
 [MainPresenter] ..> [ConfigPresenter] : settings overlay (lazy)
+[MainPresenter] ..> [TrayPresenter] : tray icon + show/hide
+[MainPresenter] ..> [TourPresenter] : first-run guided tour
+[MainPresenter] ..> [Donut.Interop\n(HotkeyManager)] : global hotkey
+[MainPresenter] ..> [Apply-StartupTask.ps1] : start-with-Windows apply
+[Apply-StartupTask.ps1] ..> [StartupTaskService] : reconcile + register
+[HomePresenter] ..> [SystemInfoService] : local host facts
 
 [HomePresenter] ..> [HomeViewModel] : builds + wires commands
 [HomeViewModel] ..> [HomeView.xaml] : DataContext (bindings)
@@ -107,7 +119,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [ToastService] ..> [ToastViewModel] : enqueues
 [DialogPresenter] ..> [DialogViewModel] : per-dialog content
 [DialogPresenter] ..> [DialogWindow.xaml] : shows modal
-[ConfigPresenter] ..> [ConfigViewModel] : SaveCommand
+[ConfigPresenter] ..> [KeybindRecorder] : records shortcut fields
 [LoginPresenter] ..> [LoginViewModel] : device-flow output
 [LoginViewModel] ..> [LoginWindow.xaml] : DataContext (bindings)
 [Donut.Mvvm\n(ObservableObject + RelayCommand)] ..> [HostViewModel] : base types (all VMs)

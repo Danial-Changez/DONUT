@@ -1,4 +1,4 @@
-@startuml Class Diagram
+@startuml class_diagram
 title DONUT — Class Structure
 skinparam classAttributeIconSize 0
 
@@ -229,6 +229,43 @@ package "Donut.Models" #15233B {
         +Message: string
         +{static} FromPollResult(result): DeviceFlowDecision
     }
+
+    class DcuUpdate {
+        +Name / Category / Type / Urgency: string
+        +VersionText / SizeText: string
+        +IsNewer / HasMatch: bool
+        +{static} Create(name, versions, match, urgency, ...): DcuUpdate
+    }
+
+    class MachineListShaper {
+        +{static} Categorize(running, reachability, idleStatus): string
+        +{static} StatusRank(category): int
+        +{static} MatchesStatus(category, filter): bool
+    }
+
+    class MachineNameMatcher {
+        +{static} DefaultPatterns: string[]
+        +{static} LooksLikeMachine(text, patterns): bool
+        +{static} AnyExactMatch(names, text): bool
+    }
+
+    class HotkeyGesture {
+        +Valid: bool
+        +Reason / Normalized: string
+        +Modifiers / VirtualKey: uint32
+        +WpfKey: Key
+        +{static} Parse(text): HotkeyGesture
+        +{static} FromKeys(mods, key): HotkeyGesture
+    }
+
+    class TourStep {
+        +Title / Body: string
+        +TargetKey / Placement: string
+    }
+
+    class TourSteps {
+        +{static} Build(): TourStep[]
+    }
 }
 
 package "Donut.Core" #102A20 {
@@ -400,6 +437,15 @@ package "Donut.Services" #221634 {
         +Gather(): SystemInfo
         +{static} BatteryLabel(hasBattery, percent, charging): string
     }
+
+    class StartupTaskService {
+        +Logger: LogService
+        +SourceRoot: string
+        +{static} TaskName(): string
+        +BuildLaunchSpec(processPath, sourceRoot): Hashtable
+        +ReconcileDecision(enabled, existingTask, spec): string
+        +Apply(enabled): bool
+    }
 }
 
 package "Donut.UI.Presenters" #2B1A12 {
@@ -416,11 +462,16 @@ package "Donut.UI.Presenters" #2B1A12 {
         -HomePresenter: HomePresenter
         -ConfigPresenter: ConfigPresenter
         -Resources: ResourceService
+        -TrayPresenter: TrayPresenter
+        -Tour: TourPresenter
+        -Hotkey: HotkeyManager
         +Initialize(): void
         +Show(): void
         +ShowHome(): void
         +OpenSettings(): void
         +CloseSettings(): void
+        +AttachHotkey(hwnd) / ApplyHotkey(): void
+        +ApplyStartupTask(): void
     }
 
     class HomePresenter extends AsyncJobPresenter {
@@ -483,9 +534,46 @@ package "Donut.UI.Presenters" #2B1A12 {
     }
 
     class ConfigPresenter {
+        +SideEffects: hashtable
+        +Initialize(): void
         +LoadCurrentConfig(): void
         +LoadOptionView(viewName): void
-        +OnSave(): void
+        +PopulateFields(): void
+        -WireDcuPersistence(controls): void
+        -PersistToggle(key, value, sideEffect): void
+        -PersistGesture(key, value, sideEffect): void
+        -SaveConfigSafely(): void
+    }
+
+    class KeybindRecorder {
+        -Display / RecordButton / ClearButton: object
+        -OnCommit: scriptblock
+        -Recording: bool
+        +{static} IsModifierKey(key): bool
+        -StartRecording() / CancelRecording(): void
+        -OnKeyDown(e) / OnKeyUp(e): void
+        -Commit(value): void
+    }
+
+    class TrayPresenter {
+        -Icon: NotifyIcon
+        -Menu: ContextMenuStrip
+        +ShowMainWindow(): void
+        +ToggleMainWindow(): void
+        +ExitApp(): void
+        +ShowCloseToTrayHint(): void
+        +Dispose(): void
+    }
+
+    class TourPresenter {
+        -Steps: TourStep[]
+        -Index: int
+        +Start(): void
+        +MaybeStartFirstRun(): void
+        +Next() / Back(): void
+        +Finish(): void
+        -ShowStep(index): void
+        -ShowSpotlight(target, placement): void
     }
 
     class DialogPresenter {
@@ -524,6 +612,15 @@ package "Donut.Mvvm (C#, src/Launcher)" #1F2A12 {
     }
 }
 
+package "Donut.Interop (C#, src/Launcher)" #1F2A12 {
+    class HotkeyManager {
+        +Pressed: event
+        +LastError: int
+        +Attach(hwnd, modifiers, vk): bool
+        +Detach(): void
+    }
+}
+
 package "Donut.UI.ViewModels" #3A2A12 {
     class HomeViewModel {
         +Machines: ObservableCollection<HostViewModel>
@@ -534,6 +631,8 @@ package "Donut.UI.ViewModels" #3A2A12 {
 
     class HostViewModel {
         +HostName / Subtitle / ChipText / StepText: string
+        +StatusCategory: string
+        +Updates: DcuUpdate[]
         +Percent: double
         +ProgressVisible / ProgressIndeterminate: bool
         +DotBrush / ChipForeground / ProgressBrush: Brush
@@ -586,9 +685,6 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +PrimaryCommand / SecondaryCommand: RelayCommand
     }
 
-    class ConfigViewModel {
-        +SaveCommand: RelayCommand
-    }
     class LoginViewModel {
         +OutputText: string
         +AuthCommand: RelayCommand
@@ -596,7 +692,9 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
     class MainViewModel {
         +IsSettingsOpen: bool
+        +IsTourOpen: bool
         +OpenSettingsCommand / CloseSettingsCommand: RelayCommand
+        +OpenTourCommand / CloseTourCommand: RelayCommand
         +Minimize/Maximize/CloseCommand: RelayCommand
     }
 }
@@ -606,7 +704,6 @@ ObservableObject <|-- HomeViewModel
 ObservableObject <|-- HostViewModel
 ObservableObject <|-- ToastViewModel
 ObservableObject <|-- DialogViewModel
-ObservableObject <|-- ConfigViewModel
 ObservableObject <|-- LoginViewModel
 ObservableObject <|-- MainViewModel
 ObservableObject <|-- PersonLensViewModel
@@ -623,6 +720,16 @@ MainPresenter --> HomePresenter
 MainPresenter --> ConfigPresenter
 MainPresenter --> ResourceService
 MainPresenter --> ToastService
+MainPresenter --> TrayPresenter
+MainPresenter --> TourPresenter
+MainPresenter ..> HotkeyManager : RegisterHotKey interop
+MainPresenter ..> HotkeyGesture
+MainPresenter ..> StartupTaskService : via Apply-StartupTask.ps1
+TrayPresenter ..> MainPresenter : duck-typed back-ref
+TourPresenter ..> TourSteps
+TourPresenter --> ConfigManager : persists hasSeenTour
+ConfigPresenter --> KeybindRecorder
+KeybindRecorder ..> HotkeyGesture
 
 HomePresenter --> ScanService
 HomePresenter --> RemoteUpdateService
@@ -677,6 +784,11 @@ HomePresenter ..> FleetCardStatus
 HomePresenter ..> DcuProgress
 HomePresenter ..> ScanCacheDecision
 HomePresenter ..> SystemInfoService
+HomePresenter ..> MachineListShaper
+HomePresenter ..> DcuUpdate
+HostViewModel --> DcuUpdate
+FinderPresenter ..> MachineNameMatcher
+TourSteps ..> TourStep
 InventoryPresenter ..> DiskUsageTree
 InventoryPresenter ..> MachineInventory
 
@@ -694,7 +806,6 @@ MainPresenter --> MainViewModel
 ToastService --> ToastViewModel
 DialogPresenter --> DialogViewModel
 LoginPresenter --> LoginViewModel
-ConfigPresenter --> ConfigViewModel
 ExecutionService ..> DcuLog
 ExecutionService ..> RemoteConnectionLostException
 ExecutionService ..> RemoteTimeoutException

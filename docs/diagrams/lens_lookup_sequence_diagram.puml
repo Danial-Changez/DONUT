@@ -1,4 +1,4 @@
-@startuml Lens Lookup Sequence Diagram
+@startuml lens_lookup_sequence_diagram
 title User Lens — persistent de-elevated agent (pick a person, see their devices)
 
 actor Operator as OP
