@@ -41,7 +41,6 @@ class TourPresenter {
     hidden [object] $DimRight
     hidden [object] $Spotlight
     hidden [object] $Callout
-    hidden [object] $StepLabel
     hidden [object] $TitleBlock
     hidden [object] $BodyBlock
     hidden [object] $Dots
@@ -69,7 +68,6 @@ class TourPresenter {
         $this.DimRight = $this.Window.FindName('tourDimRight')
         $this.Spotlight = $this.Window.FindName('tourSpotlight')
         $this.Callout = $this.Window.FindName('tourCallout')
-        $this.StepLabel = $this.Window.FindName('tourStepLabel')
         $this.TitleBlock = $this.Window.FindName('tourTitle')
         $this.BodyBlock = $this.Window.FindName('tourBody')
         $this.Dots = $this.Window.FindName('tourDots')
@@ -153,11 +151,12 @@ class TourPresenter {
         $step = $this.Steps[$index]
         $last = ($index -eq ($this.Steps.Count - 1))
 
-        $this.StepLabel.Text = "Step $($index + 1) of $($this.Steps.Count)"
         $this.TitleBlock.Text = $step.Title
         $this.BodyBlock.Text = $step.Body
         $this.BtnNext.Content = if ($last) { 'Done' } else { 'Next' }
         $this.BtnBack.Visibility = if ($index -eq 0) { 'Collapsed' } else { 'Visible' }
+        # Skip is offered once, on the welcome step; after that Esc (noted there) exits.
+        $this.BtnSkip.Visibility = if ($index -eq 0) { 'Visible' } else { 'Collapsed' }
         $this.BuildDots($index)
 
         $target = if ([string]::IsNullOrWhiteSpace($step.TargetKey)) { $null } else { $this.ResolveTarget($step.TargetKey) }
