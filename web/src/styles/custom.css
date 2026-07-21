@@ -123,11 +123,51 @@ main h1[data-page-title] {
 .sl-markdown-content :is(ul, ol):not(:where(.not-content *)) {
   padding-inline-start: 1.5rem;
 }
+/* 12px between items (Arcane's 8px assumes short single-line bullets; ours
+   run multi-line, so parity of feel needs slightly more), 8px before a
+   nested list. */
 .sl-markdown-content li:not(:where(.not-content *)) {
+  margin-top: 0.75rem;
+}
+.sl-markdown-content li > :is(ul, ol):not(:where(.not-content *)) {
   margin-top: 0.5rem;
 }
 .sl-markdown-content hr:not(:where(.not-content *)) {
   margin-block: 2rem;
+}
+/* Inline code as Arcane's chip: 0.8rem on a 4px-radius muted fill. Scoped to
+   prose code only - expressive-code blocks manage their own metrics. */
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--donut-radius-sm);
+}
+/* Asides/notes: Arcane's callout shape - rounded 1px frame on the panel
+   surface with 1rem padding; the variant color stays as a slim left edge. */
+.sl-markdown-content .starlight-aside {
+  border: 1px solid var(--sl-color-hairline);
+  border-inline-start: 3px solid var(--sl-color-asides-border);
+  border-radius: var(--donut-radius);
+  background: var(--sl-color-gray-6);
+  padding: 1rem;
+}
+/* Tables: framed and roomy instead of bare compact rows - 1px rounded frame,
+   0.625rem x 1rem cells, hairline row separators, muted small-caps-ish head. */
+.sl-markdown-content table:not(:where(.not-content *)) {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: var(--donut-radius);
+}
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border: 0;
+  padding: 0.625rem 1rem;
+}
+.sl-markdown-content thead th:not(:where(.not-content *)) {
+  color: var(--sl-color-gray-1);
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content tbody tr + tr :is(td, th):not(:where(.not-content *)) {
+  border-top: 1px solid var(--sl-color-hairline-shade);
 }
 .pagination-links {
   margin-top: 3rem;
