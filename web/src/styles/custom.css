@@ -1,11 +1,9 @@
 /* DONUT design tokens (src/UI/Styles/UIColors.xaml) mapped onto Starlight.
-   DONUT is a dark-first app, so dark is the default (Starlight is also
-   dark-default: :root = dark, [data-theme='light'] overrides). We scope our
-   palette to :root + the dark state so Starlight's own light neutrals show
-   through in light mode; the [data-theme='light'] block further down only
-   re-tunes the violet accent. The --donut-* / font / width tokens here are
-   theme-neutral and apply to both. */
+   The site is dark-only: the same palette is pinned to all theme states so a
+   light-OS visitor never sees a light flash (the toggle itself is removed via
+   the ThemeSelect component override). */
 :root,
+:root[data-theme='light'],
 :root[data-theme='dark'] {
   color-scheme: dark;
 
@@ -69,38 +67,6 @@
   --sl-content-width: 48rem;
   --sl-sidebar-width: 16.25rem;
   --donut-toc-width: 16rem;
-}
-
-/* Light mode: keep the violet brand, let Starlight's default light neutrals
-   (bg/text/grays/hairlines) handle the rest. Accents are tuned for contrast on
-   white - the primary stays #8022FE for filled buttons, but link/edge text uses
-   a darker violet to clear AA. */
-:root[data-theme='light'] {
-  color-scheme: light;
-  --sl-color-accent-low: #ede9fe; /* violet-100 - subtle accent fill */
-  --sl-color-accent: #8022fe; /* brand primary (button backgrounds) */
-  --sl-color-accent-high: #5b21b6; /* violet-800 - high-contrast edges */
-  --sl-color-text-accent: #6d28d9; /* violet-700 - links, AA on white */
-  --sl-color-bg-accent: #8022fe;
-}
-
-/* Light-mode flourishes: the hero gradient text, the hero dot-grid, and the
-   blurred header bar are hardcoded for a dark ground - swap them for light
-   equivalents. (The faux app window stays dark in both themes: it depicts the
-   dark app, like a screenshot.) */
-:root[data-theme='light'] [data-has-hero] .hero h1 {
-  background-image: linear-gradient(90deg, #18181b 30%, #8022fe);
-}
-:root[data-theme='light'] [data-has-hero] .main-frame {
-  background:
-    radial-gradient(ellipse 60% 42% at 50% 8%, rgba(128, 34, 254, 0.1), transparent 70%),
-    radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-  background-size:
-    auto,
-    26px 26px;
-}
-:root[data-theme='light'] header.header {
-  background-color: rgba(255, 255, 255, 0.82);
 }
 
 /* Site-wide atmosphere: a faint violet wash bleeding down from the top edge,
