@@ -1,14 +1,15 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Runspace-pool wrapper that runs a Lens lookup (or warms the agent) and emits JSON.
+    Runspace-pool wrapper for the Lens lookup, the finder AD search, or an agent
+    warm/teardown - a thin relay to the persistent agent that emits JSON.
 
 .DESCRIPTION
-    Invoked on the runspace pool by HomePresenter (like AdSearchWorker.ps1). Constructs
-    PersonLensService and returns its raw JSON bundle so the result crosses the runspace
-    boundary without class-identity coupling; the UI parses it with PersonLens.FromJson.
-    The persistent de-elevated agent (and the request/response exchange) lives in
-    PersonLensService.
+    Invoked on the runspace pool by the presenters. Constructs PersonLensService and
+    returns its raw JSON so the result crosses the runspace boundary without
+    class-identity coupling (a lookup bundle the UI parses with PersonLens.FromJson, or
+    the finder's { rows: [...] } search bundle). The persistent de-elevated agent (and
+    the request/response exchange) lives in PersonLensService.
 
     -WarmOnly: called once at app startup to start the de-elevated LensAgent (which then
     pre-warms its libraries in parallel with DONUT's own startup) WITHOUT running a
@@ -53,7 +54,10 @@ param(
     [string] $Sam = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
-    [switch] $StopAgent
+    [switch] $StopAgent,
+    [switch] $Search,
+    [string] $Prefix = '',
+    [string[]] $Domains = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,4 +70,6 @@ $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
 if ($WarmOnly) { return $svc.EnsureAgent() }
+# -Search: run the finder's multi-forest AD search over the warm agent (emits { rows: [...] }).
+if ($Search) { return $svc.RunSearchJson($Prefix, $Domains) }
 $svc.RunLookupJson($Identity)

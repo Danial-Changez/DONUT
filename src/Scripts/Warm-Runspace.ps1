@@ -12,7 +12,7 @@
     real job runs, and nothing cold-loads on the hot path.
 
     The `using module` set below must stay a superset of every pool worker's imports
-    (RemoteWorker.ps1, AdSearchWorker.ps1, LensLookupWorker.ps1, AdUnlockWorker.ps1);
+    (RemoteWorker.ps1, LensLookupWorker.ps1, AdUnlockWorker.ps1);
     RunspaceWarmCoverage.Tests.ps1 fails if a worker imports a module this doesn't.
     Importing the graph is the entire effect - the script has no body.
 
