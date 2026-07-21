@@ -1,6 +1,7 @@
 // @ts-check
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
+import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
 import starlightImageZoom from 'starlight-image-zoom';
 import rehypeDocsLinks from './plugins/rehype-docs-links.mjs';
@@ -24,7 +25,14 @@ export default defineConfig({
     },
   },
   markdown: {
-    rehypePlugins: [rehypeDocsLinks],
+    // The flat markdown.remarkPlugins/rehypePlugins options are deprecated; the
+    // supported path is a unified() processor. Starlight detects this processor
+    // (isUnifiedProcessor) and pushes its own plugins (asides, heading anchors,
+    // Shiki) into it, so ours composes with Starlight's rather than replacing it.
+    // gfm/smartypants are omitted, so they keep the framework defaults (on).
+    processor: unified({
+      rehypePlugins: [rehypeDocsLinks],
+    }),
   },
   integrations: [
     starlight({

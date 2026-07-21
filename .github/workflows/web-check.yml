@@ -1,0 +1,36 @@
+name: Web checks
+
+# Format, lint, and type-check the docs site. Runs independently of the deploy
+# (docs.yml) so a style/lint issue surfaces as a failed check without blocking
+# the site from shipping. Add `needs: verify` to docs.yml's build job to gate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-check.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-check.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Format check, lint, and type-check
+        run: npm run verify
+        working-directory: web
