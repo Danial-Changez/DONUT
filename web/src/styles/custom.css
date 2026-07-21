@@ -432,10 +432,19 @@ button[data-open-modal]:hover {
   color: var(--sl-color-white);
   border-color: var(--sl-color-hairline);
 }
-button[data-open-modal] kbd {
+/* The shortcut hint is a NESTED kbd: a layout-only wrapper around the Ctrl/K
+   chips. Keep the wrapper invisible (Starlight backgrounds it by default) and
+   frame only the inner chips. */
+button[data-open-modal] > kbd {
+  background: transparent;
+  border: none;
+  padding-inline: 0;
+}
+button[data-open-modal] kbd kbd {
   border: 1px solid var(--sl-color-hairline-shade);
   border-radius: var(--donut-radius-sm);
   background: var(--sl-color-gray-6);
+  padding-inline: 0.3rem;
   font-size: 0.7rem;
 }
 
