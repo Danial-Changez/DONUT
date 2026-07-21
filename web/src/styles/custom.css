@@ -362,12 +362,14 @@ header.header::after {
 }
 /* Center the search in the VIEWPORT: Starlight's header grid aligns the search
    slot over the content column (computed columns), which reads as off-center.
-   Equal 1fr flanks + a capped middle column pin it to the true center. */
+   Equal 1fr flanks + a capped middle column pin it to the true center. NOTE:
+   the grid lives on the INNER div.header (Header.astro), not the outer
+   <header class="header"> bar (PageFrame) - two elements share the class. */
 @media (min-width: 50rem) {
-  header.header {
+  header.header > .header {
     grid-template-columns: 1fr minmax(auto, 22rem) 1fr;
   }
-  header.header > div:nth-child(2) {
+  header.header > .header > div:nth-child(2) {
     width: 100%;
   }
   header.header .right-group {
@@ -397,15 +399,40 @@ button[data-open-modal] kbd {
   font-size: 0.7rem;
 }
 
-/* --- Sidebar: text-first navigation. No background fills - rows sit on a left
-   rail, hover only brightens the label, and the current page is marked by a
-   violet edge instead of a filled pill. --- */
-.sidebar-content .top-level > li {
+/* --- Sidebar: text-first navigation on Arcane's exact rhythm - 2rem label and
+   item rows, 0.25rem label-to-list gap, 2px between items, 1.5rem between
+   groups, text 0.75rem off a rail that sits flush under the label. --- */
+.sidebar-content {
+  padding-block: 1.5rem;
+}
+.sidebar-content .top-level > li + li {
+  margin-top: 1.5rem;
+}
+.sidebar-content summary {
+  min-height: 2rem;
+  padding-block: 0;
+  align-items: center;
+}
+.sidebar-content summary .group-label span {
+  color: var(--sl-color-gray-1);
+  font-weight: 500;
+}
+.sidebar-content details > ul {
   margin-top: 0.25rem;
+}
+/* The grey rail is each nested li's own left border; pull it (nearly) flush
+   with the group label and give rows Arcane's 12px text inset + 2px stacking. */
+.sidebar-content ul ul li {
+  margin-inline-start: 2px;
+  padding-inline-start: 0;
+}
+.sidebar-content ul ul li + li {
+  margin-top: 2px;
 }
 .sidebar-content a {
   border-radius: 0;
-  padding-block: 0.35rem;
+  padding-block: 0.4rem;
+  padding-inline: 0.75rem;
   color: var(--sl-color-gray-3);
   font-weight: 400;
   transition: color var(--donut-fast) var(--donut-ease);
@@ -420,11 +447,11 @@ button[data-open-modal] kbd {
   background: transparent;
   color: var(--sl-color-white);
   font-weight: 500;
-  box-shadow: inset 2px 0 0 var(--sl-color-accent);
 }
-.sidebar-content summary .group-label span {
-  color: var(--sl-color-gray-1);
-  font-weight: 500;
+/* Current page: recolor the li's OWN rail segment so the violet sits exactly
+   on top of the grey line (an inset shadow on the <a> lands beside it). */
+.sidebar-content li:has(> a[aria-current='page']) {
+  border-inline-start-color: var(--sl-color-accent);
 }
 
 /* Prev/next pager: the same flat card recipe, color-only hover on the card;
@@ -490,8 +517,6 @@ site-search[data-searching] .dw-quick-links {
 .dw-quick-links li + li {
   border-top: 1px solid var(--sl-color-hairline-shade);
 }
-/* Row highlight is INSTANT (no transition): in a command-palette context the
-   highlight is state feedback, not motion - any easing reads as lag. */
 .dw-quick-links a {
   display: flex;
   align-items: center;
@@ -502,6 +527,8 @@ site-search[data-searching] .dw-quick-links {
   color: var(--sl-color-gray-2);
   font-size: 0.875rem;
   text-decoration: none;
+  transition: color var(--donut-fast) var(--donut-ease),
+    background-color var(--donut-fast) var(--donut-ease);
 }
 .dw-quick-links a:hover {
   background: var(--sl-color-gray-5);
@@ -509,6 +536,8 @@ site-search[data-searching] .dw-quick-links {
 }
 .dw-quick-links a svg {
   opacity: 0;
+  transition: opacity var(--donut-fast) var(--donut-ease),
+    transform var(--donut-slow) var(--donut-ease);
 }
 .dw-quick-links a:hover svg {
   opacity: 1;
