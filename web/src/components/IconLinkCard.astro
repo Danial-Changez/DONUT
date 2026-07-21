@@ -1,0 +1,32 @@
+---
+/**
+ * A clickable feature card with an icon tile: Starlight's LinkCard has no icon
+ * slot and its Card (which does) isn't a link, so the splash card grid uses
+ * this instead. Styling lives in styles/custom.css (.dw-icon-card family);
+ * icons are Starlight's built-in set.
+ */
+import { Icon } from '@astrojs/starlight/components';
+
+interface Props {
+  title: string;
+  href: string;
+  icon: string;
+  description: string;
+  /** Optional footer label; the arrow renders regardless. */
+  foot?: string;
+}
+
+const { title, href, icon, description, foot } = Astro.props;
+---
+
+<a class="dw-icon-card" href={href}>
+  <span class="dw-icon-tile" aria-hidden="true">
+    <Icon name={icon} />
+  </span>
+  <span class="dw-card-title">{title}</span>
+  <p class="dw-card-desc">{description}</p>
+  <span class="dw-card-foot">
+    {foot}
+    <Icon name="right-arrow" size="0.875rem" />
+  </span>
+</a>

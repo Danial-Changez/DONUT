@@ -14,7 +14,8 @@ hero:
       variant: minimal
 ---
 
-import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { CardGrid } from '@astrojs/starlight/components';
+import IconLinkCard from '../web/src/components/IconLinkCard.astro';
 
 <div class="dw-window" aria-hidden="true">
   <div class="dw-bar">
@@ -47,35 +48,47 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 ## Everything the fleet needs
 
 <CardGrid>
-  <LinkCard
+  <IconLinkCard
     title="Fleet-wide scans"
     description="Queue machines and scan them all in parallel, with live progress per row."
     href="./features/scanning/"
+    icon="magnifier"
+    foot="Scanning"
   />
-  <LinkCard
+  <IconLinkCard
     title="Safe update applies"
     description="Two-phase flow: see exactly what will install, confirm per host, track reboots."
     href="./features/applying-updates/"
+    icon="approve-check-circle"
+    foot="Applying updates"
   />
-  <LinkCard
+  <IconLinkCard
     title="Live AD finder"
     description="Search computers and people across every forest as you type; unlock accounts inline."
     href="./features/ad-finder/"
+    icon="open-book"
+    foot="AD finder"
   />
-  <LinkCard
+  <IconLinkCard
     title="User Lens"
     description="Pick a person to see their devices and BitLocker keys — fetched safely de-elevated."
     href="./features/user-lens/"
+    icon="information"
+    foot="User Lens"
   />
-  <LinkCard
+  <IconLinkCard
     title="Details & storage"
     description="Inventory, available updates, and a biggest-folders scan for every machine."
     href="./features/machine-details/"
+    icon="laptop"
+    foot="Machine details"
   />
-  <LinkCard
+  <IconLinkCard
     title="Stays out of the way"
     description="Tray icon, global hotkey, start-with-Windows, and self-updates from GitHub releases."
     href="./features/tray-hotkey-autostart/"
+    icon="download"
+    foot="Tray & self-update"
   />
 </CardGrid>
 
