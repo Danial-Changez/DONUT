@@ -10,6 +10,14 @@
  * under /diagrams/", matched by delegation.
  */
 import Default from '@astrojs/starlight/components/Head.astro';
+
+// Drop the "<page> | DONUT" suffix from the browser-tab title: show the page
+// title alone. Starlight builds <title> into the route's head array
+// (utils/head.ts) and the stock <Head> renders that array, so rewriting it here
+// - before <Default/> renders - wins.
+const route = Astro.locals.starlightRoute;
+const titleTag = route.head.find((tag) => tag.tag === 'title');
+if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.title;
 ---
 
 <Default {...Astro.props} />
