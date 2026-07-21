@@ -4,11 +4,11 @@ description: How the docs site works and the everyday recipes - edit a page, add
 ---
 
 This site is built from the markdown in the repo's `docs/` folder by
-[Astro Starlight](https://starlight.astro.build/) (scaffolded under `website/`) and
+[Astro Starlight](https://starlight.astro.build/) (scaffolded under `web/`) and
 deployed to GitHub Pages by the `Deploy docs site` GitHub Action on every push to
-`main` that touches `docs/` or `website/`. **For normal doc edits you never run
+`main` that touches `docs/` or `web/`. **For normal doc edits you never run
 anything** — the toolchain lives entirely in CI, with versions pinned by
-`website/package-lock.json`.
+`web/package-lock.json`.
 
 ## Edit an existing page
 
@@ -29,7 +29,7 @@ a couple of minutes.
    A missing `title` **fails the build** — that's the guardrail.
 
 2. Add the page's slug (path without `.md`) to the `sidebar` list in
-   `website/astro.config.mjs` — copy an existing line, e.g. `'features/my-page'`.
+   `web/astro.config.mjs` — copy an existing line, e.g. `'features/my-page'`.
 
 3. Commit and push both files.
 
@@ -49,7 +49,7 @@ on each build. The SVG name matches the source filename (keep the `@startuml <na
 line equal to the filename). To preview locally, run:
 
 ```powershell
-.\tools\Render-Diagrams.ps1   # needs Java; output in website/public/diagrams/
+.\tools\Render-Diagrams.ps1   # needs Java; output in web/public/diagrams/
 ```
 
 ## Preview the whole site locally (optional)
@@ -57,7 +57,7 @@ line equal to the filename). To preview locally, run:
 One-time: install Node LTS (`winget install -e --id OpenJS.NodeJS.LTS`). Then:
 
 ```powershell
-cd website
+cd web
 npm ci                # exact pinned dependencies
 npm run build         # full build incl. search index
 npx astro preview     # serves http://localhost:4321/DONUT/
@@ -65,10 +65,22 @@ npx astro preview     # serves http://localhost:4321/DONUT/
 
 (Search only works in a built site, not in `npm run dev`.)
 
+## Checks (optional)
+
+The site has Prettier, ESLint, and `astro check` configured. From `web/`:
+
+```powershell
+npm run verify   # format check + lint + type-check (what CI runs)
+npm run format   # auto-fix formatting
+```
+
+The `Web checks` GitHub Action runs `npm run verify` on every push / PR that touches
+`web/`. It reports a failing check but doesn't block the deploy.
+
 ## Update the toolchain (rare, optional)
 
 ```powershell
-cd website
+cd web
 npm update
 npm run build         # verify it still builds
 ```

@@ -19,7 +19,6 @@ component "Scripts (src/Scripts)" #2A2410 {
     [Start-Donut.ps1]
     [DonutApp.ps1]
     [RemoteWorker.ps1]
-    [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
     [LensLookupWorker.ps1]
     [LensAgent.ps1]
@@ -131,9 +130,10 @@ database "%LOCALAPPDATA%\\DONUT" {
 [InventoryPresenter] ..> [InventoryService] : per-machine probe
 [InventoryPresenter] ..> [DiskUsageService] : storage scan
 [ResolutionCoordinator] ..> [HostResolver] : resolve + prefetch IP
-[FinderPresenter] ..> [ActiveDirectoryService] : live AD finder
+[FinderPresenter] ..> [ActiveDirectoryService] : forests + prefix config
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
-[LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
+[FinderPresenter] ..> [LensLookupWorker.ps1] : Lens + AD search (pool)
+[LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup / search on the pool
 [PersonLensService] ..> [LensAgent.ps1] : supervises (task) + request/response exchange
 [HomePresenter] ..> [AsyncJob] : queues
 [HomePresenter] ..> [RecentConnectionsStore] : persists
@@ -146,7 +146,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [RemoteUpdateService] ..> [DriverMatchingService]
 
 [ExecutionService] ..> [RemoteWorker.ps1] : invokes via PsExec
-[ActiveDirectoryService] ..> [AdSearchWorker.ps1] : LDAP query
+[LensAgent.ps1] ..> [ActiveDirectoryService] : AD finder search (LDAP)
 [ActiveDirectoryService] ..> [AdUnlockWorker.ps1] : unlock account
 [AsyncJob] ..> [RunspaceManager] : uses pool
 

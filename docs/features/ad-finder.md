@@ -22,9 +22,12 @@ grouped by kind.
 
 ## How the search works
 
-One combined LDAP query per forest (computers OR users, prefix match), debounced as
-you type, fanned out to all forests in parallel on the runspace pool. Results stream
-in as each forest answers; **Esc** dismisses the dropdown.
+Each keystroke — debounced, once you've typed at least the minimum prefix — runs one
+combined LDAP query per forest (computers OR users, prefix match). The search runs
+through the **same persistent de-elevated agent as the [User Lens](./user-lens.md)**:
+it keeps its directory connections warm and runs as *your* logged-on account rather than
+DONUT's elevated one, so results come back quickly. Each keystroke supersedes the last;
+**Esc** dismisses the dropdown.
 
 ## Under the hood
 

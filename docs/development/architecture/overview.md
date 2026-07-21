@@ -41,7 +41,7 @@ root/
 ├── tests/                  <-- Pester tests
 │   ├── Unit/
 │   └── Integration/
-├── website/                <-- Astro Starlight scaffold for this docs site
+├── web/                    <-- Astro Starlight scaffold for this docs site
 ├── README.md
 └── LICENSE
 
