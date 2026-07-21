@@ -1,20 +1,19 @@
 ---
 /**
  * Wraps Starlight's stock <Head> (imported by full path, so this override
- * augments rather than replaces it) to load the diagram lightbox on every page.
- *
- * Replaces starlight-image-zoom, which was slow to open and could only fit the
- * image to the screen - zooming further zoomed the page. This opens instantly
- * and lets you wheel-zoom INTO the diagram and drag to pan. Styles live in
- * styles/custom.css (.dw-lb*). Coupling is only "content images whose src is
- * under /diagrams/", matched by delegation.
+ * augments rather than replaces it) for two things:
+ *   1. Drop the "| DONUT" site-title suffix from the browser-tab title.
+ *   2. Load the diagram lightbox: click a /diagrams/ image to open it, wheel to
+ *      zoom INTO the diagram and drag to pan. The SVG is inlined and zoomed via
+ *      its viewBox - not an <img> + CSS transform, which rasterises the vector
+ *      and blurs when scaled up - so it stays crisp at any zoom. Styles are in
+ *      styles/custom.css (.dw-lb*).
  */
 import Default from '@astrojs/starlight/components/Head.astro';
 
-// Drop the "<page> | DONUT" suffix from the browser-tab title: show the page
-// title alone. Starlight builds <title> into the route's head array
-// (utils/head.ts) and the stock <Head> renders that array, so rewriting it here
-// - before <Default/> renders - wins.
+// (1) Page title alone. Starlight builds <title> into the route head array
+// (utils/head.ts); the stock <Head> renders that array, so rewriting it here -
+// before <Default/> renders - wins.
 const route = Astro.locals.starlightRoute;
 const titleTag = route.head.find((tag) => tag.tag === 'title');
 if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.title;
@@ -23,54 +22,62 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
 <Default {...Astro.props} />
 
 <script>
-  const MIN = 1;
-  const MAX = 8;
+  // (2) Diagram lightbox. Crisp zoom by inlining the SVG and driving its viewBox
+  // (the display box stays a constant size; only the coordinate window changes).
+  const MAX = 12; // deepest zoom, as a multiple of the fitted view
 
   let overlay: HTMLDivElement | null = null;
-  let stage: HTMLDivElement | null = null;
-  let imgEl: HTMLImageElement | null = null;
-  let scale = 1;
-  let tx = 0;
-  let ty = 0;
+  let svgEl: SVGSVGElement | null = null;
+  const vb = { x: 0, y: 0, w: 0, h: 0 }; // current window into the diagram
+  const vb0 = { x: 0, y: 0, w: 0, h: 0 }; // the whole diagram (fit view)
   let dragging = false;
   let moved = false;
   let lastX = 0;
   let lastY = 0;
 
-  const apply = () => {
-    if (imgEl) imgEl.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-  };
+  const apply = () => svgEl?.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  const zoom = () => (vb0.w > 0 ? vb0.w / vb.w : 1);
 
   const reset = () => {
-    scale = 1;
-    tx = 0;
-    ty = 0;
+    Object.assign(vb, vb0);
     apply();
   };
 
-  // Zoom by `factor` while keeping the point at (cx, cy) - offsets from the
-  // stage centre, which is the image's transform origin - fixed under the cursor.
-  const zoomAt = (cx: number, cy: number, factor: number) => {
-    const next = Math.min(MAX, Math.max(MIN, scale * factor));
-    if (next === scale) return;
-    tx = cx - (cx - tx) * (next / scale);
-    ty = cy - (cy - ty) * (next / scale);
-    scale = next;
-    if (scale === MIN) {
-      tx = 0;
-      ty = 0;
-    }
+  // Zoom by `factor`, keeping the diagram point under (sx, sy) - client coords -
+  // fixed. Fractions across the constant display box map to viewBox units.
+  const zoomAt = (sx: number, sy: number, factor: number) => {
+    if (!svgEl || vb0.w === 0) return;
+    const rect = svgEl.getBoundingClientRect();
+    const fx = Math.min(1, Math.max(0, (sx - rect.left) / rect.width));
+    const fy = Math.min(1, Math.max(0, (sy - rect.top) / rect.height));
+    const target = Math.min(MAX, Math.max(1, zoom() * factor));
+    const px = vb.x + fx * vb.w;
+    const py = vb.y + fy * vb.h;
+    vb.w = vb0.w / target;
+    vb.h = vb0.h / target;
+    vb.x = target === 1 ? vb0.x : px - fx * vb.w;
+    vb.y = target === 1 ? vb0.y : py - fy * vb.h;
     apply();
-  };
-
-  const centreOffset = (e: MouseEvent, el: HTMLElement): [number, number] => {
-    const rect = el.getBoundingClientRect();
-    return [e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2)];
   };
 
   const close = () => {
     overlay?.classList.remove('is-open');
     document.body.style.overflow = '';
+  };
+
+  // Size the inlined SVG to a constant fit box (aspect of the whole diagram), so
+  // the vector always renders sharp to that box while the viewBox does the zoom.
+  const fitSvg = () => {
+    if (!svgEl || vb0.h === 0) return;
+    const aspect = vb0.w / vb0.h;
+    let w = window.innerWidth * 0.92;
+    let h = w / aspect;
+    if (h > window.innerHeight * 0.92) {
+      h = window.innerHeight * 0.92;
+      w = h * aspect;
+    }
+    svgEl.style.width = `${w}px`;
+    svgEl.style.height = `${h}px`;
   };
 
   const build = () => {
@@ -79,23 +86,21 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.innerHTML = `
-      <div class="dw-lb-stage"><img class="dw-lb-img" alt="" draggable="false" /></div>
+      <div class="dw-lb-stage"></div>
       <div class="dw-lb-controls">
         <button type="button" data-lb="out" aria-label="Zoom out">&minus;</button>
         <button type="button" data-lb="reset" aria-label="Reset zoom">Reset</button>
         <button type="button" data-lb="in" aria-label="Zoom in">+</button>
         <button type="button" data-lb="close" aria-label="Close">&times;</button>
       </div>`;
-    stage = overlay.querySelector<HTMLDivElement>('.dw-lb-stage');
-    imgEl = overlay.querySelector<HTMLImageElement>('.dw-lb-img');
+    const stage = overlay.querySelector<HTMLDivElement>('.dw-lb-stage');
     if (!stage) return;
 
     stage.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
-        const [cx, cy] = centreOffset(e, stage as HTMLElement);
-        zoomAt(cx, cy, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
       },
       { passive: false },
     );
@@ -104,15 +109,16 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
       moved = false;
       lastX = e.clientX;
       lastY = e.clientY;
-      (stage as HTMLElement).setPointerCapture(e.pointerId);
+      stage.setPointerCapture(e.pointerId);
     });
     stage.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
+      if (!dragging || !svgEl || zoom() <= 1) return;
+      const rect = svgEl.getBoundingClientRect();
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-      tx += dx;
-      ty += dy;
+      vb.x -= (dx * vb.w) / rect.width;
+      vb.y -= (dy * vb.h) / rect.height;
       lastX = e.clientX;
       lastY = e.clientY;
       apply();
@@ -123,32 +129,51 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     stage.addEventListener('pointerup', endDrag);
     stage.addEventListener('pointercancel', endDrag);
     stage.addEventListener('dblclick', (e) => {
-      const [cx, cy] = centreOffset(e, stage as HTMLElement);
-      zoomAt(cx, cy, scale > 1 ? 1 / scale : 2.5);
+      zoomAt(e.clientX, e.clientY, zoom() > 1 ? 1 / zoom() : 2.5);
     });
 
     overlay.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
       const action = target.closest('[data-lb]')?.getAttribute('data-lb');
-      if (action === 'in') zoomAt(0, 0, 1.4);
-      else if (action === 'out') zoomAt(0, 0, 1 / 1.4);
+      if (action === 'in') zoomAt(cx, cy, 1.4);
+      else if (action === 'out') zoomAt(cx, cy, 1 / 1.4);
       else if (action === 'reset') reset();
       else if (action === 'close') close();
-      // Click on the empty backdrop (not the image, and not the end of a pan) closes.
       else if ((target === overlay || target === stage) && !moved) close();
     });
 
     document.body.appendChild(overlay);
   };
 
-  const open = (src: string, alt: string) => {
+  const open = async (src: string) => {
     if (!overlay) build();
-    if (!overlay || !imgEl) return;
-    imgEl.src = src;
-    imgEl.alt = alt;
-    reset();
+    const stage = overlay?.querySelector<HTMLDivElement>('.dw-lb-stage');
+    if (!overlay || !stage) return;
     overlay.classList.add('is-open');
     document.body.style.overflow = 'hidden';
+    // Inline the SVG so zoom re-renders vectors (an <img> would rasterise + blur).
+    try {
+      const res = await fetch(src);
+      stage.innerHTML = await res.text();
+    } catch {
+      stage.innerHTML = `<img class="dw-lb-fallback" src="${src}" alt="" />`;
+    }
+    svgEl = stage.querySelector('svg');
+    if (!svgEl) return;
+    const bv = svgEl.viewBox.baseVal;
+    const hasBox = bv.width > 0 && bv.height > 0;
+    vb0.x = hasBox ? bv.x : 0;
+    vb0.y = hasBox ? bv.y : 0;
+    vb0.w = hasBox ? bv.width : svgEl.width.baseVal.value;
+    vb0.h = hasBox ? bv.height : svgEl.height.baseVal.value;
+    Object.assign(vb, vb0);
+    svgEl.removeAttribute('width');
+    svgEl.removeAttribute('height');
+    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    fitSvg();
+    apply();
   };
 
   document.addEventListener('click', (e) => {
@@ -157,10 +182,13 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
       target instanceof HTMLImageElement &&
       /\/diagrams\//.test(target.getAttribute('src') ?? '')
     ) {
-      open(target.currentSrc || target.src, target.alt);
+      void open(target.currentSrc || target.src);
     }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') close();
+  });
+  window.addEventListener('resize', () => {
+    if (overlay?.classList.contains('is-open')) fitSvg();
   });
 </script>

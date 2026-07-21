@@ -183,13 +183,16 @@ main h1[data-page-title] {
 .dw-lb-stage:active {
   cursor: grabbing;
 }
-.dw-lb-img {
+/* The inlined SVG is sized to a fit box by the script; zoom happens in its
+   viewBox, so it always renders sharp. (.dw-lb-fallback is the rare <img>
+   fallback if the SVG can't be fetched.) */
+.dw-lb-stage svg {
+  display: block;
+  user-select: none;
+}
+.dw-lb-fallback {
   max-width: 92vw;
   max-height: 92vh;
-  transform-origin: center center;
-  will-change: transform;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 .dw-lb-controls {
   position: fixed;
