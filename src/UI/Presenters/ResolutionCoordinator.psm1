@@ -58,10 +58,12 @@ class ResolutionCoordinator {
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
-            # Diagnostic: proves the warm started. If this logs but no "Selected active
-            # domain controller" / "DC warm-up ..." line follows, the job is stuck Running
-            # (pool starved by other jobs, or hung on a slow forest) rather than failing.
-            $this.Logger.LogInfo("DC warm-up started - discovering a live controller...")
+            # Diagnostic: proves the warm started, and reports how many pool runspaces are
+            # free right then. If this logs but no "Selected active domain controller" /
+            # "DC warm-up ..." follows, the job is stuck Running - pool free 0 means it's
+            # starved (search/agent binds holding every runspace); >0 means it ran and hung.
+            $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
+            $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
         }
         catch {
             $this.Logger.LogException("Resolver warm-up could not start", $_)
