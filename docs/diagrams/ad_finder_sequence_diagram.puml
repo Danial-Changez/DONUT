@@ -4,8 +4,7 @@ title Home Search Bar — Live AD Finder + Unlock
 actor User
 participant "FinderPresenter" as Presenter
 participant "DispatcherTimer\n(debounce / poll)" as Timer
-participant "LensLookupWorker.ps1\n(-Search, on pool)" as Worker
-participant "LensAgent.ps1\n(de-elevated, persistent)" as Agent
+participant "AdSearchWorker.ps1\n(one per forest, on pool)" as Worker
 participant "ActiveDirectoryService" as AD
 participant "AdUnlockWorker.ps1" as Unlock
 
@@ -18,26 +17,24 @@ deactivate Presenter
 Timer -> Presenter: debounce elapsed -> RunAdSearch()
 activate Presenter
 Presenter -> Presenter: AbortSearch() (bump SearchToken)
-Presenter -> Worker: BeginInvoke(prefix, domains) on pool
-activate Worker
-Worker -> Agent: RunSearchJson() over the encrypted exchange
-activate Agent
-Agent -> AD: Search(prefix) across every forest\n(reusing warm binds)
-activate AD
-AD -> AD: QueryDirectory() via DirectorySearcher\n(computers + users, AdFilter)
-AD --> Agent: AdSearchResult[]
-deactivate AD
-Agent --> Worker: { rows: [...] } JSON
-deactivate Agent
-Worker --> Presenter: (async) rows
-deactivate Worker
+loop one job per forest
+    Presenter -> Worker: BeginInvoke(prefix, domain) on pool
+    activate Worker
+    Worker -> AD: Search(prefix)
+    activate AD
+    AD -> AD: QueryDirectory() via DirectorySearcher\n(computers + users, AdFilter)
+    AD --> Worker: AdSearchResult[]
+    deactivate AD
+    Worker --> Presenter: (async) rows for this forest
+    deactivate Worker
+end
 Presenter -> Timer: start poll timer
 deactivate Presenter
 
-loop poll until the search lands
+loop poll until every forest lands
     Timer -> Presenter: PollSearch()
     activate Presenter
-    note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nrender the dropdown.
+    note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nrender the growing union.
     Presenter -> User: Dropdown — COMPUTERS + USERS\n(locked users show "Unlock")
     deactivate Presenter
 end

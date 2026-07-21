@@ -12,21 +12,22 @@
     real job runs, and nothing cold-loads on the hot path.
 
     The `using module` set below must stay a superset of every pool worker's imports
-    (RemoteWorker.ps1, LensLookupWorker.ps1, AdUnlockWorker.ps1);
+    (RemoteWorker.ps1, AdSearchWorker.ps1, LensLookupWorker.ps1, AdUnlockWorker.ps1);
     RunspaceWarmCoverage.Tests.ps1 fails if a worker imports a module this doesn't.
 
-    The body then Import-Modules the binary CIM/ScheduledTasks modules that
-    PersonLensService.EnsureAgent loads implicitly (Get-CimInstance / *-ScheduledTask).
-    Those aren't `using module` imports, so the class graph above misses them - and
-    cold-loading them on the finder's search path took the loader lock and froze the UI.
+    The body then warms the RUNTIME assemblies the resolve worker binds - LDAP
+    (System.DirectoryServices) + a local DCOM CIM session + DNS + TCP - mirroring
+    WorkerServices.WarmRuntimeAssemblies. The pre-9304ab3 WarmRunspace warm did this per
+    runspace; 9304ab3 swapped in this class-graph warm and dropped it, so the DC warm's
+    GetActiveDomainController cold-loaded those assemblies under the loader lock and hung.
 
 .PARAMETER SourceRoot
     Accepted for call-site symmetry with the other pool workers; unused (the warm's
-    only effect is the imports above).
+    only effect is the imports + local runtime warm below).
 
 .NOTES
-    Runs on a pool runspace, never the WPF dispatcher. No agent/network/directory
-    work: loading the graph must not depend on a reachable DC / SCCM / AD.
+    Runs on a pool runspace, never the WPF dispatcher. The runtime warm is LOCAL only
+    (localhost DNS/TCP/CIM); it must never depend on a reachable DC / SCCM / AD.
 #>
 using module "..\Services\WorkerServices.psm1"
 using module "..\Services\ActiveDirectoryService.psm1"
@@ -39,11 +40,16 @@ param(
     [string] $SourceRoot = ''
 )
 
-# EnsureAgent cold-loads the CIM + ScheduledTasks stacks (Get-CimInstance / *-ScheduledTask),
-# and that load takes the process-wide CLR loader lock. Importing isn't enough - the real hit
-# lands on the FIRST call, not on Import-Module - so actually invoke each cheap, local cmdlet
-# here on the warm barrier. Otherwise the load happens on a pool runspace during startup and
-# stalls the WPF dispatcher (the "UI dispatcher was blocked / loader-lock stall" warning).
-Import-Module CimCmdlets, ScheduledTasks -ErrorAction SilentlyContinue
-try { [void](Get-CimInstance -ClassName Win32_Process -Filter "Handle=$PID" -ErrorAction SilentlyContinue) } catch { }
-try { [void](Get-ScheduledTask -TaskName 'DONUT-loader-warm-probe' -ErrorAction SilentlyContinue) } catch { }
+# Warm the runtime assemblies the resolve worker binds, so the DC warm / host resolves
+# never cold-load them under the CLR loader lock (which stalls the job). Mirrors
+# WorkerServices.WarmRuntimeAssemblies; all local, so it can't depend on a reachable DC.
+try { Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction SilentlyContinue | Out-Null } catch { }
+try { $tcp = [System.Net.Sockets.TcpClient]::new(); $tcp.Close() } catch { }
+try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue } catch { }
+try {
+    $cimOpt = New-CimSessionOption -Protocol Dcom
+    $cim = New-CimSession -SessionOption $cimOpt -ErrorAction Stop
+    try { Get-CimInstance -CimSession $cim -ClassName Win32_ComputerSystem -Property Name -ErrorAction Stop | Out-Null } catch { }
+    Remove-CimSession -CimSession $cim -ErrorAction SilentlyContinue
+}
+catch { }
