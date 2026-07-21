@@ -58,6 +58,10 @@ class ResolutionCoordinator {
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
+            # Diagnostic: proves the warm started. If this logs but no "Selected active
+            # domain controller" / "DC warm-up ..." line follows, the job is stuck Running
+            # (pool starved by other jobs, or hung on a slow forest) rather than failing.
+            $this.Logger.LogInfo("DC warm-up started - discovering a live controller...")
         }
         catch {
             $this.Logger.LogException("Resolver warm-up could not start", $_)
@@ -178,6 +182,9 @@ class ResolutionCoordinator {
                 if (-not [string]::IsNullOrWhiteSpace($dc)) {
                     $this.Resolver.SetActiveDc($dc)
                     $this.PersistDomainController($dc, @($item.DomainControllers))
+                }
+                else {
+                    $this.Logger.LogWarning("DC warm-up completed but found no reachable controller.")
                 }
             }
             elseif ($mode -eq 'Host') {
