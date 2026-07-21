@@ -24,12 +24,13 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
 <script>
   // (2) Diagram lightbox. Crisp zoom by inlining the SVG and driving its viewBox
   // (the display box stays a constant size; only the coordinate window changes).
-  const MAX = 12; // deepest zoom, as a multiple of the fitted view
+  const MAX = 20; // deepest zoom, as a multiple of the fitted view
 
   let overlay: HTMLDivElement | null = null;
   let svgEl: SVGSVGElement | null = null;
+  const diag = { x: 0, y: 0, w: 0, h: 0 }; // the diagram's own viewBox
+  const vb0 = { x: 0, y: 0, w: 0, h: 0 }; // zoom-1 view: the diagram in the screen's aspect
   const vb = { x: 0, y: 0, w: 0, h: 0 }; // current window into the diagram
-  const vb0 = { x: 0, y: 0, w: 0, h: 0 }; // the whole diagram (fit view)
   let dragging = false;
   let moved = false;
   let lastX = 0;
@@ -65,19 +66,27 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     document.body.style.overflow = '';
   };
 
-  // Size the inlined SVG to a constant fit box (aspect of the whole diagram), so
-  // the vector always renders sharp to that box while the viewBox does the zoom.
+  // Fill most of the screen and frame the whole diagram at zoom 1. The viewBox
+  // tracks the SCREEN's (wide) aspect - not the diagram's - so a zoomed-in region
+  // spans the full width instead of staying a narrow column.
   const fitSvg = () => {
-    if (!svgEl || vb0.h === 0) return;
-    const aspect = vb0.w / vb0.h;
-    let w = window.innerWidth * 0.92;
-    let h = w / aspect;
-    if (h > window.innerHeight * 0.92) {
-      h = window.innerHeight * 0.92;
-      w = h * aspect;
+    if (!svgEl || diag.w === 0) return;
+    const boxW = window.innerWidth * 0.96;
+    const boxH = window.innerHeight * 0.9;
+    svgEl.style.width = `${boxW}px`;
+    svgEl.style.height = `${boxH}px`;
+    // Grow the diagram bounds to the box aspect (centered), so nothing is cropped
+    // at zoom 1 and every zoom level fills the box edge to edge.
+    const boxAspect = boxW / boxH;
+    if (diag.w / diag.h > boxAspect) {
+      vb0.w = diag.w;
+      vb0.h = diag.w / boxAspect;
+    } else {
+      vb0.h = diag.h;
+      vb0.w = diag.h * boxAspect;
     }
-    svgEl.style.width = `${w}px`;
-    svgEl.style.height = `${h}px`;
+    vb0.x = diag.x - (vb0.w - diag.w) / 2;
+    vb0.y = diag.y - (vb0.h - diag.h) / 2;
   };
 
   const build = () => {
@@ -164,15 +173,15 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     if (!svgEl) return;
     const bv = svgEl.viewBox.baseVal;
     const hasBox = bv.width > 0 && bv.height > 0;
-    vb0.x = hasBox ? bv.x : 0;
-    vb0.y = hasBox ? bv.y : 0;
-    vb0.w = hasBox ? bv.width : svgEl.width.baseVal.value;
-    vb0.h = hasBox ? bv.height : svgEl.height.baseVal.value;
-    Object.assign(vb, vb0);
+    diag.x = hasBox ? bv.x : 0;
+    diag.y = hasBox ? bv.y : 0;
+    diag.w = hasBox ? bv.width : svgEl.width.baseVal.value;
+    diag.h = hasBox ? bv.height : svgEl.height.baseVal.value;
     svgEl.removeAttribute('width');
     svgEl.removeAttribute('height');
     svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     fitSvg();
+    Object.assign(vb, vb0);
     apply();
   };
 
@@ -189,6 +198,9 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     if (e.key === 'Escape') close();
   });
   window.addEventListener('resize', () => {
-    if (overlay?.classList.contains('is-open')) fitSvg();
+    if (!overlay?.classList.contains('is-open')) return;
+    fitSvg();
+    Object.assign(vb, vb0);
+    apply();
   });
 </script>
