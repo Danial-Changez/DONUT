@@ -97,7 +97,11 @@ main h1[data-page-title] {
   font-weight: 600;
   letter-spacing: -0.018em;
 }
-/* Content starts 2rem below the ruled title panel. */
+/* Top-of-page rhythm (Arcane's py-8): 2rem above the title, 2rem between the
+   ruled title panel and the content. */
+.main-pane .content-panel:first-child {
+  padding-top: 2rem;
+}
 .main-pane .content-panel:has(.sl-markdown-content) {
   padding-top: 2rem;
 }
@@ -551,13 +555,33 @@ button[data-open-modal] kbd kbd {
 
 /* Prev/next pager: the same flat card recipe, color-only hover on the card;
    the arrow nudges in its travel direction (svg is the anchor's first child,
-   so direction comes from rel). */
+   so direction comes from rel). Arcane's metrics: 1rem card padding, 12px
+   label with a small chevron on the label line, ~1rem semibold title -
+   instead of Starlight's display-size link titles. */
 .pagination-links a {
   border: 1px solid var(--sl-color-hairline);
   border-radius: var(--donut-radius);
   box-shadow: none;
+  padding: 1rem;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-size: 0.75rem;
+  color: var(--sl-color-gray-3);
   transition: border-color var(--donut-fast) var(--donut-ease),
     background-color var(--donut-fast) var(--donut-ease);
+}
+.pagination-links a svg {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.05rem;
+}
+.pagination-links .link-title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.4;
+  color: var(--sl-color-white);
+  margin-top: 0.25rem;
 }
 .pagination-links a:hover {
   border-color: var(--donut-violet-30);
@@ -597,6 +621,10 @@ button[data-open-modal] kbd kbd {
    current-section marker. --- */
 .right-sidebar {
   border-inline-start: none;
+}
+/* Align "On this page" with the article's title zone (Arcane's py-8). */
+.right-sidebar-panel {
+  padding-block: 2rem;
 }
 .right-sidebar-panel h2 {
   font-size: 0.875rem;
