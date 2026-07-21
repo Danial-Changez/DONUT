@@ -6,8 +6,8 @@ title DONUT — Remote operation network routing (resolve -> reconnect -> update
 skinparam maxMessageSize 260
 skinparam sequenceMessageAlign left
 skinparam noteFontSize 11
-skinparam ParticipantPadding 8
-skinparam BoxPadding 10
+' ParticipantPadding/BoxPadding skinparams were dropped: deprecated in PlantUML
+' 1.2026.x, which stamps a warning banner onto the rendered SVG.
 
 actor Operator as OP
 

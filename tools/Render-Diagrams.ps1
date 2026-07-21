@@ -42,8 +42,12 @@ if (-not (Get-Command dot -ErrorAction SilentlyContinue)) {
     $layoutArgs = @('-Playout=smetana')
 }
 
+# Site-dark theme injected at render time (transparent bg, panel fills, violet
+# accents) so the .puml sources stay theme-agnostic; see tools/plantuml-dark.cfg.
+$darkConfig = Join-Path $PSScriptRoot 'plantuml-dark.cfg'
+
 $pumlFiles = Get-ChildItem -Path $sourceDir -Filter '*.puml'
-java -jar $jarPath -tsvg -charset UTF-8 @layoutArgs -o $outputDir $pumlFiles.FullName
+java -jar $jarPath -tsvg -charset UTF-8 -config $darkConfig @layoutArgs -o $outputDir $pumlFiles.FullName
 if ($LASTEXITCODE -ne 0) {
     throw "PlantUML exited with code $LASTEXITCODE."
 }

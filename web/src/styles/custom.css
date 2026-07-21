@@ -141,6 +141,13 @@ main h1[data-page-title] {
 .sl-markdown-content hr:not(:where(.not-content *)) {
   margin-block: 2rem;
 }
+/* Diagrams (transparent-background SVGs themed to the site palette): centered
+   with breathing room; starlight-image-zoom supplies the click-to-zoom. */
+.sl-markdown-content img[src*='/diagrams/'] {
+  display: block;
+  margin-inline: auto;
+  margin-block: 1.5rem;
+}
 /* Inline code as Arcane's chip: 0.8rem on a 4px-radius muted fill. Scoped to
    prose code only - expressive-code blocks manage their own metrics. */
 .sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
