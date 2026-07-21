@@ -19,7 +19,10 @@ export default function rehypeDocsLinks() {
       const target = path.resolve(path.dirname(file.path), match[1]);
       let rel = path.relative(DOCS_ROOT, target).split(path.sep).join('/');
       if (!rel || rel.startsWith('..')) return;
-      rel = rel.replace(/\.mdx?$/i, '').replace(/(^|\/)index$/i, '$1').replace(/\/$/, '');
+      rel = rel
+        .replace(/\.mdx?$/i, '')
+        .replace(/(^|\/)index$/i, '$1')
+        .replace(/\/$/, '');
       node.properties.href = BASE + (rel ? `${rel}/` : '') + (match[2] ?? '');
     });
   };

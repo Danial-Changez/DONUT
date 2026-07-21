@@ -17,7 +17,7 @@ export default defineConfig({
         {
           find: /^@astrojs\/starlight\/components$/,
           replacement: fileURLToPath(
-            new URL('./node_modules/@astrojs/starlight/components.ts', import.meta.url)
+            new URL('./node_modules/@astrojs/starlight/components.ts', import.meta.url),
           ),
         },
       ],

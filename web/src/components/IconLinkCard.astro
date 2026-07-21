@@ -5,12 +5,14 @@
  * this instead. Styling lives in styles/custom.css (.dw-icon-card family);
  * icons are Starlight's built-in set.
  */
+import type { ComponentProps } from 'astro/types';
 import { Icon } from '@astrojs/starlight/components';
 
 interface Props {
   title: string;
   href: string;
-  icon: string;
+  // The exact Starlight icon-name union (derived from Icon's own props).
+  icon: ComponentProps<typeof Icon>['name'];
   description: string;
   /** Optional footer label; the arrow renders regardless. */
   foot?: string;

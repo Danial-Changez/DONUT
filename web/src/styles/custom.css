@@ -15,14 +15,14 @@
   --sl-color-bg-accent: #8022fe;
 
   /* Neutral scale */
-  --sl-color-white: #fafafa;   /* TitleTextPrimary - headings, emphasis */
+  --sl-color-white: #fafafa; /* TitleTextPrimary - headings, emphasis */
   --sl-color-gray-1: #d4d4d4;
-  --sl-color-gray-2: #a1a1a1;  /* BodyTextPrimary - body text */
+  --sl-color-gray-2: #a1a1a1; /* BodyTextPrimary - body text */
   --sl-color-gray-3: #8a8a8a;
   --sl-color-gray-4: #3f3f46;
-  --sl-color-gray-5: #27272a;  /* PanelBackgroundActive */
-  --sl-color-gray-6: #121212;  /* PanelBackground */
-  --sl-color-black: #0a0a0a;   /* PrimaryBackground */
+  --sl-color-gray-5: #27272a; /* PanelBackgroundActive */
+  --sl-color-gray-6: #121212; /* PanelBackground */
+  --sl-color-black: #0a0a0a; /* PrimaryBackground */
 
   /* Surfaces */
   --sl-color-bg: #0a0a0a;
@@ -44,13 +44,13 @@
   /* --- Layout system: crisp radii ladder, quiet motion, roomy composition.
      One radius knob derives the ladder; two transition tiers (fast for color,
      slow for transform) keep hover motion calm and consistent. */
-  --donut-radius-sm: 4px;   /* kbd chips, tiny chrome */
-  --donut-radius: 6px;      /* cards, buttons, code, tables - the default */
+  --donut-radius-sm: 4px; /* kbd chips, tiny chrome */
+  --donut-radius: 6px; /* cards, buttons, code, tables - the default */
   --donut-radius-lg: 8px;
-  --donut-radius-xl: 12px;  /* large framed panels (faux window) */
+  --donut-radius-xl: 12px; /* large framed panels (faux window) */
   --donut-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --donut-fast: 150ms;      /* color/border changes */
-  --donut-slow: 300ms;      /* transform/accent motion */
+  --donut-fast: 150ms; /* color/border changes */
+  --donut-slow: 300ms; /* transform/accent motion */
 
   /* Violet alpha ramp - single source for every accent wash and edge */
   --donut-violet-04: rgba(128, 34, 254, 0.04);
@@ -231,14 +231,17 @@ main h1[data-page-title] {
   background:
     radial-gradient(ellipse 60% 42% at 50% 8%, rgba(128, 34, 254, 0.16), transparent 70%),
     radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
-  background-size: auto, 26px 26px;
+  background-size:
+    auto,
+    26px 26px;
 }
 /* Crisp 6px buttons (the radii ladder), quiet color-only hover; the trailing
    icon nudges forward as the "you're about to navigate" cue. */
 .sl-link-button.primary,
 .sl-link-button.minimal {
   border-radius: var(--donut-radius);
-  transition: background-color var(--donut-fast) var(--donut-ease),
+  transition:
+    background-color var(--donut-fast) var(--donut-ease),
     border-color var(--donut-fast) var(--donut-ease),
     color var(--donut-fast) var(--donut-ease);
 }
@@ -291,10 +294,20 @@ main h1[data-page-title] {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: #0d0d0d;
 }
-.dw-dot { width: 10px; height: 10px; border-radius: 50%; }
-.dw-red { background: #4a4a4a; }
-.dw-yellow { background: #3a3a3a; }
-.dw-green { background: #2e2e2e; }
+.dw-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.dw-red {
+  background: #4a4a4a;
+}
+.dw-yellow {
+  background: #3a3a3a;
+}
+.dw-green {
+  background: #2e2e2e;
+}
 .dw-title {
   margin-inline-start: 0.6rem;
   color: #a1a1a1;
@@ -319,13 +332,32 @@ main h1[data-page-title] {
   padding: 0.75rem 1rem;
   text-align: left;
 }
-.dw-row + .dw-row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
-.dw-status { width: 8px; height: 8px; border-radius: 50%; }
-.dw-busy { background: #8e51ff; box-shadow: 0 0 8px rgba(142, 81, 255, 0.8); }
-.dw-ok { background: #34d399; }
-.dw-warn { background: #fbbf24; }
-.dw-host { color: #fafafa; font-family: var(--sl-font-mono); font-size: 0.8rem; }
-.dw-meta { color: #8a8a8a; }
+.dw-row + .dw-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.dw-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.dw-busy {
+  background: #8e51ff;
+  box-shadow: 0 0 8px rgba(142, 81, 255, 0.8);
+}
+.dw-ok {
+  background: #34d399;
+}
+.dw-warn {
+  background: #fbbf24;
+}
+.dw-host {
+  color: #fafafa;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+}
+.dw-meta {
+  color: #8a8a8a;
+}
 .dw-progress {
   height: 5px;
   border-radius: 9999px;
@@ -338,10 +370,17 @@ main h1[data-page-title] {
   border-radius: inherit;
   background: linear-gradient(90deg, #8022fe, #8e51ff);
 }
-.dw-fill-warn { background: #b45309; }
+.dw-fill-warn {
+  background: #b45309;
+}
 @media (max-width: 40rem) {
-  .dw-row { grid-template-columns: auto 1fr; }
-  .dw-meta, .dw-progress { display: none; }
+  .dw-row {
+    grid-template-columns: auto 1fr;
+  }
+  .dw-meta,
+  .dw-progress {
+    display: none;
+  }
 }
 
 /* --- Cards: flat at rest, quiet on hover.
@@ -357,7 +396,8 @@ main h1[data-page-title] {
   border-radius: var(--donut-radius);
   background: transparent;
   padding: 1.25rem;
-  transition: border-color var(--donut-fast) var(--donut-ease),
+  transition:
+    border-color var(--donut-fast) var(--donut-ease),
     box-shadow var(--donut-fast) var(--donut-ease);
 }
 .card-grid .sl-link-card::before,
@@ -484,7 +524,8 @@ button[data-open-modal] {
   border-radius: var(--donut-radius);
   background: transparent;
   color: var(--sl-color-gray-3);
-  transition: background-color var(--donut-fast) var(--donut-ease),
+  transition:
+    background-color var(--donut-fast) var(--donut-ease),
     color var(--donut-fast) var(--donut-ease);
 }
 button[data-open-modal]:hover {
@@ -583,7 +624,8 @@ button[data-open-modal] kbd kbd {
   align-items: flex-start;
   font-size: 0.75rem;
   color: var(--sl-color-gray-3);
-  transition: border-color var(--donut-fast) var(--donut-ease),
+  transition:
+    border-color var(--donut-fast) var(--donut-ease),
     background-color var(--donut-fast) var(--donut-ease);
 }
 .pagination-links a svg {
@@ -705,7 +747,8 @@ site-search[data-searching] .dw-quick-links {
   color: var(--sl-color-gray-2);
   font-size: 0.875rem;
   text-decoration: none;
-  transition: color var(--donut-fast) var(--donut-ease),
+  transition:
+    color var(--donut-fast) var(--donut-ease),
     background-color var(--donut-fast) var(--donut-ease);
 }
 .dw-quick-links a:hover {
@@ -714,7 +757,8 @@ site-search[data-searching] .dw-quick-links {
 }
 .dw-quick-links a svg {
   opacity: 0;
-  transition: opacity var(--donut-fast) var(--donut-ease),
+  transition:
+    opacity var(--donut-fast) var(--donut-ease),
     transform var(--donut-slow) var(--donut-ease);
 }
 .dw-quick-links a:hover svg {

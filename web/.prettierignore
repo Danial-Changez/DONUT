@@ -1,0 +1,12 @@
+# Framework-generated / build output
+dist/
+.astro/
+node_modules/
+package-lock.json
+
+# Generated at build time (PlantUML render step)
+public/diagrams/
+
+# Vendored: a pinned copy of Starlight's Search.astro (see the file header).
+# Kept close to upstream so it re-diffs cleanly on Starlight upgrades - do not reformat.
+src/components/Search.astro
