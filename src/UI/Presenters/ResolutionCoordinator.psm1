@@ -161,6 +161,10 @@ class ResolutionCoordinator {
     # HomePresenter owns the run/gather queue, so re-issuing queued work is handed back to it.
     [void] CompleteResolve([AsyncJob]$job) {
         if ($job.Status -eq 'Failed') {
+            # A failed resolve/warm was silent, so a DC-warm or host-resolve failure looked
+            # like nothing happened at all. Surface why (empty HostName = the startup DC warm).
+            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
+            $this.Logger.LogWarning("$who failed: $($job.FailureMessage)")
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
