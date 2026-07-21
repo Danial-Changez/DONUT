@@ -78,8 +78,11 @@ body {
   background-attachment: fixed;
 }
 
-/* --- Prose rhythm: slightly smaller body type, taller line, breathing room
-   between blocks; tight-tracked headings with a ruled h2. --- */
+/* --- Prose rhythm (Arcane's measured scale): 15px/1.7 body, 1.5rem block
+   gaps, ruled full-width h2, 2rem h3/h4 gaps, tight heading tracking.
+   Starlight wraps each heading in a flex .sl-heading-wrapper (heading +
+   anchor link), so the rhythm and the h2 rule live on the WRAPPER - a border
+   on the shrink-wrapped h2 itself only underlines the text. --- */
 .sl-markdown-content {
   font-size: 0.9375rem;
   line-height: 1.7;
@@ -88,17 +91,46 @@ body {
   letter-spacing: -0.018em;
   color: var(--sl-color-white);
 }
-.sl-markdown-content h2:not(:where(.not-content *)) {
+/* Doc page title: Arcane's 1.875rem semibold, not Starlight's display size. */
+main h1[data-page-title] {
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+/* Content starts 2rem below the ruled title panel. */
+.main-pane .content-panel:has(.sl-markdown-content) {
+  padding-top: 2rem;
+}
+/* Block gap: 1.5rem between top-level blocks; a heading hugs the paragraph
+   that follows it (1rem). */
+.sl-markdown-content > * + * {
+  margin-top: 1.5rem;
+}
+.sl-markdown-content > .sl-heading-wrapper + * {
+  margin-top: 1rem;
+}
+.sl-markdown-content .sl-heading-wrapper :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
+.sl-markdown-content > .level-h2 {
   margin-top: 2.5rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--sl-color-hairline-shade);
 }
-.sl-markdown-content h3:not(:where(.not-content *)),
-.sl-markdown-content h4:not(:where(.not-content *)) {
+.sl-markdown-content > :is(.level-h3, .level-h4) {
   margin-top: 2rem;
+}
+.sl-markdown-content :is(ul, ol):not(:where(.not-content *)) {
+  padding-inline-start: 1.5rem;
 }
 .sl-markdown-content li:not(:where(.not-content *)) {
   margin-top: 0.5rem;
+}
+.sl-markdown-content hr:not(:where(.not-content *)) {
+  margin-block: 2rem;
+}
+.pagination-links {
+  margin-top: 3rem;
 }
 
 /* --- Splash hero: centered, dot-grid ground, violet glow (Arcane-style) --- */
@@ -157,11 +189,19 @@ body {
   transform: translateX(3px);
 }
 /* Secondary actions read as buttons: a dark filled surface instead of the
-   fully transparent Starlight minimal variant. */
+   fully transparent Starlight minimal variant. Starlight zeroes the minimal
+   variant's inline padding (it's meant as a bare text link), so restore the
+   primary button's padding at both size tiers. */
 .sl-link-button.minimal {
   border: 1px solid var(--sl-color-hairline);
   background: var(--sl-color-gray-6);
   color: var(--sl-color-gray-1);
+  padding-inline: 1.125rem;
+}
+@media (min-width: 50rem) {
+  .sl-link-button.minimal {
+    padding-inline: 1.25rem;
+  }
 }
 .sl-link-button.minimal:hover {
   background: var(--sl-color-gray-5);
@@ -429,6 +469,12 @@ button[data-open-modal] kbd {
 .sidebar-content ul ul li + li {
   margin-top: 2px;
 }
+/* Sub-sub lists (a group inside a group, e.g. Development > Architecture):
+   step the child rail 0.875rem in from the parent's, per Arcane's sub-menus,
+   instead of letting every depth collapse onto the same line. */
+.sidebar-content ul ul ul li {
+  margin-inline-start: 0.875rem;
+}
 .sidebar-content a {
   border-radius: 0;
   padding-block: 0.4rem;
@@ -494,6 +540,39 @@ button[data-open-modal] kbd {
     width: calc(var(--donut-toc-width) - 2 * var(--sl-sidebar-pad-x));
     max-width: none;
   }
+}
+
+/* --- "On this page" (TOC): Arcane's treatment - no full-height divider;
+   instead a short rail on the list itself (border-l + 1rem inset), a small
+   white 500-weight heading, 13px muted rows, and a white (not violet)
+   current-section marker. --- */
+.right-sidebar {
+  border-inline-start: none;
+}
+.right-sidebar-panel h2 {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--sl-color-white);
+  margin-bottom: 0.75rem;
+}
+.right-sidebar-panel nav > ul {
+  border-inline-start: 1px solid var(--sl-color-hairline);
+  padding-inline-start: 1rem;
+}
+.right-sidebar-panel a {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  padding-block: 0.375rem;
+  color: var(--sl-color-gray-3);
+  transition: color var(--donut-fast) var(--donut-ease);
+}
+.right-sidebar-panel a:hover {
+  color: var(--sl-color-white);
+}
+.right-sidebar-panel a[aria-current='true'],
+.right-sidebar-panel a[aria-current='true']:hover {
+  color: var(--sl-color-white);
+  font-weight: 500;
 }
 
 /* --- Search dialog quick links: the empty state suggests destinations

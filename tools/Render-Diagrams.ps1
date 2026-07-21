@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Downloads a pinned PlantUML jar on first use (cached under tools/.cache, gitignored),
-    then renders every .puml under docs/diagrams into website/public/diagrams (gitignored;
+    then renders every .puml under docs/diagrams into web/public/diagrams (gitignored;
     the site serves them at /DONUT/diagrams/<name>.svg). Prefers Graphviz dot for layout
     and falls back to PlantUML's built-in Smetana engine when dot is absent. Run locally
     after editing a diagram; the docs CI workflow runs this same script on ubuntu.
@@ -20,7 +20,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $cacheDir = Join-Path $PSScriptRoot '.cache'
 $jarPath = Join-Path $cacheDir "plantuml-$plantUmlVersion.jar"
 $sourceDir = Join-Path $repoRoot 'docs/diagrams'
-$outputDir = Join-Path $repoRoot 'website/public/diagrams'
+$outputDir = Join-Path $repoRoot 'web/public/diagrams'
 
 if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
     throw 'java was not found on PATH. Install a JDK/JRE (any recent version works).'
