@@ -265,11 +265,14 @@ class HomePresenter : AsyncJobPresenter {
         # time to take the loader-lock hit (see .NOTES).
         $this.Resolution.WarmPool()
 
-        # Prime the finder + Lens agent in the background (non-blocking, unlike WarmPool).
-        $this.Finder.WarmAdSearch()
-        $this.Finder.WarmLens()
-
+        # DIAGNOSTIC (temporary): discover the DC first, with the finder + Lens agent warms
+        # DISABLED, to isolate whether their concurrent AD/agent binds stall the DC warm.
+        # If the DC now caches, the startup warms are the cause and we re-enable them behind
+        # the warm's completion; if it still hangs, the DC discovery itself is the problem.
         $this.Resolution.StartWarm()
+
+        # $this.Finder.WarmAdSearch()
+        # $this.Finder.WarmLens()
     }
 
     # --- Start-early IP resolution ---
