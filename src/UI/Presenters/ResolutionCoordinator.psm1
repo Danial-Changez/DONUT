@@ -58,12 +58,6 @@ class ResolutionCoordinator {
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
-            # Diagnostic: proves the warm started, and reports how many pool runspaces are
-            # free right then. If this logs but no "Selected active domain controller" /
-            # "DC warm-up ..." follows, the job is stuck Running - pool free 0 means it's
-            # starved (search/agent binds holding every runspace); >0 means it ran and hung.
-            $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
-            $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
         }
         catch {
             $this.Logger.LogException("Resolver warm-up could not start", $_)
@@ -167,10 +161,6 @@ class ResolutionCoordinator {
     # HomePresenter owns the run/gather queue, so re-issuing queued work is handed back to it.
     [void] CompleteResolve([AsyncJob]$job) {
         if ($job.Status -eq 'Failed') {
-            # A failed resolve/warm was silent, so a DC-warm or host-resolve failure looked
-            # like nothing happened at all. Surface why (empty HostName = the startup DC warm).
-            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
-            $this.Logger.LogWarning("$who failed: $($job.FailureMessage)")
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
@@ -184,9 +174,6 @@ class ResolutionCoordinator {
                 if (-not [string]::IsNullOrWhiteSpace($dc)) {
                     $this.Resolver.SetActiveDc($dc)
                     $this.PersistDomainController($dc, @($item.DomainControllers))
-                }
-                else {
-                    $this.Logger.LogWarning("DC warm-up completed but found no reachable controller.")
                 }
             }
             elseif ($mode -eq 'Host') {

@@ -124,6 +124,19 @@ class PersonLensService {
 
     # --- Agent supervision ---
 
+    # Cheap health probe with no side effects: the agent writes key.bin once and beats
+    # heartbeat.txt every ~2s, so a beat under 15s old means it's alive and serving. The
+    # per-keystroke finder search uses this instead of EnsureAgent, which must never pay the
+    # cold start (binary-module load under the CLR loader lock + up to ~40s of blocking waits)
+    # on a hot path. Mirrors EnsureAgent's own fast-path staleness check below.
+    [bool] AgentIsWarm() {
+        $dir = [PersonLensService]::AgentDir()
+        $beat = Join-Path $dir 'heartbeat.txt'
+        if (-not (Test-Path -LiteralPath (Join-Path $dir 'key.bin'))) { return $false }
+        if (-not (Test-Path -LiteralPath $beat)) { return $false }
+        return ((((Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime).TotalSeconds) -lt 15)
+    }
+
     # (Re)starts the agent when its heartbeat is stale; returns '' or the failure reason.
     # Mutex-guarded so concurrent pool runspaces can't race a double start.
     [string] EnsureAgent() {
@@ -281,6 +294,60 @@ class PersonLensService {
         }
         finally {
             # Consume this lookup's files; the agent + its 10-min sweep cover the rest.
+            Get-ChildItem -Path $dir -Filter "*-$reqId*.bin" -File -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # The 'search' request payload (pure, so the shape is unit-testable): the agent runs
+    # ActiveDirectoryService.Search over the warm directory bind and answers { rows: [...] }.
+    static [string] SearchRequestJson([string]$prefix, [string[]]$domains) {
+        return (@{ kind = 'search'; prefix = $prefix; domains = @($domains) } |
+                ConvertTo-Json -Compress)
+    }
+
+    # One AD finder search over the agent exchange: reuses the agent's warm forest binds
+    # instead of a cold per-search bind on the pool. Returns the { rows: [...] } JSON (no
+    # partials; search is one batch). Mirrors RunLookupJson; overridable seam for tests.
+    [string] RunSearchJson([string]$prefix, [string[]]$domains) {
+        # The finder calls this per keystroke, so it must NEVER trigger EnsureAgent's cold
+        # start - that cold-loads binary modules under the process-wide CLR loader lock and
+        # blocks up to ~40s, freezing the UI. Use the agent only when it's already warm;
+        # otherwise return empty so the dropdown just shows the add-machine row. The agent's
+        # lifecycle is owned by startup (WarmLens) and by a deliberate Lens pick (RunLookupJson).
+        if (-not $this.AgentIsWarm()) {
+            return (@{ rows = @(); error = 'Lens agent warming - retry.' } | ConvertTo-Json -Compress)
+        }
+
+        $dir = [PersonLensService]::AgentDir()
+        $keyIv = $null
+        try { $keyIv = [IO.File]::ReadAllBytes((Join-Path $dir 'key.bin')) } catch { }
+        if (-not $keyIv -or $keyIv.Length -ne 48) {
+            return (@{ rows = @(); error = 'Lens agent session key is missing - retry.' } | ConvertTo-Json -Compress)
+        }
+
+        $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
+        $resultPath = Join-Path $dir "result-$reqId.bin"
+        try {
+            [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
+                [PersonLensService]::SearchRequestJson($prefix, $domains), $keyIv)
+
+            # Search is sub-second; cap the wait well under the lookup timeout so a wedged
+            # search can't hold the dropdown.
+            $waitSec = [Math]::Min($this.TimeoutSec, 15)
+            $deadline = (Get-Date).AddSeconds($waitSec)
+            while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
+                Start-Sleep -Milliseconds 100
+            }
+            if (-not (Test-Path -LiteralPath $resultPath)) {
+                return (@{ rows = @(); error = "AD search did not complete within ${waitSec}s." } | ConvertTo-Json -Compress)
+            }
+            return [PersonLensService]::UnprotectText([IO.File]::ReadAllBytes($resultPath), $keyIv)
+        }
+        catch {
+            return (@{ rows = @(); error = "AD search failed: $($_.Exception.Message)" } | ConvertTo-Json -Compress)
+        }
+        finally {
             Get-ChildItem -Path $dir -Filter "*-$reqId*.bin" -File -ErrorAction SilentlyContinue |
                 Remove-Item -Force -ErrorAction SilentlyContinue
         }

@@ -22,12 +22,12 @@ grouped by kind.
 
 ## How the search works
 
-Each keystroke — debounced, once you've typed at least the minimum prefix — fans out one
-LDAP query **per forest** on the runspace pool (computers OR users, prefix match), and
-each forest's hits stream into the dropdown as they land. The search runs **in-process**
-(unlike the [User Lens](./user-lens.md), which uses the de-elevated agent) — AD reads
-don't need de-elevation, and keeping search off the agent means typing never waits on the
-agent's startup. Each keystroke supersedes the last; **Esc** dismisses the dropdown.
+Each keystroke — debounced, once you've typed at least the minimum prefix — runs one
+combined LDAP query per forest (computers OR users, prefix match). The search runs
+through the **same persistent de-elevated agent as the [User Lens](./user-lens.md)**:
+it keeps its directory connections warm and runs as *your* logged-on account rather than
+DONUT's elevated one, so results come back quickly. Each keystroke supersedes the last;
+**Esc** dismisses the dropdown.
 
 ## Under the hood
 

@@ -1,8 +1,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Persistent de-elevated Lens agent: serves person -> devices lookups for the
-    app's whole lifetime, so each costs only query time.
+    Persistent de-elevated Lens agent: serves person -> devices lookups AND the
+    finder's AD search for the app's whole lifetime, so each costs only query time.
 
 .DESCRIPTION
     Started ONCE (at app startup, or on demand when its heartbeat goes stale) by
@@ -13,22 +13,24 @@
     the per-pick task registration + pwsh cold start (~2-4s); on boot the agent
     pre-warms its libraries (DirectoryServices/GC bind, ThreadJob, the AdminService
     TLS/Kerberos channel) in parallel with DONUT's own startup, and reuses those warm
-    binds for every later lookup. (The finder's AD search is separate - it runs
-    in-process on the pool via AdSearchWorker, not through this agent.)
+    binds for every later request - which is why the finder's AD search runs here too.
 
     Protocol over the ACL-locked exchange dir (every payload AES-256-CBC with the
     session key.bin; writes atomic tmp+rename):
-      request-<id>.bin    <- { identity, sam, siteServer }   (parent writes)
-      partial-<id>-1.bin  -> directory facts                 (agent writes)
+      request-<id>.bin    <- { kind, ... }                   (parent writes)
+          kind 'lookup' (default): { identity, sam, siteServer }
+          kind 'search':           { prefix, domains: [...] }
+      partial-<id>-1.bin  -> directory facts (lookup only)   (agent writes)
       partial-<id>-2.bin  -> name-only device rows
-      result-<id>.bin     -> lookup bundle
+      result-<id>.bin     -> lookup bundle, or { rows: [...] } for search
     The agent deletes each request once read; the parent deletes the responses it
     consumed; anything older than 10 minutes is swept as abandoned.
 
-    A lookup takes tens of seconds, so it is offloaded to a ThreadJob (falling back to
-    inline if that fails) and the serve loop stays free to accept the next request. The
-    lookup pipeline and all exchange helpers live in LensAgent.Common.ps1, dot-sourced
-    here and into each lookup ThreadJob.
+    A lookup takes tens of seconds; a search is sub-second. So a lookup is offloaded
+    to a ThreadJob (falling back to inline if that fails) and search runs inline on the
+    serve loop, so a search never waits behind an in-flight lookup. The lookup pipeline
+    and all exchange helpers live in LensAgent.Common.ps1, dot-sourced here and into
+    each lookup ThreadJob.
 
     Exits when stop.flag appears, the parent process dies, or the exchange dir is
     deleted. heartbeat.txt is touched every ~2s from a BACKGROUND thread (not the serve
@@ -51,8 +53,10 @@
     AdminService REST endpoint (no ConfigMgr module / PSDrive). The affinity query
     is the ONLY SCCM call (the /wmi route's OData translator rejects richer
     filters, answering 404); everything per-device comes from the computer's AD
-    object. Crypto format MUST match PersonLensService.ProtectText/UnprotectText.
+    object. AD search reuses ActiveDirectoryService.Search. Crypto format MUST match
+    PersonLensService.ProtectText/UnprotectText.
 #>
+using module "..\Services\ActiveDirectoryService.psm1"
 
 [CmdletBinding()]
 param(
@@ -72,9 +76,42 @@ try { $script:KeyIv = [IO.File]::ReadAllBytes((Join-Path $ExchangeDir 'key.bin')
 # No session key -> nothing to serve.
 if (-not $script:KeyIv -or $script:KeyIv.Length -ne 48) { return }
 
-# Exchange crypto/IO + the lookup (Resolve-Lens) helpers.
+# Exchange crypto/IO + the lookup (Resolve-Lens) helpers, shared with the lookup ThreadJobs.
 $commonPath = Join-Path $PSScriptRoot 'LensAgent.Common.ps1'
 . $commonPath
+
+# --- Multi-forest AD prefix search (the finder dropdown), run inline on the serve loop ---
+# Lives here, not in the dot-sourced Common file, because it constructs [ActiveDirectoryService]
+# by name: this script's `using module` (above) loads that class into the runspace, whereas a
+# dot-sourced file carries no `using` of its own. Search always runs inline in this main
+# runspace (never a ThreadJob), so the type resolves here. Reuses the unit-tested
+# ActiveDirectoryService.Search; results are { rows: [...] } (an object, so a single hit can't
+# collapse out of an array).
+function Resolve-Search {
+    param([string]$prefix, [string[]]$domains, [string]$reqId)
+    $bundle = [ordered]@{ rows = @(); error = '' }
+    try {
+        $svc = [ActiveDirectoryService]::new($domains, $null)
+        $bundle.rows = @($svc.Search($prefix) | ForEach-Object {
+                [ordered]@{
+                    Kind              = $_.Kind
+                    Name              = $_.Name
+                    SamAccountName    = $_.SamAccountName
+                    UserPrincipalName = $_.UserPrincipalName
+                    DisplayName       = $_.DisplayName
+                    Domain            = $_.Domain
+                    Enabled           = $_.Enabled
+                    LockedOut         = $_.LockedOut
+                    DistinguishedName = $_.DistinguishedName
+                }
+            })
+    }
+    catch {
+        $bundle.error = "AD search: $($_.Exception.Message)"
+    }
+    $resultPath = Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)
+    Write-LensBundle $resultPath ($bundle | ConvertTo-Json -Depth 6)
+}
 
 # --- pre-warm (parallel with DONUT's startup; heartbeat first so the parent unblocks) --
 $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
@@ -152,28 +189,35 @@ while ($true) {
         catch { }
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
+        $kind = if ($req.kind) { [string]$req.kind } else { 'lookup' }
         try {
-            # Offload the lookup so a slow one never blocks the loop; fall back to inline if
-            # the ThreadJob can't start, so a lookup is never silently dropped.
-            $offloaded = $false
-            try {
-                $job = Start-ThreadJob -ScriptBlock {
-                    param($commonPath, $exchangeDir, $keyIv, $forestNc, $identity, $samHint, $server, $reqId)
-                    Import-Module ThreadJob -ErrorAction SilentlyContinue
-                    . $commonPath
-                    $script:KeyIv = $keyIv
-                    $script:ForestNc = $forestNc
-                    $ExchangeDir = $exchangeDir
-                    Resolve-Lens -identity $identity -samHint $samHint -server $server -reqId $reqId
-                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
-                ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
-                $lookupJobs.Add($job)
-                $offloaded = $true
+            if ($kind -eq 'search') {
+                # Fast: run inline so a search returns promptly even while lookups are in flight.
+                Resolve-Search -prefix ([string]$req.prefix) -domains @($req.domains) -reqId $reqId
             }
-            catch { $offloaded = $false }
-            if (-not $offloaded) {
-                Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) `
-                    -server ([string]$req.siteServer) -reqId $reqId
+            else {
+                # Slow: offload so it never blocks the loop. Fall back to inline if the
+                # ThreadJob can't start, so a lookup is never silently dropped.
+                $offloaded = $false
+                try {
+                    $job = Start-ThreadJob -ScriptBlock {
+                        param($commonPath, $exchangeDir, $keyIv, $forestNc, $identity, $samHint, $server, $reqId)
+                        Import-Module ThreadJob -ErrorAction SilentlyContinue
+                        . $commonPath
+                        $script:KeyIv = $keyIv
+                        $script:ForestNc = $forestNc
+                        $ExchangeDir = $exchangeDir
+                        Resolve-Lens -identity $identity -samHint $samHint -server $server -reqId $reqId
+                    } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
+                    ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
+                    $lookupJobs.Add($job)
+                    $offloaded = $true
+                }
+                catch { $offloaded = $false }
+                if (-not $offloaded) {
+                    Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) `
+                        -server ([string]$req.siteServer) -reqId $reqId
+                }
             }
         }
         catch {

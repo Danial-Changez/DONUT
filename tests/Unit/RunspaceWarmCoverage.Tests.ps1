@@ -8,10 +8,11 @@
     runspace at startup so no job cold-loads on the hot path - but that only helps
     if the warm covers EVERY graph a pool worker uses.
 
-    The freeze regressed when the AD-finder (AdSearchWorker -> ActiveDirectoryService)
-    and user Lens (LensLookupWorker -> PersonLensService) shipped with graphs the warm
-    didn't load. These tests fail if Warm-Runspace.ps1 stops covering any pool
-    worker's imports, or if WarmPool stops running it.
+    The freeze regressed when the AD-finder and user Lens (LensLookupWorker ->
+    PersonLensService) shipped with graphs the warm didn't load. These tests fail if
+    Warm-Runspace.ps1 stops covering any pool worker's imports, or if WarmPool stops
+    running it. (AdUnlockWorker still uses ActiveDirectoryService on the pool, so that
+    graph must stay warmed even though the finder search now runs on the Lens agent.)
 #>
 
 Describe "Runspace warm coverage" {
@@ -25,8 +26,7 @@ Describe "Runspace warm coverage" {
         # A NEW pool worker must be added here *and* covered by Warm-Runspace.ps1's imports.
         $script:PoolWorkers = @(
             'RemoteWorker.ps1'      # scan / apply / inventory / disk / resolve
-            'AdSearchWorker.ps1'    # AD finder fan-out
-            'LensLookupWorker.ps1'  # user Lens lookup + agent warm/teardown
+            'LensLookupWorker.ps1'  # user Lens lookup + AD finder search + agent warm/teardown
             'AdUnlockWorker.ps1'    # inline account unlock
         )
 

@@ -2,12 +2,13 @@
 <#
 .SYNOPSIS
     Shared helpers for LensAgent.ps1: crypto/exchange I/O and the AD/SCCM lookup
-    (Resolve-Lens).
+    (Resolve-Lens). The AD search (Resolve-Search) lives in LensAgent.ps1 itself,
+    which has the [ActiveDirectoryService] `using module` it constructs.
 
 .DESCRIPTION
     Dot-sourced by LensAgent.ps1 in the agent's main runspace, and by each lookup
-    ThreadJob the serve loop spawns (a slow lookup runs off the loop so the loop stays
-    free for the next request). Callers must set these script-scope variables before use:
+    ThreadJob the serve loop spawns (a slow lookup runs off the loop so it never
+    blocks a fast search). Callers must set these script-scope variables before use:
       $script:KeyIv      48-byte AES key+IV (from key.bin)
       $script:ForestNc   the forest root naming context (for GC binds)
       $ExchangeDir       the ACL-locked exchange directory

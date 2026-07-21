@@ -48,7 +48,7 @@ class SearchRowViewModel {
         return $vm
     }
 
-    # A result row from an AdSearchWorker hit (Kind = 'Computer' | 'User').
+    # A result row from an AD search hit (Kind = 'Computer' | 'User').
     static [SearchRowViewModel] FromResult([object]$r) {
         $vm = [SearchRowViewModel]::new()
         $vm.Result = $r
