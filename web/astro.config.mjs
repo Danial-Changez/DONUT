@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
-import starlightImageZoom from 'starlight-image-zoom';
 import rehypeDocsLinks from './plugins/rehype-docs-links.mjs';
 
 export default defineConfig({
@@ -36,9 +35,6 @@ export default defineConfig({
   },
   integrations: [
     starlight({
-      // Click-to-zoom lightbox on content images (the PlantUML diagrams render
-      // far wider than the 48rem article column).
-      plugins: [starlightImageZoom()],
       title: 'DONUT',
       description:
         'Remote Dell Command Update runner - scan and update fleets of Dell machines in parallel from one app.',
@@ -62,6 +58,8 @@ export default defineConfig({
         ThemeSelect: './src/components/ThemeSelect.astro',
         // Stock search + a quick-links empty state (see components/Search.astro).
         Search: './src/components/Search.astro',
+        // Stock head + the diagram lightbox loader (see components/Head.astro).
+        Head: './src/components/Head.astro',
       },
       expressiveCode: {
         // Single dark syntax theme so code blocks never flip light.

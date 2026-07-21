@@ -142,11 +142,85 @@ main h1[data-page-title] {
   margin-block: 2rem;
 }
 /* Diagrams (transparent-background SVGs themed to the site palette): centered
-   with breathing room; starlight-image-zoom supplies the click-to-zoom. */
+   with breathing room, click to open the lightbox (components/Head.astro). */
 .sl-markdown-content img[src*='/diagrams/'] {
   display: block;
   margin-inline: auto;
   margin-block: 1.5rem;
+  cursor: zoom-in;
+}
+
+/* --- Diagram lightbox: opens instantly, wheel to zoom INTO the diagram, drag
+   to pan; controls for keyboard/touch (components/Head.astro). --- */
+.dw-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.85);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms var(--donut-ease),
+    visibility 120ms var(--donut-ease);
+}
+.dw-lb.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+.dw-lb-stage {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.dw-lb-stage:active {
+  cursor: grabbing;
+}
+.dw-lb-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.dw-lb-controls {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: var(--donut-radius);
+  background: var(--sl-color-gray-6);
+}
+.dw-lb-controls button {
+  min-width: 2rem;
+  height: 2rem;
+  padding-inline: 0.6rem;
+  border: 0;
+  border-radius: var(--donut-radius-sm);
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--donut-fast) var(--donut-ease),
+    background-color var(--donut-fast) var(--donut-ease);
+}
+.dw-lb-controls button:hover {
+  background: var(--sl-color-gray-5);
+  color: var(--sl-color-white);
 }
 /* Inline code as Arcane's chip: 0.8rem on a 4px-radius muted fill. Scoped to
    prose code only - expressive-code blocks manage their own metrics. */

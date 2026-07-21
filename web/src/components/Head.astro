@@ -1,0 +1,158 @@
+---
+/**
+ * Wraps Starlight's stock <Head> (imported by full path, so this override
+ * augments rather than replaces it) to load the diagram lightbox on every page.
+ *
+ * Replaces starlight-image-zoom, which was slow to open and could only fit the
+ * image to the screen - zooming further zoomed the page. This opens instantly
+ * and lets you wheel-zoom INTO the diagram and drag to pan. Styles live in
+ * styles/custom.css (.dw-lb*). Coupling is only "content images whose src is
+ * under /diagrams/", matched by delegation.
+ */
+import Default from '@astrojs/starlight/components/Head.astro';
+---
+
+<Default {...Astro.props} />
+
+<script>
+  const MIN = 1;
+  const MAX = 8;
+
+  let overlay: HTMLDivElement | null = null;
+  let stage: HTMLDivElement | null = null;
+  let imgEl: HTMLImageElement | null = null;
+  let scale = 1;
+  let tx = 0;
+  let ty = 0;
+  let dragging = false;
+  let moved = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const apply = () => {
+    if (imgEl) imgEl.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  };
+
+  const reset = () => {
+    scale = 1;
+    tx = 0;
+    ty = 0;
+    apply();
+  };
+
+  // Zoom by `factor` while keeping the point at (cx, cy) - offsets from the
+  // stage centre, which is the image's transform origin - fixed under the cursor.
+  const zoomAt = (cx: number, cy: number, factor: number) => {
+    const next = Math.min(MAX, Math.max(MIN, scale * factor));
+    if (next === scale) return;
+    tx = cx - (cx - tx) * (next / scale);
+    ty = cy - (cy - ty) * (next / scale);
+    scale = next;
+    if (scale === MIN) {
+      tx = 0;
+      ty = 0;
+    }
+    apply();
+  };
+
+  const centreOffset = (e: MouseEvent, el: HTMLElement): [number, number] => {
+    const rect = el.getBoundingClientRect();
+    return [e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2)];
+  };
+
+  const close = () => {
+    overlay?.classList.remove('is-open');
+    document.body.style.overflow = '';
+  };
+
+  const build = () => {
+    overlay = document.createElement('div');
+    overlay.className = 'dw-lb';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `
+      <div class="dw-lb-stage"><img class="dw-lb-img" alt="" draggable="false" /></div>
+      <div class="dw-lb-controls">
+        <button type="button" data-lb="out" aria-label="Zoom out">&minus;</button>
+        <button type="button" data-lb="reset" aria-label="Reset zoom">Reset</button>
+        <button type="button" data-lb="in" aria-label="Zoom in">+</button>
+        <button type="button" data-lb="close" aria-label="Close">&times;</button>
+      </div>`;
+    stage = overlay.querySelector<HTMLDivElement>('.dw-lb-stage');
+    imgEl = overlay.querySelector<HTMLImageElement>('.dw-lb-img');
+    if (!stage) return;
+
+    stage.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const [cx, cy] = centreOffset(e, stage as HTMLElement);
+        zoomAt(cx, cy, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      },
+      { passive: false },
+    );
+    stage.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      moved = false;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      (stage as HTMLElement).setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+      tx += dx;
+      ty += dy;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      apply();
+    });
+    const endDrag = () => {
+      dragging = false;
+    };
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+    stage.addEventListener('dblclick', (e) => {
+      const [cx, cy] = centreOffset(e, stage as HTMLElement);
+      zoomAt(cx, cy, scale > 1 ? 1 / scale : 2.5);
+    });
+
+    overlay.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const action = target.closest('[data-lb]')?.getAttribute('data-lb');
+      if (action === 'in') zoomAt(0, 0, 1.4);
+      else if (action === 'out') zoomAt(0, 0, 1 / 1.4);
+      else if (action === 'reset') reset();
+      else if (action === 'close') close();
+      // Click on the empty backdrop (not the image, and not the end of a pan) closes.
+      else if ((target === overlay || target === stage) && !moved) close();
+    });
+
+    document.body.appendChild(overlay);
+  };
+
+  const open = (src: string, alt: string) => {
+    if (!overlay) build();
+    if (!overlay || !imgEl) return;
+    imgEl.src = src;
+    imgEl.alt = alt;
+    reset();
+    overlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  document.addEventListener('click', (e) => {
+    const target = e.target;
+    if (
+      target instanceof HTMLImageElement &&
+      /\/diagrams\//.test(target.getAttribute('src') ?? '')
+    ) {
+      open(target.currentSrc || target.src, target.alt);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+  });
+</script>
