@@ -1,8 +1,9 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Shared helpers for LensAgent.ps1: crypto/exchange I/O, the AD/SCCM lookup
-    (Resolve-Lens) and the multi-forest AD search (Resolve-Search).
+    Shared helpers for LensAgent.ps1: crypto/exchange I/O and the AD/SCCM lookup
+    (Resolve-Lens). The AD search (Resolve-Search) lives in LensAgent.ps1 itself,
+    which has the [ActiveDirectoryService] `using module` it constructs.
 
 .DESCRIPTION
     Dot-sourced by LensAgent.ps1 in the agent's main runspace, and by each lookup
@@ -11,8 +12,6 @@
       $script:KeyIv      48-byte AES key+IV (from key.bin)
       $script:ForestNc   the forest root naming context (for GC binds)
       $ExchangeDir       the ACL-locked exchange directory
-    Resolve-Search additionally needs [ActiveDirectoryService] loaded (LensAgent.ps1
-    imports it via `using module`); it is referenced only at call time.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -80,35 +79,6 @@ function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
         Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
     }
     catch { }
-}
-
-# --- Multi-forest AD prefix search (the finder dropdown), served from the warm agent ---
-# Reuses the unit-tested ActiveDirectoryService.Search so directory logic stays single-sourced;
-# results come back as { rows: [...] } (an object, so a single hit can't collapse out of an array).
-function Resolve-Search {
-    param([string]$prefix, [string[]]$domains, [string]$reqId)
-    $bundle = [ordered]@{ rows = @(); error = '' }
-    try {
-        $svc = [ActiveDirectoryService]::new($domains, $null)
-        $bundle.rows = @($svc.Search($prefix) | ForEach-Object {
-                [ordered]@{
-                    Kind              = $_.Kind
-                    Name              = $_.Name
-                    SamAccountName    = $_.SamAccountName
-                    UserPrincipalName = $_.UserPrincipalName
-                    DisplayName       = $_.DisplayName
-                    Domain            = $_.Domain
-                    Enabled           = $_.Enabled
-                    LockedOut         = $_.LockedOut
-                    DistinguishedName = $_.DistinguishedName
-                }
-            })
-    }
-    catch {
-        $bundle.error = "AD search: $($_.Exception.Message)"
-    }
-    $resultPath = Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)
-    Write-LensBundle $resultPath ($bundle | ConvertTo-Json -Depth 6)
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---

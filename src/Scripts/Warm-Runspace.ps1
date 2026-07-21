@@ -14,11 +14,15 @@
     The `using module` set below must stay a superset of every pool worker's imports
     (RemoteWorker.ps1, LensLookupWorker.ps1, AdUnlockWorker.ps1);
     RunspaceWarmCoverage.Tests.ps1 fails if a worker imports a module this doesn't.
-    Importing the graph is the entire effect - the script has no body.
+
+    The body then Import-Modules the binary CIM/ScheduledTasks modules that
+    PersonLensService.EnsureAgent loads implicitly (Get-CimInstance / *-ScheduledTask).
+    Those aren't `using module` imports, so the class graph above misses them - and
+    cold-loading them on the finder's search path took the loader lock and froze the UI.
 
 .PARAMETER SourceRoot
     Accepted for call-site symmetry with the other pool workers; unused (the warm's
-    only effect is the module import above).
+    only effect is the imports above).
 
 .NOTES
     Runs on a pool runspace, never the WPF dispatcher. No agent/network/directory
@@ -34,3 +38,9 @@ using module "..\Models\AdSearchResult.psm1"
 param(
     [string] $SourceRoot = ''
 )
+
+# Binary modules EnsureAgent loads implicitly the first time it runs Get-CimInstance /
+# Register-ScheduledTask. They aren't `using module` class imports, so the warm above
+# doesn't cover them; import them here so the process-wide CLR loader-lock hit lands on
+# this startup barrier, never on the WPF dispatcher during a finder search.
+Import-Module CimCmdlets, ScheduledTasks -ErrorAction SilentlyContinue

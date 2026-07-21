@@ -124,6 +124,19 @@ class PersonLensService {
 
     # --- Agent supervision ---
 
+    # Cheap health probe with no side effects: the agent writes key.bin once and beats
+    # heartbeat.txt every ~2s, so a beat under 15s old means it's alive and serving. The
+    # per-keystroke finder search uses this instead of EnsureAgent, which must never pay the
+    # cold start (binary-module load under the CLR loader lock + up to ~40s of blocking waits)
+    # on a hot path. Mirrors EnsureAgent's own fast-path staleness check below.
+    [bool] AgentIsWarm() {
+        $dir = [PersonLensService]::AgentDir()
+        $beat = Join-Path $dir 'heartbeat.txt'
+        if (-not (Test-Path -LiteralPath (Join-Path $dir 'key.bin'))) { return $false }
+        if (-not (Test-Path -LiteralPath $beat)) { return $false }
+        return ((((Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime).TotalSeconds) -lt 15)
+    }
+
     # (Re)starts the agent when its heartbeat is stale; returns '' or the failure reason.
     # Mutex-guarded so concurrent pool runspaces can't race a double start.
     [string] EnsureAgent() {
@@ -297,9 +310,13 @@ class PersonLensService {
     # instead of a cold per-search bind on the pool. Returns the { rows: [...] } JSON (no
     # partials; search is one batch). Mirrors RunLookupJson; overridable seam for tests.
     [string] RunSearchJson([string]$prefix, [string[]]$domains) {
-        $agentErr = $this.EnsureAgent()
-        if ($agentErr) {
-            return (@{ rows = @(); error = "Lens agent unavailable: $agentErr" } | ConvertTo-Json -Compress)
+        # The finder calls this per keystroke, so it must NEVER trigger EnsureAgent's cold
+        # start - that cold-loads binary modules under the process-wide CLR loader lock and
+        # blocks up to ~40s, freezing the UI. Use the agent only when it's already warm;
+        # otherwise return empty so the dropdown just shows the add-machine row. The agent's
+        # lifecycle is owned by startup (WarmLens) and by a deliberate Lens pick (RunLookupJson).
+        if (-not $this.AgentIsWarm()) {
+            return (@{ rows = @(); error = 'Lens agent warming - retry.' } | ConvertTo-Json -Compress)
         }
 
         $dir = [PersonLensService]::AgentDir()

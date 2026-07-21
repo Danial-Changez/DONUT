@@ -76,9 +76,42 @@ try { $script:KeyIv = [IO.File]::ReadAllBytes((Join-Path $ExchangeDir 'key.bin')
 # No session key -> nothing to serve.
 if (-not $script:KeyIv -or $script:KeyIv.Length -ne 48) { return }
 
-# Exchange crypto/IO + the lookup (Resolve-Lens) + the search (Resolve-Search) helpers.
+# Exchange crypto/IO + the lookup (Resolve-Lens) helpers, shared with the lookup ThreadJobs.
 $commonPath = Join-Path $PSScriptRoot 'LensAgent.Common.ps1'
 . $commonPath
+
+# --- Multi-forest AD prefix search (the finder dropdown), run inline on the serve loop ---
+# Lives here, not in the dot-sourced Common file, because it constructs [ActiveDirectoryService]
+# by name: this script's `using module` (above) loads that class into the runspace, whereas a
+# dot-sourced file carries no `using` of its own. Search always runs inline in this main
+# runspace (never a ThreadJob), so the type resolves here. Reuses the unit-tested
+# ActiveDirectoryService.Search; results are { rows: [...] } (an object, so a single hit can't
+# collapse out of an array).
+function Resolve-Search {
+    param([string]$prefix, [string[]]$domains, [string]$reqId)
+    $bundle = [ordered]@{ rows = @(); error = '' }
+    try {
+        $svc = [ActiveDirectoryService]::new($domains, $null)
+        $bundle.rows = @($svc.Search($prefix) | ForEach-Object {
+                [ordered]@{
+                    Kind              = $_.Kind
+                    Name              = $_.Name
+                    SamAccountName    = $_.SamAccountName
+                    UserPrincipalName = $_.UserPrincipalName
+                    DisplayName       = $_.DisplayName
+                    Domain            = $_.Domain
+                    Enabled           = $_.Enabled
+                    LockedOut         = $_.LockedOut
+                    DistinguishedName = $_.DistinguishedName
+                }
+            })
+    }
+    catch {
+        $bundle.error = "AD search: $($_.Exception.Message)"
+    }
+    $resultPath = Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)
+    Write-LensBundle $resultPath ($bundle | ConvertTo-Json -Depth 6)
+}
 
 # --- pre-warm (parallel with DONUT's startup; heartbeat first so the parent unblocks) --
 $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
