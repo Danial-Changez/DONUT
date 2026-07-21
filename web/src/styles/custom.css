@@ -185,6 +185,13 @@ main h1[data-page-title] {
 .pagination-links {
   margin-top: 3rem;
 }
+/* Starlight's footer meta row (edit link + last-updated) is disabled on this
+   site, but the empty div still stacks its 3rem margin plus the footer's
+   1.5rem flex gap above the pager - ~120px of dead space on every page.
+   Hiding it when empty halves the content-to-pager gap. */
+.main-pane footer .meta:empty {
+  display: none;
+}
 
 /* --- Splash hero: centered, dot-grid ground, violet glow (Arcane-style) --- */
 [data-has-hero] .hero {
