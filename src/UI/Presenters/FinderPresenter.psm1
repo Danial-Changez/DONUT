@@ -20,8 +20,8 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     account unlock, and the user Lens (person -> devices).
 
 .DESCRIPTION
-    Owns everything behind the Home search bar's dropdown: the debounced multi-forest
-    AD search (run over the warm de-elevated Lens agent via LensLookupWorker -Search),
+    Owns everything behind the Home search bar's dropdown: the debounced per-forest
+    AD fan-out (AdSearchWorker on the runspace pool, results streamed per forest),
     inline unlock of locked-out accounts, and the user Lens - picking a user runs a
     lookup over the persistent de-elevated agent (LensLookupWorker on the pool) and
     shows the result in the detail pane via HomeVm.SetPerson. All pool jobs are raw
@@ -252,22 +252,19 @@ class FinderPresenter {
         if ($this.StoppingJobs.Count -eq 0) { $this.ReapTimer.Stop() }
     }
 
-    # Fire-and-forget warm: ensure the agent is up, then run one throwaway search ('zzz') to
-    # prime its bind to every configured forest, so the first real search is fast. Runs on a
-    # background pool runspace (Prime, not Search), so the EnsureAgent cost never hits a keystroke.
+    # Fire-and-forget warm: one throwaway search per forest primes the worker graph
+    # + each forest's LDAP bind. Never blocks; reaped by the first real search.
     [void] WarmAdSearch() {
-        try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $this.AdWarmJobs.Add($this.StartPoolScript($worker, @{
-                        Prime      = $true
-                        Prefix     = 'zzz'
-                        Domains    = @($this.AdService.Domains)
-                        SiteServer = $this.Config.GetAdminServiceHost()
-                        SourceRoot = $this.Config.SourceRoot
-                    }))
-        }
-        catch {
-            $this.Logger.LogException("AD search warm-up could not start", $_)
+        $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
+        foreach ($domain in $this.AdService.Domains) {
+            try {
+                # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
+                $this.AdWarmJobs.Add(
+                    $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
+            }
+            catch {
+                $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
+            }
         }
     }
 
@@ -345,8 +342,7 @@ class FinderPresenter {
         $this.SearchPollTimer.Stop()
     }
 
-    # Debounce elapsed: kick a background search that runs over the warm de-elevated agent
-    # (reusing its warm forest binds) instead of a cold per-forest bind on the pool.
+    # Debounce elapsed: kick a background search on the runspace pool.
     [void] RunAdSearch() {
         $this.SearchDebounce.Stop()
         $this.ReapAdWarm()   # startup warm has served its purpose once a real search runs
@@ -360,47 +356,35 @@ class FinderPresenter {
         $this.SearchToken++
         $token = $this.SearchToken
 
-        # One agent job covers all forests (the agent runs the multi-forest search over its
-        # warm binds); the pool runspace is just a thin relay.
-        try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $job = $this.StartPoolScript($worker, @{
-                    Search     = $true
-                    Prefix     = $prefix
-                    Domains    = @($this.AdService.Domains)
-                    SiteServer = $this.Config.GetAdminServiceHost()
-                    SourceRoot = $this.Config.SourceRoot
-                })
-            $job.Token = $token
-            $this.SearchJobs.Add($job)
-            $this.SearchPollTimer.Start()
+        # Fan out one job per forest and render hits as each lands, instead of
+        # waiting on the sum of all forests' LDAP round-trips.
+        $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdSearchWorker.ps1'
+        foreach ($domain in $this.AdService.Domains) {
+            try {
+                $job = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = $prefix })
+                $job.Token = $token
+                $this.SearchJobs.Add($job)
+            }
+            catch {
+                $this.Logger.LogException("AD search could not start for '$domain'", $_)
+            }
         }
-        catch {
-            $this.Logger.LogException("AD search could not start", $_)
-            $this.CloseSearchPopup()
-        }
+        if ($this.SearchJobs.Count -gt 0) { $this.SearchPollTimer.Start() }
+        else { $this.CloseSearchPopup() }
     }
 
-    # Poll the in-flight search: on completion parse the agent's { rows: [...] } bundle,
-    # fold hits into the current token's accumulator, and render. Stale-token jobs are discarded.
+    # Poll the per-forest searches; as each lands, fold its hits into the current token's
+    # accumulator and re-render the growing union. Stale-token jobs are discarded.
     [void] PollSearch() {
         foreach ($job in @($this.SearchJobs)) {
             if (-not $job.Handle.IsCompleted) { continue }
-            $rows = @()
-            try {
-                $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
-                if ($json) {
-                    $parsed = $json | ConvertFrom-Json
-                    if ($parsed.error) { $this.Logger.LogWarning("AD search: $($parsed.error)") }
-                    $rows = @($parsed.rows)
-                }
-            }
+            $results = @()
+            try { $results = @($job.Ps.EndInvoke($job.Handle)) }
             catch { $this.Logger.LogException("AD search failed", $_) }
             $this.DisposeJob($job.Ps)
             [void]$this.SearchJobs.Remove($job)
             if ($job.Token -ne $this.SearchToken) { continue }
-            foreach ($row in $rows) {
-                if ($null -eq $row) { continue }
+            foreach ($row in $results) {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
                 if ($this.SearchSeen.Add($key)) { $this.SearchResults.Add($row) }
             }

@@ -82,11 +82,14 @@ rights — a separate identity means a separate process.
   (`PersonLens.FromJson`) is pure/tested; the agent/task I/O is the overridable
   `RunLookupJson` seam. The `%5C` (backslash) gotcha in the SCCM query is avoided by
   filtering on the forest-unique SAM (`endswith`) and exact-matching client-side.
-- The **AD finder search runs through this same agent**, not the pool: a `kind: 'search'`
-  request drives `ActiveDirectoryService.Search` across the forests (`RunSearchJson` ->
-  `Resolve-Search`, returning `{ rows }`), reusing the agent's warm directory binds and
-  running de-elevated as the operator. A lookup is offloaded to a `ThreadJob` so a slow
-  lookup never blocks a fast search on the serve loop.
+- The **AD finder search runs in-process on the pool, not through this agent**:
+  `FinderPresenter` fans out one `AdSearchWorker` job per forest, each calling
+  `ActiveDirectoryService.Search` as the elevated admin - AD reads don't need
+  de-elevation. (It was briefly routed through the agent to reuse warm binds, but that
+  dragged the agent's cold start - CIM + scheduled-task module load, which takes the
+  process-wide CLR loader lock, plus a ~2-4 s `pwsh` spawn - onto the per-keystroke path
+  and froze the UI, so it went back to the warmed pool.) A lookup is offloaded to a
+  `ThreadJob` so a slow one never blocks the serve loop.
 
 **The exchange protocol** (fixed `%ProgramData%\DONUT\lens-agent` dir): the parent drops
 `request-<id>.bin`; the agent answers `partial-<id>-1.bin` (directory facts),

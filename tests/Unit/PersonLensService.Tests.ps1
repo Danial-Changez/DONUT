@@ -45,32 +45,6 @@ Describe "PersonLensService" {
         $lens.Errors[0] | Should -Be 'boom'
     }
 
-    Context "AD search request (served by the agent's Resolve-Search)" {
-
-        It "SearchRequestJson carries kind 'search', the prefix, and the domains" {
-            $json = [PersonLensService]::SearchRequestJson('cap-10', @('corp.example', 'lab.example'))
-            $req = $json | ConvertFrom-Json
-            $req.kind | Should -Be 'search'
-            $req.prefix | Should -Be 'cap-10'
-            @($req.domains) | Should -Be @('corp.example', 'lab.example')
-        }
-
-        It "normalizes a single domain to an array (a lone hit can't collapse out of one)" {
-            $json = [PersonLensService]::SearchRequestJson('jsmith', @('corp.example'))
-            $req = $json | ConvertFrom-Json
-            @($req.domains).Count | Should -Be 1
-            @($req.domains)[0] | Should -Be 'corp.example'
-        }
-
-        It "round-trips the search request through the exchange crypto (no prefix on disk in clear)" {
-            $keyIv = [PersonLensService]::NewKeyIv()
-            $json = [PersonLensService]::SearchRequestJson('secretuser', @('corp.example'))
-            $blob = [PersonLensService]::ProtectText($json, $keyIv)
-            [System.Text.Encoding]::UTF8.GetString($blob) | Should -Not -Match 'secretuser'
-            [PersonLensService]::UnprotectText($blob, $keyIv) | Should -Be $json
-        }
-    }
-
     Context "exchange crypto (format shared with LensAgent.ps1)" {
 
         It "NewKeyIv returns 48 bytes (32 key + 16 IV) and differs per call" {
