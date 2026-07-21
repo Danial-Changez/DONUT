@@ -59,9 +59,10 @@
   --donut-violet-30: rgba(128, 34, 254, 0.3);
   --donut-violet-40: rgba(128, 34, 254, 0.4);
 
-  /* Content column and chrome sizing: wide article, lean sidebar */
+  /* Content column and chrome sizing: wide article, lean sidebar, capped TOC rail */
   --sl-content-width: 48rem;
   --sl-sidebar-width: 16.25rem;
+  --donut-toc-width: 15rem;
 }
 
 /* Site-wide atmosphere: a faint violet wash bleeding down from the top edge,
@@ -105,6 +106,15 @@ body {
   text-align: center;
   padding-block: 4.5rem 1rem;
 }
+/* True centering, two Starlight quirks: the hero .copy flex column left-aligns
+   its children (the shrink-wrapped h1 pins to the stack's left edge), and
+   .sl-container only gets auto side margins at >=72rem viewports. */
+[data-has-hero] .hero .copy {
+  align-items: center;
+}
+[data-has-hero] .sl-container {
+  margin-inline: auto;
+}
 [data-has-hero] .hero h1 {
   background: linear-gradient(90deg, #fafafa 30%, #c4b5fd);
   -webkit-background-clip: text;
@@ -129,13 +139,20 @@ body {
     radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
   background-size: auto, 26px 26px;
 }
-/* Crisp 6px buttons (the radii ladder), quiet color-only hover. */
+/* Crisp 6px buttons (the radii ladder), quiet color-only hover; the trailing
+   icon nudges forward as the "you're about to navigate" cue. */
 .sl-link-button.primary,
 .sl-link-button.minimal {
   border-radius: var(--donut-radius);
   transition: background-color var(--donut-fast) var(--donut-ease),
     border-color var(--donut-fast) var(--donut-ease),
     color var(--donut-fast) var(--donut-ease);
+}
+.sl-link-button svg {
+  transition: transform var(--donut-slow) var(--donut-ease);
+}
+.sl-link-button:hover svg {
+  transform: translateX(3px);
 }
 
 /* --- Faux app window on the splash (stand-in for a product screenshot) --- */
@@ -382,7 +399,9 @@ button[data-open-modal] kbd {
   font-weight: 500;
 }
 
-/* Prev/next pager: the same flat card recipe, color-only hover. */
+/* Prev/next pager: the same flat card recipe, color-only hover on the card;
+   the arrow nudges in its travel direction (svg is the anchor's first child,
+   so direction comes from rel). */
 .pagination-links a {
   border: 1px solid var(--sl-color-hairline);
   border-radius: var(--donut-radius);
@@ -393,6 +412,78 @@ button[data-open-modal] kbd {
 .pagination-links a:hover {
   border-color: var(--donut-violet-30);
   background: var(--sl-color-gray-6);
+}
+.pagination-links a svg {
+  transition: transform var(--donut-slow) var(--donut-ease);
+}
+.pagination-links a[rel='next']:hover svg {
+  transform: translateX(3px);
+}
+.pagination-links a[rel='prev']:hover svg {
+  transform: translateX(-3px);
+}
+
+/* --- Right rail on a diet: Starlight grows the TOC pane to absorb half the
+   leftover viewport (~576px at 1920w); cap it and hand the space back to the
+   main pane, centering the article between the rails. Starlight scopes its
+   own rules in :where() (zero specificity), so these plain selectors win. --- */
+@media (min-width: 72rem) {
+  .right-sidebar-container {
+    width: var(--donut-toc-width);
+  }
+  [data-has-sidebar][data-has-toc] .main-pane {
+    width: calc(100% - var(--donut-toc-width));
+    --sl-content-margin-inline: auto;
+  }
+  .right-sidebar-panel .sl-container {
+    width: calc(var(--donut-toc-width) - 2 * var(--sl-sidebar-pad-x));
+    max-width: none;
+  }
+}
+
+/* --- Search dialog quick links: the empty state suggests destinations
+   (markup in components/Search.astro); hides once a query has text. --- */
+site-search[data-searching] .dw-quick-links {
+  display: none;
+}
+.dw-quick-links-label {
+  margin: 0 0 0.25rem;
+  color: var(--sl-color-gray-3);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dw-quick-links ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dw-quick-links li + li {
+  border-top: 1px solid var(--sl-color-hairline-shade);
+}
+.dw-quick-links a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.25rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: color var(--donut-fast) var(--donut-ease);
+}
+.dw-quick-links a:hover {
+  color: var(--sl-color-text-accent);
+}
+.dw-quick-links a svg {
+  opacity: 0;
+  transition: opacity var(--donut-fast) var(--donut-ease),
+    transform var(--donut-slow) var(--donut-ease);
+}
+.dw-quick-links a:hover svg {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .dw-footer-note {

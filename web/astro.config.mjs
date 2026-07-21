@@ -48,6 +48,8 @@ export default defineConfig({
       components: {
         // DONUT is dark-only; this empty component removes the theme toggle.
         ThemeSelect: './src/components/ThemeSelect.astro',
+        // Stock search + a quick-links empty state (see components/Search.astro).
+        Search: './src/components/Search.astro',
       },
       expressiveCode: {
         // Single dark syntax theme so code blocks never flip light.
