@@ -60,11 +60,13 @@
   --donut-violet-40: rgba(128, 34, 254, 0.4);
 
   /* Content column and chrome sizing: wide article, lean sidebar, capped TOC
-     rail. Rail widths reference Arcane's: 260px sidebar at desktop; a ~224px
-     TOC column plus a 48px gutter to the article (hence 17rem). */
+     rail. Rail widths reference Arcane's: 260px sidebar at desktop; the TOC
+     pane is 16rem so its inner list is exactly their w-56 (224px) once the
+     1rem panel padding comes off - the 3rem article gap lives on the flex
+     cluster, not in the rail. */
   --sl-content-width: 48rem;
   --sl-sidebar-width: 16.25rem;
-  --donut-toc-width: 17rem;
+  --donut-toc-width: 16rem;
 }
 
 /* Site-wide atmosphere: a faint violet wash bleeding down from the top edge,
@@ -597,17 +599,23 @@ button[data-open-modal] kbd kbd {
   transform: translateX(-3px);
 }
 
-/* --- Right rail on a diet: Starlight grows the TOC pane to absorb half the
-   leftover viewport (~576px at 1920w); cap it and hand the space back to the
-   main pane, centering the article between the rails. Starlight scopes its
-   own rules in :where() (zero specificity), so these plain selectors win. --- */
+/* --- Article + TOC as one centered cluster (Arcane's shell: justify-center
+   gap-12): the main pane shrinks to fit the 48rem article, the TOC rail is a
+   fixed narrow column 3rem beside it, and the PAIR centers in the space right
+   of the sidebar - instead of Starlight growing the TOC pane to absorb half
+   the leftover viewport and stranding it at the screen edge. Starlight scopes
+   its own rules in :where() (zero specificity), so these selectors win. --- */
 @media (min-width: 72rem) {
-  .right-sidebar-container {
-    width: var(--donut-toc-width);
+  [data-has-sidebar][data-has-toc] .lg\:sl-flex {
+    justify-content: center;
+    gap: 3rem;
   }
   [data-has-sidebar][data-has-toc] .main-pane {
-    width: calc(100% - var(--donut-toc-width));
+    width: calc(var(--sl-content-width) + 2 * var(--sl-content-pad-x));
     --sl-content-margin-inline: auto;
+  }
+  .right-sidebar-container {
+    width: var(--donut-toc-width);
   }
   .right-sidebar-panel .sl-container {
     width: calc(var(--donut-toc-width) - 2 * var(--sl-sidebar-pad-x));
