@@ -112,12 +112,12 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 
 The full class structure across all layers:
 
-![DONUT class diagram](/DONUT/diagrams/class_diagram.svg)
+![DONUT class diagram](/diagrams/class_diagram.svg)
 
 *Source: [`class_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/class_diagram.puml)*
 
 Component wiring, launcher → scripts → presenters → services → workers:
 
-![DONUT component diagram](/DONUT/diagrams/component_diagram.svg)
+![DONUT component diagram](/diagrams/component_diagram.svg)
 
 *Source: [`component_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/component_diagram.puml)*

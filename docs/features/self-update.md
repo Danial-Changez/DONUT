@@ -26,6 +26,6 @@ DONUT keeps itself current from your org's **GitHub Releases**.
 
 ## Under the hood
 
-![Self-update sequence diagram](/DONUT/diagrams/update_sequence_diagram.svg)
+![Self-update sequence diagram](/diagrams/update_sequence_diagram.svg)
 
 *Source: [`update_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/update_sequence_diagram.puml)*

@@ -4,10 +4,11 @@ import { defineConfig } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
 import rehypeDocsLinks from './plugins/rehype-docs-links.mjs';
+import { site, base, repo } from './site-base.mjs';
 
 export default defineConfig({
-  site: 'https://danial-changez.github.io',
-  base: '/DONUT',
+  site,
+  base,
   vite: {
     resolve: {
       alias: [
@@ -41,9 +42,7 @@ export default defineConfig({
       // The wordmark already spells DONUT, so it replaces the text title.
       logo: { src: './src/assets/logo.png', alt: 'DONUT', replacesTitle: true },
       favicon: '/favicon.ico',
-      social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/Danial-Changez/DONUT' },
-      ],
+      social: [{ icon: 'github', label: 'GitHub', href: repo }],
       customCss: [
         '@fontsource/geist-sans/400.css',
         '@fontsource/geist-sans/500.css',

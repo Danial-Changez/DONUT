@@ -34,12 +34,12 @@ settling the row as *Unconfirmed*.
 
 ## Under the hood
 
-![Apply updates sequence diagram](/DONUT/diagrams/applyUpdates_sequence_diagram.svg)
+![Apply updates sequence diagram](/diagrams/applyUpdates_sequence_diagram.svg)
 
 *Source: [`applyUpdates_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/applyUpdates_sequence_diagram.puml)*
 
 The remote worker itself (inside a pool runspace):
 
-![Remote worker activity diagram](/DONUT/diagrams/activity_diagram.svg)
+![Remote worker activity diagram](/diagrams/activity_diagram.svg)
 
 *Source: [`activity_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/activity_diagram.puml)*

@@ -31,6 +31,6 @@ DONUT's elevated one, so results come back quickly. Each keystroke supersedes th
 
 ## Under the hood
 
-![AD finder sequence diagram](/DONUT/diagrams/ad_finder_sequence_diagram.svg)
+![AD finder sequence diagram](/diagrams/ad_finder_sequence_diagram.svg)
 
 *Source: [`ad_finder_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/ad_finder_sequence_diagram.puml)*

@@ -36,6 +36,6 @@ licensing); the scan deploys it to the target, parses the CSV export, and cleans
 
 ## Under the hood
 
-![Inventory and storage sequence diagram](/DONUT/diagrams/inventory_sequence_diagram.svg)
+![Inventory and storage sequence diagram](/diagrams/inventory_sequence_diagram.svg)
 
 *Source: [`inventory_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/inventory_sequence_diagram.puml)*

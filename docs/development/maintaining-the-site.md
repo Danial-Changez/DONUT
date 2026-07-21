@@ -40,7 +40,9 @@ a couple of minutes.
   site URLs at build time.
 - Don't link site pages to `docs/README.md`, `docs/diagrams/*`, or `docs/plans/*` —
   those are GitHub-only (excluded from the site). Use a full GitHub URL instead.
-- Reference diagram SVGs as `/DONUT/diagrams/<name>.svg`.
+- Reference diagram SVGs as `/diagrams/<name>.svg` (base-less). The build prefixes
+  the deploy base, so the path stays correct if the repo is renamed or moved —
+  don't hardcode the `/DONUT/` base.
 
 ## Update a diagram
 
@@ -94,6 +96,6 @@ last known-good pin.
 | Symptom | Cause |
 |---------|-------|
 | Build fails with a schema error naming a file | That page is missing `title` (or `description`) frontmatter |
-| A page 404s on the site | Slug missing from `sidebar` in `astro.config.mjs`, or the link forgot the `/DONUT/` base |
+| A page 404s on the site | Slug missing from `sidebar` in `astro.config.mjs`, or a link used an absolute path instead of a relative `.md` link |
 | Diagram image broken | SVG name doesn't match the `.puml` filename / `@startuml` name |
 | Search finds nothing locally | You're in `npm run dev` — search indexes only on `npm run build` |

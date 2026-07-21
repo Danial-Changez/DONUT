@@ -30,6 +30,6 @@ encrypted, ACL-locked exchange. Details in the
 
 ## Under the hood
 
-![Lens lookup sequence diagram](/DONUT/diagrams/lens_lookup_sequence_diagram.svg)
+![Lens lookup sequence diagram](/diagrams/lens_lookup_sequence_diagram.svg)
 
 *Source: [`lens_lookup_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/lens_lookup_sequence_diagram.puml)*

@@ -34,6 +34,6 @@ invalidated after an apply. See [Applying updates](./applying-updates.md).
 
 ## Under the hood
 
-![Scan sequence diagram](/DONUT/diagrams/scan_sequence_diagram.svg)
+![Scan sequence diagram](/diagrams/scan_sequence_diagram.svg)
 
 *Source: [`scan_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/scan_sequence_diagram.puml)*

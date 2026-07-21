@@ -6,7 +6,7 @@
 .DESCRIPTION
     Downloads a pinned PlantUML jar on first use (cached under tools/.cache, gitignored),
     then renders every .puml under docs/diagrams into web/public/diagrams (gitignored;
-    the site serves them at /DONUT/diagrams/<name>.svg). Prefers Graphviz dot for layout
+    the site serves them under its deploy base as /<base>/diagrams/<name>.svg). Prefers Graphviz dot for layout
     and falls back to PlantUML's built-in Smetana engine when dot is absent. Run locally
     after editing a diagram; the docs CI workflow runs this same script on ubuntu.
 #>
