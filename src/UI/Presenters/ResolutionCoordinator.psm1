@@ -82,8 +82,12 @@ class ResolutionCoordinator {
         # PersonLensService) into every runspace, not just RemoteWorker's WorkerServices
         # graph. Otherwise the first AD search / Lens lookup to land on an un-warmed
         # runspace cold-loads its graph under the CLR loader lock, and if that happens
-        # while the dispatcher is rendering (e.g. mid-scan) the UI freezes. The N jobs run
-        # concurrently and the WaitOne barrier below holds each runspace, so all N warm.
+        # while the dispatcher is rendering (e.g. mid-scan) the UI freezes. The warm also
+        # runs RemoteWorker.ps1 once per runspace (Mode='WarmRunspace') - a runspace whose
+        # first worker execution happens on a real job wedges it silently (the DC-warm /
+        # machine-list regression) - which is why LogsDir/ReportsDir thread through. The N
+        # jobs run concurrently and the WaitOne barrier below holds each runspace, so all
+        # N warm.
         $warmScript = Join-Path $this.Config.SourceRoot 'Scripts\Warm-Runspace.ps1'
         $pool = [RunspaceManager]::GetPool()
         $shells = [System.Collections.Generic.List[object]]::new()
@@ -94,6 +98,8 @@ class ResolutionCoordinator {
                 $ps.RunspacePool = $pool
                 $ps.AddCommand($warmScript) | Out-Null
                 $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
+                $ps.AddParameter('LogsDir', $this.Config.LogsPath) | Out-Null
+                $ps.AddParameter('ReportsDir', $this.Config.ReportsPath) | Out-Null
                 $handles.Add($ps.BeginInvoke())
                 $shells.Add($ps)
             }

@@ -12,6 +12,13 @@
     and user Lens (LensLookupWorker -> PersonLensService) shipped with graphs the warm
     didn't load. These tests fail if Warm-Runspace.ps1 stops covering any pool
     worker's imports, or if WarmPool stops running it.
+
+    Also guards the sibling regression: pre-loading the graph WITHOUT executing
+    RemoteWorker.ps1 once per runspace left the first real worker execution to a live
+    job, which wedged it silently - the startup DC discovery never logged, so every
+    resolve/inventory no-oped (the machine-list regression). The warm must therefore
+    invoke RemoteWorker.ps1 in Mode='WarmRunspace', with the log/report dirs threaded
+    through so the worker pass logs into Donut.log.
 #>
 
 Describe "Runspace warm coverage" {
@@ -80,5 +87,20 @@ Describe "Runspace warm coverage" {
 
     It "WarmPool is wired to run Warm-Runspace.ps1" {
         (Get-Content $Coordinator -Raw) | Should -Match 'Warm-Runspace\.ps1'
+    }
+
+    It "runs the real worker pipeline once per runspace (Mode='WarmRunspace')" {
+        $raw = Get-Content $WarmScript -Raw
+        $raw | Should -Match 'RemoteWorker\.ps1' -Because (
+            "the warm must execute RemoteWorker.ps1, not just pre-load its graph - " +
+            "a runspace whose first worker execution lands on a real job wedges it " +
+            "(the silent DC-warm / machine-list regression)")
+        $raw | Should -Match "Mode\s*=\s*'WarmRunspace'"
+    }
+
+    It "WarmPool threads the log/report dirs the worker warm pass needs" {
+        $raw = Get-Content $Coordinator -Raw
+        $raw | Should -Match "AddParameter\('LogsDir'"
+        $raw | Should -Match "AddParameter\('ReportsDir'"
     }
 }

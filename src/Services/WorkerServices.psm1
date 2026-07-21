@@ -142,6 +142,10 @@ class ExecutionService {
         $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
 
         if ($mode -eq 'Warm') {
+            # Entry marker: if this logs but "Cached N domain controller(s)" never
+            # follows, the hang is inside the AD discovery itself; if even this line is
+            # missing, the worker never started (script/pipeline bring-up wedged).
+            $this.Logger.LogInfo("DC discovery running on the pool (worker pipeline is up).")
             $dc = $this.Probe.GetActiveDomainController()
             $this.Logger.LogInfo("Resolver warm-up: active domain controller = $dc")
             return @{
@@ -155,6 +159,9 @@ class ExecutionService {
         # means later jobs never cold-load under the loader lock.
         if ($mode -eq 'WarmRunspace') {
             $this.WarmRuntimeAssemblies()
+            # One line per pool runspace at startup: proof this runspace ran the real
+            # worker pipeline before any real job landed on it.
+            $this.Logger.LogDebug("Runspace warmed: worker pipeline + runtime assemblies resident.")
             return @{ Mode = 'WarmRunspace' }
         }
 

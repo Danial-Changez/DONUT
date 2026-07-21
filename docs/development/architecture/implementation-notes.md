@@ -13,6 +13,16 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
+- **Pool warm = graph load + one real worker pass:** at startup
+  `ResolutionCoordinator.WarmPool` runs `Warm-Runspace.ps1` once per pool runspace
+  (concurrently, behind a barrier). It `using module`-loads the superset of every pool
+  worker's class graph, exercises the binary CIM/ScheduledTasks module machinery, and
+  then **executes `RemoteWorker.ps1` once** in `Mode='WarmRunspace'` (real pipeline
+  construction + `WarmRuntimeAssemblies`). Pre-loading the graph alone is not enough:
+  when a runspace's first `RemoteWorker.ps1` execution happened on a live job, that
+  job wedged silently — the startup DC discovery never logged a line, `HostResolver`
+  never got an active DC, and every resolve/inventory quietly no-oped (the
+  machine-list regression). `RunspaceWarmCoverage.Tests.ps1` guards both halves.
 - **Thread safety:** `LogService` is thread-safe. Work is fed back to the UI through a
   thread-safe state/queue that a `DispatcherTimer` polls on the UI thread — **not** by
   returning results (which only surface when the runspace completes) — so the "live
