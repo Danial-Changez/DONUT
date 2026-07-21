@@ -7,9 +7,8 @@ import astro from 'eslint-plugin-astro';
 
 export default [
   {
-    // Build output, framework-generated files, and the vendored Search.astro
-    // (a pinned upstream copy we don't own the style of).
-    ignores: ['dist/', '.astro/', 'node_modules/', 'src/components/Search.astro'],
+    // Build output and framework-generated files.
+    ignores: ['dist/', '.astro/', 'node_modules/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

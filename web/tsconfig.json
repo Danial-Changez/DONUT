@@ -1,8 +1,5 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  // Search.astro is a pinned copy of Starlight's own component; it imports
-  // Starlight-internal virtual modules whose types aren't visible to us, so it
-  // is type-checked upstream, not here (see its header re: re-diffing).
-  "exclude": ["dist", "src/components/Search.astro"]
+  "exclude": ["dist"]
 }

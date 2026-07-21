@@ -58,14 +58,12 @@ export default defineConfig({
         './src/styles/custom.css',
       ],
       components: {
-        // DONUT is dark-only; this empty component removes the theme toggle.
-        ThemeSelect: './src/components/ThemeSelect.astro',
         // Stock search + a quick-links empty state (see components/Search.astro).
         Search: './src/components/Search.astro',
       },
       expressiveCode: {
-        // Single dark syntax theme so code blocks never flip light.
-        themes: ['github-dark'],
+        // Dark default with a light counterpart; Starlight switches on the theme.
+        themes: ['github-dark', 'github-light'],
       },
       markdown: {
         // Run Starlight's Markdown pipeline (asides, anchors) on the external
