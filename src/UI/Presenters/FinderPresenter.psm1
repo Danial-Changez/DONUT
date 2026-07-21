@@ -252,13 +252,14 @@ class FinderPresenter {
         if ($this.StoppingJobs.Count -eq 0) { $this.ReapTimer.Stop() }
     }
 
-    # Fire-and-forget warm: one throwaway agent search ('zzz') primes the agent's bind to
-    # every configured forest. Never blocks; reaped by the first real search.
+    # Fire-and-forget warm: ensure the agent is up, then run one throwaway search ('zzz') to
+    # prime its bind to every configured forest, so the first real search is fast. Runs on a
+    # background pool runspace (Prime, not Search), so the EnsureAgent cost never hits a keystroke.
     [void] WarmAdSearch() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
             $this.AdWarmJobs.Add($this.StartPoolScript($worker, @{
-                        Search     = $true
+                        Prime      = $true
                         Prefix     = 'zzz'
                         Domains    = @($this.AdService.Domains)
                         SiteServer = $this.Config.GetAdminServiceHost()

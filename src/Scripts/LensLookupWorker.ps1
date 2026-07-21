@@ -42,6 +42,15 @@
 .PARAMETER StopAgent
     Stop/unregister the agent and purge every Lens exchange dir, without running a lookup.
 
+.PARAMETER Search
+    Run the finder's multi-forest AD search over the already-warm agent and emit
+    { rows: [...] }. The per-keystroke path; never starts the agent (that would freeze the UI).
+
+.PARAMETER Prime
+    Startup bind warm: ensure the agent is up, then run one throwaway search so its per-forest
+    LDAP/Kerberos binds are hot before the first real query. Off the hot path, so the EnsureAgent
+    cost is paid on a background pool runspace, not on a keystroke.
+
 .NOTES
     Runs on a pool runspace, as the elevated admin account.
 #>
@@ -56,6 +65,7 @@ param(
     [switch] $WarmOnly,
     [switch] $StopAgent,
     [switch] $Search,
+    [switch] $Prime,
     [string] $Prefix = '',
     [string[]] $Domains = @()
 )
@@ -70,6 +80,14 @@ $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
 if ($WarmOnly) { return $svc.EnsureAgent() }
+# -Prime: startup bind warm. Ensure the agent (fine off the UI thread), then run one throwaway
+# search so its per-forest LDAP/Kerberos binds are hot before the first real query. Deliberately
+# NOT the -Search path below, which must never call EnsureAgent (that froze the dispatcher).
+if ($Prime) {
+    $err = $svc.EnsureAgent()
+    if (-not $err) { [void]$svc.RunSearchJson($Prefix, $Domains) }
+    return $err
+}
 # -Search: run the finder's multi-forest AD search over the warm agent (emits { rows: [...] }).
 if ($Search) { return $svc.RunSearchJson($Prefix, $Domains) }
 $svc.RunLookupJson($Identity)

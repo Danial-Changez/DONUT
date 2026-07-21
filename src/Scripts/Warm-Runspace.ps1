@@ -39,8 +39,11 @@ param(
     [string] $SourceRoot = ''
 )
 
-# Binary modules EnsureAgent loads implicitly the first time it runs Get-CimInstance /
-# Register-ScheduledTask. They aren't `using module` class imports, so the warm above
-# doesn't cover them; import them here so the process-wide CLR loader-lock hit lands on
-# this startup barrier, never on the WPF dispatcher during a finder search.
+# EnsureAgent cold-loads the CIM + ScheduledTasks stacks (Get-CimInstance / *-ScheduledTask),
+# and that load takes the process-wide CLR loader lock. Importing isn't enough - the real hit
+# lands on the FIRST call, not on Import-Module - so actually invoke each cheap, local cmdlet
+# here on the warm barrier. Otherwise the load happens on a pool runspace during startup and
+# stalls the WPF dispatcher (the "UI dispatcher was blocked / loader-lock stall" warning).
 Import-Module CimCmdlets, ScheduledTasks -ErrorAction SilentlyContinue
+try { [void](Get-CimInstance -ClassName Win32_Process -Filter "Handle=$PID" -ErrorAction SilentlyContinue) } catch { }
+try { [void](Get-ScheduledTask -TaskName 'DONUT-loader-warm-probe' -ErrorAction SilentlyContinue) } catch { }
