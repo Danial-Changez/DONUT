@@ -59,10 +59,12 @@
   --donut-violet-30: rgba(128, 34, 254, 0.3);
   --donut-violet-40: rgba(128, 34, 254, 0.4);
 
-  /* Content column and chrome sizing: wide article, lean sidebar, capped TOC rail */
+  /* Content column and chrome sizing: wide article, lean sidebar, capped TOC
+     rail. Rail widths reference Arcane's: 260px sidebar at desktop; a ~224px
+     TOC column plus a 48px gutter to the article (hence 17rem). */
   --sl-content-width: 48rem;
   --sl-sidebar-width: 16.25rem;
-  --donut-toc-width: 15rem;
+  --donut-toc-width: 17rem;
 }
 
 /* Site-wide atmosphere: a faint violet wash bleeding down from the top edge,
@@ -153,6 +155,18 @@ body {
 }
 .sl-link-button:hover svg {
   transform: translateX(3px);
+}
+/* Secondary actions read as buttons: a dark filled surface instead of the
+   fully transparent Starlight minimal variant. */
+.sl-link-button.minimal {
+  border: 1px solid var(--sl-color-hairline);
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-1);
+}
+.sl-link-button.minimal:hover {
+  background: var(--sl-color-gray-5);
+  border-color: var(--donut-violet-30);
+  color: var(--sl-color-white);
 }
 
 /* --- Faux app window on the splash (stand-in for a product screenshot) --- */
@@ -346,6 +360,20 @@ header.header::after {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--donut-violet-30), transparent);
 }
+/* Center the search in the VIEWPORT: Starlight's header grid aligns the search
+   slot over the content column (computed columns), which reads as off-center.
+   Equal 1fr flanks + a capped middle column pin it to the true center. */
+@media (min-width: 50rem) {
+  header.header {
+    grid-template-columns: 1fr minmax(auto, 22rem) 1fr;
+  }
+  header.header > div:nth-child(2) {
+    width: 100%;
+  }
+  header.header .right-group {
+    justify-content: flex-end;
+  }
+}
 
 /* Search: a quiet bordered field with framed kbd chips. */
 button[data-open-modal] {
@@ -462,24 +490,25 @@ site-search[data-searching] .dw-quick-links {
 .dw-quick-links li + li {
   border-top: 1px solid var(--sl-color-hairline-shade);
 }
+/* Row highlight is INSTANT (no transition): in a command-palette context the
+   highlight is state feedback, not motion - any easing reads as lag. */
 .dw-quick-links a {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.55rem 0.25rem;
+  padding: 0.55rem 0.5rem;
+  border-radius: var(--donut-radius-sm);
   color: var(--sl-color-gray-2);
   font-size: 0.875rem;
   text-decoration: none;
-  transition: color var(--donut-fast) var(--donut-ease);
 }
 .dw-quick-links a:hover {
-  color: var(--sl-color-text-accent);
+  background: var(--sl-color-gray-5);
+  color: var(--sl-color-white);
 }
 .dw-quick-links a svg {
   opacity: 0;
-  transition: opacity var(--donut-fast) var(--donut-ease),
-    transform var(--donut-slow) var(--donut-ease);
 }
 .dw-quick-links a:hover svg {
   opacity: 1;
