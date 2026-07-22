@@ -183,33 +183,50 @@ class ExecutionService {
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
-    # Pre-loads the heavy runtime assemblies and modules (DNS, sockets, LDAP, CIM) so
-    # the first real probe never loads them under the process-wide CLR loader lock
-    # mid-render. LOADS ONLY - never a lookup, session, or query, not even against
-    # this machine: the localhost DNS lookup and DCOM session this method once opened
-    # are native connects a security stack can hook, and hooked connects wedge below
-    # PowerShell where no timeout or stop can reach them (the pool sat 0/8 free 90 s
-    # after the warm barrier lapsed). First-use connection costs belong on live pool
-    # jobs, whose gates are bounded and off the startup barrier.
+    # Exercises the heavy runtime stacks (DNS, TCP, CIM/DCOM, LDAP) against localhost
+    # so a live job's FIRST resolve/socket/CIM call is never also this runspace's
+    # first: assembly loads, winsock/DNS-client bring-up, and DCOM plumbing all get
+    # paid here. This is the recipe every known-good build ran (64dbec8 through
+    # 36c7536: resolve, disk scan, and DC discovery all worked for weeks). A
+    # loads-only variant that skipped the exercises shipped once, and the first live
+    # resolve-IP and disk-scan jobs - whose opening act is exactly a first
+    # DNS/socket connect - stopped completing.
+    #
+    # Wedge risk is accepted BY DESIGN: this runs under WarmPool's barrier, which
+    # can no longer hang or kill anything - a warm that overruns is parked running,
+    # capacity is compensated, and the reaper harvests it whenever it lands. The
+    # one op that stays banned here is anything unproven: the loopback port-445
+    # probe added in 2292abe was in no known-good build and coincided with the
+    # no-window startup incident; WarmScanLaunchPath stays pure CPU.
     [void] WarmRuntimeAssemblies() {
-        try { Import-Module DnsClient -ErrorAction Stop }
-        catch {
-            $this.Logger.LogDebug("DnsClient module pre-load failed: $($_.Exception.Message)")
+        try {
+            Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction Stop | Out-Null
         }
-        try { [void][System.Net.Sockets.TcpClient] }
         catch {
-            $this.Logger.LogDebug("Sockets assembly pre-load failed: $($_.Exception.Message)")
+            $this.Logger.LogDebug("DNS warm-up skipped: $($_.Exception.Message)")
+        }
+        try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() }
+        catch {
+            $this.Logger.LogDebug("TCP warm-up skipped: $($_.Exception.Message)")
         }
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction Stop }
         catch {
-            $this.Logger.LogDebug(
-                "DirectoryServices assembly pre-load failed: $($_.Exception.Message)")
+            $this.Logger.LogDebug("DirectoryServices warm-up skipped: $($_.Exception.Message)")
         }
-        # A session OPTION is a plain local object; building one loads the CIM binary
-        # module machinery without ever opening a session.
-        try { [void](New-CimSessionOption -Protocol Dcom) }
+        try {
+            $opt = New-CimSessionOption -Protocol Dcom
+            $s = New-CimSession -SessionOption $opt -ErrorAction Stop
+            try {
+                Get-CimInstance -CimSession $s -ClassName Win32_ComputerSystem `
+                    -Property Name -ErrorAction Stop | Out-Null
+            }
+            catch {
+                $this.Logger.LogDebug("CIM query warm-up skipped: $($_.Exception.Message)")
+            }
+            Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue
+        }
         catch {
-            $this.Logger.LogDebug("CIM module pre-load failed: $($_.Exception.Message)")
+            $this.Logger.LogDebug("CIM session warm-up skipped: $($_.Exception.Message)")
         }
     }
 
@@ -220,12 +237,12 @@ class ExecutionService {
     # wedged forever after "Starting preliminary scan" with every op in that gap
     # bounded at source level, so the block sits below PowerShell.
     #
-    # NO network operation may ever go in this warm (or any warm the startup barrier
-    # waits on). A port-445 loopback probe here once wedged inside the native connect
-    # call - below the probe's own 2 s timeout, which is armed only after BeginConnect
-    # returns - and every warm job hung, so WarmPool's barrier lapsed and the app
-    # never showed a window. Security stacks hook socket connects (445 above all);
-    # the hook can block the call itself, so a socket op is never "bounded" here.
+    # This warm stays PURE CPU. A port-445 loopback probe was added here once "to
+    # bind the socket stack" - it was in no known-good build, and it coincided with
+    # the no-window startup incident (a hooked connect can block inside BeginConnect,
+    # below the probe's own 2 s timeout, which is armed only after the call returns).
+    # The proven localhost first-use exercises live in WarmRuntimeAssemblies; nothing
+    # unproven gets added to the barrier's workload.
     [void] WarmScanLaunchPath() {
         try {
             $overrides = @{

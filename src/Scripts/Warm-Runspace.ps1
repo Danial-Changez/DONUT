@@ -21,8 +21,8 @@
     startup DC discovery never logs a line, HostResolver never gets an active DC, and
     every resolve/inventory quietly no-ops (the machine-list regression introduced
     when 9304ab3 replaced the per-runspace worker pass with a graph-only warm). So
-    after the imports the body (1) imports the binary CIM + ScheduledTasks modules
-    the workers and the Lens-agent bring-up bind, then (2) invokes
+    after the imports the body (1) exercises the binary CIM + ScheduledTasks module
+    machinery the workers and the Lens-agent bring-up bind, then (2) invokes
     RemoteWorker.ps1 in Mode='WarmRunspace' - compiling the worker script and
     constructing its real pipeline (LogService / AppConfig / ExecutionService +
     WarmRuntimeAssemblies) in this runspace, exactly what the pre-9304ab3 WarmPool
@@ -39,10 +39,10 @@
     Local reports directory, threaded to the worker pass.
 
 .NOTES
-    Runs on a pool runspace, never the WPF dispatcher. The warm is LOAD-ONLY
-    (module + assembly loads, script compilation); it must never depend on the
-    DC / SCCM / AD being up, and it may never open a connection of any kind -
-    not even to this machine. See the block comment above the module imports.
+    Runs on a pool runspace, never the WPF dispatcher. The warm is LOCAL only
+    (localhost CIM / task / assembly warm-ups); it must never depend on the
+    DC / SCCM / AD being up. WarmPool's barrier parks an overrunning warm and
+    compensates capacity, so a slow or stuck warm cannot hold up the app.
 #>
 using module "..\Services\WorkerServices.psm1"
 using module "..\Services\ActiveDirectoryService.psm1"
@@ -63,22 +63,30 @@ param(
 $warmLog = if ([string]::IsNullOrWhiteSpace($LogsDir)) { [NullLogService]::new() }
 else { [LogService]::new($LogsDir) }
 
-# Import the binary CIM + ScheduledTasks modules (hit by the workers and
-# PersonLensService.EnsureAgent) so their assemblies are resident before any real job
-# binds them. IMPORTS ONLY - no query may ever run here. This block once made two
-# "cheap, local" first-call probes (a WMI query for our own PID and a task lookup) to
-# prepay the first-call loader hit; both are RPC connects under the hood, and a
-# security stack's hook on those connects wedged them below PowerShell - unstoppably,
-# the pool still 0/8 free 90 s after the stop requests - on 7-8 of 8 warm runspaces,
-# starving the DC resolve and every other job behind a dead pool. The first-call cost
-# the probes prepaid now lands on a live pool job, bounded and off the startup barrier.
+# The binary CIM + ScheduledTasks stacks (hit by the workers and
+# PersonLensService.EnsureAgent) take the process-wide CLR loader lock on their FIRST
+# call - importing alone doesn't pay that cost - so invoke each cheap, local cmdlet
+# here instead of on a live pool job. This is the recipe of every known-good build
+# (36c7536: DC discovery completed; earlier trees: resolve + disk scan worked for
+# weeks). An imports-only variant shipped once and the first live jobs stopped
+# completing. A probe that wedges here can no longer hurt the app: WarmPool's
+# barrier parks an overrunning warm (still running) and compensates capacity.
 try {
     Import-Module CimCmdlets, ScheduledTasks -ErrorAction Stop
+    $cimProbe = @{
+        ClassName   = 'Win32_Process'
+        Filter      = "Handle=$PID"
+        ErrorAction = 'Stop'
+    }
+    [void](Get-CimInstance @cimProbe)
+    # The probe task never exists: the miss itself pays the ScheduledTasks loader hit,
+    # which is all this call is for - so the expected not-found is not worth logging.
+    [void](Get-ScheduledTask -TaskName 'DONUT-loader-warm-probe' -ErrorAction SilentlyContinue)
 }
 catch {
     $warmLog.LogWarning(
-        "Runspace warm: CIM/ScheduledTasks module pre-load failed - first use pays " +
-        "the loader hit on a live job: " + $_.Exception.Message)
+        "Runspace warm: CIM/ScheduledTasks pre-load failed - first use will cold-load: " +
+        $_.Exception.Message)
 }
 
 # Run the real worker once (Mode='WarmRunspace' -> WarmRuntimeAssemblies): the script

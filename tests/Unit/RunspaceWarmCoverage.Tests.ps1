@@ -133,34 +133,36 @@ Describe "Runspace warm coverage" {
             "connect wedges below PowerShell and once held app startup hostage")
     }
 
-    It "the runtime-assembly warm loads modules but opens no connection" {
-        # The 445 lesson generalizes: LOCAL operations are connects too. This method
-        # once ran a localhost DNS lookup and opened a DCOM session "to cold-load
-        # assemblies"; both are native connects a security stack can hook, and hooked
-        # connects wedge where no timeout or stop reaches (the pool sat 0/8 free 90 s
-        # after the barrier lapsed, starving the DC resolve). Loads pay the loader
-        # hit; only connects can wedge - so only loads are allowed here.
+    It "the runtime-assembly warm exercises the DNS/TCP/CIM stacks, not just loads" {
+        # The recipe of every known-good build (64dbec8 through 36c7536): exercise
+        # each heavy stack against localhost so a live job's first resolve, socket,
+        # or CIM call is never also this runspace's first. A loads-only variant
+        # shipped once, and the first live resolve-IP and disk-scan jobs - whose
+        # opening act is exactly a first DNS/socket connect - stopped completing.
+        # Wedge risk is carried by WarmPool's barrier (park + reap + capacity
+        # compensation), never by removing the exercises.
         $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
         $raw = Get-Content $services -Raw
         $raw -match '(?s)\[void\] WarmRuntimeAssemblies\(\)(.*?)\r?\n    \}' | Should -BeTrue
-        $Matches[1] | Should -Not -Match (
-            'Get-CimInstance|New-CimSession(?!Option)|Get-ScheduledTask|Resolve-DnsName|' +
-            'Test-Connection|::new\(|Connect|Reachable|Probe\.') -Because (
-            "the warm may load modules/assemblies but must never resolve, query, or " +
-            "open a session - not even against this machine")
+        foreach ($exercise in 'Resolve-DnsName', 'TcpClient', 'New-CimSession ') {
+            $Matches[1] | Should -Match ([regex]::Escape($exercise)) -Because (
+                "dropping the $($exercise.Trim()) first-use warm-up regressed the " +
+                "first live resolve/disk-scan job on machines where 64dbec8 worked")
+        }
     }
 
-    It "Warm-Runspace.ps1 imports modules but opens no connection" {
-        # Same rule at the script level: the warm script once ran a local WMI query
-        # and a scheduled-task lookup to prepay first-call loader hits; their hooked
-        # RPC connects wedged 7-8 of 8 warm runspaces unstoppably and every real job
-        # queued behind a dead pool. Import-Module is allowed; queries are not.
+    It "Warm-Runspace.ps1 exercises the CIM/ScheduledTasks machinery, not just imports" {
+        # Importing the binary modules does not pay their first-call loader hit; the
+        # known-good recipe (36c7536) invokes one cheap local cmdlet per stack. An
+        # imports-only variant shipped once alongside the loads-only runtime warm and
+        # the first live jobs stopped completing.
         $raw = Get-Content $WarmScript -Raw
-        $raw | Should -Not -Match (
-            'Get-CimInstance|New-CimSession|Get-ScheduledTask|Resolve-DnsName|' +
-            'Test-Connection|TcpClient|BeginConnect|Reachable') -Because (
-            "every connection-class call - even a local one - must live on a live " +
-            "job's bounded path, never inside the startup warm barrier")
+        $raw | Should -Match 'Get-CimInstance' -Because (
+            "the CIM stack must be exercised, not merely imported, or the first live " +
+            "CIM call pays the loader hit mid-job")
+        $raw | Should -Match 'Get-ScheduledTask' -Because (
+            "the ScheduledTasks stack backs the Lens-agent bring-up and must be " +
+            "exercised at warm")
     }
 
     It "WarmPool raises pool capacity when warm jobs miss the barrier" {

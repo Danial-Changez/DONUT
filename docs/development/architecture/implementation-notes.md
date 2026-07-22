@@ -13,12 +13,13 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
-- **Pool warm = graph load + one real worker pass, LOADS ONLY:** at startup
+- **Pool warm = graph load + one real worker pass + first-use exercises:** at startup
   `ResolutionCoordinator.WarmPool` runs `Warm-Runspace.ps1` once per pool runspace
   (concurrently, behind a barrier). It `using module`-loads the superset of every pool
-  worker's class graph, imports the binary CIM/ScheduledTasks modules, and then
-  **executes `RemoteWorker.ps1` once** in `Mode='WarmRunspace'` (real pipeline
-  construction + `WarmRuntimeAssemblies` + `WarmScanLaunchPath`). Pre-loading the
+  worker's class graph, exercises the binary CIM/ScheduledTasks machinery with one
+  cheap local cmdlet each, and then **executes `RemoteWorker.ps1` once** in
+  `Mode='WarmRunspace'` (real pipeline construction + `WarmRuntimeAssemblies`'s
+  localhost DNS/TCP/CIM exercises + `WarmScanLaunchPath`). Pre-loading the
   graph alone is not enough: when a runspace's first `RemoteWorker.ps1` execution
   happened on a live job, that job wedged silently — the startup DC discovery never
   logged a line, `HostResolver` never got an active DC, and every resolve/inventory
@@ -26,17 +27,15 @@ model.
   applies *per code path*: a live DCU scan once wedged between "Starting preliminary
   scan" and the psexec launch on the first-ever `InvokePsExec` in the process, so the
   warm also pre-executes the CPU half of the scan launch path (dcu-cli arg build,
-  remote-script build + encode). **No connection of any kind may ever open inside
-  the warm — remote or local.** A loopback port-445 probe added "to bind the socket
-  stack" wedged *inside* the native connect (security stacks hook socket connects;
-  the hook blocks below any PowerShell-level timeout), every warm job hung, and the
-  app never showed a window. Removing it was not enough: the warm's *local* WMI
-  query, scheduled-task lookup, localhost DNS resolve, and loopback DCOM session are
-  RPC/native connects too, and the same hooks wedged 7–8 of 8 warm jobs
-  *unstoppably* (the pool still `0/8 free` 90 s after the background stops were
-  requested). The warm now performs module/assembly loads and script compilation
-  only; first-use *connection* costs land on live pool jobs, whose gates are bounded
-  and off the startup barrier. `WarmPool`'s barrier (default 30 s,
+  remote-script build + encode). **The first-use exercises are load-bearing — do not
+  reduce them to imports/loads.** A loads-only warm shipped once and the first live
+  resolve-IP and disk-scan jobs — whose opening act is exactly a first DNS/socket
+  connect — stopped completing on machines where the exercise-ful recipe (64dbec8
+  through 36c7536) had worked for weeks. The inverse lesson also stands: nothing
+  *unproven* goes under the barrier — the loopback port-445 probe (2292abe) was in
+  no known-good build, coincided with the no-window incident, and stays out;
+  `WarmScanLaunchPath` remains pure CPU. Wedge risk from the exercises is carried
+  by the barrier's design, never by removing them: `WarmPool`'s barrier (default 30 s,
   `WarmTimeoutSeconds`) **stops the waiting, never the work**: a shell that missed
   the deadline must not be `Dispose()`d or `Stop()`ped (both wait on the pipeline
   synchronously, and a wedged pipeline never yields — that hang shipped once,
@@ -55,9 +54,10 @@ model.
   first in line for a degraded pool. The starvation signature in `Donut.log`: the
   barrier-lapse warning, `Pre-warmed N of M` with `N < M`, `DC warm-up started
   (pool free: 0/…)`, and Resolve-job stall heartbeats with `0/… free`.
-  `RunspaceWarmCoverage.Tests.ps1` guards the static rules (no-connect across
-  `WarmScanLaunchPath`, `WarmRuntimeAssemblies`, and `Warm-Runspace.ps1`; the
-  self-heal; park-and-reap with no Stop of any kind);
+  `RunspaceWarmCoverage.Tests.ps1` guards the static rules (`WarmScanLaunchPath`
+  pure CPU; the DNS/TCP/CIM and CIM/ScheduledTasks exercises present in
+  `WarmRuntimeAssemblies` / `Warm-Runspace.ps1`; the self-heal; park-and-reap with
+  no Stop of any kind);
   `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path returns
   promptly, heals capacity, dispatches work while shells are parked, and reaps
   late warms back to the configured throttle; and
