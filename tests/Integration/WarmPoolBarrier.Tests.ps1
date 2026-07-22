@@ -70,7 +70,7 @@ Describe "WarmPool barrier" {
         $ps.Dispose()
     }
 
-    It "a lapsed barrier returns promptly, parks the shells, and recovers the runspaces" {
+    It "a lapsed barrier returns promptly, parks the shells, and heals the pool" {
         $f = New-BarrierFixture "Start-Sleep -Seconds 120"
         $f.Coordinator.WarmTimeoutSeconds = 2
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -85,15 +85,32 @@ Describe "WarmPool barrier" {
         $f.Log.Contains('Pre-warmed 0 of 2') | Should -BeTrue
         $f.Coordinator.AbandonedWarmShells.Count | Should -Be 2
 
-        # These stubs are stoppable, so the fire-and-forget BeginStop must hand their
-        # runspaces back: the pool self-heals instead of starving every later job.
+        # Self-heal: capacity must grow by the parked count so real jobs never starve
+        # behind held runspaces - in the field the pool sat 0/8 free for minutes and
+        # the DC resolve heartbeated unrun until the app was killed.
+        $f.Log.Contains('Pool capacity raised to 4') | Should -BeTrue
+        [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 4
+
+        # THE user-facing contract: a job submitted immediately after a fully wedged
+        # warm must still run, even while both parked shells hold their runspaces.
+        $ps = [powershell]::Create()
+        $ps.RunspacePool = [RunspaceManager]::GetPool()
+        [void]$ps.AddScript('7')
+        $handle = $ps.BeginInvoke()
+        $handle.AsyncWaitHandle.WaitOne(30000) | Should -BeTrue -Because (
+            "the healed pool must dispatch real work while warm shells are parked")
+        [string]$ps.EndInvoke($handle) | Should -Be '7'
+        $ps.Dispose()
+
+        # These stubs are stoppable, so the fire-and-forget BeginStop must eventually
+        # hand their two runspaces back on top of the raised capacity.
         $free = 0
         foreach ($attempt in 1..60) {
             $free = [RunspaceManager]::GetPool().GetAvailableRunspaces()
-            if ($free -ge 2) { break }
+            if ($free -ge 4) { break }
             Start-Sleep -Milliseconds 500
         }
-        $free | Should -BeGreaterOrEqual 2 -Because (
+        $free | Should -BeGreaterOrEqual 4 -Because (
             "a stopped warm shell must return its runspace to the pool")
     }
 }

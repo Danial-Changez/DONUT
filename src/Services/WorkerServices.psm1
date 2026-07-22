@@ -183,19 +183,34 @@ class ExecutionService {
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
-    # Cold-loads the heavy runtime assemblies (DNS, TCP, CIM/DCOM, LDAP) against
-    # localhost so the first real probe never loads them under the CLR loader lock.
+    # Pre-loads the heavy runtime assemblies and modules (DNS, sockets, LDAP, CIM) so
+    # the first real probe never loads them under the process-wide CLR loader lock
+    # mid-render. LOADS ONLY - never a lookup, session, or query, not even against
+    # this machine: the localhost DNS lookup and DCOM session this method once opened
+    # are native connects a security stack can hook, and hooked connects wedge below
+    # PowerShell where no timeout or stop can reach them (the pool sat 0/8 free 90 s
+    # after the warm barrier lapsed). First-use connection costs belong on live pool
+    # jobs, whose gates are bounded and off the startup barrier.
     [void] WarmRuntimeAssemblies() {
-        try { Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction SilentlyContinue | Out-Null } catch { }
-        try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() } catch { }
-        try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue } catch { }
-        try {
-            $opt = New-CimSessionOption -Protocol Dcom
-            $s = New-CimSession -SessionOption $opt -ErrorAction Stop
-            try { Get-CimInstance -CimSession $s -ClassName Win32_ComputerSystem -Property Name -ErrorAction Stop | Out-Null } catch { }
-            Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue
+        try { Import-Module DnsClient -ErrorAction Stop }
+        catch {
+            $this.Logger.LogDebug("DnsClient module pre-load failed: $($_.Exception.Message)")
         }
-        catch { }
+        try { [void][System.Net.Sockets.TcpClient] }
+        catch {
+            $this.Logger.LogDebug("Sockets assembly pre-load failed: $($_.Exception.Message)")
+        }
+        try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction Stop }
+        catch {
+            $this.Logger.LogDebug(
+                "DirectoryServices assembly pre-load failed: $($_.Exception.Message)")
+        }
+        # A session OPTION is a plain local object; building one loads the CIM binary
+        # module machinery without ever opening a session.
+        try { [void](New-CimSessionOption -Protocol Dcom) }
+        catch {
+            $this.Logger.LogDebug("CIM module pre-load failed: $($_.Exception.Message)")
+        }
     }
 
     # Pre-executes the CPU-only half of the DCU launch path - dcu-cli arg build and

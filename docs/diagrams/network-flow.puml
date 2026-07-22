@@ -32,7 +32,7 @@ P -> J : Resolve{Warm}  +  Resolve{WarmRunspace}
 J -> W : StartWorker -> RunResolvePhase
 W -> N : GetActiveDomainController()
 N -> DC : Get-ADDomainController + TestServerOnline
-W -> W : WarmRuntimeAssemblies()\n(cold-load DNS/CIM/TCP/LDAP off the UI thread)
+W -> W : WarmRuntimeAssemblies()\n(DNS/CIM/TCP/LDAP assembly + module LOADS only —\nnever a lookup, session, or connect: hooked local\nRPC connects here once wedged 8/8 warms unstoppably)
 J --> P : CompleteResolve -> Resolver.SetActiveDc(dc)
 note over P,R #13291D
   Warm loads the heavy assemblies + the worker class graph into EVERY

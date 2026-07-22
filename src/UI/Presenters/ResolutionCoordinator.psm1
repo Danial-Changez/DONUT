@@ -157,11 +157,34 @@ class ResolutionCoordinator {
             }
         }
         if ($warmed -lt $shells.Count) {
+            $parked = $shells.Count - $warmed
             $this.Logger.LogWarning(
-                "$($shells.Count - $warmed) of $($shells.Count) runspace warm job(s) did not " +
-                "finish within $($this.WarmTimeoutSeconds) s (stop requested in the " +
-                "background). A stuck warm holds its pool runspace, so real jobs may " +
-                "queue behind fewer free runspaces.")
+                "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
+                "$($this.WarmTimeoutSeconds) s (stop requested in the background). A stuck " +
+                "warm holds its pool runspace, so real jobs may queue behind fewer free " +
+                "runspaces.")
+            # Self-heal: a parked shell holds its runspace until the background stop
+            # lands, and a pipeline wedged in a hooked native call never honors one -
+            # in the field the pool sat 0/8 free for minutes and every job (the DC
+            # resolve first) queued forever, heartbeating unrun. Raising the max mints
+            # fresh runspaces: cold, so a first job on one pays the loader hit, but it
+            # RUNS. If a parked shell later stops, the surplus capacity is harmless.
+            try {
+                $newMax = $pool.GetMaxRunspaces() + $parked
+                if ($pool.SetMaxRunspaces($newMax)) {
+                    $this.Logger.LogWarning(
+                        "Pool capacity raised to $newMax to compensate for $parked " +
+                        "runspace(s) held by unfinished warm jobs.")
+                }
+                else {
+                    $this.Logger.LogWarning(
+                        "Pool capacity raise to $newMax was rejected; jobs may starve " +
+                        "behind $parked held runspace(s).")
+                }
+            }
+            catch {
+                $this.Logger.LogException("Pool capacity compensation failed", $_)
+            }
         }
         $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
     }

@@ -265,11 +265,15 @@ class HomePresenter : AsyncJobPresenter {
         # time to take the loader-lock hit (see .NOTES).
         $this.Resolution.WarmPool()
 
+        # The DC warm is the keystone - every resolve/inventory/scan gates on an
+        # active DC - so it is submitted FIRST. When warm jobs miss the barrier and
+        # park (holding runspaces), whatever is queued first gets the first free
+        # runspace; this used to be the finder warm, and the DC resolve starved.
+        $this.Resolution.StartWarm()
+
         # Prime the finder + Lens agent in the background (non-blocking, unlike WarmPool).
         $this.Finder.WarmAdSearch()
         $this.Finder.WarmLens()
-
-        $this.Resolution.StartWarm()
     }
 
     # --- Start-early IP resolution ---

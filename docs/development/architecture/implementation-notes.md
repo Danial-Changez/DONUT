@@ -13,11 +13,11 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
-- **Pool warm = graph load + one real worker pass:** at startup
+- **Pool warm = graph load + one real worker pass, LOADS ONLY:** at startup
   `ResolutionCoordinator.WarmPool` runs `Warm-Runspace.ps1` once per pool runspace
   (concurrently, behind a barrier). It `using module`-loads the superset of every pool
-  worker's class graph, exercises the binary CIM/ScheduledTasks module machinery, and
-  then **executes `RemoteWorker.ps1` once** in `Mode='WarmRunspace'` (real pipeline
+  worker's class graph, imports the binary CIM/ScheduledTasks modules, and then
+  **executes `RemoteWorker.ps1` once** in `Mode='WarmRunspace'` (real pipeline
   construction + `WarmRuntimeAssemblies` + `WarmScanLaunchPath`). Pre-loading the
   graph alone is not enough: when a runspace's first `RemoteWorker.ps1` execution
   happened on a live job, that job wedged silently — the startup DC discovery never
@@ -26,20 +26,32 @@ model.
   applies *per code path*: a live DCU scan once wedged between "Starting preliminary
   scan" and the psexec launch on the first-ever `InvokePsExec` in the process, so the
   warm also pre-executes the CPU half of the scan launch path (dcu-cli arg build,
-  remote-script build + encode). **No network call may ever run inside the warm**: a
-  loopback port-445 probe added "to bind the socket stack" wedged *inside* the native
-  connect (security stacks hook socket connects; the hook blocks below any
-  PowerShell-level timeout), every warm job hung, and the app never showed a window.
-  For the same reason `WarmPool`'s barrier (default 30 s, `WarmTimeoutSeconds`) must
-  never `Dispose()`/`Stop()` a shell that missed the deadline — both stop the
-  pipeline synchronously and a wedged pipeline never honors the stop, hanging the UI
-  thread pre-window; it fires `BeginStop` and parks the shell instead. A parked shell
-  still holds its pool runspace until the background stop lands, so a fully wedged
-  warm can starve every later job — the log evidence is the barrier-lapse warning
-  plus `Pre-warmed N of M` with `N < M`, and `DC warm-up started (pool free: 0/…)`.
-  `RunspaceWarmCoverage.Tests.ps1` guards the static rules;
-  `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path returns
-  promptly and recovers the runspaces, and
+  remote-script build + encode). **No connection of any kind may ever open inside
+  the warm — remote or local.** A loopback port-445 probe added "to bind the socket
+  stack" wedged *inside* the native connect (security stacks hook socket connects;
+  the hook blocks below any PowerShell-level timeout), every warm job hung, and the
+  app never showed a window. Removing it was not enough: the warm's *local* WMI
+  query, scheduled-task lookup, localhost DNS resolve, and loopback DCOM session are
+  RPC/native connects too, and the same hooks wedged 7–8 of 8 warm jobs
+  *unstoppably* (the pool still `0/8 free` 90 s after the background stops were
+  requested). The warm now performs module/assembly loads and script compilation
+  only; first-use *connection* costs land on live pool jobs, whose gates are bounded
+  and off the startup barrier. For the same reason `WarmPool`'s barrier (default
+  30 s, `WarmTimeoutSeconds`) must never `Dispose()`/`Stop()` a shell that missed
+  the deadline — both stop the pipeline synchronously and a wedged pipeline never
+  honors the stop, hanging the UI thread pre-window; it fires `BeginStop` and parks
+  the shell instead. A parked shell still holds its pool runspace until the
+  background stop lands (never, if wedged), so **a lapsed barrier self-heals: it
+  raises the pool max by the parked count**, minting fresh (cold) runspaces so real
+  jobs always find one. `HomePresenter.Initialize` submits the DC warm *before* the
+  finder/Lens warms — the DC is the keystone every resolve gates on, so it must be
+  first in line for a degraded pool. The starvation signature in `Donut.log`: the
+  barrier-lapse warning, `Pre-warmed N of M` with `N < M`, `DC warm-up started
+  (pool free: 0/…)`, and Resolve-job stall heartbeats with `0/… free`.
+  `RunspaceWarmCoverage.Tests.ps1` guards the static rules (no-connect across
+  `WarmScanLaunchPath`, `WarmRuntimeAssemblies`, and `Warm-Runspace.ps1`, plus the
+  self-heal); `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path
+  returns promptly, heals capacity, and still dispatches work; and
   `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
   scripts on a real pool and asserts they always terminate (the "`Started Resolve
   job.` then silence" regression family).

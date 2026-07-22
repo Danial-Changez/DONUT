@@ -133,6 +133,47 @@ Describe "Runspace warm coverage" {
             "connect wedges below PowerShell and once held app startup hostage")
     }
 
+    It "the runtime-assembly warm loads modules but opens no connection" {
+        # The 445 lesson generalizes: LOCAL operations are connects too. This method
+        # once ran a localhost DNS lookup and opened a DCOM session "to cold-load
+        # assemblies"; both are native connects a security stack can hook, and hooked
+        # connects wedge where no timeout or stop reaches (the pool sat 0/8 free 90 s
+        # after the barrier lapsed, starving the DC resolve). Loads pay the loader
+        # hit; only connects can wedge - so only loads are allowed here.
+        $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
+        $raw = Get-Content $services -Raw
+        $raw -match '(?s)\[void\] WarmRuntimeAssemblies\(\)(.*?)\r?\n    \}' | Should -BeTrue
+        $Matches[1] | Should -Not -Match (
+            'Get-CimInstance|New-CimSession(?!Option)|Get-ScheduledTask|Resolve-DnsName|' +
+            'Test-Connection|::new\(|Connect|Reachable|Probe\.') -Because (
+            "the warm may load modules/assemblies but must never resolve, query, or " +
+            "open a session - not even against this machine")
+    }
+
+    It "Warm-Runspace.ps1 imports modules but opens no connection" {
+        # Same rule at the script level: the warm script once ran a local WMI query
+        # and a scheduled-task lookup to prepay first-call loader hits; their hooked
+        # RPC connects wedged 7-8 of 8 warm runspaces unstoppably and every real job
+        # queued behind a dead pool. Import-Module is allowed; queries are not.
+        $raw = Get-Content $WarmScript -Raw
+        $raw | Should -Not -Match (
+            'Get-CimInstance|New-CimSession|Get-ScheduledTask|Resolve-DnsName|' +
+            'Test-Connection|TcpClient|BeginConnect|Reachable') -Because (
+            "every connection-class call - even a local one - must live on a live " +
+            "job's bounded path, never inside the startup warm barrier")
+    }
+
+    It "WarmPool raises pool capacity when warm jobs miss the barrier" {
+        # Parked warm shells hold their runspaces until their background stop lands -
+        # which a wedged pipeline never honors - so without compensation the pool
+        # starves and every job (the DC resolve first) queues forever. The lapse path
+        # must grow the max so real work always finds a runspace.
+        $raw = Get-Content $Coordinator -Raw
+        $raw | Should -Match 'SetMaxRunspaces' -Because (
+            "a lapsed barrier must self-heal the pool instead of leaving the app " +
+            "alive but unable to run any job")
+    }
+
     It "WarmPool never blocks on a warm job that missed the deadline" {
         # Dispose (or Stop) on a still-running pipeline stops it synchronously; a
         # pipeline wedged in a hooked native call never honors the stop, so the UI
