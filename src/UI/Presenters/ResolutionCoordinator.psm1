@@ -34,6 +34,10 @@ class ResolutionCoordinator {
     [HostResolver] $Resolver        # shared with HomePresenter (not owned here)
     [object]       $Home            # duck-typed back-ref to HomePresenter's pump + seams
     [bool]         $PoolWarmed = $false   # single-shot guard for WarmPool
+    # Warm shells whose pipeline never finished: a stop was requested but is never
+    # awaited (a pipeline wedged below PowerShell can't honor one). Parked here so
+    # they aren't finalized mid-run; they die with the process.
+    hidden [object[]] $AbandonedWarmShells = @()
 
     ResolutionCoordinator(
         [AppConfig] $config,
@@ -110,22 +114,53 @@ class ResolutionCoordinator {
 
         # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
         $deadline = [datetime]::UtcNow.AddSeconds(30)
+        $warmed = 0
         for ($i = 0; $i -lt $shells.Count; $i++) {
+            $completed = $false
             try {
                 $remaining = [int][Math]::Max(0,
                     [Math]::Ceiling(($deadline - [datetime]::UtcNow).TotalMilliseconds))
-                if ($handles[$i].AsyncWaitHandle.WaitOne($remaining)) {
+                $completed = $handles[$i].AsyncWaitHandle.WaitOne($remaining)
+                if ($completed) {
                     $shells[$i].EndInvoke($handles[$i])
+                    $warmed++
                 }
             }
             catch {
                 $this.Logger.LogException("Runspace warm-up failed", $_)
             }
             finally {
-                try { $shells[$i].Dispose() } catch { }
+                if ($completed) {
+                    try { $shells[$i].Dispose() }
+                    catch {
+                        $this.Logger.LogDebug(
+                            "Warm shell dispose failed: $($_.Exception.Message)")
+                    }
+                }
+                else {
+                    # NEVER Dispose (or Stop) a still-running warm inline: both stop
+                    # the pipeline synchronously, and a pipeline wedged below
+                    # PowerShell (a hooked native call that never returns) can't
+                    # honor the stop - this thread (the UI thread, before any window
+                    # exists) would block here forever. That exact hang shipped once:
+                    # the app logged the resource-dictionary merge and went silent.
+                    # BeginStop is fire-and-forget; park the shell instead.
+                    try { [void]$shells[$i].BeginStop($null, $null) }
+                    catch {
+                        $this.Logger.LogDebug(
+                            "Warm stop request failed: $($_.Exception.Message)")
+                    }
+                    $this.AbandonedWarmShells += $shells[$i]
+                }
             }
         }
-        $this.Logger.LogInfo("Pre-warmed $($shells.Count) runspace(s).")
+        if ($warmed -lt $shells.Count) {
+            $this.Logger.LogWarning(
+                "$($shells.Count - $warmed) of $($shells.Count) runspace warm job(s) did not " +
+                "finish within 30 s (stop requested in the background). A stuck warm holds " +
+                "its pool runspace, so real jobs may queue behind fewer free runspaces.")
+        }
+        $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
     }
 
     # Resolves a host's IP in the background (single-flight); no-op until a DC is warm

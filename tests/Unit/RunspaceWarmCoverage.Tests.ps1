@@ -107,8 +107,8 @@ Describe "Runspace warm coverage" {
     It "the WarmRunspace pass warms the DCU scan launch path" {
         # A live scan once wedged silently between "Starting preliminary scan" and the
         # psexec launch - the first-ever execution of the InvokePsExec path on a live
-        # job. The warm must pre-execute that path (arg build, remote-script build +
-        # encode, async TCP probe machinery) so first-use costs land on the barrier.
+        # job. The warm must pre-execute the CPU half of that path (arg build,
+        # remote-script build + encode) so those first-use costs land on the barrier.
         $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
         $raw = Get-Content $services -Raw
         $raw | Should -Match '\[void\]\s+WarmScanLaunchPath\(\)' -Because (
@@ -116,5 +116,34 @@ Describe "Runspace warm coverage" {
             "pays every first-use cost mid-job")
         $raw | Should -Match '\$this\.WarmScanLaunchPath\(\)' -Because (
             "WarmScanLaunchPath must actually be invoked from the WarmRunspace branch")
+    }
+
+    It "the scan launch-path warm performs no network operation" {
+        # The warm once probed loopback 445 "to bind the socket stack". Security
+        # stacks hook socket connects, and the hook can block INSIDE the native call
+        # - below any PowerShell-level timeout - so every warm job hung, WarmPool's
+        # 30 s barrier lapsed, and the app never showed a window. The warm must stay
+        # pure CPU; first-use socket costs belong on a live job's bounded gate, never
+        # on the startup barrier.
+        $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
+        $raw = Get-Content $services -Raw
+        $raw -match '(?s)\[void\] WarmScanLaunchPath\(\)(.*?)\r?\n    \}' | Should -BeTrue
+        $Matches[1] | Should -Not -Match 'Probe|TcpClient|Socket|Reachable|Connect' -Because (
+            "no socket/network call may run inside the startup warm - a hooked " +
+            "connect wedges below PowerShell and once held app startup hostage")
+    }
+
+    It "WarmPool never blocks on a warm job that missed the deadline" {
+        # Dispose (or Stop) on a still-running pipeline stops it synchronously; a
+        # pipeline wedged in a hooked native call never honors the stop, so the UI
+        # thread hung forever before any window existed. The timeout path must
+        # fire-and-forget BeginStop and park the shell instead of disposing it.
+        $raw = Get-Content $Coordinator -Raw
+        $raw | Should -Match 'BeginStop\(\$null,\s*\$null\)' -Because (
+            "a warm shell that missed the deadline may be wedged; only an async stop " +
+            "request is safe from the UI thread")
+        $raw | Should -Match 'AbandonedWarmShells' -Because (
+            "unfinished warm shells must be parked, not disposed inline - Dispose " +
+            "stops the pipeline synchronously and can block forever")
     }
 }

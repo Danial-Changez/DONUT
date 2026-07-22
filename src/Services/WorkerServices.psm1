@@ -198,14 +198,19 @@ class ExecutionService {
         catch { }
     }
 
-    # Pre-executes the DCU launch path - dcu-cli arg build, remote-script build +
-    # encode, and the async TCP probe machinery - against loopback, so a live scan's
-    # first InvokePsExec is never also this runspace's first execution of that path.
-    # A first-ever execution on a live job is the silent-wedge class the worker warm
-    # pass exists to dodge: a real scan wedged forever after "Starting preliminary
-    # scan" with every op in that gap bounded at source level, so the block sits
-    # below PowerShell (loader lock / hooked socket create). Pay every first-use
-    # cost here, on the startup warm barrier, where a wedge is visible and harmless.
+    # Pre-executes the CPU-only half of the DCU launch path - dcu-cli arg build and
+    # remote-script build + encode - so a live scan's first InvokePsExec is never also
+    # this runspace's first compile of that code. A first-ever execution on a live job
+    # is the silent-wedge class the worker warm pass exists to dodge: a real scan
+    # wedged forever after "Starting preliminary scan" with every op in that gap
+    # bounded at source level, so the block sits below PowerShell.
+    #
+    # NO network operation may ever go in this warm (or any warm the startup barrier
+    # waits on). A port-445 loopback probe here once wedged inside the native connect
+    # call - below the probe's own 2 s timeout, which is armed only after BeginConnect
+    # returns - and every warm job hung, so WarmPool's barrier lapsed and the app
+    # never showed a window. Security stacks hook socket connects (445 above all);
+    # the hook can block the call itself, so a socket op is never "bounded" here.
     [void] WarmScanLaunchPath() {
         try {
             $overrides = @{
@@ -216,9 +221,6 @@ class ExecutionService {
             $remoteScript = [ExecutionService]::BuildRemoteDcuScript(
                 'scan', $scanArgs, [string]$overrides.outputLog)
             [void][Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($remoteScript))
-            # First BeginConnect/WaitOne binds the async-socket stack (winsock LSPs, the
-            # IO thread pool); loopback answers or refuses within milliseconds either way.
-            [void]$this.Probe.IsSmbReachableQuiet('127.0.0.1')
         }
         catch {
             $this.Logger.LogWarning(

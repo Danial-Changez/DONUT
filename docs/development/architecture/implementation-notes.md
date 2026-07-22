@@ -25,9 +25,16 @@ model.
   quietly no-oped (the machine-list regression). The same first-execution rule
   applies *per code path*: a live DCU scan once wedged between "Starting preliminary
   scan" and the psexec launch on the first-ever `InvokePsExec` in the process, so the
-  warm also pre-executes the scan launch path (dcu-cli arg build, remote-script build
-  + encode, and one loopback TCP probe to bind the async-socket stack).
-  `RunspaceWarmCoverage.Tests.ps1` guards all of it.
+  warm also pre-executes the CPU half of the scan launch path (dcu-cli arg build,
+  remote-script build + encode). **No network call may ever run inside the warm**: a
+  loopback port-445 probe added "to bind the socket stack" wedged *inside* the native
+  connect (security stacks hook socket connects; the hook blocks below any
+  PowerShell-level timeout), every warm job hung, and the app never showed a window.
+  For the same reason `WarmPool`'s 30 s barrier must never `Dispose()`/`Stop()` a
+  shell that missed the deadline — both stop the pipeline synchronously and a wedged
+  pipeline never honors the stop, hanging the UI thread pre-window; it fires
+  `BeginStop` and parks the shell instead. `RunspaceWarmCoverage.Tests.ps1` guards
+  all of it.
 - **Thread safety:** `LogService` is thread-safe. Work is fed back to the UI through a
   thread-safe state/queue that a `DispatcherTimer` polls on the UI thread — **not** by
   returning results (which only surface when the runspace completes) — so the "live
