@@ -103,4 +103,18 @@ Describe "Runspace warm coverage" {
         $raw | Should -Match "AddParameter\('LogsDir'"
         $raw | Should -Match "AddParameter\('ReportsDir'"
     }
+
+    It "the WarmRunspace pass warms the DCU scan launch path" {
+        # A live scan once wedged silently between "Starting preliminary scan" and the
+        # psexec launch - the first-ever execution of the InvokePsExec path on a live
+        # job. The warm must pre-execute that path (arg build, remote-script build +
+        # encode, async TCP probe machinery) so first-use costs land on the barrier.
+        $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
+        $raw = Get-Content $services -Raw
+        $raw | Should -Match '\[void\]\s+WarmScanLaunchPath\(\)' -Because (
+            "the scan launch path must have a warm pass or its first live execution " +
+            "pays every first-use cost mid-job")
+        $raw | Should -Match '\$this\.WarmScanLaunchPath\(\)' -Because (
+            "WarmScanLaunchPath must actually be invoked from the WarmRunspace branch")
+    }
 }

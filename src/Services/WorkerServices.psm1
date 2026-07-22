@@ -159,9 +159,11 @@ class ExecutionService {
         # means later jobs never cold-load under the loader lock.
         if ($mode -eq 'WarmRunspace') {
             $this.WarmRuntimeAssemblies()
+            $this.WarmScanLaunchPath()
             # One line per pool runspace at startup: proof this runspace ran the real
             # worker pipeline before any real job landed on it.
-            $this.Logger.LogDebug("Runspace warmed: worker pipeline + runtime assemblies resident.")
+            $this.Logger.LogDebug(
+                "Runspace warmed: worker pipeline + runtime assemblies + scan path resident.")
             return @{ Mode = 'WarmRunspace' }
         }
 
@@ -196,6 +198,35 @@ class ExecutionService {
         catch { }
     }
 
+    # Pre-executes the DCU launch path - dcu-cli arg build, remote-script build +
+    # encode, and the async TCP probe machinery - against loopback, so a live scan's
+    # first InvokePsExec is never also this runspace's first execution of that path.
+    # A first-ever execution on a live job is the silent-wedge class the worker warm
+    # pass exists to dodge: a real scan wedged forever after "Starting preliminary
+    # scan" with every op in that gap bounded at source level, so the block sits
+    # below PowerShell (loader lock / hooked socket create). Pay every first-use
+    # cost here, on the startup warm barrier, where a wedge is visible and harmless.
+    [void] WarmScanLaunchPath() {
+        try {
+            $overrides = @{
+                report    = 'C:\temp\DONUT'
+                outputLog = 'C:\temp\DONUT\scan.log'
+            }
+            $scanArgs = $this.Config.BuildDcuArgs('scan', $overrides)
+            $remoteScript = [ExecutionService]::BuildRemoteDcuScript(
+                'scan', $scanArgs, [string]$overrides.outputLog)
+            [void][Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($remoteScript))
+            # First BeginConnect/WaitOne binds the async-socket stack (winsock LSPs, the
+            # IO thread pool); loopback answers or refuses within milliseconds either way.
+            [void]$this.Probe.IsSmbReachableQuiet('127.0.0.1')
+        }
+        catch {
+            $this.Logger.LogWarning(
+                "Scan launch-path warm failed - the first live scan pays its first-use costs: " +
+                $_.Exception.Message)
+        }
+    }
+
     # The job's target IP, resolved at most once: returns the seeded IP if present,
     # else resolves via the AD-authoritative path and memoizes it.
     hidden [string] ResolvedIpFor([string]$hostName) {
@@ -226,6 +257,12 @@ class ExecutionService {
         if ($scanArgs -notmatch '-updateDeviceCategory') {
             $scanArgs += " -updateDeviceCategory='audio,video,network,storage,input,chipset,others'"
         }
+
+        # Breadcrumb pairing with InvokePsExec's gate + "Executing:" lines: a scan once
+        # wedged silently between "Starting preliminary scan" and the psexec launch, so
+        # the next repro must pin which segment of that gap stopped logging.
+        $this.Logger.LogDebug(
+            "[$($device.HostName)] Scan arguments built - invoking psexec launcher.")
 
         $params = @{
             ComputerName = $device.HostName
@@ -534,8 +571,10 @@ class ExecutionService {
         if (-not (Test-Path $csvPath)) { return $jsonPath }
 
         try {
-            $raw = Get-Content -Path $csvPath -Raw
-            $report = [WizTreeCsv]::ParseTopFolders($raw, $topN)
+            # Stream the CSV line-by-line: reading a full-drive export with -Raw and
+            # splitting it materialized multi-MB strings + a PSObject per row on the
+            # pool thread, and the resulting gen-2 GCs suspended the UI mid-scan.
+            $report = [WizTreeCsv]::ParseTopFoldersFromFile($csvPath, $topN)
             $report.ToHashtable() | ConvertTo-Json -Depth 5 |
                 Set-Content -Path $jsonPath -Encoding UTF8
         }
@@ -782,6 +821,10 @@ exit `$LASTEXITCODE
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot run psexec.")
             throw [RpcUnavailableException]::new($ip)
         }
+
+        # Breadcrumb: SMB gate passed; only pure string/encode work remains before the
+        # "Executing:" line, so a gap ending here points at the probe/socket layer.
+        $this.Logger.LogDebug("[$ip] SMB gate passed - building remote DCU command.")
 
         $outputLog = [string]$parameters.OutputLog
         $remoteScript = [ExecutionService]::BuildRemoteDcuScript($command, $argsString, $outputLog)

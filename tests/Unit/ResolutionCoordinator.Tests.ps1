@@ -114,5 +114,31 @@ Describe "ResolutionCoordinator" {
             $script:config.Settings['activeDomainController'] | Should -Be 'DC01'
             $script:cfgMgr.SaveCount | Should -Be 1
         }
+
+        It "does not re-save the config when only the controller ORDER changed" {
+            # AD discovery order is nondeterministic; an order-only diff used to trigger
+            # a full config re-serialization on the dispatcher right as the warm landed.
+            $script:config.Settings['activeDomainController'] = 'DC01'
+            $script:config.Settings['domainControllers'] = @('DC02', 'DC01')
+            $job = [AsyncJob]::new('', [JobKind]::Resolve)
+            $job.Status = 'Completed'
+            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
+
+            $script:coord.CompleteResolve($job)
+
+            $script:cfgMgr.SaveCount | Should -Be 0
+        }
+
+        It "still saves when the controller SET changed" {
+            $script:config.Settings['activeDomainController'] = 'DC01'
+            $script:config.Settings['domainControllers'] = @('DC01', 'DC02')
+            $job = [AsyncJob]::new('', [JobKind]::Resolve)
+            $job.Status = 'Completed'
+            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03') })
+
+            $script:coord.CompleteResolve($job)
+
+            $script:cfgMgr.SaveCount | Should -Be 1
+        }
     }
 }

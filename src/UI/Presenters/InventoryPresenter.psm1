@@ -257,7 +257,7 @@ class InventoryPresenter {
             }
             $prep = $this.InventoryService.PrepareInventory($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Inventory)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
         }
@@ -336,7 +336,7 @@ class InventoryPresenter {
             }
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan)
+            $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
         }

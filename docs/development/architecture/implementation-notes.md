@@ -18,15 +18,37 @@ model.
   (concurrently, behind a barrier). It `using module`-loads the superset of every pool
   worker's class graph, exercises the binary CIM/ScheduledTasks module machinery, and
   then **executes `RemoteWorker.ps1` once** in `Mode='WarmRunspace'` (real pipeline
-  construction + `WarmRuntimeAssemblies`). Pre-loading the graph alone is not enough:
-  when a runspace's first `RemoteWorker.ps1` execution happened on a live job, that
-  job wedged silently — the startup DC discovery never logged a line, `HostResolver`
-  never got an active DC, and every resolve/inventory quietly no-oped (the
-  machine-list regression). `RunspaceWarmCoverage.Tests.ps1` guards both halves.
+  construction + `WarmRuntimeAssemblies` + `WarmScanLaunchPath`). Pre-loading the
+  graph alone is not enough: when a runspace's first `RemoteWorker.ps1` execution
+  happened on a live job, that job wedged silently — the startup DC discovery never
+  logged a line, `HostResolver` never got an active DC, and every resolve/inventory
+  quietly no-oped (the machine-list regression). The same first-execution rule
+  applies *per code path*: a live DCU scan once wedged between "Starting preliminary
+  scan" and the psexec launch on the first-ever `InvokePsExec` in the process, so the
+  warm also pre-executes the scan launch path (dcu-cli arg build, remote-script build
+  + encode, and one loopback TCP probe to bind the async-socket stack).
+  `RunspaceWarmCoverage.Tests.ps1` guards all of it.
 - **Thread safety:** `LogService` is thread-safe. Work is fed back to the UI through a
   thread-safe state/queue that a `DispatcherTimer` polls on the UI thread — **not** by
   returning results (which only surface when the runspace completes) — so the "live
   feed" updates in real time.
+- **Every `AsyncJob` gets the real logger:** the 3-arg constructor is mandatory for
+  production call sites (`AsyncJobLoggerCoverage.Tests.ps1` enforces it). The 2-arg
+  form coalesces to `NullLogService`, which made every job failure — start errors,
+  error-stream lines, completion exceptions — invisible in `Donut.log`; a wedged scan
+  took days to triage because of that silence. The 2-arg form remains for tests only.
+- **Dispatcher watchdog semantics:** `DispatcherWatchdog` warns when its 250 ms tick
+  gap exceeds the threshold, and appends the GC gen0/1/2 collection-count deltas
+  across the gap (gen2 > 0 → a blocking GC suspended all threads; +0/+0/+0 → loader
+  lock or synchronous UI-thread work). Ticks only fire while a message pump runs, so
+  the first measurement after `Start()`/`Reset()` is discarded and `MainPresenter`
+  calls `Reset()` right before entering `Application.Run` — otherwise pre-pump
+  startup time gets charged to the first tick and reads as a fake multi-second block.
+- **WizTree CSV is parsed streaming:** a full-drive export runs to hundreds of
+  thousands of rows. `WizTreeCsv.ParseTopFoldersFromFile` reads it line-by-line on
+  the pool thread; the earlier `-Raw` + `-split` + `ConvertFrom-Csv` pass
+  materialized the file as a giant string, a line array, and a `PSObject` per row,
+  and the resulting gen-2 GCs suspended the UI thread right as a disk scan finished.
 
 ## Remote execution (PsExec)
 

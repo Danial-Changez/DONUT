@@ -26,6 +26,10 @@ class AsyncJob {
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
 
+    # Test convenience only. Production call sites must pass the real logger (guarded
+    # by AsyncJobLoggerCoverage.Tests.ps1): with the null logger, a job that fails to
+    # start, errors, or throws during completion leaves no trace in Donut.log - a
+    # scan that wedged silently took days to triage because of exactly that.
     AsyncJob([string]$hostName, [JobKind]$type) {
         $this.Initialize($hostName, $type, $null)
     }

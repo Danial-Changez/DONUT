@@ -72,48 +72,117 @@ class DiskUsageReport {
 }
 
 # Pure parser for WizTree's CSV export. Static, WPF-free, tested.
+#
+# Parses STREAMING (one line at a time): a full-drive export runs to hundreds of
+# thousands of rows, and the earlier -Raw + -split + ConvertFrom-Csv approach
+# materialized the whole file as a giant string, a line array, and a PSObject per
+# row on the pool thread - the gen-2 GCs that churn forced suspend every thread,
+# including the UI's, which read as multi-second freezes right as a scan finished.
 class WizTreeCsv {
     # Parses a WizTree export into a ranked DiskUsageReport: find the real header row
     # ("File Name"), drop the volume-root total, rank by size, cap at topN. Never throws.
     static [DiskUsageReport] ParseTopFolders([string]$csvText, [int]$topN) {
+        if ([string]::IsNullOrWhiteSpace($csvText)) { return [WizTreeCsv]::EmptyReport() }
+        $reader = [System.IO.StringReader]::new($csvText)
+        try { return [WizTreeCsv]::ParseReader($reader, $topN) }
+        finally { $reader.Dispose() }
+    }
+
+    # Same parse, streamed straight off the file - the copied-back export never
+    # exists in memory as one string. Missing/unreadable file = empty report.
+    static [DiskUsageReport] ParseTopFoldersFromFile([string]$csvPath, [int]$topN) {
+        try { $reader = [System.IO.StreamReader]::new($csvPath) }
+        catch { return [WizTreeCsv]::EmptyReport() }
+        try { return [WizTreeCsv]::ParseReader($reader, $topN) }
+        finally { $reader.Dispose() }
+    }
+
+    hidden static [DiskUsageReport] EmptyReport() {
         $report = [DiskUsageReport]::new()
         $report.ScannedAt = [datetime]::UtcNow.ToString('o')
         $report.Folders = @()
+        return $report
+    }
 
-        if ([string]::IsNullOrWhiteSpace($csvText)) { return $report }
-
-        # Split into lines and find the header row (first line mentioning "File Name").
-        $lines = $csvText -split "`r?`n"
-        $headerIndex = -1
-        for ($i = 0; $i -lt $lines.Length; $i++) {
-            if ($lines[$i] -match '(?i)(^|,)\s*"?File Name"?\s*,') { $headerIndex = $i; break }
-        }
-        if ($headerIndex -lt 0) { return $report }
-
-        $body = $lines[$headerIndex..($lines.Length - 1)] -join "`n"
-
-        $rows = $null
-        try { $rows = $body | ConvertFrom-Csv } catch { return $report }
-        if ($null -eq $rows) { return $report }
+    # Shared streaming core: skip to the header row, locate the File Name / Size
+    # columns, then fold each data row into a small FolderUsage as it is read.
+    hidden static [DiskUsageReport] ParseReader([System.IO.TextReader]$reader, [int]$topN) {
+        $report = [WizTreeCsv]::EmptyReport()
 
         $list = [System.Collections.Generic.List[FolderUsage]]::new()
-        foreach ($row in $rows) {
-            $path = [string]$row.'File Name'
-            if ([string]::IsNullOrWhiteSpace($path)) { continue }
-            $path = $path.Trim()
-            # Skip the volume root (e.g. "C:\" / "C:") — that's the whole-drive total.
-            if ($path -match '^[A-Za-z]:\\?$') { continue }
+        $nameIdx = -1
+        $sizeIdx = -1
+        try {
+            while ($null -ne ($line = $reader.ReadLine())) {
+                if ($nameIdx -lt 0) {
+                    # Banner lines precede the header (first line mentioning "File Name").
+                    if ($line -match '(?i)(^|,)\s*"?File Name"?\s*,') {
+                        $header = [WizTreeCsv]::SplitCsvLine($line)
+                        for ($i = 0; $i -lt $header.Length; $i++) {
+                            $col = $header[$i].Trim()
+                            if ($col -ieq 'File Name') { $nameIdx = $i }
+                            elseif ($col -ieq 'Size') { $sizeIdx = $i }
+                        }
+                        if ($nameIdx -lt 0 -or $sizeIdx -lt 0) { return $report }
+                    }
+                    continue
+                }
 
-            $f = [FolderUsage]::new()
-            $f.Path = $path
-            $f.SizeBytes = [FolderUsage]::AsLong($row.Size)
-            $list.Add($f)
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                $cols = [WizTreeCsv]::SplitCsvLine($line)
+                if ($cols.Length -le $nameIdx -or $cols.Length -le $sizeIdx) { continue }
+
+                $path = $cols[$nameIdx].Trim()
+                if ([string]::IsNullOrWhiteSpace($path)) { continue }
+                # Skip the volume root (e.g. "C:\" / "C:") — that's the whole-drive total.
+                if ($path -match '^[A-Za-z]:\\?$') { continue }
+
+                $f = [FolderUsage]::new()
+                $f.Path = $path
+                $f.SizeBytes = [FolderUsage]::AsLong($cols[$sizeIdx])
+                $list.Add($f)
+            }
+        }
+        catch {
+            # Never throws: rank whatever parsed before the fault, but say so - the
+            # warning stream reaches the job's detail-pane log when run on a worker.
+            Write-Warning "WizTree CSV parse stopped early: $($_.Exception.Message)"
         }
 
         $ranked = $list | Sort-Object -Property SizeBytes -Descending
         if ($topN -gt 0) { $ranked = $ranked | Select-Object -First $topN }
         $report.Folders = @($ranked)
         return $report
+    }
+
+    # Minimal quote-aware CSV field splitter ("" = escaped quote). WizTree fields are
+    # double-quoted and NTFS names cannot contain quotes, so this covers the format
+    # without ConvertFrom-Csv's per-row PSObject cost.
+    hidden static [string[]] SplitCsvLine([string]$line) {
+        $fields = [System.Collections.Generic.List[string]]::new()
+        $sb = [System.Text.StringBuilder]::new()
+        $inQuotes = $false
+        for ($i = 0; $i -lt $line.Length; $i++) {
+            $ch = $line[$i]
+            if ($inQuotes) {
+                if ($ch -eq '"') {
+                    if ($i + 1 -lt $line.Length -and $line[$i + 1] -eq '"') {
+                        [void]$sb.Append('"')
+                        $i++
+                    }
+                    else { $inQuotes = $false }
+                }
+                else { [void]$sb.Append($ch) }
+            }
+            elseif ($ch -eq '"') { $inQuotes = $true }
+            elseif ($ch -eq ',') {
+                $fields.Add($sb.ToString())
+                [void]$sb.Clear()
+            }
+            else { [void]$sb.Append($ch) }
+        }
+        $fields.Add($sb.ToString())
+        return $fields.ToArray()
     }
 }
 

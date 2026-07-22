@@ -65,6 +65,42 @@ WizTree (4.0.0) (c) 2024 Antibody Software - https://wiztree.com [Generated 2026
         $r = [WizTreeCsv]::ParseTopFolders("just some garbage`nwith no header", 12)
         $r.Folders.Count | Should -Be 0
     }
+
+    It "tolerates a Size column that is not immediately after File Name" {
+        $csv = @'
+"Files","File Name","Size"
+10,"C:\Users\",53687091200
+'@
+        $r = [WizTreeCsv]::ParseTopFolders($csv, 12)
+        $r.Folders.Count | Should -Be 1
+        $r.Folders[0].SizeBytes | Should -Be 53687091200
+    }
+}
+
+Describe "WizTreeCsv.ParseTopFoldersFromFile" {
+    It "streams the same result as the in-memory parse" {
+        $csv = @'
+WizTree (4.0.0) banner line
+"File Name","Size","Allocated","Modified","Attributes","Files","Folders"
+"C:\",274877906944,274877906944,2026-06-28,16,500000,40000
+"C:\Users\",53687091200,53687091200,2026-06-28,16,200000,15000
+"C:\Data, Archived\",2147483648,2147483648,2026-06-28,16,10,2
+'@
+        $path = Join-Path $TestDrive 'wiztree.csv'
+        Set-Content -Path $path -Value $csv -Encoding UTF8
+
+        $r = [WizTreeCsv]::ParseTopFoldersFromFile($path, 12)
+        $r.Folders.Count | Should -Be 2
+        $r.Folders[0].Path | Should -Be 'C:\Users\'
+        $r.Folders[1].Path | Should -Be 'C:\Data, Archived\'
+        $r.Folders[1].SizeBytes | Should -Be 2147483648
+    }
+
+    It "returns an empty report (no throw) for a missing file" {
+        $missing = Join-Path $TestDrive 'not-there.csv'
+        { [WizTreeCsv]::ParseTopFoldersFromFile($missing, 12) } | Should -Not -Throw
+        ([WizTreeCsv]::ParseTopFoldersFromFile($missing, 12)).Folders.Count | Should -Be 0
+    }
 }
 
 Describe "DiskUsageFormat.SizeLabel" {

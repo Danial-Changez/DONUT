@@ -536,6 +536,9 @@ class MainPresenter {
     [void] Show() {
         if ($this.Window) {
             try {
+                # The pumpless span since the login dialog closed is dead time; without
+                # a reset the watchdog charges it to its first tick as a fake block.
+                if ($this.Watchdog) { $this.Watchdog.Reset() }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Run($this.Window)
                 }
@@ -567,6 +570,8 @@ class MainPresenter {
             # Create the native HWND without showing the window (raises SourceInitialized),
             # so the global hotkey registers even when we start straight to the tray.
             [void][System.Windows.Interop.WindowInteropHelper]::new($this.Window).EnsureHandle()
+            # Same pumpless-span reset as Show(): don't charge startup to the first tick.
+            if ($this.Watchdog) { $this.Watchdog.Reset() }
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.Run()
             }

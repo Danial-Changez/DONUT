@@ -55,7 +55,7 @@ class ResolutionCoordinator {
     [void] StartWarm() {
         try {
             $prep = $this.Resolver.PrepareWarm()
-            $job = [AsyncJob]::new('', [JobKind]::Resolve)
+            $job = [AsyncJob]::new('', [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
             # Diagnostic: proves the warm started, and reports how many pool runspaces are
@@ -135,7 +135,7 @@ class ResolutionCoordinator {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolve($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
         }
@@ -160,7 +160,7 @@ class ResolutionCoordinator {
         $this.Resolver.ClearVerifiedName($hostName)
         try {
             $prep = $this.Resolver.PrepareName($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve)
+            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
         }
@@ -239,7 +239,13 @@ class ResolutionCoordinator {
         }
         if ($null -ne $list -and $list.Count -gt 0) {
             $existing = @($this.Config.Settings['domainControllers'])
-            if (($existing -join '|') -ne ($list -join '|')) {
+            # Compare as sets: AD returns controllers in nondeterministic order, and an
+            # order-only "change" would re-serialize the whole config on the dispatcher
+            # right as the DC warm completes (a multi-second UI stall once the recents
+            # carry cached inventory/disk trees).
+            $before = (@($existing) | Sort-Object) -join '|'
+            $after = (@($list) | Sort-Object) -join '|'
+            if ($before -ne $after) {
                 $this.Config.Settings['domainControllers'] = @($list)
                 $changed = $true
             }

@@ -536,7 +536,7 @@ class HomePresenter : AsyncJobPresenter {
 
             if ($jobParams) {
                 $this.AttachResolvedIp($jobParams.Prep, $hostName)
-                $job = [AsyncJob]::new($hostName, $jobParams.Type)
+                $job = [AsyncJob]::new($hostName, $jobParams.Type, $this.Logger)
                 $job.Start($jobParams.Prep.ScriptPath, $jobParams.Prep.Arguments,
                     $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
@@ -864,7 +864,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.ScanSteps.Remove($hostName)
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
             $this.AttachResolvedIp($prep, $hostName)
-            $applyJob = [AsyncJob]::new($hostName, 'UpdateApply')
+            $applyJob = [AsyncJob]::new($hostName, 'UpdateApply', $this.Logger)
             $applyJob.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.ActiveJobs.Add($applyJob)
             $this.RefreshCardStatus($applyJob)
