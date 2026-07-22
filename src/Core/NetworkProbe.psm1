@@ -47,6 +47,7 @@ class NetworkProbe {
         }
 
         try {
+            $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
             $found = $this.QueryDomainControllers()
             $this.DomainControllers = @($found | Where-Object { $_ })
 
@@ -74,11 +75,13 @@ class NetworkProbe {
 
         $controllers = $this.GetDomainControllers()
         foreach ($dc in $controllers) {
+            $this.Logger.LogDebug("DC discovery: probing '$dc'...")
             if ($this.TestServerOnline($dc)) {
                 $this.ActiveDomainController = $dc
                 $this.Logger.LogInfo("Selected active domain controller: $dc")
                 return $dc
             }
+            $this.Logger.LogDebug("DC discovery: '$dc' not reachable, trying next.")
         }
 
         $this.Logger.LogError("No reachable domain controller found among: $($controllers -join ', ')")
@@ -117,7 +120,11 @@ class NetworkProbe {
             return $null
         }
         try {
-            return $this.ResolveViaServer($hostName, $dc)
+            $this.Logger.LogDebug("DNS: resolving '$hostName' via DC '$dc'...")
+            $ip = $this.ResolveViaServer($hostName, $dc)
+            $ipText = if ($null -ne $ip) { $ip.ToString() } else { 'no address' }
+            $this.Logger.LogDebug("DNS: '$hostName' via '$dc' -> $ipText.")
+            return $ip
         }
         catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
@@ -160,12 +167,25 @@ class NetworkProbe {
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
+            # The pre-connect breadcrumb is deliberate: a security stack can hold
+            # BeginConnect itself (below the 2 s wait, which is only armed after it
+            # returns), and then this is the last line in the log - naming the exact
+            # call, host, and port that wedged.
+            if ($logFailure) {
+                $this.Logger.LogDebug(
+                    "$checkLabel probe: connecting to '$hostName':$port (2 s cap)...")
+            }
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $client = [TcpClient]::new()
             $result = $client.BeginConnect($hostName, $port, $null, $null)
             $success = $result.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))
             if ($success) {
                 $client.EndConnect($result)
                 $client.Close()
+                if ($logFailure) {
+                    $ms = $sw.ElapsedMilliseconds
+                    $this.Logger.LogDebug("$checkLabel probe: '$hostName':$port open ($ms ms).")
+                }
                 return $true
             }
             $client.Close()
@@ -225,7 +245,12 @@ class NetworkProbe {
     [string] ResolveComputerName([string]$ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
         try {
-            return $this.QueryComputerName($ip)
+            # Pre-call breadcrumb: DCOM binds below PowerShell; if the query wedges,
+            # this line names it.
+            $this.Logger.LogDebug("Identity check: querying computer name at '$ip' (WMI/DCOM)...")
+            $actual = $this.QueryComputerName($ip)
+            $this.Logger.LogDebug("Identity check: '$ip' reports '$actual'.")
+            return $actual
         }
         catch {
             $this.Logger.LogException("Computer-name query for '$ip' failed", $_)

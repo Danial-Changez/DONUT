@@ -53,7 +53,13 @@ model.
   finder/Lens warms — the DC is the keystone every resolve gates on, so it must be
   first in line for a degraded pool. The starvation signature in `Donut.log`: the
   barrier-lapse warning, `Pre-warmed N of M` with `N < M`, `DC warm-up started
-  (pool free: 0/…)`, and Resolve-job stall heartbeats with `0/… free`.
+  (pool free: 0/…)`, and Resolve-job stall heartbeats with `0/… free`. Beyond that,
+  every resolve step leaves a DEBUG breadcrumb — "Worker up" (graph compiled),
+  "querying AD", per-DC "probing", "DNS: resolving … via DC", port probes'
+  "connecting to 'host':port", warm-exercise "Warm: exercising …", and "verdict
+  received" — so a stalled resolve's *last* log line names the wedged step. The
+  probe/exercise breadcrumbs log **before** the call on purpose: a hooked native
+  connect never returns, so only a pre-call line can identify it.
   `RunspaceWarmCoverage.Tests.ps1` guards the static rules (`WarmScanLaunchPath`
   pure CPU; the DNS/TCP/CIM and CIM/ScheduledTasks exercises present in
   `WarmRuntimeAssemblies` / `Warm-Runspace.ps1`; the self-heal; park-and-reap with

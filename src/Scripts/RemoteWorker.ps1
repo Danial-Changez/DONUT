@@ -44,6 +44,7 @@
 using module "..\Services\WorkerServices.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Core\ConfigManager.psm1"
+using module "..\Core\LogService.psm1"
 
 param(
     [string]$HostName,
@@ -58,6 +59,25 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# First possible trace: execution only reaches here after the runspace finished
+# parsing/compiling this script and its whole using-module graph, so the gap
+# between the submitter's "Started X job." line and this one IS the queue +
+# compile time. A job whose log shows "Started" but never this line either never
+# got a runspace or is still (or forever) compiling.
+$workerLog = $null
+try {
+    if (-not [string]::IsNullOrWhiteSpace($LogsDir)) {
+        $workerLog = [LogService]::new($LogsDir)
+        $modeText = if ($Options -and $Options.Mode) { [string]$Options.Mode } else { '' }
+        $workerLog.LogDebug(
+            "[$HostName] Worker up: JobType=$JobType Mode=$modeText " +
+            "(graph compiled, pipeline starting).")
+    }
+}
+catch {
+    Write-Warning "Worker start trace unavailable: $($_.Exception.Message)"
+}
 
 try {
     # Prefer the live config sent from the UI (config.json is only persistence);
@@ -78,6 +98,12 @@ try {
         $config, $SourceRoot, $LogsDir, $ReportsDir)
 }
 catch {
+    # The error stream reaches Donut.log only if the job's Poll() drains it; a
+    # worker that dies while the pump is stalled would otherwise vanish, so the
+    # failure is also written straight to the log file.
+    if ($null -ne $workerLog) {
+        $workerLog.LogException("[$HostName] $JobType worker failed", $_)
+    }
     Write-Error "Worker failed: $_"
     exit 1
 }

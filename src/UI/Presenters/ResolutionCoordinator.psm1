@@ -250,6 +250,7 @@ class ResolutionCoordinator {
             $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
+            $this.Logger.LogDebug("[$hostName] IP pre-resolve job submitted.")
         }
         catch {
             # Release the latch if the job never started, or NeedsResolve stays false
@@ -299,6 +300,9 @@ class ResolutionCoordinator {
             $mode = [string]$item.Mode
             if ($mode -eq 'Warm') {
                 $dc = [string]$item.ActiveDc
+                $this.Logger.LogDebug(
+                    "DC warm-up result received: dc='$dc', " +
+                    "controllers=$(@($item.DomainControllers).Count).")
                 if (-not [string]::IsNullOrWhiteSpace($dc)) {
                     $this.Resolver.SetActiveDc($dc)
                     $this.PersistDomainController($dc, @($item.DomainControllers))
@@ -311,6 +315,8 @@ class ResolutionCoordinator {
                 $hn = [string]$item.HostName
                 $newIp = [string]$item.Ip
                 $online = [bool]$item.Online
+                $this.Logger.LogDebug(
+                    "[$hn] Resolve verdict received: ip='$newIp', online=$online.")
                 $oldIp = $this.Resolver.GetCachedIp($hn)
                 # Log only a first find or an actual change - never a same-IP TTL refresh.
                 if (-not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {

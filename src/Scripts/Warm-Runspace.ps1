@@ -63,6 +63,11 @@ param(
 $warmLog = if ([string]::IsNullOrWhiteSpace($LogsDir)) { [NullLogService]::new() }
 else { [LogService]::new($LogsDir) }
 
+# Execution reaches here only after the runspace parsed the whole superset graph,
+# so WarmPool's submit time to this line = queue + graph-compile time.
+$warmLog.LogDebug("Runspace warm: module graph parsed - warm pass starting.")
+$warmSw = [System.Diagnostics.Stopwatch]::StartNew()
+
 # The binary CIM + ScheduledTasks stacks (hit by the workers and
 # PersonLensService.EnsureAgent) take the process-wide CLR loader lock on their FIRST
 # call - importing alone doesn't pay that cost - so invoke each cheap, local cmdlet
@@ -82,6 +87,8 @@ try {
     # The probe task never exists: the miss itself pays the ScheduledTasks loader hit,
     # which is all this call is for - so the expected not-found is not worth logging.
     [void](Get-ScheduledTask -TaskName 'DONUT-loader-warm-probe' -ErrorAction SilentlyContinue)
+    $warmLog.LogDebug(
+        "Runspace warm: CIM/ScheduledTasks exercised ($($warmSw.ElapsedMilliseconds) ms).")
 }
 catch {
     $warmLog.LogWarning(

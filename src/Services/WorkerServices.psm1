@@ -158,12 +158,17 @@ class ExecutionService {
         # This job already loaded the module graph; warming the runtime assemblies too
         # means later jobs never cold-load under the loader lock.
         if ($mode -eq 'WarmRunspace') {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $this.WarmRuntimeAssemblies()
+            $runtimeMs = $sw.ElapsedMilliseconds
+            $sw.Restart()
             $this.WarmScanLaunchPath()
             # One line per pool runspace at startup: proof this runspace ran the real
-            # worker pipeline before any real job landed on it.
+            # worker pipeline before any real job landed on it. The timings say where
+            # a slow warm spent its barrier budget.
             $this.Logger.LogDebug(
-                "Runspace warmed: worker pipeline + runtime assemblies + scan path resident.")
+                "Runspace warmed: worker pipeline up; runtime assemblies $runtimeMs ms; " +
+                "scan path $($sw.ElapsedMilliseconds) ms.")
             return @{ Mode = 'WarmRunspace' }
         }
 
@@ -174,12 +179,21 @@ class ExecutionService {
             return @{ Mode = 'Name'; HostName = $device.HostName; ActualName = [string]$actual }
         }
 
+        # Step breadcrumbs (DEBUG): a host resolve that never completes must name its
+        # last step - DNS via the DC, then the RPC-135 probe. TTL re-validations are
+        # minutes apart per host, so the volume stays low.
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
+        $this.Logger.LogDebug("[$($device.HostName)] Host resolve: DC='$dc' - DNS lookup...")
         $ip = $this.Probe.ResolveWith($device.HostName, $dc)
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
-        $online = if (-not [string]::IsNullOrWhiteSpace($ipStr)) { $this.Probe.IsRpcAvailable($ipStr) }
-        else { $false }
-        # No log: routine TTL re-validations would spam it; the presenter logs changes.
+        $online = $false
+        if (-not [string]::IsNullOrWhiteSpace($ipStr)) {
+            $this.Logger.LogDebug(
+                "[$($device.HostName)] Host resolve: ip='$ipStr' - probing RPC 135...")
+            $online = $this.Probe.IsRpcAvailable($ipStr)
+        }
+        $this.Logger.LogDebug(
+            "[$($device.HostName)] Host resolve verdict: ip='$ipStr', online=$online.")
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
@@ -199,20 +213,26 @@ class ExecutionService {
     # probe added in 2292abe was in no known-good build and coincided with the
     # no-window startup incident; WarmScanLaunchPath stays pure CPU.
     [void] WarmRuntimeAssemblies() {
+        # Each exercise logs BEFORE it runs: a warm that wedges leaves the name of
+        # the exact stack it wedged in as the runspace's last log line.
+        $this.Logger.LogDebug("Warm: exercising DNS (localhost lookup)...")
         try {
             Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction Stop | Out-Null
         }
         catch {
             $this.Logger.LogDebug("DNS warm-up skipped: $($_.Exception.Message)")
         }
+        $this.Logger.LogDebug("Warm: exercising TCP (socket construct)...")
         try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() }
         catch {
             $this.Logger.LogDebug("TCP warm-up skipped: $($_.Exception.Message)")
         }
+        $this.Logger.LogDebug("Warm: loading DirectoryServices (LDAP)...")
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction Stop }
         catch {
             $this.Logger.LogDebug("DirectoryServices warm-up skipped: $($_.Exception.Message)")
         }
+        $this.Logger.LogDebug("Warm: exercising CIM (loopback DCOM session)...")
         try {
             $opt = New-CimSessionOption -Protocol Dcom
             $s = New-CimSession -SessionOption $opt -ErrorAction Stop
@@ -228,6 +248,7 @@ class ExecutionService {
         catch {
             $this.Logger.LogDebug("CIM session warm-up skipped: $($_.Exception.Message)")
         }
+        $this.Logger.LogDebug("Warm: runtime stacks exercised.")
     }
 
     # Pre-executes the CPU-only half of the DCU launch path - dcu-cli arg build and
