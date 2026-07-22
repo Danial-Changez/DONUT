@@ -93,22 +93,33 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Security
 
-    # MVVM base types: compiled into Donut.Launcher in production (guard skips); on the
-    # `pwsh -Sta` dev path compile them here, before the class graph parses against them.
+    # C# helper types the class graph parses against: compiled into Donut.Launcher in
+    # production, compiled here on the `pwsh -Sta` dev path. Each file is guarded by
+    # ITS OWN type and compiled individually. Guarding them all on ObservableObject
+    # alone crashed startup: any session where the MVVM types are already resident
+    # but a newer helper is not - a console that ran an older tree, or an installed
+    # launcher (which hosts this very script) built before the helper existed -
+    # skipped the whole block, and the graph parse died on the first reference
+    # ("Unable to find type [WindowChromeHelper]"). Per-file guards compile exactly
+    # what is missing and never recompile a resident type, which would make its
+    # name ambiguous across assemblies.
+    #
+    # Reference the loaded runtime assemblies by path so versions match (see
+    # Get-RuntimeAssemblyPath). System.ObjectModel defines ICommand /
+    # INotifyPropertyChanged; WindowsBase + PresentationCore back the interop helpers.
+    $refs = @(
+        Get-RuntimeAssemblyPath 'System.ObjectModel'
+        Get-RuntimeAssemblyPath 'WindowsBase'
+        Get-RuntimeAssemblyPath 'PresentationCore'
+    )
     if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
-        # Reference the loaded runtime assemblies by path so versions match (see
-        # Get-RuntimeAssemblyPath). System.ObjectModel defines ICommand /
-        # INotifyPropertyChanged; WindowsBase + PresentationCore back the interop helpers.
-        $refs = @(
-            Get-RuntimeAssemblyPath 'System.ObjectModel'
-            Get-RuntimeAssemblyPath 'WindowsBase'
-            Get-RuntimeAssemblyPath 'PresentationCore'
-        )
-        Add-Type -Path @(
-            "$PSScriptRoot\Launcher\ObservableObject.cs",
-            "$PSScriptRoot\Launcher\RelayCommand.cs",
-            "$PSScriptRoot\Launcher\WindowChromeHelper.cs"
-        ) -ReferencedAssemblies $refs
+        Add-Type -Path "$PSScriptRoot\Launcher\ObservableObject.cs" -ReferencedAssemblies $refs
+    }
+    if (-not ('Donut.Mvvm.RelayCommand' -as [type])) {
+        Add-Type -Path "$PSScriptRoot\Launcher\RelayCommand.cs" -ReferencedAssemblies $refs
+    }
+    if (-not ('Donut.Interop.WindowChromeHelper' -as [type])) {
+        Add-Type -Path "$PSScriptRoot\Launcher\WindowChromeHelper.cs" -ReferencedAssemblies $refs
     }
 
     # QR helper (Donut.Qr.QrCode): wraps bundled QRCoder (MIT) for the BitLocker QR overlay.

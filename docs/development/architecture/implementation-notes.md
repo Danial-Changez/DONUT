@@ -242,3 +242,14 @@ threads touching the UI directly.
   `SelfUpdateService` can copy it to `%LOCALAPPDATA%\DONUT` and run it independently
   for updates/rollbacks; the copy is hash-gated (SHA-256) to avoid needless writes, and
   Device Flow tokens are DPAPI-protected (CurrentUser).
+- **Every dev-path C# helper guards its own type:** `Start-Donut.ps1` compiles the
+  `src/Launcher/*.cs` helpers with `Add-Type` when their types are not already
+  resident (production compiles them into `Donut.Launcher`, which also *hosts* this
+  script). Each file must sit behind its **own** `-as [type]` guard and compile
+  alone: hiding several helpers behind one guard type crashed startup with
+  "Unable to find type [WindowChromeHelper]" — a session with the MVVM types
+  resident (an installed launcher older than a newer helper, or a console that had
+  run an older tree) skipped the whole block, and the class-graph parse died on the
+  first missing type. Per-file guards compile exactly what is missing and never
+  recompile a resident type (a duplicate would make the name ambiguous across
+  assemblies). `StartupDevPath.Tests.ps1` enforces the rule.
