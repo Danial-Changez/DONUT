@@ -38,6 +38,8 @@ class ResolutionCoordinator {
     # awaited (a pipeline wedged below PowerShell can't honor one). Parked here so
     # they aren't finalized mid-run; they die with the process.
     hidden [object[]] $AbandonedWarmShells = @()
+    # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
+    hidden [int] $WarmTimeoutSeconds = 30
 
     ResolutionCoordinator(
         [AppConfig] $config,
@@ -113,7 +115,7 @@ class ResolutionCoordinator {
         }
 
         # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
-        $deadline = [datetime]::UtcNow.AddSeconds(30)
+        $deadline = [datetime]::UtcNow.AddSeconds($this.WarmTimeoutSeconds)
         $warmed = 0
         for ($i = 0; $i -lt $shells.Count; $i++) {
             $completed = $false
@@ -157,8 +159,9 @@ class ResolutionCoordinator {
         if ($warmed -lt $shells.Count) {
             $this.Logger.LogWarning(
                 "$($shells.Count - $warmed) of $($shells.Count) runspace warm job(s) did not " +
-                "finish within 30 s (stop requested in the background). A stuck warm holds " +
-                "its pool runspace, so real jobs may queue behind fewer free runspaces.")
+                "finish within $($this.WarmTimeoutSeconds) s (stop requested in the " +
+                "background). A stuck warm holds its pool runspace, so real jobs may " +
+                "queue behind fewer free runspaces.")
         }
         $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
     }

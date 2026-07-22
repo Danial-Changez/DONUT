@@ -267,4 +267,37 @@ throw "Test exception: $Message"
             $job.Cleanup()
         }
     }
+
+    Context "Stall heartbeat" {
+        It "warns with the pool state when a running job crosses the threshold, then re-arms" {
+            # The recurring field failure is a job that logs "Started X job." and then
+            # nothing, with no way to tell queued-behind-a-starved-pool from a wedged
+            # worker. The heartbeat is the log evidence for that gap.
+            $logger = [CapturingLogService]::new()
+            $job = [AsyncJob]::new("SlowHost", "Scan", $logger)
+            $job.Start($script:slowScript, @{ DelayMs = 4000 }, $null)
+
+            # Force the first heartbeat due now instead of waiting the real 90 s.
+            $job.NextStallLogUtc = [datetime]::UtcNow.AddSeconds(-1)
+            $job.Poll()
+
+            $logger.HasLevel("WARN") | Should -Be $true
+            $logger.Contains("still running after") | Should -Be $true
+            $logger.Contains("pool:") | Should -Be $true
+
+            # Re-armed: the next Poll inside the repeat window must stay quiet.
+            $job.Poll()
+            @($logger.Entries | Where-Object { $_ -like "*still running after*" }).Count |
+                Should -Be 1
+
+            # Let the job finish so cleanup never disposes a running pipeline.
+            $timeout = [DateTime]::Now.AddSeconds(30)
+            while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
+                Start-Sleep -Milliseconds 100
+                $job.Poll()
+            }
+            $job.Status | Should -Be "Completed"
+            $job.Cleanup()
+        }
+    }
 }

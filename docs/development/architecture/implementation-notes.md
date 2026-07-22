@@ -30,11 +30,19 @@ model.
   loopback port-445 probe added "to bind the socket stack" wedged *inside* the native
   connect (security stacks hook socket connects; the hook blocks below any
   PowerShell-level timeout), every warm job hung, and the app never showed a window.
-  For the same reason `WarmPool`'s 30 s barrier must never `Dispose()`/`Stop()` a
-  shell that missed the deadline — both stop the pipeline synchronously and a wedged
-  pipeline never honors the stop, hanging the UI thread pre-window; it fires
-  `BeginStop` and parks the shell instead. `RunspaceWarmCoverage.Tests.ps1` guards
-  all of it.
+  For the same reason `WarmPool`'s barrier (default 30 s, `WarmTimeoutSeconds`) must
+  never `Dispose()`/`Stop()` a shell that missed the deadline — both stop the
+  pipeline synchronously and a wedged pipeline never honors the stop, hanging the UI
+  thread pre-window; it fires `BeginStop` and parks the shell instead. A parked shell
+  still holds its pool runspace until the background stop lands, so a fully wedged
+  warm can starve every later job — the log evidence is the barrier-lapse warning
+  plus `Pre-warmed N of M` with `N < M`, and `DC warm-up started (pool free: 0/…)`.
+  `RunspaceWarmCoverage.Tests.ps1` guards the static rules;
+  `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path returns
+  promptly and recovers the runspaces, and
+  `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
+  scripts on a real pool and asserts they always terminate (the "`Started Resolve
+  job.` then silence" regression family).
 - **Thread safety:** `LogService` is thread-safe. Work is fed back to the UI through a
   thread-safe state/queue that a `DispatcherTimer` polls on the UI thread — **not** by
   returning results (which only surface when the runspace completes) — so the "live
@@ -44,6 +52,13 @@ model.
   form coalesces to `NullLogService`, which made every job failure — start errors,
   error-stream lines, completion exceptions — invisible in `Donut.log`; a wedged scan
   took days to triage because of that silence. The 2-arg form remains for tests only.
+- **Every `AsyncJob` has a stall heartbeat:** `Poll()` logs a WARN once a job has run
+  90 s without completing, then every 5 min, including the pool's free/max runspace
+  count. That count is the discriminator this app's silent regressions always lacked:
+  `0 free` means the job is queued behind busy or stuck runspaces (e.g. parked warm
+  shells still holding theirs); free > 0 means the worker itself has not returned.
+  Long scans legitimately cross the threshold — the heartbeat is evidence, not an
+  error. Jobs put into `Running` without `Start()` (test doubles) never heartbeat.
 - **Dispatcher watchdog semantics:** `DispatcherWatchdog` warns when its 250 ms tick
   gap exceeds the threshold, and appends the GC gen0/1/2 collection-count deltas
   across the gap (gen2 > 0 → a blocking GC suspended all threads; +0/+0/+0 → loader

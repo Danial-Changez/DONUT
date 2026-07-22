@@ -26,6 +26,16 @@ class AsyncJob {
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
 
+    # Stall heartbeat. Every silent regression in this app's history looked the same
+    # in the field: a "Started X job." line and then nothing, with no way to tell a
+    # job queued behind a starved pool from a worker wedged mid-run. Poll() warns
+    # once a running job crosses StallWarnAfterSeconds, then every
+    # StallRepeatSeconds, with the pool's free count as the discriminator.
+    [datetime] $StartedAtUtc
+    hidden [datetime] $NextStallLogUtc
+    hidden [int] $StallWarnAfterSeconds = 90
+    hidden [int] $StallRepeatSeconds = 300
+
     # Test convenience only. Production call sites must pass the real logger (guarded
     # by AsyncJobLoggerCoverage.Tests.ps1): with the null logger, a job that fails to
     # start, errors, or throws during completion leaves no trace in Donut.log - a
@@ -60,6 +70,8 @@ class AsyncJob {
             }
 
             $this.Status = [JobStatus]::Running
+            $this.StartedAtUtc = [datetime]::UtcNow
+            $this.NextStallLogUtc = $this.StartedAtUtc.AddSeconds($this.StallWarnAfterSeconds)
             $this.AsyncResult = $this.PowerShell.BeginInvoke()
             $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job.")
         }
@@ -99,11 +111,37 @@ class AsyncJob {
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
         }
+        elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
+            [datetime]::UtcNow -ge $this.NextStallLogUtc) {
+            # MinValue = the job reached Running without Start() arming the heartbeat
+            # (test doubles do this); never treat that as an instant stall.
+            $this.LogStallHeartbeat()
+        }
 
         $this.DrainStream($this.PowerShell.Streams.Information)
         $this.DrainStream($this.PowerShell.Streams.Verbose)
         $this.DrainStream($this.PowerShell.Streams.Warning)
         $this.DrainStream($this.PowerShell.Streams.Error)
+    }
+
+    # One WARN per interval while a job neither completes nor fails - the difference
+    # between "the app just went quiet" and a log that says where the time is going.
+    hidden [void] LogStallHeartbeat() {
+        $elapsed = [long]([datetime]::UtcNow - $this.StartedAtUtc).TotalSeconds
+        $pool = 'unknown'
+        try {
+            $p = [RunspaceManager]::GetPool()
+            $pool = "$($p.GetAvailableRunspaces())/$($p.GetMaxRunspaces()) free"
+        }
+        catch {
+            $this.Logger.LogDebug(
+                "Stall heartbeat: pool state unreadable: $($_.Exception.Message)")
+        }
+        $this.Logger.LogWarning(
+            "[$($this.HostName)] $($this.JobType) job still running after $elapsed s " +
+            "(pool: $pool). 0 free means it is queued behind busy or stuck runspaces; " +
+            "otherwise the worker itself has not returned.")
+        $this.NextStallLogUtc = [datetime]::UtcNow.AddSeconds($this.StallRepeatSeconds)
     }
 
     [void] DrainStream($stream) {
