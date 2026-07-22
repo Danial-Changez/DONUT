@@ -174,17 +174,27 @@ Describe "Runspace warm coverage" {
             "alive but unable to run any job")
     }
 
-    It "WarmPool never blocks on a warm job that missed the deadline" {
-        # Dispose (or Stop) on a still-running pipeline stops it synchronously; a
-        # pipeline wedged in a hooked native call never honors the stop, so the UI
-        # thread hung forever before any window existed. The timeout path must
-        # fire-and-forget BeginStop and park the shell instead of disposing it.
+    It "WarmPool never blocks on - and never kills - a warm job that missed the deadline" {
+        # Dispose/Stop on a still-running pipeline waits for it synchronously; a
+        # pipeline wedged in a hooked native call never yields, and that hang shipped
+        # once (the UI thread, pre-window). Async-stopping shipped too - and it
+        # destroyed warms that were merely SLOW (first-run AV/AMSI scans push the
+        # module-graph warm past the barrier), wasting the work seconds before it
+        # finished. The contract: the barrier stops the WAITING, never the WORK -
+        # park the shell running, reap it when it completes, give back the
+        # compensating capacity.
         $raw = Get-Content $Coordinator -Raw
-        $raw | Should -Match 'BeginStop\(\$null,\s*\$null\)' -Because (
-            "a warm shell that missed the deadline may be wedged; only an async stop " +
-            "request is safe from the UI thread")
+        $raw | Should -Not -Match 'BeginStop|\.Stop\(' -Because (
+            "stopping a parked warm either blocks forever (wedged) or throws away " +
+            "nearly finished warm work (slow)")
         $raw | Should -Match 'AbandonedWarmShells' -Because (
             "unfinished warm shells must be parked, not disposed inline - Dispose " +
-            "stops the pipeline synchronously and can block forever")
+            "waits on the pipeline synchronously and can block forever")
+        $raw | Should -Match 'ReapWarmShells' -Because (
+            "parked warms must be harvested on completion so the runspace counts as " +
+            "warmed and the raised pool capacity is restored")
+        $homePresenter = Join-Path $PSScriptRoot '../../src/UI/Presenters/HomePresenter.psm1'
+        (Get-Content $homePresenter -Raw) | Should -Match 'ReapWarmShells' -Because (
+            "something must actually drive the reap - the job pump tick is the hook")
     }
 }

@@ -562,6 +562,10 @@ class HomePresenter : AsyncJobPresenter {
     [void] OnTimerTick($timerSource, $tickArgs) {
         try {
             $this.PumpJobs()
+            # Harvest warm jobs that outlived WarmPool's barrier: a late finisher is
+            # a fully warmed runspace, and reaping it returns the pool capacity the
+            # barrier lapse raised.
+            if ($null -ne $this.Resolution) { $this.Resolution.ReapWarmShells() }
         }
         catch {
             $this.Logger.LogException("Error during job pump", $_)

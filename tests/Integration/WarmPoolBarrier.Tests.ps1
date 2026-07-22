@@ -70,8 +70,12 @@ Describe "WarmPool barrier" {
         $ps.Dispose()
     }
 
-    It "a lapsed barrier returns promptly, parks the shells, and heals the pool" {
-        $f = New-BarrierFixture "Start-Sleep -Seconds 120"
+    It "a lapsed barrier returns promptly, heals the pool, and reaps late warms" {
+        # The stubs outlive the 2 s barrier but finish on their own at ~8 s - the
+        # "slow, not wedged" case from the field (first-run AV/AMSI scanning pushed
+        # every warm past 30 s). The barrier must not kill them: a late finisher is
+        # still a fully warmed runspace.
+        $f = New-BarrierFixture "Start-Sleep -Seconds 8"
         $f.Coordinator.WarmTimeoutSeconds = 2
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $f.Coordinator.WarmPool()
@@ -91,8 +95,8 @@ Describe "WarmPool barrier" {
         $f.Log.Contains('Pool capacity raised to 4') | Should -BeTrue
         [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 4
 
-        # THE user-facing contract: a job submitted immediately after a fully wedged
-        # warm must still run, even while both parked shells hold their runspaces.
+        # THE user-facing contract: a job submitted immediately after a lapsed
+        # barrier must still run, even while both parked shells hold their runspaces.
         $ps = [powershell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetPool()
         [void]$ps.AddScript('7')
@@ -102,15 +106,20 @@ Describe "WarmPool barrier" {
         [string]$ps.EndInvoke($handle) | Should -Be '7'
         $ps.Dispose()
 
-        # These stubs are stoppable, so the fire-and-forget BeginStop must eventually
-        # hand their two runspaces back on top of the raised capacity.
-        $free = 0
-        foreach ($attempt in 1..60) {
-            $free = [RunspaceManager]::GetPool().GetAvailableRunspaces()
-            if ($free -ge 4) { break }
+        # Reap: when the late warms land (~8 s), the pump-driven harvest must claim
+        # them and give the raised capacity back - the raise is temporary insurance,
+        # not a permanent doubling.
+        foreach ($attempt in 1..90) {
+            $f.Coordinator.ReapWarmShells()
+            if ($f.Coordinator.AbandonedWarmShells.Count -eq 0) { break }
             Start-Sleep -Milliseconds 500
         }
-        $free | Should -BeGreaterOrEqual 4 -Because (
-            "a stopped warm shell must return its runspace to the pool")
+        $f.Coordinator.AbandonedWarmShells.Count | Should -Be 0 -Because (
+            "a slow-but-healthy warm must eventually be harvested, not leak")
+        $f.Log.Contains('finished late') | Should -BeTrue
+        $f.Log.Contains('Pool capacity restored to 2') | Should -BeTrue
+        [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 2 -Because (
+            "after every late warm is harvested the pool must converge back on the " +
+            "configured throttle")
     }
 }

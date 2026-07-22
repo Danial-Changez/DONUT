@@ -34,9 +34,10 @@ class ResolutionCoordinator {
     [HostResolver] $Resolver        # shared with HomePresenter (not owned here)
     [object]       $Home            # duck-typed back-ref to HomePresenter's pump + seams
     [bool]         $PoolWarmed = $false   # single-shot guard for WarmPool
-    # Warm shells whose pipeline never finished: a stop was requested but is never
-    # awaited (a pipeline wedged below PowerShell can't honor one). Parked here so
-    # they aren't finalized mid-run; they die with the process.
+    # Warm shells still running when the barrier lapsed, parked as
+    # @{ Shell; Handle; Started } and left RUNNING - a late warm still delivers a
+    # fully warmed runspace. ReapWarmShells (pump-driven) harvests each one when it
+    # completes; a truly wedged one never completes and dies with the process.
     hidden [object[]] $AbandonedWarmShells = @()
     # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
     hidden [int] $WarmTimeoutSeconds = 30
@@ -115,7 +116,8 @@ class ResolutionCoordinator {
         }
 
         # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
-        $deadline = [datetime]::UtcNow.AddSeconds($this.WarmTimeoutSeconds)
+        $started = [datetime]::UtcNow
+        $deadline = $started.AddSeconds($this.WarmTimeoutSeconds)
         $warmed = 0
         for ($i = 0; $i -lt $shells.Count; $i++) {
             $completed = $false
@@ -140,19 +142,21 @@ class ResolutionCoordinator {
                     }
                 }
                 else {
-                    # NEVER Dispose (or Stop) a still-running warm inline: both stop
-                    # the pipeline synchronously, and a pipeline wedged below
-                    # PowerShell (a hooked native call that never returns) can't
-                    # honor the stop - this thread (the UI thread, before any window
-                    # exists) would block here forever. That exact hang shipped once:
-                    # the app logged the resource-dictionary merge and went silent.
-                    # BeginStop is fire-and-forget; park the shell instead.
-                    try { [void]$shells[$i].BeginStop($null, $null) }
-                    catch {
-                        $this.Logger.LogDebug(
-                            "Warm stop request failed: $($_.Exception.Message)")
+                    # NEVER Dispose or Stop a still-running warm. The synchronous
+                    # forms wait on the pipeline, and a pipeline wedged below
+                    # PowerShell can't yield - this thread (the UI thread, before
+                    # any window exists) would block forever; that hang shipped
+                    # once. Async-stopping shipped too - and destroyed warms that
+                    # were merely SLOW (first-run AV/AMSI scanning of the module
+                    # graph pushes them past the barrier), killing the work seconds
+                    # before it finished. The barrier stops the WAITING, never the
+                    # WORK: park the shell running; ReapWarmShells harvests it
+                    # whenever it completes.
+                    $this.AbandonedWarmShells += @{
+                        Shell   = $shells[$i]
+                        Handle  = $handles[$i]
+                        Started = $started
                     }
-                    $this.AbandonedWarmShells += $shells[$i]
                 }
             }
         }
@@ -160,15 +164,15 @@ class ResolutionCoordinator {
             $parked = $shells.Count - $warmed
             $this.Logger.LogWarning(
                 "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
-                "$($this.WarmTimeoutSeconds) s (stop requested in the background). A stuck " +
-                "warm holds its pool runspace, so real jobs may queue behind fewer free " +
-                "runspaces.")
-            # Self-heal: a parked shell holds its runspace until the background stop
-            # lands, and a pipeline wedged in a hooked native call never honors one -
-            # in the field the pool sat 0/8 free for minutes and every job (the DC
-            # resolve first) queued forever, heartbeating unrun. Raising the max mints
-            # fresh runspaces: cold, so a first job on one pays the loader hit, but it
-            # RUNS. If a parked shell later stops, the surplus capacity is harmless.
+                "$($this.WarmTimeoutSeconds) s. They keep running in the background; each " +
+                "is harvested when it completes and holds its pool runspace until then.")
+            # Self-heal: a parked shell holds its runspace until its warm completes -
+            # never, if it is wedged - and in the field the pool sat 0/8 free for
+            # minutes while every job (the DC resolve first) queued unrun. Raising the
+            # max mints fresh runspaces: cold, so a first job on one pays the loader
+            # hit, but it RUNS. The raise is temporary insurance - ReapWarmShells
+            # gives a slot back each time a late warm lands - and stays only for
+            # shells that never finish, where it is what keeps the app alive.
             try {
                 $newMax = $pool.GetMaxRunspaces() + $parked
                 if ($pool.SetMaxRunspaces($newMax)) {
@@ -187,6 +191,53 @@ class ResolutionCoordinator {
             }
         }
         $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
+    }
+
+    # Pump-driven: harvests parked warm shells that finished after the barrier
+    # lapsed. A late warm still delivers a fully warmed runspace - the work is never
+    # thrown away - and each harvest gives back one unit of the capacity the lapse
+    # raised, so the pool converges on the configured throttle. A wedged shell never
+    # completes: it stays parked (dying with the process) and its replacement
+    # capacity stays with it. The late/never split in the log is also the
+    # slow-vs-wedged diagnostic for the warm itself.
+    [void] ReapWarmShells() {
+        if ($this.AbandonedWarmShells.Count -eq 0) { return }
+        $stillRunning = @()
+        foreach ($entry in $this.AbandonedWarmShells) {
+            if (-not $entry.Handle.IsCompleted) {
+                $stillRunning += $entry
+                continue
+            }
+            $elapsed = [int]([datetime]::UtcNow - $entry.Started).TotalSeconds
+            try {
+                $entry.Shell.EndInvoke($entry.Handle)
+                $this.Logger.LogInfo(
+                    "A runspace warm finished late ($elapsed s) - that runspace is warm.")
+            }
+            catch {
+                $this.Logger.LogWarning(
+                    "A late runspace warm failed after $elapsed s - its runspace " +
+                    "cold-loads on first use: $($_.Exception.Message)")
+            }
+            try { $entry.Shell.Dispose() }
+            catch {
+                $this.Logger.LogDebug("Late warm dispose failed: $($_.Exception.Message)")
+            }
+            try {
+                $pool = [RunspaceManager]::GetPool()
+                $floor = $this.Config.GetThrottleLimit()
+                $max = $pool.GetMaxRunspaces()
+                if ($max -gt $floor) {
+                    [void]$pool.SetMaxRunspaces($max - 1)
+                    $this.Logger.LogInfo(
+                        "Pool capacity restored to $($max - 1) (late warm harvested).")
+                }
+            }
+            catch {
+                $this.Logger.LogException("Pool capacity restore failed", $_)
+            }
+        }
+        $this.AbandonedWarmShells = $stillRunning
     }
 
     # Resolves a host's IP in the background (single-flight); no-op until a DC is warm

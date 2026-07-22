@@ -36,22 +36,31 @@ model.
   *unstoppably* (the pool still `0/8 free` 90 s after the background stops were
   requested). The warm now performs module/assembly loads and script compilation
   only; first-use *connection* costs land on live pool jobs, whose gates are bounded
-  and off the startup barrier. For the same reason `WarmPool`'s barrier (default
-  30 s, `WarmTimeoutSeconds`) must never `Dispose()`/`Stop()` a shell that missed
-  the deadline — both stop the pipeline synchronously and a wedged pipeline never
-  honors the stop, hanging the UI thread pre-window; it fires `BeginStop` and parks
-  the shell instead. A parked shell still holds its pool runspace until the
-  background stop lands (never, if wedged), so **a lapsed barrier self-heals: it
-  raises the pool max by the parked count**, minting fresh (cold) runspaces so real
-  jobs always find one. `HomePresenter.Initialize` submits the DC warm *before* the
+  and off the startup barrier. `WarmPool`'s barrier (default 30 s,
+  `WarmTimeoutSeconds`) **stops the waiting, never the work**: a shell that missed
+  the deadline must not be `Dispose()`d or `Stop()`ped (both wait on the pipeline
+  synchronously, and a wedged pipeline never yields — that hang shipped once,
+  pre-window) and must not be async-stopped either (that shipped too, and it
+  destroyed warms that were merely *slow* — first-run AV/AMSI scanning of the
+  module graph pushes warms past the barrier — wasting the work just before it
+  finished). Instead the shell is parked *still running*, the pool max is raised
+  by the parked count so real jobs always find a runspace, and the job pump's
+  `ReapWarmShells` harvests each late finisher: its runspace lands fully warmed
+  and one unit of the raised capacity is given back, so the pool converges on the
+  configured throttle. Only a truly wedged shell keeps its replacement capacity —
+  there, the raise is what keeps the app alive. The late/never reap split in the
+  log ("finished late (N s)" vs. nothing) doubles as the slow-vs-wedged
+  diagnostic. `HomePresenter.Initialize` submits the DC warm *before* the
   finder/Lens warms — the DC is the keystone every resolve gates on, so it must be
   first in line for a degraded pool. The starvation signature in `Donut.log`: the
   barrier-lapse warning, `Pre-warmed N of M` with `N < M`, `DC warm-up started
   (pool free: 0/…)`, and Resolve-job stall heartbeats with `0/… free`.
   `RunspaceWarmCoverage.Tests.ps1` guards the static rules (no-connect across
-  `WarmScanLaunchPath`, `WarmRuntimeAssemblies`, and `Warm-Runspace.ps1`, plus the
-  self-heal); `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path
-  returns promptly, heals capacity, and still dispatches work; and
+  `WarmScanLaunchPath`, `WarmRuntimeAssemblies`, and `Warm-Runspace.ps1`; the
+  self-heal; park-and-reap with no Stop of any kind);
+  `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path returns
+  promptly, heals capacity, dispatches work while shells are parked, and reaps
+  late warms back to the configured throttle; and
   `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
   scripts on a real pool and asserts they always terminate (the "`Started Resolve
   job.` then silence" regression family).
