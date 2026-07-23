@@ -80,18 +80,27 @@ catch {
 }
 
 try {
-    # Prefer the live config sent from the UI (config.json is only persistence);
-    # fall back to it, or to defaults, when no Settings were supplied.
+    # Prefer the config snapshot sent from the UI (config.json is only persistence);
+    # fall back to it, or to defaults, when no Settings were supplied. The source
+    # breadcrumb splits the silent gap between "Worker up" and the worker service's
+    # first line: if the log stops before "Config built", the wedge is inside the
+    # config merge itself.
+    $configSource = 'defaults'
     $config = if ($Settings) {
+        $configSource = 'ui snapshot'
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, $Settings)
     }
     elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
+        $configSource = 'config file'
         $mgr = [ConfigManager]::new($SourceRoot)
         $mgr.LoadConfig()
     }
     else {
         # Use default config with provided paths
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, @{})
+    }
+    if ($null -ne $workerLog) {
+        $workerLog.LogDebug("[$HostName] Config built ($configSource).")
     }
 
     [ExecutionService]::StartWorker($HostName, $JobType, $Options, $ResolvedIp,

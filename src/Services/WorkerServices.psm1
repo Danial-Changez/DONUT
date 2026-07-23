@@ -101,12 +101,17 @@ class ExecutionService {
         [string]$LogsDir,
         [string]$ReportsDir
     ) {
-        # One logger shared across the worker's collaborators.
+        # One logger shared across the worker's collaborators. The two breadcrumbs
+        # bracket the constructor chain: a worker whose log stops between them
+        # wedged inside a collaborator constructor; stopping after "dispatching"
+        # pins the wedge in the phase method before its first own line.
         $localLogger = [LogService]::new($LogsDir)
+        $localLogger.LogDebug("[$HostName] Worker service: constructing collaborators...")
         $localProbe = [NetworkProbe]::new($localLogger)
         $localMatcher = [DriverMatchingService]::new($localLogger)
         $service = [ExecutionService]::new($localLogger, $localProbe, $localMatcher,
             $Config, $SourceRoot, $LogsDir, $ReportsDir)
+        $localLogger.LogDebug("[$HostName] Worker service: dispatching JobType=$JobType...")
 
         # The pre-resolved IP rides a dedicated argument - never an Options key - so
         # the worker skips DNS yet it can't leak into a dcu-cli line.

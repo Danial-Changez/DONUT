@@ -310,7 +310,7 @@ Describe "RemoteServices" {
             $result.Arguments.ReportsDir | Should -Be $config.ReportsPath
         }
 
-        It "Should send the live config Settings so the worker need not re-read config.json" {
+        It "Should send a config Settings snapshot so the worker need not re-read config.json" {
             $probe = [MockNetworkProbe]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
                 activeCommand = "applyUpdates"
@@ -319,8 +319,14 @@ Describe "RemoteServices" {
 
             $result = $service.PrepareScan("TestHost")
 
-            $result.Arguments.Settings | Should -Be $cfg.Settings
             $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+            # A SNAPSHOT, never the live reference: the worker deep-enumerates this
+            # hashtable off-thread, and enumerating a live table the UI thread is
+            # writing can corrupt it and spin forever (a silent pure-CPU wedge).
+            [object]::ReferenceEquals($result.Arguments.Settings, $cfg.Settings) |
+                Should -BeFalse -Because (
+                "jobs must carry a UI-thread deep clone of Settings, not the live " +
+                "reference the UI keeps mutating")
         }
 
         It "Should carry Settings on apply-phase arguments too" {
