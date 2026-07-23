@@ -303,7 +303,13 @@ class ExecutionService {
             OutputLog    = 'C:\temp\DONUT\scan.log'
         }
 
-        $this.InvokePsExec($params)
+        # Start/done pair around the launch (mirrors RunDiskScanPhase): a "start" with
+        # no "done" pins the hang to the psexec/dcu wait, not to argument-building.
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $this.Logger.LogInfo("[$($device.HostName)] Scan: psexec launch start.")
+        $exit = $this.InvokePsExec($params)
+        $this.Logger.LogInfo(
+            "[$($device.HostName)] Scan: psexec launch done in $($sw.ElapsedMilliseconds) ms (exit $exit).")
         $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog)
 
         return @{
@@ -493,6 +499,8 @@ class ExecutionService {
         [scriptblock]$onTick
     ) {
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
+        $startedUtc = [datetime]::UtcNow
+        $nextReportUtc = $startedUtc.AddSeconds(30)
         while (-not $p.HasExited) {
             if ([datetime]::UtcNow -gt $deadline) {
                 # Best-effort: it may already be exiting, or we may lack rights to kill it.
@@ -501,6 +509,12 @@ class ExecutionService {
             }
             Start-Sleep -Milliseconds 1500
             if ($null -ne $onTick) { & $onTick }
+            # Heartbeat: the remote process is still alive - the wait isn't the wedge.
+            if ([datetime]::UtcNow -ge $nextReportUtc) {
+                $waited = [long]([datetime]::UtcNow - $startedUtc).TotalSeconds
+                $this.Logger.LogDebug("[$target] $operation still waiting after $waited s (remote process running).")
+                $nextReportUtc = [datetime]::UtcNow.AddSeconds(30)
+            }
         }
         $p.WaitForExit()   # flush the exit code after HasExited flips
         $exitCode = [int]$p.ExitCode
@@ -870,9 +884,19 @@ exit `$LASTEXITCODE
         # only a reference type lets the consumed-chars offset survive across ticks.
         $maxMinutes = if ($command -eq 'applyUpdates') { 120 } else { 30 }
         $svc = $this
-        $tickState = @{ Seen = 0 }
+        $tickState = @{ Seen = 0; Ticks = 0; LastReportedSeen = 0 }
         $onTick = {
             $tickState.Seen = $svc.EmitNewDcuLogLines($ip, $remoteLogUnc, [int]$tickState.Seen)
+            $tickState.Ticks++
+            # Every ~30 s say whether the remote log GREW: no growth while SMB is
+            # reachable = dcu-cli is running but producing nothing (the wedge to chase).
+            if ($tickState.Ticks % 20 -eq 0) {
+                $delta = [int]$tickState.Seen - [int]$tickState.LastReportedSeen
+                $reach = $svc.Probe.IsSmbReachableQuiet($ip)
+                $svc.Logger.LogDebug(
+                    "[$ip] DCU /$command tail: +$delta log chars in last ~30 s (total $($tickState.Seen), SMB reachable=$reach).")
+                $tickState.LastReportedSeen = $tickState.Seen
+            }
         }.GetNewClosure()
         $exitCode = $this.WaitForRemoteProcess($p, $computer, "DCU /$command", $maxMinutes, $onTick)
         # Final flush for output that landed between the last poll and exit.

@@ -213,6 +213,15 @@ SMB (port 445), avoids WinRM/TrustedHosts configuration, and natively supports
   is **not** redirected (redirecting it removed the console and caused remote
   `0xC0000142` init failures) — with no window. `ExecutionService.StartPsExecHidden`
   is the shared launcher.
+- **Scan launch/wait breadcrumbs (under investigation).** A Scan that "runs forever"
+  is bounded (`WaitForRemoteProcess` kills + throws at 30 min) and SMB-gated, so the
+  wedge is inside the silent launch→wait segment. `RunScanPhase` brackets the launch
+  with `Scan: psexec launch start` / `… done in N ms (exit C)`; `WaitForRemoteProcess`
+  emits a 30 s `still waiting after N s (remote process running)` heartbeat; and the
+  scan tick logs `DCU /scan tail: +N log chars in last ~30 s (… SMB reachable=B)`.
+  Read them together: a `start` with no heartbeats ⇒ never launched; heartbeats with
+  `tail +0 chars` while `reachable=True` ⇒ `dcu-cli` is running but writing nothing
+  (the wedge to chase); `tail +N` ⇒ it's progressing, just slow.
 
 ## De-elevating the user Lens
 

@@ -4,6 +4,7 @@ using module "..\..\src\Services\DriverMatchingService.psm1"
 using module "..\..\src\Models\DeviceContext.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Services\WorkerServices.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
 using namespace System.Net
 
 # Mock NetworkProbe
@@ -217,6 +218,22 @@ Describe "WorkerServices" {
             # The BeforeEach config sets no updateDeviceCategory, so the default
             # list is appended; it must be single-quoted (not bare commas).
             $service.LastPsExecParams.Arguments | Should -BeLike "*-updateDeviceCategory='audio,video,network,storage,input,chipset,others'*"
+        }
+
+        It "brackets the psexec launch with start/done breadcrumbs carrying the exit code" {
+            # The scan hang lives in the silent launch->wait segment; a "start" with no
+            # "done" pins it to psexec/dcu, and the exit code lands in the log.
+            $logger = [CapturingLogService]::new()
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.PsExecReturnCode = 5
+
+            $service.RunScanPhase([DeviceContext]::new("TestHost"))
+
+            $logger.Contains("Scan: psexec launch start") | Should -BeTrue
+            $logger.Contains("Scan: psexec launch done") | Should -BeTrue
+            $logger.Contains("(exit 5)") | Should -BeTrue
         }
     }
 
