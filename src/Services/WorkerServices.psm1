@@ -64,6 +64,9 @@ class ExecutionService {
     [string] $LocalReportsDir
     # Per-job resolved IP; a job resolves its host at most once (see ResolvedIpFor).
     [string] $JobIp = ''
+    # Warm-shell tag ("warm-3", rides in HostName) prefixing the warm breadcrumbs so
+    # 8 concurrent warm passes stay distinguishable in Donut.log.
+    hidden [string] $WarmTag = ''
 
     # dcu-cli-missing exit code, outside all dcu-cli and psexec code ranges so
     # InvokePsExec maps it without a UNC path check (see BuildRemoteDcuScript).
@@ -157,6 +160,7 @@ class ExecutionService {
         # This job already loaded the module graph; warming the runtime assemblies too
         # means later jobs never cold-load under the loader lock.
         if ($mode -eq 'WarmRunspace') {
+            $this.WarmTag = [string]$device.HostName
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $this.WarmRuntimeAssemblies()
             $runtimeMs = $sw.ElapsedMilliseconds
@@ -165,7 +169,7 @@ class ExecutionService {
             # One line per warmed runspace; the timings say where a slow warm spent
             # its barrier budget.
             $this.Logger.LogDebug(
-                "Runspace warmed: worker pipeline up; runtime assemblies $runtimeMs ms; " +
+                "[$($this.WarmTag)] Runspace warmed: worker pipeline up; runtime assemblies $runtimeMs ms; " +
                 "scan path $($sw.ElapsedMilliseconds) ms.")
             return @{ Mode = 'WarmRunspace' }
         }
@@ -199,24 +203,25 @@ class ExecutionService {
     [void] WarmRuntimeAssemblies() {
         # Each exercise logs BEFORE it runs: a warm that wedges leaves the name of
         # the exact stack it wedged in as the runspace's last log line.
-        $this.Logger.LogDebug("Warm: exercising DNS (localhost lookup)...")
+        $t = $this.WarmTag
+        $this.Logger.LogDebug("[$t] Warm: exercising DNS (localhost lookup)...")
         try {
             Resolve-DnsName -Name 'localhost' -QuickTimeout -ErrorAction Stop | Out-Null
         }
         catch {
-            $this.Logger.LogDebug("DNS warm-up skipped: $($_.Exception.Message)")
+            $this.Logger.LogDebug("[$t] DNS warm-up skipped: $($_.Exception.Message)")
         }
-        $this.Logger.LogDebug("Warm: exercising TCP (socket construct)...")
+        $this.Logger.LogDebug("[$t] Warm: exercising TCP (socket construct)...")
         try { $c = [System.Net.Sockets.TcpClient]::new(); $c.Close() }
         catch {
-            $this.Logger.LogDebug("TCP warm-up skipped: $($_.Exception.Message)")
+            $this.Logger.LogDebug("[$t] TCP warm-up skipped: $($_.Exception.Message)")
         }
-        $this.Logger.LogDebug("Warm: loading DirectoryServices (LDAP)...")
+        $this.Logger.LogDebug("[$t] Warm: loading DirectoryServices (LDAP)...")
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction Stop }
         catch {
-            $this.Logger.LogDebug("DirectoryServices warm-up skipped: $($_.Exception.Message)")
+            $this.Logger.LogDebug("[$t] DirectoryServices warm-up skipped: $($_.Exception.Message)")
         }
-        $this.Logger.LogDebug("Warm: exercising CIM (loopback DCOM session)...")
+        $this.Logger.LogDebug("[$t] Warm: exercising CIM (loopback DCOM session)...")
         try {
             $opt = New-CimSessionOption -Protocol Dcom
             $s = New-CimSession -SessionOption $opt -ErrorAction Stop
@@ -225,14 +230,14 @@ class ExecutionService {
                     -Property Name -ErrorAction Stop | Out-Null
             }
             catch {
-                $this.Logger.LogDebug("CIM query warm-up skipped: $($_.Exception.Message)")
+                $this.Logger.LogDebug("[$t] CIM query warm-up skipped: $($_.Exception.Message)")
             }
             Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue
         }
         catch {
-            $this.Logger.LogDebug("CIM session warm-up skipped: $($_.Exception.Message)")
+            $this.Logger.LogDebug("[$t] CIM session warm-up skipped: $($_.Exception.Message)")
         }
-        $this.Logger.LogDebug("Warm: runtime stacks exercised.")
+        $this.Logger.LogDebug("[$t] Warm: runtime stacks exercised.")
     }
 
     # Pre-executes the CPU-only half of the DCU launch path so a live scan's first

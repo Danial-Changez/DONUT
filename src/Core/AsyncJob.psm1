@@ -132,10 +132,22 @@ class AsyncJob {
             $this.Logger.LogDebug(
                 "Stall heartbeat: pool state unreadable: $($_.Exception.Message)")
         }
+        $state = 'unknown'
+        $firstError = ''
+        try {
+            $state = "$($this.PowerShell.InvocationStateInfo.State)"
+            if ($this.PowerShell.Streams.Error.Count -gt 0) {
+                $firstError = " firstError=$($this.PowerShell.Streams.Error[0])"
+            }
+        }
+        catch {
+            $this.Logger.LogDebug(
+                "Stall heartbeat: shell state unreadable: $($_.Exception.Message)")
+        }
         $this.Logger.LogWarning(
             "[$($this.HostName)] $($this.JobType) job still running after $elapsed s " +
-            "(pool: $pool). 0 free means it is queued behind busy or stuck runspaces; " +
-            "otherwise the worker itself has not returned.")
+            "(pool: $pool, state: $state$firstError). 0 free means it is queued behind " +
+            "busy or stuck runspaces; otherwise the worker itself has not returned.")
         $this.NextStallLogUtc = [datetime]::UtcNow.AddSeconds($this.StallRepeatSeconds)
     }
 

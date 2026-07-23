@@ -77,6 +77,28 @@ model.
   `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
   scripts on a real pool and asserts they always terminate (the "`Started Resolve
   job.` then silence" regression family).
+
+- **Warm-shell forensics.** Each barrier shell carries a `warm-N` tag that rides in
+  the worker's `HostName` argument (`PrepareWarmRunspace([string]$tag)`), so the 8
+  concurrent warm passes stay distinguishable in `Donut.log` (`[warm-3] Worker up:`).
+  The tag is for warm shells only — the DC-warm AsyncJob keeps its empty `HostName`,
+  which `CompleteResolve` uses as its DC-warm sentinel. The barrier never discards
+  evidence: a shell that misses the deadline is logged per-shell
+  (`Warm shell parked at barrier lapse: warm-N state=… hadErrors=… errors=[…]`) via
+  `DescribeShell` (indexed stream reads only — enumerating a live `Streams.Error`
+  while the worker appends is the "Collection was modified" race), `ReapWarmShells`
+  re-dumps parked-shell state at most once a minute, and a warm whose pipeline
+  completed **with errors** now logs at ERROR and is counted apart:
+  `Pre-warmed N of M runspace(s) (K completed with errors).` — before this, an
+  errored warm counted as warmed and the log showed nothing at all. AsyncJob's
+  stall heartbeat likewise reports `state:` and `firstError=` for the wedged shell.
+
+- **Startup provenance stamp.** Right after `DONUT starting up.`,
+  `BuildProvenance::Stamp` logs one line with the git short SHA (+`dirty` flag) on
+  clones — falling back to the launcher-written `version.txt` on prod installs —
+  plus pwsh/CLR versions, machine name, and OS build. Field logs arrive detached
+  from the code that produced them; the stamp makes every `Donut.log` attributable
+  to an exact commit before any diagnosis starts.
 - **Startup is STAGED — only the warm shells + the DC warm touch the pool at boot:**
   the finder/Lens warms and the startup-task heal are deferred until the DC warm
   completes (`HomePresenter.StartDeferredWarms`, with a 90 s fallback timer;

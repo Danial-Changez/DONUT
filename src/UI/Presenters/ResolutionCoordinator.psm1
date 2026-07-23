@@ -39,6 +39,8 @@ class ResolutionCoordinator {
     hidden [object[]] $AbandonedWarmShells = @()
     # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
     hidden [int] $WarmTimeoutSeconds = 30
+    # Next time ReapWarmShells may dump parked-shell state lines (throttles to 1/min).
+    hidden [datetime] $NextReapReportUtc = [datetime]::MinValue
 
     ResolutionCoordinator(
         [AppConfig] $config,
@@ -86,9 +88,12 @@ class ResolutionCoordinator {
         $pool = [RunspaceManager]::GetPool()
         $shells = [System.Collections.Generic.List[object]]::new()
         $handles = [System.Collections.Generic.List[object]]::new()
+        $tags = [System.Collections.Generic.List[string]]::new()
         for ($i = 0; $i -lt $n; $i++) {
             try {
-                $prep = $this.Resolver.PrepareWarmRunspace()
+                # Tag rides in HostName so every worker breadcrumb names its shell.
+                $tag = "warm-$($i + 1)"
+                $prep = $this.Resolver.PrepareWarmRunspace($tag)
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
                 $ps.AddCommand($prep.ScriptPath) | Out-Null
@@ -97,6 +102,7 @@ class ResolutionCoordinator {
                 }
                 $handles.Add($ps.BeginInvoke())
                 $shells.Add($ps)
+                $tags.Add($tag)
             }
             catch {
                 $this.Logger.LogException("Runspace warm-up could not start", $_)
@@ -107,6 +113,8 @@ class ResolutionCoordinator {
         $started = [datetime]::UtcNow
         $deadline = $started.AddSeconds($this.WarmTimeoutSeconds)
         $warmed = 0
+        $erred = 0
+        $parked = 0
         for ($i = 0; $i -lt $shells.Count; $i++) {
             $completed = $false
             try {
@@ -115,11 +123,21 @@ class ResolutionCoordinator {
                 $completed = $handles[$i].AsyncWaitHandle.WaitOne($remaining)
                 if ($completed) {
                     $shells[$i].EndInvoke($handles[$i])
-                    $warmed++
+                    if ($shells[$i].HadErrors) {
+                        # An errored warm left its runspace part-loaded; count it apart
+                        # so "Pre-warmed N" stays honest.
+                        $erred++
+                        $this.Logger.LogError("Runspace warm completed with errors: " +
+                            $this.DescribeShell($shells[$i], $tags[$i], $started))
+                    }
+                    else {
+                        $warmed++
+                    }
                 }
             }
             catch {
-                $this.Logger.LogException("Runspace warm-up failed", $_)
+                $this.Logger.LogException(
+                    "Runspace warm-up failed ($($tags[$i]))", $_)
             }
             finally {
                 if ($completed) {
@@ -132,16 +150,21 @@ class ResolutionCoordinator {
                 else {
                     # Never Dispose/Stop a running warm (sync forms hang on a wedged
                     # pipeline; async stops waste slow warms): park it, reap later.
+                    $this.Logger.LogWarning("Warm shell parked at barrier lapse: " +
+                        $this.DescribeShell($shells[$i], $tags[$i], $started))
                     $this.AbandonedWarmShells += @{
                         Shell   = $shells[$i]
                         Handle  = $handles[$i]
                         Started = $started
+                        Tag     = $tags[$i]
                     }
+                    $parked++
                 }
             }
         }
-        if ($warmed -lt $shells.Count) {
-            $parked = $shells.Count - $warmed
+        # Only shells still holding a runspace warrant compensation - an errored warm
+        # completed and released its slot, so it must not inflate the raise.
+        if ($parked -gt 0) {
             $this.Logger.LogWarning(
                 "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
                 "$($this.WarmTimeoutSeconds) s. They keep running in the background; each " +
@@ -165,16 +188,50 @@ class ResolutionCoordinator {
                 $this.Logger.LogException("Pool capacity compensation failed", $_)
             }
         }
-        $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
+        $suffix = if ($erred -gt 0) { " ($erred completed with errors)" } else { '' }
+        $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s)$suffix.")
+        if ($this.AbandonedWarmShells.Count -gt 0) {
+            $this.NextReapReportUtc = [datetime]::UtcNow.AddSeconds(60)
+        }
+    }
+
+    # One-line forensic snapshot of a warm shell: state, failure reason, first errors.
+    # Safe on a running pipeline (PSDataCollection reads are thread-safe).
+    hidden [string] DescribeShell([object]$shell, [string]$tag, [datetime]$started) {
+        try {
+            $elapsed = [int]([datetime]::UtcNow - $started).TotalSeconds
+            $info = $shell.InvocationStateInfo
+            $line = "$tag state=$($info.State) hadErrors=$($shell.HadErrors) elapsed=${elapsed}s"
+            if ($null -ne $info.Reason) {
+                $line += " reason=$($info.Reason.GetType().Name): $($info.Reason.Message)"
+            }
+            # Indexed reads only: enumerating a live stream while the worker appends
+            # is the "Collection was modified" race (implementation-notes).
+            $take = [Math]::Min(3, $shell.Streams.Error.Count)
+            if ($take -gt 0) {
+                $errs = for ($j = 0; $j -lt $take; $j++) { "$($shell.Streams.Error[$j])" }
+                $line += " errors=[" + ($errs -join ' | ') + "]"
+            }
+            return $line
+        }
+        catch {
+            return "$tag (state unreadable: $($_.Exception.Message))"
+        }
     }
 
     # Pump-driven harvest of barrier-lapsed warm shells: a late finisher lands fully
     # warmed and returns one unit of raised capacity; a wedged one parks for life.
     [void] ReapWarmShells() {
         if ($this.AbandonedWarmShells.Count -eq 0) { return }
+        $report = [datetime]::UtcNow -ge $this.NextReapReportUtc
+        if ($report) { $this.NextReapReportUtc = [datetime]::UtcNow.AddSeconds(60) }
         $stillRunning = @()
         foreach ($entry in $this.AbandonedWarmShells) {
             if (-not $entry.Handle.IsCompleted) {
+                if ($report) {
+                    $this.Logger.LogWarning("Warm shell still parked: " +
+                        $this.DescribeShell($entry.Shell, [string]$entry.Tag, $entry.Started))
+                }
                 $stillRunning += $entry
                 continue
             }
@@ -182,11 +239,11 @@ class ResolutionCoordinator {
             try {
                 $entry.Shell.EndInvoke($entry.Handle)
                 $this.Logger.LogInfo(
-                    "A runspace warm finished late ($elapsed s) - that runspace is warm.")
+                    "A runspace warm ($($entry.Tag)) finished late ($elapsed s) - that runspace is warm.")
             }
             catch {
                 $this.Logger.LogWarning(
-                    "A late runspace warm failed after $elapsed s - its runspace " +
+                    "A late runspace warm ($($entry.Tag)) failed after $elapsed s - its runspace " +
                     "cold-loads on first use: $($_.Exception.Message)")
             }
             try { $entry.Shell.Dispose() }

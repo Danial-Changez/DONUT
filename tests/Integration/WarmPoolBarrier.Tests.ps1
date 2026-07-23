@@ -30,7 +30,9 @@ class StubWarmResolver : HostResolver {
     StubWarmResolver([string]$stubPath) : base($null, $null) {
         $this.StubPath = $stubPath
     }
-    [hashtable] PrepareWarmRunspace() {
+    # The coordinator calls the TAGGED arity; overriding only the 0-arg one would
+    # fall through to the real BuildWorkerArgs and submit the real worker.
+    [hashtable] PrepareWarmRunspace([string]$tag) {
         return @{ ScriptPath = $this.StubPath; Arguments = @{} }
     }
 }
@@ -100,6 +102,12 @@ Describe "WarmPool barrier" {
         $f.Log.Contains('Pre-warmed 0 of 2') | Should -BeTrue
         $f.Coordinator.AbandonedWarmShells.Count | Should -Be 2
 
+        # Forensics: each parked shell must leave a per-shell state line naming its
+        # tag - the "Pre-warmed 0 of N" log must say WHY each shell missed.
+        $f.Log.Contains('Warm shell parked at barrier lapse: warm-1') | Should -BeTrue
+        $f.Log.Contains('Warm shell parked at barrier lapse: warm-2') | Should -BeTrue
+        $f.Log.Contains('state=Running') | Should -BeTrue
+
         # Self-heal: capacity must grow by the parked count so real jobs never starve
         # behind held runspaces - in the field the pool sat 0/8 free for minutes and
         # the DC resolve heartbeated unrun until the app was killed.
@@ -132,5 +140,20 @@ Describe "WarmPool barrier" {
         [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 2 -Because (
             "after every late warm is harvested the pool must converge back on the " +
             "configured throttle")
+    }
+
+    It "a warm that completes with errors is counted apart and logged at ERROR" {
+        # Non-terminating errors complete the pipeline, so before the forensics this
+        # counted as a successful warm and the log showed nothing at all.
+        $f = New-BarrierFixture "Write-Error 'boom' -ErrorAction Continue"
+        $f.Coordinator.WarmPool()
+
+        $f.Log.Contains('Pre-warmed 0 of 2') | Should -BeTrue
+        $f.Log.Contains('(2 completed with errors)') | Should -BeTrue
+        $f.Log.Contains('boom') | Should -BeTrue
+        $f.Log.HasLevel('ERROR') | Should -BeTrue
+        $f.Coordinator.AbandonedWarmShells.Count | Should -Be 0
+        [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 2 -Because (
+            "errored warms completed, so no capacity compensation may fire")
     }
 }

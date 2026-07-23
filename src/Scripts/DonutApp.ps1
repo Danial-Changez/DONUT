@@ -19,6 +19,7 @@ using module "..\Models\AppConfig.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AdSearchResult.psm1"
 using module "..\Core\AsyncJob.psm1"
+using module "..\Core\BuildProvenance.psm1"
 using module "..\Core\ConfigManager.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\RunspaceManager.psm1"
@@ -61,6 +62,8 @@ try {
     # into the collaborators that support it so runtime errors are recorded.
     $logger = [LogService]::new($configManager.LogsPath)
     $logger.LogInfo("DONUT starting up.")
+    # Provenance first: every field log must name the exact code that produced it.
+    $logger.LogInfo([BuildProvenance]::Stamp($srcRoot))
     [RunspaceManager]::SetLogger($logger)
 
     $throttleLimit = $global:AppConfig.GetThrottleLimit()

@@ -156,6 +156,14 @@ Describe "HostResolver" {
             $prep = $r.PrepareWarmRunspace()
             $prep.Arguments.JobType      | Should -Be "Resolve"
             $prep.Arguments.Options.Mode | Should -Be "WarmRunspace"
+            $prep.Arguments.HostName     | Should -Be ""
+        }
+
+        It "PrepareWarmRunspace rides the shell tag in HostName for the breadcrumbs" {
+            $r = New-Resolver
+            $prep = $r.PrepareWarmRunspace("warm-5")
+            $prep.Arguments.HostName     | Should -Be "warm-5"
+            $prep.Arguments.Options.Mode | Should -Be "WarmRunspace"
         }
 
         It "PrepareName carries the host's cached IP in Name mode" {
