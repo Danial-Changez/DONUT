@@ -18,29 +18,17 @@ Describe "Core Module Integration" {
         $script:scriptsDir = Join-Path $script:testSourceRoot "Scripts"
         New-Item -Path $script:scriptsDir -ItemType Directory -Force | Out-Null
         
-        # Create a test worker script
+        # Test worker speaks AsyncJob's child-process protocol (args in, result out).
         $script:testWorker = Join-Path $script:scriptsDir "TestWorker.ps1"
         @'
-param(
-    [string]$HostName,
-    [string]$JobType,
-    [string]$ConfigPath
-)
-
-# Simulate work
-Write-Output "Processing $JobType for $HostName"
-
-if ($ConfigPath -and (Test-Path $ConfigPath)) {
-    $config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
-    Write-Output "Loaded config with activeCommand: $($config.activeCommand)"
+param([string]$ArgsFile, [string]$ResultFile)
+$a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
+$result = @{ HostName = [string]$a.HostName; JobType = [string]$a.JobType; Success = $true }
+if ($a.ConfigPath -and (Test-Path $a.ConfigPath)) {
+    $config = Get-Content -LiteralPath $a.ConfigPath -Raw | ConvertFrom-Json
+    $result.ActiveCommand = $config.activeCommand
 }
-
-return @{
-    HostName = $HostName
-    JobType = $JobType
-    Success = $true
-    Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-}
+$result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:testWorker
 
         # Override LOCALAPPDATA for ConfigManager tests

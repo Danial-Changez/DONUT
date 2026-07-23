@@ -55,10 +55,27 @@ param(
     [string]$LogsDir,
     [string]$ReportsDir,
     [hashtable]$Settings,
-    [string]$ConfigPath
+    [string]$ConfigPath,
+    # Child-process path: args ride in through a JSON file (Options/Settings can't
+    # cross a command line), the result rides back through ResultFile.
+    [string]$ArgsFile,
+    [string]$ResultFile
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($ArgsFile) {
+    $a = Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable
+    $HostName = [string]$a.HostName
+    $JobType = [string]$a.JobType
+    $Options = if ($null -ne $a.Options) { [hashtable]$a.Options } else { @{} }
+    $ResolvedIp = [string]$a.ResolvedIp
+    $SourceRoot = [string]$a.SourceRoot
+    $LogsDir = [string]$a.LogsDir
+    $ReportsDir = [string]$a.ReportsDir
+    $Settings = if ($null -ne $a.Settings) { [hashtable]$a.Settings } else { $null }
+    if ($a.ContainsKey('ConfigPath')) { $ConfigPath = [string]$a.ConfigPath }
+}
 
 # First possible trace: the gap from "Started X job." to this line IS the queue +
 # graph-compile time; "Started" with no "Worker up" = no runspace or stuck compile.
@@ -97,15 +114,25 @@ try {
         $workerLog.LogDebug("[$HostName] Config built ($configSource).")
     }
 
-    [ExecutionService]::StartWorker($HostName, $JobType, $Options, $ResolvedIp,
-        $config, $SourceRoot, $LogsDir, $ReportsDir)
+    $workerResult = [ExecutionService]::StartWorker($HostName, $JobType, $Options,
+        $ResolvedIp, $config, $SourceRoot, $LogsDir, $ReportsDir)
+
+    # Child-process path: hand the result back through the file; in-process callers
+    # get it straight off the pipeline.
+    if ($ResultFile) {
+        ($workerResult | ConvertTo-Json -Depth 12) |
+            Set-Content -LiteralPath $ResultFile -Encoding UTF8
+    }
+    else {
+        $workerResult
+    }
 }
 catch {
-    # Also write the failure straight to the log file - the error stream reaches
-    # Donut.log only if the pump drains it, and a stalled pump would eat the death.
+    # Log to Donut.log, and write ONE clean line to stderr (no Write-Error decoration)
+    # so the parent's FailureMessage stays parseable for RemoteFailure.ReasonFromMessage.
     if ($null -ne $workerLog) {
         $workerLog.LogException("[$HostName] $JobType worker failed", $_)
     }
-    Write-Error "Worker failed: $_"
+    [Console]::Error.WriteLine("Worker failed: $($_.Exception.Message)")
     exit 1
 }

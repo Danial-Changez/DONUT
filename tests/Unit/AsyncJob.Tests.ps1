@@ -13,28 +13,32 @@ Describe "AsyncJob" {
             New-Item -Path $script:testScriptDir -ItemType Directory -Force | Out-Null
         }
         
-        # Simple script that returns a value
+        # Stubs speak AsyncJob's child-process protocol: read args from -ArgsFile,
+        # write the result to -ResultFile, exit non-zero + clean stderr on failure.
         $script:simpleScript = Join-Path $script:testScriptDir "SimpleScript.ps1"
         @'
-param([string]$Input)
-Write-Output "Received: $Input"
-return @{ Success = $true; Value = $Input }
+param([string]$ArgsFile, [string]$ResultFile)
+$a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
+@{ Success = $true; Value = $a.Input } | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:simpleScript
 
         # Script that takes time
         $script:slowScript = Join-Path $script:testScriptDir "SlowScript.ps1"
         @'
-param([int]$DelayMs = 500)
-Start-Sleep -Milliseconds $DelayMs
-return @{ Completed = $true }
+param([string]$ArgsFile, [string]$ResultFile)
+$a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
+$d = if ($a.DelayMs) { [int]$a.DelayMs } else { 500 }
+Start-Sleep -Milliseconds $d
+@{ Completed = $true } | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:slowScript
 
-        # Script that throws an error
+        # Script that fails (non-zero exit + clean stderr, like RemoteWorker)
         $script:errorScript = Join-Path $script:testScriptDir "ErrorScript.ps1"
         @'
-param([string]$Message)
-Write-Error $Message
-throw "Test exception: $Message"
+param([string]$ArgsFile, [string]$ResultFile)
+$a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
+[Console]::Error.WriteLine("Worker failed: $($a.Message)")
+exit 1
 '@ | Set-Content -Path $script:errorScript
         
         # Initialize RunspaceManager for tests

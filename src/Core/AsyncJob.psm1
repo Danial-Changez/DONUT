@@ -1,6 +1,7 @@
 using namespace System.Collections.Concurrent
 using module '.\RunspaceManager.psm1'
 using module '.\LogService.psm1'
+using module '.\WorkerProcess.psm1'
 using module '..\Models\JobEnums.psm1'
 
 <#
@@ -25,6 +26,10 @@ class AsyncJob {
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
+    # Child-process worker: args ride in, result rides out through temp files
+    # (isolated AppDomain per job dodges the concurrent class-load deadlock).
+    hidden [string] $ArgsFilePath
+    hidden [string] $ResultFilePath
 
     # Stall heartbeat: Poll() warns at StallWarnAfterSeconds then every repeat, with
     # the pool free count discriminating queued-behind-starved-pool vs wedged worker.
@@ -57,20 +62,26 @@ class AsyncJob {
         $this.TempConfigPath = $tempConfigPath
 
         try {
+            # WorkerProcess owns the isolation: serialize args, spawn the child on a pool
+            # runspace via its (class-free, deadlock-proof) launcher.
+            $prep = [WorkerProcess]::Prepare($scriptPath, $arguments, $tempConfigPath)
+            $this.ArgsFilePath = $prep.ArgsFile
+            $this.ResultFilePath = $prep.ResultFile
+
             $pool = [RunspaceManager]::GetPool()
             $this.PowerShell = [System.Management.Automation.PowerShell]::Create()
             $this.PowerShell.RunspacePool = $pool
-            $this.PowerShell.AddCommand($scriptPath) | Out-Null
-
-            foreach ($key in $arguments.Keys) {
-                $this.PowerShell.AddParameter($key, $arguments[$key]) | Out-Null
-            }
+            $this.PowerShell.AddScript($prep.Launcher) | Out-Null
+            $this.PowerShell.AddArgument($prep.PwshPath) | Out-Null
+            $this.PowerShell.AddArgument($prep.ScriptPath) | Out-Null
+            $this.PowerShell.AddArgument($prep.ArgsFile) | Out-Null
+            $this.PowerShell.AddArgument($prep.ResultFile) | Out-Null
 
             $this.Status = [JobStatus]::Running
             $this.StartedAtUtc = [datetime]::UtcNow
             $this.NextStallLogUtc = $this.StartedAtUtc.AddSeconds($this.StallWarnAfterSeconds)
             $this.AsyncResult = $this.PowerShell.BeginInvoke()
-            $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job.")
+            $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job (child process).")
         }
         catch {
             $this.Status = [JobStatus]::Failed
@@ -84,20 +95,18 @@ class AsyncJob {
 
         if ($this.AsyncResult.IsCompleted) {
             try {
-                $this.Result = $this.PowerShell.EndInvoke($this.AsyncResult)
-                $this.Status = if ($this.PowerShell.HadErrors) { [JobStatus]::Failed }
-                else { [JobStatus]::Completed }
+                $verdict = [WorkerProcess]::Interpret($this.PowerShell.EndInvoke($this.AsyncResult))
+                $this.Result = $verdict.Result
 
-                if ($this.PowerShell.HadErrors) {
-                    if ($this.PowerShell.Streams.Error.Count -gt 0) {
-                        $this.FailureMessage = [string]$this.PowerShell.Streams.Error[0]
-                    }
-                    foreach ($err in $this.PowerShell.Streams.Error) {
-                        $this.Logs.Enqueue("Error: $err")
-                        $this.Logger.LogError("[$($this.HostName)] $($this.JobType) error: $err")
-                    }
+                if ($this.PowerShell.HadErrors -or -not $verdict.Succeeded) {
+                    $this.Status = [JobStatus]::Failed
+                    $this.FailureMessage = $verdict.FailureMessage
+                    $this.Logs.Enqueue("Error: $($this.FailureMessage)")
+                    $this.Logger.LogError("[$($this.HostName)] $($this.JobType) worker failed " +
+                        "(exit $($verdict.ExitCode)): $($this.FailureMessage)")
                 }
                 else {
+                    $this.Status = [JobStatus]::Completed
                     $this.Logger.LogDebug("[$($this.HostName)] $($this.JobType) job completed.")
                 }
             }
@@ -203,8 +212,8 @@ class AsyncJob {
 
     [void] Cleanup() {
         if ($this.PowerShell) { $this.PowerShell.Dispose() }
-        if ($this.TempConfigPath -and (Test-Path $this.TempConfigPath)) {
-            Remove-Item $this.TempConfigPath -Force -ErrorAction SilentlyContinue
+        foreach ($f in @($this.TempConfigPath, $this.ArgsFilePath, $this.ResultFilePath)) {
+            if ($f -and (Test-Path $f)) { Remove-Item $f -Force -ErrorAction SilentlyContinue }
         }
     }
 }

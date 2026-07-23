@@ -10,6 +10,23 @@ How the design handles the constraints of remote execution, threading, and packa
 The original tool used PowerShell runspaces for parallel execution; DONUT keeps that
 model.
 
+- **Workers run as isolated child processes (process isolation) — the resolution to
+  the whole DC-warm/scan saga.** Running the worker class graph *in-process* on pool
+  runspaces is fundamentally unsafe: 2+ runspaces cold-loading the `using module` graph
+  concurrently deadlock on PowerShell's module-load lock, and even serial loads onto a
+  second runspace hang. 64dbec8 only worked because ThreadPool starvation accidentally
+  serialized execution. The fix is DONUT's *original* (first-commit) model: each job
+  runs in its own **child `pwsh` process** (separate AppDomain), so parallel workers
+  never share the class-load lock. The pool stays — but each runspace now runs a tiny
+  **launcher** (no `using module`, so no class-load, no deadlock) that spawns
+  `RemoteWorker.ps1` as a child and returns its result. Concurrency is still throttled
+  by the pool's `throttleLimit`; isolation comes free from the process boundary.
+  `WorkerProcess` owns this one concern (args → temp file, launcher scriptblock,
+  result-file → verdict); `AsyncJob` just orchestrates the lifecycle; `RemoteWorker.ps1`
+  reads `-ArgsFile` and writes `-ResultFile`. Validated at 8-way concurrency with zero
+  deadlock. *(The in-process warm/barrier machinery below — pool warm, compile
+  serialization, the ThreadPool floor — is now vestigial for worker jobs and slated for
+  removal; it is retained for one release so the change stays reviewable.)*
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
