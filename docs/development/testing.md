@@ -87,6 +87,54 @@ at most `-TimeoutSec`, then `Disable-RunspaceDebug` resumes it — read the log
 forensics first, probe second, `dotnet-stack report` only if native stacks are
 needed.
 
+## Headless diagnostic runs and the empirical bisect protocol
+
+`tools/Invoke-DiagnosticRun.ps1` runs the app's startup pool sequence without
+the UI — N concurrent warm passes behind one barrier deadline (the WarmPool
+recipe), DC discovery, then optionally a real resolve and disk scan — and
+bundles every signal into one zip: per-phase verdict JSON (rewritten after
+every phase, so even a killed run reports), the run's own `Donut.log`,
+provenance (commit, pwsh, Defender/AMSI signature version + age), PowerShell
+script-block/module events for the run window (enabled per-process via
+`-SettingsFile`, no machine policy touched), and — when the barrier lapses —
+live runspace stacks captured by the wedge probe while the stuck shells are
+still running.
+
+```powershell
+# Full pipeline on a lab machine; send/upload the zip it prints last:
+pwsh -File tools\Invoke-DiagnosticRun.ps1 -TargetHost <host> -IncludeDiskScan
+```
+
+The script imports nothing from `src/`, so a **fixed copy** can drive
+`git bisect` against any checkout. Protocol when a regression has no obvious
+first-bad commit:
+
+1. **Split code vs. environment first.** Copy the harness + probe out of the
+   tree (`Copy-Item tools\Invoke-DiagnosticRun.ps1, tools\Get-DonutRunspaceStacks.ps1
+   $env:TEMP\donut-harness\`), then run it against worktrees of the suspected
+   good commits *today* (`git worktree add ..\donut-<sha> <sha>`, then
+   `-SourceRoot ..\donut-<sha>\src`). A historically-good commit failing today
+   means the machine changed, not the code — diff the two runs'
+   `provenance.json` Defender signature dates and pwsh versions.
+2. **Bisect each symptom separately** — different symptoms can have different
+   first-bad commits:
+   ```powershell
+   git bisect start <bad> <good>
+   git bisect run pwsh -NoProfile -File $env:TEMP\donut-harness\Invoke-DiagnosticRun.ps1 `
+       -SourceRoot .\src -SkipEventLog -BisectExitCodes [-TargetHost <host>]
+   ```
+   `-BisectExitCodes` maps pass→0, symptom→1, harness-broken→125
+   (`git bisect skip`, for mid-refactor commits that cannot run standalone).
+   Bisect the warm symptom with no target host (warm+DC phases only) and the
+   resolve symptom with `-TargetHost`.
+3. **Full-app checkout runs stay hermetic.** The harness never touches
+   `%LOCALAPPDATA%`, but *launching the app* from an old checkout re-saves the
+   shared config. Back it up first and restore after:
+   ```powershell
+   Copy-Item $env:LOCALAPPDATA\DONUT\config\config.json $env:TEMP\config.bak.json
+   Copy-Item $env:TEMP\config.bak.json $env:LOCALAPPDATA\DONUT\config\config.json
+   ```
+
 ## Code coverage
 
 Generate a visual HTML coverage report from the project root:
