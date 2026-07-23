@@ -68,6 +68,25 @@ Before committing:
 The analyzer rules live in `PSScriptAnalyzerSettings.psd1`; the conventions they
 enforce are described in [Coding style](./coding-style.md).
 
+## Wedge stack probe (field diagnostics)
+
+When a warm or resolve wedges on a real machine, `Donut.log`'s barrier forensics
+say *which* shell is stuck; `tools/Get-DonutRunspaceStacks.ps1` says *where*:
+
+```powershell
+pwsh -File tools\Get-DonutRunspaceStacks.ps1 -ProcessId <donut pwsh PID>
+```
+
+It attaches over PowerShell's built-in named-pipe IPC (same user, nothing to
+install), requests a debugger break in every busy runspace, and prints each
+script call stack. A runspace that never breaks is wedged inside a single
+native/.NET call — that verdict is itself the diagnostic (hooked socket, AMSI
+scan, loader lock). An attach timeout means the whole engine is unresponsive
+(process-wide loader wedge); exit code 2 flags it. Breaks pause a runspace for
+at most `-TimeoutSec`, then `Disable-RunspaceDebug` resumes it — read the log
+forensics first, probe second, `dotnet-stack report` only if native stacks are
+needed.
+
 ## Code coverage
 
 Generate a visual HTML coverage report from the project root:
