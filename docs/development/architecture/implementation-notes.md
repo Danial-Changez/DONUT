@@ -24,7 +24,13 @@ model.
   `WorkerProcess` owns this one concern (args → temp file, launcher scriptblock,
   result-file → verdict); `AsyncJob` just orchestrates the lifecycle; `RemoteWorker.ps1`
   reads `-ArgsFile` and writes `-ResultFile`. Validated at 8-way concurrency with zero
-  deadlock. *(The in-process warm/barrier machinery below — pool warm, compile
+  deadlock. **Live progress** survives the process boundary: `RemoteWorker.ps1` sets
+  `$InformationPreference='Continue'` so its dcu-tail `Write-Information` lines hit the
+  child's stdout, and the launcher reads that stdout *line-by-line* (not `ReadToEnd`),
+  re-emitting each line into the pool runspace's Information stream — where
+  `AsyncJob.DrainStream` → `job.Logs` → the existing `DcuProgress` parser drives the
+  `ThinProgressBar` exactly as before. Stderr is drained on a `ReadToEndAsync` task so a
+  full pipe can't wedge the child. *(The in-process warm/barrier machinery below — pool warm, compile
   serialization, the ThreadPool floor — is now vestigial for worker jobs and slated for
   removal; it is retained for one release so the change stays reviewable.)*
 - **Classes in runspaces:** PowerShell classes are not automatically available in new

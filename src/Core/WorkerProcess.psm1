@@ -39,8 +39,8 @@ class WorkerProcess {
         }
     }
 
-    # Runs ON a pool runspace (no using-module -> no class-load -> no deadlock): spawns
-    # the worker as a child process and returns @{ Result; ExitCode; StdErr; StdOut }.
+    # Runs ON a pool runspace (no using-module -> no deadlock): spawns the worker child,
+    # streams its stdout LIVE into this runspace's Information stream (-> the progress bar).
     static [scriptblock] $Launcher = {
         param($pwshPath, $scriptPath, $argsFile, $resultFile)
         $psi = [System.Diagnostics.ProcessStartInfo]::new($pwshPath)
@@ -53,15 +53,20 @@ class WorkerProcess {
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
         $proc = [System.Diagnostics.Process]::Start($psi)
-        $out = $proc.StandardOutput.ReadToEnd()
-        $err = $proc.StandardError.ReadToEnd()
+        # Drain stderr async (a full pipe buffer would wedge the child); read stdout
+        # line-by-line so the worker's progress surfaces as it lands, not at exit.
+        $errTask = $proc.StandardError.ReadToEndAsync()
+        while ($null -ne ($line = $proc.StandardOutput.ReadLine())) {
+            Write-Information $line
+        }
         $proc.WaitForExit()
+        $err = $errTask.Result
         $result = $null
         if (Test-Path -LiteralPath $resultFile) {
             try { $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json -AsHashtable }
             catch { $err += "`nResult parse failed: $($_.Exception.Message)" }
         }
-        [pscustomobject]@{ Result = $result; ExitCode = $proc.ExitCode; StdErr = $err; StdOut = $out }
+        [pscustomobject]@{ Result = $result; ExitCode = $proc.ExitCode; StdErr = $err }
     }
 
     # Turns the launcher's return into a verdict: exit code 0 (and no host errors) is

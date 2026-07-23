@@ -63,6 +63,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Surface Write-Information (the live dcu tail lines) on stdout so the parent's
+# launcher can stream them to the UI progress bar as the scan/apply runs.
+$InformationPreference = 'Continue'
 
 if ($ArgsFile) {
     $a = Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json -AsHashtable
