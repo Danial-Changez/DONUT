@@ -210,8 +210,7 @@ class NetworkProbe {
     }
 
     # Same 445 reachability check, but silent on failure. The live-tail gate calls this every
-    # ~1.5s; when a host drops mid-run the noisy variant spammed a DEBUG line per tick (and
-    # every write takes LogService's mutex, which can aggravate STA UI-thread stalls).
+    # ~1.5s; when a host drops mid-run the noisy variant spammed a DEBUG line per tick.
     [bool] IsSmbReachableQuiet([string]$hostName) {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $false)
     }

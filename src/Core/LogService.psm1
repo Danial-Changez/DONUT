@@ -11,9 +11,6 @@
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot
-    # Cross-instance write lock: every worker runspace builds its own LogService over
-    # the same Donut.log, so only a named kernel mutex keyed by path prevents lost lines.
-    hidden [System.Threading.Mutex] $FileMutex
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
     # Does not bind a file path; WriteLog must be overridden by the derived type.
@@ -27,11 +24,6 @@ class LogService {
         }
         $this.LogFilePath = Join-Path $logDirectory "Donut.log"
         $this.SyncRoot = [System.Object]::new()
-        $pathBytes = [System.Text.Encoding]::UTF8.GetBytes($this.LogFilePath.ToLowerInvariant())
-        $hashHex = [System.BitConverter]::ToString(
-            [System.Security.Cryptography.SHA1]::HashData($pathBytes))
-        $hash = $hashHex.Replace('-', '').Substring(0, 16)
-        $this.FileMutex = [System.Threading.Mutex]::new($false, "Local\DonutLog-$hash")
     }
 
     # Returns the supplied logger, or a NullLogService no-op when $null - collapses the
@@ -80,22 +72,34 @@ class LogService {
         $this.WriteLog($level, ($parts -join '|'))
     }
 
+    # Lock-free atomic append. Every writer (UI thread + every pool runspace) opens
+    # the file in Append mode with ReadWrite sharing and emits ONE line in ONE
+    # Write call - the kernel serializes append-only writes, so lines never tear
+    # and no cross-writer lock exists at all.
+    #
+    # The previous design - a named mutex with a 2 s bounded wait around a per-line
+    # Add-Content - collapsed under exactly the concurrency it was built for: with
+    # ~10 runspaces + the UI writing, every writer hovered at the full 2 s timeout,
+    # so each UI log line blocked the dispatcher ~2.2 s ("UI dispatcher was blocked
+    # ~22xx ms" storms, where the watchdog's own warning write caused the NEXT
+    # block), timed-out writers' fallback appends collided with the owner's and
+    # lines vanished silently, and workers crawled at seconds per log line - warm
+    # jobs missed the startup barrier from logging cost alone. Logging must never
+    # be able to block the app it serves.
     [void] WriteLog([string]$level, [string]$message) {
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $logEntry = "[$timestamp] [$level] $message"
-
-        # Bounded wait so logging can never hang a thread: on timeout write anyway; an
-        # abandoned mutex (a runspace died holding it) still grants ownership.
-        $owned = $false
-        if ($null -ne $this.FileMutex) {
-            try { $owned = $this.FileMutex.WaitOne(2000) }
-            catch [System.Threading.AbandonedMutexException] { $owned = $true }
-        }
+        $timestamp = [datetime]::Now.ToString('yyyy-MM-dd HH:mm:ss')
+        $line = "[$timestamp] [$level] $message" + [System.Environment]::NewLine
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($line)
         try {
-            Add-Content -Path $this.LogFilePath -Value $logEntry -ErrorAction SilentlyContinue
+            $fs = [System.IO.FileStream]::new($this.LogFilePath,
+                [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::ReadWrite)
+            try { $fs.Write($bytes, 0, $bytes.Length) }
+            finally { $fs.Dispose() }
         }
-        finally {
-            if ($owned) { $this.FileMutex.ReleaseMutex() }
+        catch {
+            # A failed log write has nowhere to log itself; swallowing here is the
+            # only option that cannot recurse or take the caller down with it.
         }
     }
 

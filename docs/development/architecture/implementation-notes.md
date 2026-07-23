@@ -70,7 +70,17 @@ model.
   `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
   scripts on a real pool and asserts they always terminate (the "`Started Resolve
   job.` then silence" regression family).
-- **Thread safety:** `LogService` is thread-safe. Work is fed back to the UI through a
+- **Thread safety:** `LogService` is thread-safe via **lock-free atomic appends** —
+  every writer opens `Donut.log` in Append mode with ReadWrite sharing and emits one
+  line per `Write` call, which the kernel serializes. It deliberately holds **no
+  lock of any kind**: an earlier named-mutex design (2 s bounded wait + per-line
+  `Add-Content`) collapsed under its own concurrency — with ~10 runspaces + the UI
+  writing, every writer sat at the full 2 s timeout, each UI log line blocked the
+  dispatcher ~2.2 s (the watchdog's own "dispatcher was blocked" warning write then
+  caused the *next* block, an infinite warning storm), timed-out writers' fallback
+  appends collided with the owner's and silently dropped lines, and warm jobs
+  missed the 30 s startup barrier from logging cost alone. Logging must never be
+  able to block the app it serves. Work is fed back to the UI through a
   thread-safe state/queue that a `DispatcherTimer` polls on the UI thread — **not** by
   returning results (which only surface when the runspace completes) — so the "live
   feed" updates in real time.
