@@ -13,13 +13,11 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
-- **Pool warm = graph load + one real worker pass + first-use exercises:** at startup
-  `ResolutionCoordinator.WarmPool` runs `Warm-Runspace.ps1` once per pool runspace
-  (concurrently, behind a barrier). It `using module`-loads the superset of every pool
-  worker's class graph, exercises the binary CIM/ScheduledTasks machinery with one
-  cheap local cmdlet each, and then **executes `RemoteWorker.ps1` once** in
-  `Mode='WarmRunspace'` (real pipeline construction + `WarmRuntimeAssemblies`'s
-  localhost DNS/TCP/CIM exercises + `WarmScanLaunchPath`). Pre-loading the
+- **Pool warm = ONE real worker pass per runspace — the 64dbec8 recipe, nothing
+  more:** at startup `ResolutionCoordinator.WarmPool` runs `RemoteWorker.ps1` in
+  `Mode='WarmRunspace'` once per pool runspace (concurrently, behind a barrier):
+  script compile, real pipeline construction, `WarmRuntimeAssemblies`'s localhost
+  DNS/TCP/CIM exercises, and `WarmScanLaunchPath`. Pre-loading a module
   graph alone is not enough: when a runspace's first `RemoteWorker.ps1` execution
   happened on a live job, that job wedged silently — the startup DC discovery never
   logged a line, `HostResolver` never got an active DC, and every resolve/inventory
@@ -27,7 +25,16 @@ model.
   applies *per code path*: a live DCU scan once wedged between "Starting preliminary
   scan" and the psexec launch on the first-ever `InvokePsExec` in the process, so the
   warm also pre-executes the CPU half of the scan launch path (dcu-cli arg build,
-  remote-script build + encode). **The first-use exercises are load-bearing — do not
+  remote-script build + encode). **The barrier must never carry a superset graph
+  warm.** A `Warm-Runspace.ps1` that loaded the full AD + Lens graph and imported
+  the binary CIM/ScheduledTasks modules per runspace shipped on 07-20 alongside the
+  agent-AD work; 8 concurrent copies contend the **process-wide** module-analysis
+  and CLR loader locks, the shells stopped fitting the 30 s barrier at all
+  (`Pre-warmed 0 of 8`), and every feature queued behind a starved pool. The
+  AD/Lens graphs warm organically via the *deferred* finder warms instead
+  (`HomePresenter.StartDeferredWarms`); a first mid-scan search on a runspace they
+  have not reached may pay a one-time cold-load — a deliberate trade, revisit only
+  with the barrier kept out of it. **The first-use exercises are load-bearing — do not
   reduce them to imports/loads.** A loads-only warm shipped once and the first live
   resolve-IP and disk-scan jobs — whose opening act is exactly a first DNS/socket
   connect — stopped completing on machines where the exercise-ful recipe (64dbec8
@@ -60,10 +67,10 @@ model.
   received" — so a stalled resolve's *last* log line names the wedged step. The
   probe/exercise breadcrumbs log **before** the call on purpose: a hooked native
   connect never returns, so only a pre-call line can identify it.
-  `RunspaceWarmCoverage.Tests.ps1` guards the static rules (`WarmScanLaunchPath`
-  pure CPU; the DNS/TCP/CIM and CIM/ScheduledTasks exercises present in
-  `WarmRuntimeAssemblies` / `Warm-Runspace.ps1`; the self-heal; park-and-reap with
-  no Stop of any kind);
+  `RunspaceWarmCoverage.Tests.ps1` guards the static rules (worker pass at the
+  barrier, no superset warm; `WarmScanLaunchPath` pure CPU; the DNS/TCP/CIM
+  exercises present in `WarmRuntimeAssemblies`; startup staging; the self-heal;
+  park-and-reap with no Stop of any kind);
   `tests/Integration/WarmPoolBarrier.Tests.ps1` proves the lapse path returns
   promptly, heals capacity, dispatches work while shells are parked, and reaps
   late warms back to the configured throttle; and

@@ -17,9 +17,9 @@
     for minutes inside `Invoke-Pester -Path tests`. The child starts clean, so the
     smoke result reflects the scripts, not the test host's module state.
 
-    What this catches: parse/parameter breaks in Warm-Runspace.ps1 or
-    RemoteWorker.ps1, module-graph load failures, warm code that loops or blocks by
-    construction, a pool left starved after the warm pass.
+    What this catches: parse/parameter breaks in RemoteWorker.ps1, module-graph
+    load failures, warm code that loops or blocks by construction, a pool left
+    starved after the warm pass.
     What it cannot catch: environment-specific wedges (a security stack holding a
     native call below PowerShell). Those are guarded by the no-connect static rules
     in RunspaceWarmCoverage.Tests.ps1 and surfaced at runtime by AsyncJob's stall
@@ -36,7 +36,7 @@ Describe "Startup warm + resolve smoke" {
         New-Item -ItemType Directory -Force -Path $LogsDir, $ReportsDir | Out-Null
 
         # The child harness: opens a 2-runspace pool, then runs the app's startup
-        # sequence - Warm-Runspace.ps1, a follow-up worker job, the DC-discovery
+        # sequence - the worker warm pass, a follow-up worker job, the DC-discovery
         # job - each with a bounded wait, and reports one JSON verdict. A shell
         # whose wait lapses is deliberately leaked (disposing a running pipeline
         # blocks - the exact production hang this suite guards); it dies with the
@@ -71,10 +71,14 @@ try {
     }
     $scripts = Join-Path $SourceRoot 'Scripts'
     $common = @{ SourceRoot = $SourceRoot; LogsDir = $LogsDir; ReportsDir = $ReportsDir }
-    $warm = Invoke-PoolScript (Join-Path $scripts 'Warm-Runspace.ps1') $common 120
-    $result.WarmCompleted = $warm.Completed
-
     $worker = Join-Path $scripts 'RemoteWorker.ps1'
+
+    # The barrier body: one real worker pass (the 64dbec8 recipe WarmPool runs).
+    $warm = Invoke-PoolScript $worker ($common + @{
+            HostName = ''; JobType = 'Resolve'; ResolvedIp = ''
+            Options = @{ Mode = 'WarmRunspace' }
+        }) 120
+    $result.WarmCompleted = $warm.Completed
     $followup = Invoke-PoolScript $worker ($common + @{
             HostName = ''; JobType = 'Resolve'; ResolvedIp = ''
             Options = @{ Mode = 'WarmRunspace' }
@@ -120,14 +124,14 @@ catch { $result.Error = $_.Exception.Message }
         Remove-Item $script:WorkDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It "Warm-Runspace.ps1 (the startup barrier body) terminates on a live pool" {
+    It "the worker warm pass (the startup barrier body) terminates on a live pool" {
         $ChildTimedOut | Should -BeFalse -Because (
             "the smoke harness itself must finish - a wedged harness means a wedge " +
-            "in the warm/worker scripts")
+            "in the worker scripts")
         $Smoke | Should -Not -BeNullOrEmpty
         [string]$Smoke.Error | Should -BeNullOrEmpty
         [bool]$Smoke.WarmCompleted | Should -BeTrue -Because (
-            "the startup barrier waits on this script per runspace; if it cannot " +
+            "the startup barrier waits on this pass per runspace; if it cannot " +
             "finish, the app never shows a window")
     }
 

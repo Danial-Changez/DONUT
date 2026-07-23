@@ -103,13 +103,8 @@ try {
     $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
 
     if ($null -ne $mainPresenter) {
-        # Heal the startup task on every boot (re-registers a moved install) - but
-        # DEFERRED well past the startup crunch. It used to run immediately, as a
-        # 9th pool job importing ScheduledTasks concurrently with all 8 warm shells;
-        # Apply-StartupTask.ps1's own retry comment records the module-analysis race
-        # that storm causes ("Collection was modified"), and the contention helped
-        # push every warm past the 30 s barrier and starve the pool. Nothing about
-        # this heal is urgent; two minutes late is as good as on time.
+        # Heal the startup task DEFERRED past the startup crunch - as a boot-time
+        # pool job it raced the warm shells (implementation-notes: startup staging).
         $startupTaskTimer = [System.Windows.Threading.DispatcherTimer]::new()
         $startupTaskTimer.Interval = [TimeSpan]::FromSeconds(120)
         $startupTaskTimer.Add_Tick({

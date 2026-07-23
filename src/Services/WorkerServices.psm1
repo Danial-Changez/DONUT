@@ -65,11 +65,8 @@ class ExecutionService {
     # Per-job resolved IP; a job resolves its host at most once (see ResolvedIpFor).
     [string] $JobIp = ''
 
-    # Exit code the remote script returns when dcu-cli.exe isn't on the target. Chosen
-    # to sit outside every documented dcu-cli code (0-8, 1xx, 5xx, 1000s, 2000s) and every
-    # psexec transport code (64, 233, ...), so InvokePsExec can map it back to
-    # DcuNotInstalledException without a bounded-side path check that would hang on a
-    # wedged admin share (see BuildRemoteDcuScript).
+    # dcu-cli-missing exit code, outside all dcu-cli and psexec code ranges so
+    # InvokePsExec maps it without a UNC path check (see BuildRemoteDcuScript).
     static [int] $DcuNotFoundExit = 2600
 
     ExecutionService(
@@ -101,10 +98,8 @@ class ExecutionService {
         [string]$LogsDir,
         [string]$ReportsDir
     ) {
-        # One logger shared across the worker's collaborators. The two breadcrumbs
-        # bracket the constructor chain: a worker whose log stops between them
-        # wedged inside a collaborator constructor; stopping after "dispatching"
-        # pins the wedge in the phase method before its first own line.
+        # Shared logger; the two breadcrumbs bracket the constructor chain so a
+        # wedged bring-up names its segment (ctors vs dispatch vs phase entry).
         $localLogger = [LogService]::new($LogsDir)
         $localLogger.LogDebug("[$HostName] Worker service: constructing collaborators...")
         $localProbe = [NetworkProbe]::new($localLogger)
@@ -147,9 +142,8 @@ class ExecutionService {
         $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
 
         if ($mode -eq 'Warm') {
-            # Entry marker: if this logs but "Cached N domain controller(s)" never
-            # follows, the hang is inside the AD discovery itself; if even this line is
-            # missing, the worker never started (script/pipeline bring-up wedged).
+            # Entry marker: absent = bring-up wedged; present with no "Cached N
+            # domain controller(s)" after it = the AD discovery itself hung.
             $this.Logger.LogInfo("DC discovery running on the pool (worker pipeline is up).")
             $dc = $this.Probe.GetActiveDomainController()
             $this.Logger.LogInfo("Resolver warm-up: active domain controller = $dc")
@@ -168,9 +162,8 @@ class ExecutionService {
             $runtimeMs = $sw.ElapsedMilliseconds
             $sw.Restart()
             $this.WarmScanLaunchPath()
-            # One line per pool runspace at startup: proof this runspace ran the real
-            # worker pipeline before any real job landed on it. The timings say where
-            # a slow warm spent its barrier budget.
+            # One line per warmed runspace; the timings say where a slow warm spent
+            # its barrier budget.
             $this.Logger.LogDebug(
                 "Runspace warmed: worker pipeline up; runtime assemblies $runtimeMs ms; " +
                 "scan path $($sw.ElapsedMilliseconds) ms.")
@@ -184,9 +177,8 @@ class ExecutionService {
             return @{ Mode = 'Name'; HostName = $device.HostName; ActualName = [string]$actual }
         }
 
-        # Step breadcrumbs (DEBUG): a host resolve that never completes must name its
-        # last step - DNS via the DC, then the RPC-135 probe. TTL re-validations are
-        # minutes apart per host, so the volume stays low.
+        # Step breadcrumbs (DEBUG): a stalled host resolve must name its last step;
+        # TTL re-validations are minutes apart per host, so the volume stays low.
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
         $this.Logger.LogDebug("[$($device.HostName)] Host resolve: DC='$dc' - DNS lookup...")
         $ip = $this.Probe.ResolveWith($device.HostName, $dc)
@@ -202,21 +194,8 @@ class ExecutionService {
         return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
     }
 
-    # Exercises the heavy runtime stacks (DNS, TCP, CIM/DCOM, LDAP) against localhost
-    # so a live job's FIRST resolve/socket/CIM call is never also this runspace's
-    # first: assembly loads, winsock/DNS-client bring-up, and DCOM plumbing all get
-    # paid here. This is the recipe every known-good build ran (64dbec8 through
-    # 36c7536: resolve, disk scan, and DC discovery all worked for weeks). A
-    # loads-only variant that skipped the exercises shipped once, and the first live
-    # resolve-IP and disk-scan jobs - whose opening act is exactly a first
-    # DNS/socket connect - stopped completing.
-    #
-    # Wedge risk is accepted BY DESIGN: this runs under WarmPool's barrier, which
-    # can no longer hang or kill anything - a warm that overruns is parked running,
-    # capacity is compensated, and the reaper harvests it whenever it lands. The
-    # one op that stays banned here is anything unproven: the loopback port-445
-    # probe added in 2292abe was in no known-good build and coincided with the
-    # no-window startup incident; WarmScanLaunchPath stays pure CPU.
+    # Exercises the heavy stacks (DNS/TCP/CIM/LDAP) against localhost so a live job's
+    # first such call is never a runspace's first (implementation-notes: pool warm).
     [void] WarmRuntimeAssemblies() {
         # Each exercise logs BEFORE it runs: a warm that wedges leaves the name of
         # the exact stack it wedged in as the runspace's last log line.
@@ -256,19 +235,8 @@ class ExecutionService {
         $this.Logger.LogDebug("Warm: runtime stacks exercised.")
     }
 
-    # Pre-executes the CPU-only half of the DCU launch path - dcu-cli arg build and
-    # remote-script build + encode - so a live scan's first InvokePsExec is never also
-    # this runspace's first compile of that code. A first-ever execution on a live job
-    # is the silent-wedge class the worker warm pass exists to dodge: a real scan
-    # wedged forever after "Starting preliminary scan" with every op in that gap
-    # bounded at source level, so the block sits below PowerShell.
-    #
-    # This warm stays PURE CPU. A port-445 loopback probe was added here once "to
-    # bind the socket stack" - it was in no known-good build, and it coincided with
-    # the no-window startup incident (a hooked connect can block inside BeginConnect,
-    # below the probe's own 2 s timeout, which is armed only after the call returns).
-    # The proven localhost first-use exercises live in WarmRuntimeAssemblies; nothing
-    # unproven gets added to the barrier's workload.
+    # Pre-executes the CPU-only half of the DCU launch path so a live scan's first
+    # InvokePsExec is never a first compile. PURE CPU only (see implementation-notes).
     [void] WarmScanLaunchPath() {
         try {
             $overrides = @{
@@ -318,9 +286,8 @@ class ExecutionService {
             $scanArgs += " -updateDeviceCategory='audio,video,network,storage,input,chipset,others'"
         }
 
-        # Breadcrumb pairing with InvokePsExec's gate + "Executing:" lines: a scan once
-        # wedged silently between "Starting preliminary scan" and the psexec launch, so
-        # the next repro must pin which segment of that gap stopped logging.
+        # Pairs with the gate + "Executing:" lines: a scan repro must pin which
+        # segment between "Starting preliminary scan" and psexec stopped logging.
         $this.Logger.LogDebug(
             "[$($device.HostName)] Scan arguments built - invoking psexec launcher.")
 
@@ -631,9 +598,8 @@ class ExecutionService {
         if (-not (Test-Path $csvPath)) { return $jsonPath }
 
         try {
-            # Stream the CSV line-by-line: reading a full-drive export with -Raw and
-            # splitting it materialized multi-MB strings + a PSObject per row on the
-            # pool thread, and the resulting gen-2 GCs suspended the UI mid-scan.
+            # Stream line-by-line: a -Raw read of a full-drive export caused gen-2
+            # GCs that suspended the UI mid-scan (see DiskUsage.psm1).
             $report = [WizTreeCsv]::ParseTopFoldersFromFile($csvPath, $topN)
             $report.ToHashtable() | ConvertTo-Json -Depth 5 |
                 Set-Content -Path $jsonPath -Encoding UTF8
@@ -735,14 +701,8 @@ class ExecutionService {
         return @{ Log = $localLog; Report = $localReport }
     }
 
-    # One SMB-gated read of the run's outputLog: streams any new whole lines to the
-    # Information stream and reports @{ Seen (advanced offset); Code (dcu-cli's terminal
-    # return code if the log now holds one) }. Shared by the live tail (offset only) and the
-    # reconnect-resume recovery (which also needs the code). The 2s SMB gate matters because
-    # this runs INSIDE loops that must keep ticking: a read against a wedged/absent share
-    # blocks with no timeout, so the gate turns that into a skipped read, not a stall.
-    # Best-effort: a missing file / unreachable share / read error returns the old offset and
-    # Found=$false. Overridable seam so the worker tests run without a network.
+    # One SMB-gated outputLog read -> @{ Seen; Code }; shared by the live tail and
+    # reconnect recovery. Best-effort + 2s-gated so tick loops never stall (.NOTES).
     [hashtable] TailAndScanLog([string]$ip, [string]$remoteLog, [int]$seenChars) {
         $result = @{ Seen = $seenChars; Code = @{ Found = $false; Code = 0 } }
         if ([string]::IsNullOrWhiteSpace($remoteLog)) { return $result }
@@ -786,14 +746,8 @@ class ExecutionService {
         return "\\$ip\$drive`$\$rest"                # \\ip\C$\temp\DONUT\apply.log
     }
 
-    # After a connection drop (at EITHER end), keep trying to reconnect and RESUME tailing
-    # the log from $seenChars until dcu-cli's return code appears or the recovery window
-    # (AppConfig.GetRecoveryWindowMinutes) elapses. dcu-cli keeps running on the target as
-    # SYSTEM, so its outputLog is the source of truth. Bidirectional: it waits out the
-    # operator's own offline periods (IsLocalOnline) as well as an unreachable target,
-    # emitting DcuProgress.ReconnectMarker status lines the pump turns into a "Reconnecting…"
-    # card. Returns @{ Found; Code }; Found=$false means the window elapsed with no verdict
-    # (settle Unconfirmed). Overridable seam so the worker tests run without a network.
+    # Reconnect-and-resume tail after a drop at either end, bounded by the recovery
+    # window; dcu-cli's outputLog is the truth. Overridable test seam (.NOTES).
     [hashtable] RecoverByResumeTail([string]$ip, [string]$computer, [string]$remoteLog, [int]$seenChars) {
         $marker = [DcuProgress]::ReconnectMarker
         $deadline = [datetime]::UtcNow.AddMinutes($this.Config.GetRecoveryWindowMinutes())
@@ -838,12 +792,8 @@ class ExecutionService {
         return @{ Found = $false; Code = 0 }
     }
 
-    # Builds the PowerShell that runs on the TARGET (as SYSTEM) for one dcu-cli command:
-    # stop any running DCU, ensure the work dir, clear the prior outputLog, then resolve
-    # dcu-cli locally and run it. Resolving on the target (not a controller-side UNC
-    # Test-Path) is the whole point - a hung admin share can no longer stall the launch.
-    # Exits $DcuNotFoundExit when dcu-cli is absent; ends on dcu-cli's own code otherwise.
-    # Pure + static, so it's unit-testable without a host.
+    # Builds the on-TARGET launcher for one dcu-cli command; resolving dcu-cli on the
+    # target keeps hung admin shares out of the launch. Pure + static (unit-tested).
     static [string] BuildRemoteDcuScript([string]$command, [string]$argsString, [string]$outputLog) {
         $clearLine = if (-not [string]::IsNullOrWhiteSpace($outputLog)) {
             "Remove-Item -LiteralPath '$outputLog' -Force -ErrorAction SilentlyContinue"
@@ -873,10 +823,8 @@ exit `$LASTEXITCODE
         # Reuse the job's resolved/prefetched IP (resolves at most once).
         $ip = $this.ResolvedIpFor($computer)
 
-        # Bounded SMB gate (2s) so a down/firewalled host fails fast and typed. dcu-cli
-        # discovery + the log clear now run ON the target (BuildRemoteDcuScript), so there
-        # is NO controller-side UNC before launch - a wedged admin share (e.g. a host
-        # mid-reboot after a BIOS flash) can't stall the worker before psexec is even sent.
+        # Bounded SMB gate (2s): a down/firewalled host fails fast and typed, and no
+        # controller-side UNC runs before launch (see BuildRemoteDcuScript).
         if (-not $this.Probe.IsSmbAvailable($ip)) {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot run psexec.")
             throw [RpcUnavailableException]::new($ip)
@@ -931,10 +879,8 @@ exit `$LASTEXITCODE
             throw [DcuNotInstalledException]::new($computer)
         }
 
-        # A transport code means the connection dropped mid-command - at EITHER end (the
-        # target's NIC reset, or the operator's own laptop lost Wi-Fi). dcu-cli keeps running
-        # on the target, so reconnect, resume the tail from where we left off ($tickState.Seen),
-        # and recover its authoritative code (bounded by the recovery window - see .NOTES).
+        # Transport code = the connection dropped mid-command at either end; dcu-cli
+        # keeps running, so resume the tail and recover its code (.NOTES).
         if ([RemoteConnectionLostException]::IsConnectionLost($exitCode)) {
             $dcu = $this.RecoverByResumeTail($ip, $computer, $remoteLogUnc, [int]$tickState.Seen)
             if ($dcu.Found) {

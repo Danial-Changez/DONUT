@@ -72,20 +72,8 @@ class LogService {
         $this.WriteLog($level, ($parts -join '|'))
     }
 
-    # Lock-free atomic append. Every writer (UI thread + every pool runspace) opens
-    # the file in Append mode with ReadWrite sharing and emits ONE line in ONE
-    # Write call - the kernel serializes append-only writes, so lines never tear
-    # and no cross-writer lock exists at all.
-    #
-    # The previous design - a named mutex with a 2 s bounded wait around a per-line
-    # Add-Content - collapsed under exactly the concurrency it was built for: with
-    # ~10 runspaces + the UI writing, every writer hovered at the full 2 s timeout,
-    # so each UI log line blocked the dispatcher ~2.2 s ("UI dispatcher was blocked
-    # ~22xx ms" storms, where the watchdog's own warning write caused the NEXT
-    # block), timed-out writers' fallback appends collided with the owner's and
-    # lines vanished silently, and workers crawled at seconds per log line - warm
-    # jobs missed the startup barrier from logging cost alone. Logging must never
-    # be able to block the app it serves.
+    # Lock-free atomic append (Append mode + ReadWrite sharing, one line per Write):
+    # logging must never block the app (implementation-notes: thread safety).
     [void] WriteLog([string]$level, [string]$message) {
         $timestamp = [datetime]::Now.ToString('yyyy-MM-dd HH:mm:ss')
         $line = "[$timestamp] [$level] $message" + [System.Environment]::NewLine

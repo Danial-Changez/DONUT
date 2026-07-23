@@ -26,20 +26,15 @@ class AsyncJob {
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
 
-    # Stall heartbeat. Every silent regression in this app's history looked the same
-    # in the field: a "Started X job." line and then nothing, with no way to tell a
-    # job queued behind a starved pool from a worker wedged mid-run. Poll() warns
-    # once a running job crosses StallWarnAfterSeconds, then every
-    # StallRepeatSeconds, with the pool's free count as the discriminator.
+    # Stall heartbeat: Poll() warns at StallWarnAfterSeconds then every repeat, with
+    # the pool free count discriminating queued-behind-starved-pool vs wedged worker.
     [datetime] $StartedAtUtc
     hidden [datetime] $NextStallLogUtc
     hidden [int] $StallWarnAfterSeconds = 90
     hidden [int] $StallRepeatSeconds = 300
 
-    # Test convenience only. Production call sites must pass the real logger (guarded
-    # by AsyncJobLoggerCoverage.Tests.ps1): with the null logger, a job that fails to
-    # start, errors, or throws during completion leaves no trace in Donut.log - a
-    # scan that wedged silently took days to triage because of exactly that.
+    # Test convenience only - production sites must pass the real logger, or job
+    # failures leave no trace in Donut.log (AsyncJobLoggerCoverage.Tests enforces).
     AsyncJob([string]$hostName, [JobKind]$type) {
         $this.Initialize($hostName, $type, $null)
     }

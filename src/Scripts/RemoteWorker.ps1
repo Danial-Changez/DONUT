@@ -60,11 +60,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# First possible trace: execution only reaches here after the runspace finished
-# parsing/compiling this script and its whole using-module graph, so the gap
-# between the submitter's "Started X job." line and this one IS the queue +
-# compile time. A job whose log shows "Started" but never this line either never
-# got a runspace or is still (or forever) compiling.
+# First possible trace: the gap from "Started X job." to this line IS the queue +
+# graph-compile time; "Started" with no "Worker up" = no runspace or stuck compile.
 $workerLog = $null
 try {
     if (-not [string]::IsNullOrWhiteSpace($LogsDir)) {
@@ -80,11 +77,8 @@ catch {
 }
 
 try {
-    # Prefer the config snapshot sent from the UI (config.json is only persistence);
-    # fall back to it, or to defaults, when no Settings were supplied. The source
-    # breadcrumb splits the silent gap between "Worker up" and the worker service's
-    # first line: if the log stops before "Config built", the wedge is inside the
-    # config merge itself.
+    # Prefer the UI's config snapshot, else config.json, else defaults; the source
+    # breadcrumb pins a wedge before "Config built" to the config merge itself.
     $configSource = 'defaults'
     $config = if ($Settings) {
         $configSource = 'ui snapshot'
@@ -107,9 +101,8 @@ try {
         $config, $SourceRoot, $LogsDir, $ReportsDir)
 }
 catch {
-    # The error stream reaches Donut.log only if the job's Poll() drains it; a
-    # worker that dies while the pump is stalled would otherwise vanish, so the
-    # failure is also written straight to the log file.
+    # Also write the failure straight to the log file - the error stream reaches
+    # Donut.log only if the pump drains it, and a stalled pump would eat the death.
     if ($null -ne $workerLog) {
         $workerLog.LogException("[$HostName] $JobType worker failed", $_)
     }

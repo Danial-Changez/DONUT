@@ -55,16 +55,8 @@ if (-not $global:SingleInstanceOwned) {
 # Read by DonutApp.ps1 for the hidden-start decision on the dev path.
 $global:TrayStart = [bool]$Tray
 
-# Resolve an already-loaded assembly to its on-disk path by simple name.
-#
-# Add-Type -ReferencedAssemblies must get the *runtime* WPF assemblies by path. Passing
-# a bare simple name (e.g. 'WindowsBase') instead lets the C# compiler bind it to the
-# 4.0.0.0 .NET Framework reference facade; PresentationCore then pulls in the real 10.x
-# runtime WindowsBase and the compile dies with CS1705 ("WindowsBase 10.0.0.0 ... has a
-# higher version than referenced assembly WindowsBase 4.0.0.0"). The caller loads these
-# assemblies explicitly first (PresentationFramework loads them lazily, so they may not
-# be present otherwise), so this lookup finds them; if one is genuinely missing we throw
-# rather than fall back to the bare name and reintroduce the mismatch.
+# Resolves a loaded assembly to its on-disk path: Add-Type references must use the
+# runtime WPF paths or the compiler binds 4.0 facades and dies with CS1705.
 function Get-RuntimeAssemblyPath([string]$SimpleName) {
     $asm = [AppDomain]::CurrentDomain.GetAssemblies() |
         Where-Object { $_.GetName().Name -eq $SimpleName -and $_.Location } |
@@ -75,38 +67,19 @@ function Get-RuntimeAssemblyPath([string]$SimpleName) {
     return $asm.Location
 }
 
-# Everything that loads the WPF assemblies, compiles the dev-path C# helpers and
-# dot-sources the module graph runs behind this handler. A failed Add-Type compile
-# (e.g. the CS1705 above) or a parse error in the using-module graph would otherwise
-# kill the process silently — on the relaunched `pwsh -Sta` path the window just
-# closes with no trace. Capture it to a crash log and surface it instead. (DonutApp.ps1
-# has its own try/catch for *runtime* errors after a clean parse; this covers the
-# load/compile/parse failures it can't reach.)
+# All assembly loads, helper compiles, and the graph dot-source run behind this
+# handler: load/compile/parse failures die silently otherwise - crash-log them.
 try {
-    # Assemblies are resolved at runtime (not parse time), so load them before
-    # dot-sourcing the app graph. PresentationCore and WindowsBase are dependencies of
-    # PresentationFramework that load lazily; load them explicitly so they're present
-    # (with a real runtime path) when Get-RuntimeAssemblyPath resolves references below.
+    # Load the WPF set explicitly (they load lazily) so Get-RuntimeAssemblyPath can
+    # resolve real runtime paths before the graph dot-sources.
     Add-Type -AssemblyName PresentationFramework
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Security
 
-    # C# helper types the class graph parses against: compiled into Donut.Launcher in
-    # production, compiled here on the `pwsh -Sta` dev path. Each file is guarded by
-    # ITS OWN type and compiled individually. Guarding them all on ObservableObject
-    # alone crashed startup: any session where the MVVM types are already resident
-    # but a newer helper is not - a console that ran an older tree, or an installed
-    # launcher (which hosts this very script) built before the helper existed -
-    # skipped the whole block, and the graph parse died on the first reference
-    # ("Unable to find type [WindowChromeHelper]"). Per-file guards compile exactly
-    # what is missing and never recompile a resident type, which would make its
-    # name ambiguous across assemblies.
-    #
-    # Reference the loaded runtime assemblies by path so versions match (see
-    # Get-RuntimeAssemblyPath). System.ObjectModel defines ICommand /
-    # INotifyPropertyChanged; WindowsBase + PresentationCore back the interop helpers.
+    # Dev-path C# helpers: each file guarded by ITS OWN type and compiled alone -
+    # a shared guard once skipped a missing helper and killed the graph parse.
     $refs = @(
         Get-RuntimeAssemblyPath 'System.ObjectModel'
         Get-RuntimeAssemblyPath 'WindowsBase'

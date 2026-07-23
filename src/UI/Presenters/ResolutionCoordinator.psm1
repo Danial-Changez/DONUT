@@ -34,10 +34,8 @@ class ResolutionCoordinator {
     [HostResolver] $Resolver        # shared with HomePresenter (not owned here)
     [object]       $Home            # duck-typed back-ref to HomePresenter's pump + seams
     [bool]         $PoolWarmed = $false   # single-shot guard for WarmPool
-    # Warm shells still running when the barrier lapsed, parked as
-    # @{ Shell; Handle; Started } and left RUNNING - a late warm still delivers a
-    # fully warmed runspace. ReapWarmShells (pump-driven) harvests each one when it
-    # completes; a truly wedged one never completes and dies with the process.
+    # Barrier-lapsed warm shells, parked STILL RUNNING as @{ Shell; Handle; Started }
+    # until ReapWarmShells harvests them (implementation-notes: pool warm).
     hidden [object[]] $AbandonedWarmShells = @()
     # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
     hidden [int] $WarmTimeoutSeconds = 30
@@ -65,10 +63,8 @@ class ResolutionCoordinator {
             $job = [AsyncJob]::new('', [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
-            # Diagnostic: proves the warm started, and reports how many pool runspaces are
-            # free right then. If this logs but no "Selected active domain controller" /
-            # "DC warm-up ..." follows, the job is stuck Running - pool free 0 means it's
-            # starved (search/agent binds holding every runspace); >0 means it ran and hung.
+            # Free-count diagnostic: if this logs with no "Selected active domain
+            # controller" after it, free 0 = starved pool, free > 0 = the worker hung.
             $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
             $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
         }
@@ -77,36 +73,28 @@ class ResolutionCoordinator {
         }
     }
 
-    # Warms every pool runspace's COMPLETE worker module graph synchronously. One-shot;
-    # loader-lock rationale in .NOTES.
+    # Warms every pool runspace with one real worker pass, synchronously behind a
+    # barrier. One-shot; recipe rationale on the submission loop below.
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
         $n = $this.Config.GetThrottleLimit()
         if ($n -lt 1) { $n = 1 }
 
-        # Load the FULL pool-worker graph (WorkerServices + ActiveDirectoryService +
-        # PersonLensService) into every runspace, not just RemoteWorker's WorkerServices
-        # graph. Otherwise the first AD search / Lens lookup to land on an un-warmed
-        # runspace cold-loads its graph under the CLR loader lock, and if that happens
-        # while the dispatcher is rendering (e.g. mid-scan) the UI freezes. The warm also
-        # runs RemoteWorker.ps1 once per runspace (Mode='WarmRunspace') - a runspace whose
-        # first worker execution happens on a real job wedges it silently (the DC-warm /
-        # machine-list regression) - which is why LogsDir/ReportsDir thread through. The N
-        # jobs run concurrently and the WaitOne barrier below holds each runspace, so all
-        # N warm.
-        $warmScript = Join-Path $this.Config.SourceRoot 'Scripts\Warm-Runspace.ps1'
+        # One real worker pass per runspace and NOTHING more (the 64dbec8 recipe): a
+        # superset warm here blew the barrier (implementation-notes: pool warm).
         $pool = [RunspaceManager]::GetPool()
         $shells = [System.Collections.Generic.List[object]]::new()
         $handles = [System.Collections.Generic.List[object]]::new()
         for ($i = 0; $i -lt $n; $i++) {
             try {
+                $prep = $this.Resolver.PrepareWarmRunspace()
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
-                $ps.AddCommand($warmScript) | Out-Null
-                $ps.AddParameter('SourceRoot', $this.Config.SourceRoot) | Out-Null
-                $ps.AddParameter('LogsDir', $this.Config.LogsPath) | Out-Null
-                $ps.AddParameter('ReportsDir', $this.Config.ReportsPath) | Out-Null
+                $ps.AddCommand($prep.ScriptPath) | Out-Null
+                foreach ($k in $prep.Arguments.Keys) {
+                    $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
+                }
                 $handles.Add($ps.BeginInvoke())
                 $shells.Add($ps)
             }
@@ -142,16 +130,8 @@ class ResolutionCoordinator {
                     }
                 }
                 else {
-                    # NEVER Dispose or Stop a still-running warm. The synchronous
-                    # forms wait on the pipeline, and a pipeline wedged below
-                    # PowerShell can't yield - this thread (the UI thread, before
-                    # any window exists) would block forever; that hang shipped
-                    # once. Async-stopping shipped too - and destroyed warms that
-                    # were merely SLOW (first-run AV/AMSI scanning of the module
-                    # graph pushes them past the barrier), killing the work seconds
-                    # before it finished. The barrier stops the WAITING, never the
-                    # WORK: park the shell running; ReapWarmShells harvests it
-                    # whenever it completes.
+                    # Never Dispose/Stop a running warm (sync forms hang on a wedged
+                    # pipeline; async stops waste slow warms): park it, reap later.
                     $this.AbandonedWarmShells += @{
                         Shell   = $shells[$i]
                         Handle  = $handles[$i]
@@ -166,13 +146,8 @@ class ResolutionCoordinator {
                 "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
                 "$($this.WarmTimeoutSeconds) s. They keep running in the background; each " +
                 "is harvested when it completes and holds its pool runspace until then.")
-            # Self-heal: a parked shell holds its runspace until its warm completes -
-            # never, if it is wedged - and in the field the pool sat 0/8 free for
-            # minutes while every job (the DC resolve first) queued unrun. Raising the
-            # max mints fresh runspaces: cold, so a first job on one pays the loader
-            # hit, but it RUNS. The raise is temporary insurance - ReapWarmShells
-            # gives a slot back each time a late warm lands - and stays only for
-            # shells that never finish, where it is what keeps the app alive.
+            # Self-heal: parked shells hold their runspaces, so raise the max to keep
+            # jobs running; ReapWarmShells returns the slack as late warms land.
             try {
                 $newMax = $pool.GetMaxRunspaces() + $parked
                 if ($pool.SetMaxRunspaces($newMax)) {
@@ -193,13 +168,8 @@ class ResolutionCoordinator {
         $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s).")
     }
 
-    # Pump-driven: harvests parked warm shells that finished after the barrier
-    # lapsed. A late warm still delivers a fully warmed runspace - the work is never
-    # thrown away - and each harvest gives back one unit of the capacity the lapse
-    # raised, so the pool converges on the configured throttle. A wedged shell never
-    # completes: it stays parked (dying with the process) and its replacement
-    # capacity stays with it. The late/never split in the log is also the
-    # slow-vs-wedged diagnostic for the warm itself.
+    # Pump-driven harvest of barrier-lapsed warm shells: a late finisher lands fully
+    # warmed and returns one unit of raised capacity; a wedged one parks for life.
     [void] ReapWarmShells() {
         if ($this.AbandonedWarmShells.Count -eq 0) { return }
         $stillRunning = @()
@@ -364,10 +334,8 @@ class ResolutionCoordinator {
         }
         if ($null -ne $list -and $list.Count -gt 0) {
             $existing = @($this.Config.Settings['domainControllers'])
-            # Compare as sets: AD returns controllers in nondeterministic order, and an
-            # order-only "change" would re-serialize the whole config on the dispatcher
-            # right as the DC warm completes (a multi-second UI stall once the recents
-            # carry cached inventory/disk trees).
+            # Compare as sets: AD order is nondeterministic, and an order-only "change"
+            # would re-serialize the whole config on the dispatcher mid-warm-landing.
             $before = (@($existing) | Sort-Object) -join '|'
             $after = (@($list) | Sort-Object) -join '|'
             if ($before -ne $after) {

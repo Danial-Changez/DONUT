@@ -71,13 +71,8 @@ class DiskUsageReport {
     }
 }
 
-# Pure parser for WizTree's CSV export. Static, WPF-free, tested.
-#
-# Parses STREAMING (one line at a time): a full-drive export runs to hundreds of
-# thousands of rows, and the earlier -Raw + -split + ConvertFrom-Csv approach
-# materialized the whole file as a giant string, a line array, and a PSObject per
-# row on the pool thread - the gen-2 GCs that churn forced suspend every thread,
-# including the UI's, which read as multi-second freezes right as a scan finished.
+# Pure parser for WizTree's CSV export - STREAMING, one line at a time: -Raw on a
+# full-drive export caused gen-2 GC storms that froze the UI. Static, WPF-free.
 class WizTreeCsv {
     # Parses a WizTree export into a ranked DiskUsageReport: find the real header row
     # ("File Name"), drop the volume-root total, rank by size, cap at topN. Never throws.
@@ -155,8 +150,7 @@ class WizTreeCsv {
         return $report
     }
 
-    # Minimal quote-aware CSV field splitter ("" = escaped quote). WizTree fields are
-    # double-quoted and NTFS names cannot contain quotes, so this covers the format
+    # Minimal quote-aware CSV splitter ("" = escaped quote) - covers WizTree's format
     # without ConvertFrom-Csv's per-row PSObject cost.
     hidden static [string[]] SplitCsvLine([string]$line) {
         $fields = [System.Collections.Generic.List[string]]::new()

@@ -20,7 +20,20 @@ using module "..\..\src\UI\Presenters\ResolutionCoordinator.psm1"
 using module "..\..\src\Core\RunspaceManager.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
+using module "..\..\src\Services\HostResolver.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
+
+# Stands in for HostResolver so WarmPool submits a stub script instead of the real
+# RemoteWorker warm pass. base($null, $null) is safe - the base ctor only stores refs.
+class StubWarmResolver : HostResolver {
+    [string] $StubPath
+    StubWarmResolver([string]$stubPath) : base($null, $null) {
+        $this.StubPath = $stubPath
+    }
+    [hashtable] PrepareWarmRunspace() {
+        return @{ ScriptPath = $this.StubPath; Arguments = @{} }
+    }
+}
 
 Describe "WarmPool barrier" {
 
@@ -29,20 +42,18 @@ Describe "WarmPool barrier" {
         [RunspaceManager]::Close()
         [RunspaceManager]::Initialize(1, 2)
 
-        # A coordinator whose Config roots a stub Scripts/Warm-Runspace.ps1, plus the
-        # capturing logger it writes to. The stub receives WarmPool's parameters.
+        # A coordinator whose resolver hands WarmPool a stub warm script, plus the
+        # capturing logger it writes to.
         function New-BarrierFixture([string]$stubBody) {
             $root = Join-Path ([System.IO.Path]::GetTempPath()) `
                 ("DonutBarrier-" + [guid]::NewGuid().ToString('N'))
-            $scripts = Join-Path $root 'Scripts'
-            New-Item -ItemType Directory -Force -Path $scripts | Out-Null
-            $stubParams = "param([string]`$SourceRoot = '', [string]`$LogsDir = '', " +
-            "[string]`$ReportsDir = '')"
-            ($stubParams + "`n" + $stubBody) |
-                Set-Content -Path (Join-Path $scripts 'Warm-Runspace.ps1')
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            $stub = Join-Path $root 'StubWarm.ps1'
+            $stubBody | Set-Content -Path $stub
             $log = [CapturingLogService]::new()
             $config = [AppConfig]::new($root, '', '', @{ throttleLimit = 2 })
-            $coord = [ResolutionCoordinator]::new($config, $log, $null, $null, $null, $null)
+            $resolver = [StubWarmResolver]::new($stub)
+            $coord = [ResolutionCoordinator]::new($config, $log, $null, $null, $resolver, $null)
             return @{ Coordinator = $coord; Log = $log; Root = $root }
         }
     }

@@ -1,70 +1,39 @@
 <#
-    Regression guard for the "app froze mid-scan during a user search" class of bug.
+    Regression guards for the startup warm - the gate the whole app sits behind.
 
-    Cold-loading a worker's class/module graph takes the process-wide CLR loader
-    lock; if a pool job cold-loads while the WPF dispatcher is rendering (e.g. a
-    scan is streaming updates), the UI freezes until the load finishes.
-    ResolutionCoordinator.WarmPool pre-loads the worker graph into every pool
-    runspace at startup so no job cold-loads on the hot path - but that only helps
-    if the warm covers EVERY graph a pool worker uses.
+    The barrier warm is the 64dbec8 recipe: ONE real worker pass (RemoteWorker.ps1
+    Mode='WarmRunspace') per pool runspace - script compile, real pipeline
+    construction, runtime-assembly exercises, scan-path prewarm - and nothing more.
+    History, so nobody re-learns it the hard way:
 
-    The freeze regressed when the AD-finder (AdSearchWorker -> ActiveDirectoryService)
-    and user Lens (LensLookupWorker -> PersonLensService) shipped with graphs the warm
-    didn't load. These tests fail if Warm-Runspace.ps1 stops covering any pool
-    worker's imports, or if WarmPool stops running it.
-
-    Also guards the sibling regression: pre-loading the graph WITHOUT executing
-    RemoteWorker.ps1 once per runspace left the first real worker execution to a live
-    job, which wedged it silently - the startup DC discovery never logged, so every
-    resolve/inventory no-oped (the machine-list regression). The warm must therefore
-    invoke RemoteWorker.ps1 in Mode='WarmRunspace', with the log/report dirs threaded
-    through so the worker pass logs into Donut.log.
+    - Pre-loading a module graph WITHOUT executing the worker once left a
+      runspace's first RemoteWorker execution to a live job, which wedged silently
+      (the machine-list regression). The worker pass is mandatory.
+    - A SUPERSET warm (full AD + Lens graph + binary CIM/ScheduledTasks imports
+      per runspace, added 07-20 alongside the agent-AD work) multiplied the
+      per-shell workload; 8 concurrent copies contend the process-wide
+      module-analysis/loader locks, the shells stopped fitting the 30 s barrier
+      at all ("Pre-warmed 0 of 8"), and every feature queued behind a starved
+      pool. The AD/Lens graphs warm via the DEFERRED finder warms instead
+      (HomePresenter.StartDeferredWarms); a first mid-scan search on an unwarmed
+      runspace may pay a one-time cold-load - a deliberate, documented trade.
+    - The barrier itself must never block on, kill, or waste a late warm, and a
+      lapsed barrier must leave the pool usable (park + reap + capacity heal).
 #>
 
 Describe "Runspace warm coverage" {
 
     BeforeAll {
         $script:ScriptsDir = Join-Path $PSScriptRoot '../../src/Scripts'
-        $script:WarmScript = Join-Path $ScriptsDir 'Warm-Runspace.ps1'
         $script:Coordinator = Join-Path $PSScriptRoot '../../src/UI/Presenters/ResolutionCoordinator.psm1'
 
         # Scripts dispatched onto the shared runspace pool (via StartPoolScript / AsyncJob).
-        # A NEW pool worker must be added here *and* covered by Warm-Runspace.ps1's imports.
         $script:PoolWorkers = @(
             'RemoteWorker.ps1'      # scan / apply / inventory / disk / resolve
             'AdSearchWorker.ps1'    # AD finder fan-out
             'LensLookupWorker.ps1'  # user Lens lookup + agent warm/teardown
             'AdUnlockWorker.ps1'    # inline account unlock
         )
-
-        # The set of module files a script imports via `using module`, as normalized
-        # absolute paths (resolved relative to the script, backslashes made portable).
-        function Get-UsingModulePaths([string]$scriptPath) {
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile(
-                $scriptPath, [ref]$null, [ref]$null)
-            $usings = $ast.FindAll({
-                    param($n)
-                    ($n -is [System.Management.Automation.Language.UsingStatementAst]) -and
-                    ($n.UsingStatementKind -eq
-                    [System.Management.Automation.Language.UsingStatementKind]::Module)
-                }, $true)
-            $dir = Split-Path $scriptPath -Parent
-            $set = [System.Collections.Generic.HashSet[string]]::new()
-            foreach ($u in $usings) {
-                if ($null -eq $u.Name) { continue }   # module-spec hashtable form: not used by workers
-                $rel = ([string]$u.Name.Value) -replace '\\', '/'
-                [void]$set.Add([System.IO.Path]::GetFullPath((Join-Path $dir $rel)))
-            }
-            return $set
-        }
-    }
-
-    It "Warm-Runspace.ps1 exists and parses cleanly" {
-        Test-Path $WarmScript | Should -BeTrue
-        $errs = $null
-        [void][System.Management.Automation.Language.Parser]::ParseFile(
-            $WarmScript, [ref]$null, [ref]$errs)
-        @($errs).Count | Should -Be 0
     }
 
     It "every pool worker script exists" {
@@ -73,35 +42,22 @@ Describe "Runspace warm coverage" {
         }
     }
 
-    It "warms every module graph a pool worker imports (nothing cold-loads on the hot path)" {
-        $warm = Get-UsingModulePaths $WarmScript
-        foreach ($w in $PoolWorkers) {
-            $needed = Get-UsingModulePaths (Join-Path $ScriptsDir $w)
-            foreach ($mod in $needed) {
-                $warm.Contains($mod) | Should -BeTrue -Because (
-                    "$w imports $(Split-Path $mod -Leaf), so Warm-Runspace.ps1 must import it too " +
-                    "or that worker cold-loads under the loader lock and can freeze the UI mid-scan")
-            }
-        }
-    }
-
-    It "WarmPool is wired to run Warm-Runspace.ps1" {
-        (Get-Content $Coordinator -Raw) | Should -Match 'Warm-Runspace\.ps1'
-    }
-
-    It "runs the real worker pipeline once per runspace (Mode='WarmRunspace')" {
-        $raw = Get-Content $WarmScript -Raw
-        $raw | Should -Match 'RemoteWorker\.ps1' -Because (
-            "the warm must execute RemoteWorker.ps1, not just pre-load its graph - " +
-            "a runspace whose first worker execution lands on a real job wedges it " +
-            "(the silent DC-warm / machine-list regression)")
-        $raw | Should -Match "Mode\s*=\s*'WarmRunspace'"
-    }
-
-    It "WarmPool threads the log/report dirs the worker warm pass needs" {
+    It "WarmPool runs the real worker pass per runspace (the 64dbec8 recipe)" {
         $raw = Get-Content $Coordinator -Raw
-        $raw | Should -Match "AddParameter\('LogsDir'"
-        $raw | Should -Match "AddParameter\('ReportsDir'"
+        $raw | Should -Match 'PrepareWarmRunspace' -Because (
+            "the barrier must execute RemoteWorker.ps1 Mode='WarmRunspace' per runspace - " +
+            "a runspace whose first worker execution lands on a real job wedges it silently")
+    }
+
+    It "the barrier never runs a superset graph warm" {
+        # 8 concurrent superset warms (AD + Lens graph + binary module imports per
+        # runspace) contend the process-wide module-analysis/loader locks and blew
+        # the barrier on real hardware ("Pre-warmed 0 of 8", every feature starved).
+        Test-Path (Join-Path $ScriptsDir 'Warm-Runspace.ps1') | Should -BeFalse -Because (
+            "the superset warm script was removed; AD/Lens graphs warm via the " +
+            "deferred finder warms, never behind the startup barrier")
+        (Get-Content $Coordinator -Raw) | Should -Not -Match 'Warm-Runspace' -Because (
+            "WarmPool must submit the worker pass, not a graph superset")
     }
 
     It "the WarmRunspace pass warms the DCU scan launch path" {
@@ -122,14 +78,13 @@ Describe "Runspace warm coverage" {
         # The warm once probed loopback 445 "to bind the socket stack". Security
         # stacks hook socket connects, and the hook can block INSIDE the native call
         # - below any PowerShell-level timeout - so every warm job hung, WarmPool's
-        # 30 s barrier lapsed, and the app never showed a window. The warm must stay
-        # pure CPU; first-use socket costs belong on a live job's bounded gate, never
-        # on the startup barrier.
+        # 30 s barrier lapsed, and the app never showed a window. This warm stays
+        # pure CPU; nothing unproven goes under the barrier.
         $services = Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1'
         $raw = Get-Content $services -Raw
         $raw -match '(?s)\[void\] WarmScanLaunchPath\(\)(.*?)\r?\n    \}' | Should -BeTrue
         $Matches[1] | Should -Not -Match 'Probe|TcpClient|Socket|Reachable|Connect' -Because (
-            "no socket/network call may run inside the startup warm - a hooked " +
+            "no socket/network call may run inside the scan-path warm - a hooked " +
             "connect wedges below PowerShell and once held app startup hostage")
     }
 
@@ -149,31 +104,6 @@ Describe "Runspace warm coverage" {
                 "dropping the $($exercise.Trim()) first-use warm-up regressed the " +
                 "first live resolve/disk-scan job on machines where 64dbec8 worked")
         }
-    }
-
-    It "Warm-Runspace.ps1 exercises the CIM/ScheduledTasks machinery, not just imports" {
-        # Importing the binary modules does not pay their first-call loader hit; the
-        # known-good recipe (36c7536) invokes one cheap local cmdlet per stack. An
-        # imports-only variant shipped once alongside the loads-only runtime warm and
-        # the first live jobs stopped completing.
-        $raw = Get-Content $WarmScript -Raw
-        $raw | Should -Match 'Get-CimInstance' -Because (
-            "the CIM stack must be exercised, not merely imported, or the first live " +
-            "CIM call pays the loader hit mid-job")
-        $raw | Should -Match 'Get-ScheduledTask' -Because (
-            "the ScheduledTasks stack backs the Lens-agent bring-up and must be " +
-            "exercised at warm")
-    }
-
-    It "WarmPool raises pool capacity when warm jobs miss the barrier" {
-        # Parked warm shells hold their runspaces until their background stop lands -
-        # which a wedged pipeline never honors - so without compensation the pool
-        # starves and every job (the DC resolve first) queues forever. The lapse path
-        # must grow the max so real work always finds a runspace.
-        $raw = Get-Content $Coordinator -Raw
-        $raw | Should -Match 'SetMaxRunspaces' -Because (
-            "a lapsed barrier must self-heal the pool instead of leaving the app " +
-            "alive but unable to run any job")
     }
 
     It "startup submits only the warm shells + DC warm; other pool work is deferred" {
@@ -203,8 +133,7 @@ Describe "Runspace warm coverage" {
         # Dispose/Stop on a still-running pipeline waits for it synchronously; a
         # pipeline wedged in a hooked native call never yields, and that hang shipped
         # once (the UI thread, pre-window). Async-stopping shipped too - and it
-        # destroyed warms that were merely SLOW (first-run AV/AMSI scans push the
-        # module-graph warm past the barrier), wasting the work seconds before it
+        # destroyed warms that were merely SLOW, wasting the work seconds before it
         # finished. The contract: the barrier stops the WAITING, never the WORK -
         # park the shell running, reap it when it completes, give back the
         # compensating capacity.
@@ -221,5 +150,16 @@ Describe "Runspace warm coverage" {
         $homePresenter = Join-Path $PSScriptRoot '../../src/UI/Presenters/HomePresenter.psm1'
         (Get-Content $homePresenter -Raw) | Should -Match 'ReapWarmShells' -Because (
             "something must actually drive the reap - the job pump tick is the hook")
+    }
+
+    It "WarmPool raises pool capacity when warm jobs miss the barrier" {
+        # Parked warm shells hold their runspaces until they finish - never, if
+        # wedged - so without compensation the pool starves and every job (the DC
+        # resolve first) queues forever. The lapse path must grow the max so real
+        # work always finds a runspace.
+        $raw = Get-Content $Coordinator -Raw
+        $raw | Should -Match 'SetMaxRunspaces' -Because (
+            "a lapsed barrier must self-heal the pool instead of leaving the app " +
+            "alive but unable to run any job")
     }
 }

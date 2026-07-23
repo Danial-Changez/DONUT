@@ -63,9 +63,8 @@ class RemoteJobService {
             Arguments      = @{
                 HostName   = $hostName
                 JobType    = $jobType
-                # Snapshot, same rule as Settings below: no live hashtable may cross
-                # the runspace boundary (a worker enumerating a table the UI mutates
-                # can spin forever on a corrupted bucket chain).
+                # Snapshot, same rule as Settings below: no live hashtable may
+                # cross the runspace boundary.
                 Options    = if ($null -ne $options) { [AppConfig]::DeepClone($options) }
                 else { @{} }
                 # Seeded by the presenter (AttachResolvedIp) before Start. A dedicated
@@ -74,13 +73,8 @@ class RemoteJobService {
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
-                # Snapshot of the in-memory config so the run uses exactly what the
-                # UI holds, not whatever config.json contains. DEEP-CLONED ON THE UI
-                # THREAD on purpose: every Settings mutation happens on the UI
-                # thread, so this copy is atomic with respect to them - the live
-                # reference used to cross the runspace boundary, and the worker's
-                # deep enumeration racing a UI write can corrupt the (non-thread-
-                # safe) hashtable and spin forever: a silent, pure-CPU wedge.
+                # UI-thread deep clone of the live config: a worker enumerating a
+                # table the UI mutates can spin forever on a corrupted bucket chain.
                 Settings   = [AppConfig]::DeepClone($this.Config.Settings)
             }
         }

@@ -129,9 +129,8 @@ class HomePresenter : AsyncJobPresenter {
     # or drops them - never left queued silently.
     hidden [hashtable] $PendingRuns = @{}
 
-    # Hosts whose running job announced a connection drop (worker emits reconnect lines):
-    # the card shows "Reconnecting…" until the resumed tail streams a normal dcu line, or
-    # the job settles. Set/cleared in OnJobPolled; cleared on terminal in OnJobCompleted.
+    # Hosts mid connection-drop: card shows "Reconnecting…" until the resumed tail
+    # streams a normal dcu line or the job settles (set/cleared by the pump).
     hidden [hashtable] $Reconnecting = @{}
 
     # Gathers queued the same way; value = strongest $force flag seen while queued.
@@ -269,16 +268,8 @@ class HomePresenter : AsyncJobPresenter {
         # time to take the loader-lock hit (see .NOTES).
         $this.Resolution.WarmPool()
 
-        # The DC warm is the keystone - every resolve/inventory/scan gates on an
-        # active DC - so it is the ONLY job submitted at startup beyond the warm
-        # shells. The finder/Lens warms are deferred until it completes (fallback
-        # timer below): at 64dbec8 startup submitted exactly warm shells + DC warm
-        # and everything worked; the stampede that accreted afterwards - one live
-        # LDAP warm per forest, the Lens agent bring-up (20 s mutex + ScheduledTasks
-        # COM), the startup-task heal - all inside the same two seconds contended
-        # the process-wide module-analysis/loader locks and WMI/Task Scheduler
-        # against the warm barrier, and pool jobs froze for minutes in segments
-        # that are pure CPU.
+        # The DC warm is the ONLY job submitted at startup beyond the warm shells;
+        # everything else is deferred (implementation-notes: startup staging).
         $this.Resolution.StartWarm()
         $presenter = $this
         $this.DeferredWarmTimer = [DispatcherTimer]::new()
@@ -586,9 +577,8 @@ class HomePresenter : AsyncJobPresenter {
     [void] OnTimerTick($timerSource, $tickArgs) {
         try {
             $this.PumpJobs()
-            # Harvest warm jobs that outlived WarmPool's barrier: a late finisher is
-            # a fully warmed runspace, and reaping it returns the pool capacity the
-            # barrier lapse raised.
+            # Harvest warm jobs that outlived the barrier: a late finisher is a fully
+            # warmed runspace and returns the capacity the lapse raised.
             if ($null -ne $this.Resolution) { $this.Resolution.ReapWarmShells() }
         }
         catch {

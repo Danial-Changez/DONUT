@@ -167,10 +167,8 @@ class NetworkProbe {
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
-            # The pre-connect breadcrumb is deliberate: a security stack can hold
-            # BeginConnect itself (below the 2 s wait, which is only armed after it
-            # returns), and then this is the last line in the log - naming the exact
-            # call, host, and port that wedged.
+            # Pre-connect on purpose: a hooked BeginConnect never returns, so only a
+            # line logged BEFORE it can name the wedged call, host, and port.
             if ($logFailure) {
                 $this.Logger.LogDebug(
                     "$checkLabel probe: connecting to '$hostName':$port (2 s cap)...")
@@ -215,11 +213,8 @@ class NetworkProbe {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $false)
     }
 
-    # True when THIS machine (the operator's laptop) has a usable network at all. A cheap,
-    # local, non-blocking check - it stays fast even while offline (unlike a DC probe, which
-    # would trigger blocking AD discovery on the worker's fresh probe). The reconnect loop
-    # uses it to tell "my own Wi-Fi is down" from "the target is unreachable". Overridable
-    # seam so the worker tests can force offline/online without a real NIC.
+    # Cheap non-blocking "is MY network up" check; the reconnect loop uses it to tell
+    # own-Wi-Fi-down from target-unreachable. Overridable seam for the worker tests.
     [bool] IsLocalOnline() {
         try {
             return [System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()

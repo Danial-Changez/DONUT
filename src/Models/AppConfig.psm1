@@ -110,11 +110,8 @@ class AppConfig {
         return $merged
     }
 
-    # Recursively clones a hashtable, copying nested hashtables by value so the
-    # result shares no mutable structure with the source. Cycle-safe: a table that
-    # (directly or transitively) contains itself maps to its own clone instead of
-    # recursing forever - this runs on the UI thread for every job prep, and an
-    # unguarded recursion over a cyclic Settings tree would freeze the dispatcher.
+    # Recursive by-value clone sharing no mutable structure with the source.
+    # Cycle-safe: a self-containing table maps to its own clone, never recursing away.
     hidden static [hashtable] DeepClone([hashtable]$source) {
         $seen = [System.Collections.Generic.Dictionary[object, object]]::new(
             [System.Collections.Generic.ReferenceEqualityComparer]::Instance)
