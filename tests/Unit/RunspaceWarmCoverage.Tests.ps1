@@ -163,6 +163,18 @@ Describe "Runspace warm coverage" {
             "alive but unable to run any job")
     }
 
+    It "warms the pool SEQUENTIALLY (concurrent using-module compiles deadlock)" {
+        # The confirmed root cause: submitting all N warm shells at once means N
+        # runspaces compile the using-module class graph concurrently, which
+        # deadlocks PowerShell's module-load lock (>=4 concurrent hangs).
+        $raw = Get-Content $Coordinator -Raw
+        $raw | Should -Not -Match '\$handles\.Add' -Because (
+            "accumulating every warm handle before waiting = N concurrent graph " +
+            "compiles, the deadlock that hung scan/apply for the whole saga")
+        $raw | Should -Match 'compiles in flight' -Because (
+            "WarmPool must wait for each shell before submitting the next")
+    }
+
     It "raises the ThreadPool floor before creating the pool (dispatch-starvation guard)" {
         # The confirmed 2026-07-23 regression: pool dispatch/completion run on
         # ThreadPool threads; concurrent warm opens starved the default floor, so

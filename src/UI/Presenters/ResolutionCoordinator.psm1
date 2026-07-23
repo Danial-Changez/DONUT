@@ -75,24 +75,25 @@ class ResolutionCoordinator {
         }
     }
 
-    # Warms every pool runspace with one real worker pass, synchronously behind a
-    # barrier. One-shot; recipe rationale on the submission loop below.
+    # Warms the pool ONE runspace at a time (serial is mandatory - concurrent
+    # using-module compiles deadlock; implementation-notes: warm compile serialization).
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
         $n = $this.Config.GetThrottleLimit()
         if ($n -lt 1) { $n = 1 }
-
-        # One real worker pass per runspace and NOTHING more (the 64dbec8 recipe): a
-        # superset warm here blew the barrier (implementation-notes: pool warm).
         $pool = [RunspaceManager]::GetPool()
-        $shells = [System.Collections.Generic.List[object]]::new()
-        $handles = [System.Collections.Generic.List[object]]::new()
-        $tags = [System.Collections.Generic.List[string]]::new()
+
+        $warmed = 0
+        $erred = 0
+        $parked = 0
         for ($i = 0; $i -lt $n; $i++) {
+            $tag = "warm-$($i + 1)"
+            $ps = $null
+            $handle = $null
+            $started = [datetime]::UtcNow
             try {
-                # Tag rides in HostName so every worker breadcrumb names its shell.
-                $tag = "warm-$($i + 1)"
+                # One real worker pass; NOTHING more (the 64dbec8 recipe).
                 $prep = $this.Resolver.PrepareWarmRunspace($tag)
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
@@ -100,94 +101,54 @@ class ResolutionCoordinator {
                 foreach ($k in $prep.Arguments.Keys) {
                     $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
                 }
-                $handles.Add($ps.BeginInvoke())
-                $shells.Add($ps)
-                $tags.Add($tag)
-            }
-            catch {
-                $this.Logger.LogException("Runspace warm-up could not start", $_)
-            }
-        }
-
-        # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
-        $started = [datetime]::UtcNow
-        $deadline = $started.AddSeconds($this.WarmTimeoutSeconds)
-        $warmed = 0
-        $erred = 0
-        $parked = 0
-        for ($i = 0; $i -lt $shells.Count; $i++) {
-            $completed = $false
-            try {
-                $remaining = [int][Math]::Max(0,
-                    [Math]::Ceiling(($deadline - [datetime]::UtcNow).TotalMilliseconds))
-                $completed = $handles[$i].AsyncWaitHandle.WaitOne($remaining)
-                if ($completed) {
-                    $shells[$i].EndInvoke($handles[$i])
-                    if ($shells[$i].HadErrors) {
-                        # An errored warm left its runspace part-loaded; count it apart
-                        # so "Pre-warmed N" stays honest.
+                # Wait for THIS shell before submitting the next - never two graph
+                # compiles in flight, or the pool deadlocks.
+                $handle = $ps.BeginInvoke()
+                if ($handle.AsyncWaitHandle.WaitOne($this.WarmTimeoutSeconds * 1000)) {
+                    $ps.EndInvoke($handle)
+                    if ($ps.HadErrors) {
                         $erred++
                         $this.Logger.LogError("Runspace warm completed with errors: " +
-                            $this.DescribeShell($shells[$i], $tags[$i], $started))
+                            $this.DescribeShell($ps, $tag, $started))
                     }
                     else {
                         $warmed++
                     }
-                }
-            }
-            catch {
-                $this.Logger.LogException(
-                    "Runspace warm-up failed ($($tags[$i]))", $_)
-            }
-            finally {
-                if ($completed) {
-                    try { $shells[$i].Dispose() }
+                    try { $ps.Dispose() }
                     catch {
-                        $this.Logger.LogDebug(
-                            "Warm shell dispose failed: $($_.Exception.Message)")
+                        $this.Logger.LogDebug("Warm shell dispose failed: $($_.Exception.Message)")
                     }
                 }
                 else {
-                    # Never Dispose/Stop a running warm (sync forms hang on a wedged
-                    # pipeline; async stops waste slow warms): park it, reap later.
+                    # A warm that never returns = the load lock is likely wedged; park
+                    # it (never Dispose a running pipeline) and STOP piling on.
                     $this.Logger.LogWarning("Warm shell parked at barrier lapse: " +
-                        $this.DescribeShell($shells[$i], $tags[$i], $started))
+                        $this.DescribeShell($ps, $tag, $started))
                     $this.AbandonedWarmShells += @{
-                        Shell   = $shells[$i]
-                        Handle  = $handles[$i]
-                        Started = $started
-                        Tag     = $tags[$i]
+                        Shell = $ps; Handle = $handle; Started = $started; Tag = $tag
                     }
                     $parked++
+                    break
+                }
+            }
+            catch {
+                $this.Logger.LogException("Runspace warm-up failed ($tag)", $_)
+                if ($null -ne $ps -and $null -eq $handle) {
+                    try { $ps.Dispose() }
+                    catch { $this.Logger.LogDebug("Warm shell dispose failed: $($_.Exception.Message)") }
                 }
             }
         }
-        # Only shells still holding a runspace warrant compensation - an errored warm
-        # completed and released its slot, so it must not inflate the raise.
+
         if ($parked -gt 0) {
-            # ThreadPool free-thread count at the lapse: ~0 with idle runspaces is the
-            # starved-dispatch signature (raise the floor in DonutApp, not here).
-            $tp = 'unknown'
-            try {
-                $w = 0; $io = 0
-                [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
-                $tp = "$w worker / $io IOCP free"
-            }
-            catch {
-                $this.Logger.LogDebug("Warm lapse: threadpool state unreadable: $($_.Exception.Message)")
-            }
-            $this.Logger.LogWarning(
-                "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
-                "$($this.WarmTimeoutSeconds) s (threadpool: $tp). They keep running in the " +
-                "background; each is harvested when it completes and holds its pool runspace until then.")
-            # Self-heal: parked shells hold their runspaces, so raise the max to keep
-            # jobs running; ReapWarmShells returns the slack as late warms land.
+            # A parked shell holds its runspace, so raise the max so real jobs never
+            # starve behind it; ReapWarmShells returns the slack when it lands.
             try {
                 $newMax = $pool.GetMaxRunspaces() + $parked
                 if ($pool.SetMaxRunspaces($newMax)) {
                     $this.Logger.LogWarning(
                         "Pool capacity raised to $newMax to compensate for $parked " +
-                        "runspace(s) held by unfinished warm jobs.")
+                        "runspace(s) held by an unfinished warm job.")
                 }
                 else {
                     $this.Logger.LogWarning(
@@ -200,7 +161,7 @@ class ResolutionCoordinator {
             }
         }
         $suffix = if ($erred -gt 0) { " ($erred completed with errors)" } else { '' }
-        $this.Logger.LogInfo("Pre-warmed $warmed of $($shells.Count) runspace(s)$suffix.")
+        $this.Logger.LogInfo("Pre-warmed $warmed of $n runspace(s)$suffix.")
         if ($this.AbandonedWarmShells.Count -gt 0) {
             $this.NextReapReportUtc = [datetime]::UtcNow.AddSeconds(60)
         }

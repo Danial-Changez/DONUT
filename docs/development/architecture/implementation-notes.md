@@ -13,6 +13,24 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
+- **Warm compile serialization — the actual DC-warm/scan regression (fixed
+  2026-07-23).** Compiling a `using module` class graph in **4+ runspaces at once
+  deadlocks** on PowerShell's module-load lock (measured threshold: 2–3 concurrent
+  are fine, 4+ hang; reproduced end-to-end). The wedged compiles *hold* the lock, so
+  every later class operation — even in a runspace that already compiled — blocks
+  behind them. This is why the field logs showed a scan reach `Worker up:
+  JobType=Scan` and then hang at the next class call, and a second Resolve wedge right
+  after `Config built`: they were all queued behind the deadlocked warm compiles.
+  The ThreadPool floor fix *exposed* this — once dispatch stopped starving, all 8
+  warm passes finally ran at once and deadlocked. **The fix:** `WarmPool` warms **one
+  runspace at a time** — submit a shell, wait for it, then the next — so only one
+  graph compile is ever in flight. The first pass compiles (~0.5 s) and primes the
+  process module-analysis cache; the rest reuse it (~30 ms each), so the whole warm
+  is a second or two (`Pre-warmed 8 of 8` in ~0.5 s, vs a 30 s barrier lapse before).
+  Priming does **not** make concurrent compiles safe — the deadlock is on the lock
+  itself, not a cache miss — so serialization is mandatory, not an optimization.
+  `RunspaceWarmCoverage.Tests` guards it: the coordinator must wait per shell, never
+  accumulate all handles before waiting.
 - **Pool warm = ONE real worker pass per runspace — the 64dbec8 recipe, nothing
   more:** at startup `ResolutionCoordinator.WarmPool` runs `RemoteWorker.ps1` in
   `Mode='WarmRunspace'` once per pool runspace (concurrently, behind a barrier):

@@ -98,24 +98,23 @@ Describe "WarmPool barrier" {
         # pipeline (Dispose/Stop on one hangs until the pipeline yields, which a
         # wedged pipeline never does; that hang shipped once, pre-window).
         $sw.Elapsed.TotalSeconds | Should -BeLessThan 20
-        $f.Log.Contains('did not finish within') | Should -BeTrue
         $f.Log.Contains('Pre-warmed 0 of 2') | Should -BeTrue
-        $f.Coordinator.AbandonedWarmShells.Count | Should -Be 2
 
-        # Forensics: each parked shell must leave a per-shell state line naming its
-        # tag - the "Pre-warmed 0 of N" log must say WHY each shell missed.
+        # Serial warm parks the FIRST wedged shell and STOPS (a wedged compile holds
+        # the load lock; submitting the next would only pile onto it).
+        $f.Coordinator.AbandonedWarmShells.Count | Should -Be 1
+
+        # Forensics: the parked shell must leave a per-shell state line naming its tag.
         $f.Log.Contains('Warm shell parked at barrier lapse: warm-1') | Should -BeTrue
-        $f.Log.Contains('Warm shell parked at barrier lapse: warm-2') | Should -BeTrue
         $f.Log.Contains('state=Running') | Should -BeTrue
 
-        # Self-heal: capacity must grow by the parked count so real jobs never starve
-        # behind held runspaces - in the field the pool sat 0/8 free for minutes and
-        # the DC resolve heartbeated unrun until the app was killed.
-        $f.Log.Contains('Pool capacity raised to 4') | Should -BeTrue
-        [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 4
+        # Self-heal: capacity grows by the parked count so real jobs never starve
+        # behind the held runspace.
+        $f.Log.Contains('Pool capacity raised to 3') | Should -BeTrue
+        [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 3
 
         # THE user-facing contract: a job submitted immediately after a lapsed
-        # barrier must still run, even while both parked shells hold their runspaces.
+        # barrier must still run, even while the parked shell holds its runspace.
         $ps = [powershell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetPool()
         [void]$ps.AddScript('7')
