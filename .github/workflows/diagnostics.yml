@@ -1,0 +1,63 @@
+# Remote-lab diagnostics: runs ONLY on the private mirror (donut-lab), where the
+# self-hosted runner on the domain test machine is registered. On the public
+# repo this workflow stays inert - no runner carries these labels there, and no
+# pull_request trigger may ever be added (see docs/development/remote-lab.md).
+name: Remote lab diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      target-host:
+        description: Host for the resolve/disk phases (empty = warm + DC only)
+        required: false
+        default: ''
+      include-disk-scan:
+        description: Also run a real disk scan against target-host
+        type: boolean
+        default: false
+  push:
+    branches: ['fix/**']
+
+# One physical lab machine - never overlap runs.
+concurrency:
+  group: donut-lab
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, donut-lab]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test suite
+        shell: pwsh
+        run: ./tools/Invoke-Tests.ps1
+
+      - name: Diagnostic run
+        if: always()
+        shell: pwsh
+        run: |
+          $diskFlag = '${{ inputs.include-disk-scan }}' -eq 'true'
+          $params = @{
+            TargetHost = '${{ inputs.target-host }}'
+            OutDir     = Join-Path $env:RUNNER_TEMP 'donut-diag'
+          }
+          if ($diskFlag) { $params.IncludeDiskScan = $true }
+          ./tools/Invoke-DiagnosticRun.ps1 @params
+          # The harness exit code is the run's verdict, not a step failure -
+          # surface it in the summary; the artifact carries the evidence.
+          $verdict = switch ($LASTEXITCODE) {
+            0 { 'PASS' } 2 { 'SYMPTOM' } default { "BROKEN($LASTEXITCODE)" }
+          }
+          "## Diagnostic verdict: $verdict" >> $env:GITHUB_STEP_SUMMARY
+          exit 0
+
+      - name: Upload diagnostic bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-diagnostics
+          path: ${{ runner.temp }}/DonutDiag-*.zip
+          retention-days: 14
+          if-no-files-found: warn
