@@ -93,22 +93,34 @@ model.
   errored warm counted as warmed and the log showed nothing at all. AsyncJob's
   stall heartbeat likewise reports `state:` and `firstError=` for the wedged shell.
 
-- **ThreadPool floor (pool-dispatch starvation).** A `RunspacePool` dispatches
-  pipelines and fires their completion callbacks on **.NET ThreadPool** threads,
-  whose floor defaults to `Environment.ProcessorCount`. At startup the app opens
-  8 warm runspaces at once (each compiling the full `using module` graph), which
-  saturates that floor; further dispatch/completion callbacks then wait on the
-  ThreadPool's slow ~1-thread/second injection. The field signature is unmistakable
-  and misleading: the pool reports runspaces *idle/Available* while every warm and
-  the DC-resolve job sit at `state=Running` for minutes — they are queued and never
-  dispatched, not wedged inside a runspace (a wedged pipeline would read *Busy*).
-  The identical scripts complete in ~2 s in the headless harness, whose process has
-  nothing else touching the ThreadPool. `DonutApp.ps1` raises the floor with
-  `ThreadPool::SetMinThreads(max(16, throttle*2))` **before** the pool is created,
-  so dispatch never waits on thread injection. The stall heartbeat and the warm
+- **ThreadPool floor (pool-dispatch starvation) — CONFIRMED regression, fixed
+  2026-07-23.** A `RunspacePool` dispatches pipelines and fires their completion
+  callbacks on **.NET ThreadPool** threads, whose floor defaults to
+  `Environment.ProcessorCount`. At startup the app opens 8 warm runspaces at once
+  (each compiling the full `using module` graph), which saturates that floor;
+  further dispatch/completion callbacks then wait on the ThreadPool's slow
+  ~1-thread/second injection. The field signature is unmistakable and misleading:
+  the pool reports runspaces *idle/Available* while every warm and the DC-resolve
+  job sit at `state=Running` for minutes — they are queued and never dispatched,
+  not wedged inside a runspace (a wedged pipeline would read *Busy*). The identical
+  scripts complete in ~2 s in the headless harness, whose process has nothing else
+  touching the ThreadPool. **How it was pinned:** the field diagnostics
+  (`tools/Get-DonutRunspaceStacks.ps1` against the live app) showed every pool
+  runspace `Availability=Available` while the resolve job reported `state=Running`
+  past 391 s — proving *queued, not wedged*. Raising the floor restored IP
+  resolution **and** disk scan on the domain test machine that same day.
+  **The fix:** `RunspaceManager.Initialize` raises the floor with
+  `ThreadPool::SetMinThreads(max(16, max*2))` as the first statement **before**
+  `CreateRunspacePool`, so *every* pool-creation path (the explicit startup call,
+  the lazy `GetPool` default, the warm) gets it and dispatch never waits on thread
+  injection. **How to recognize it again:** the stall heartbeat and the warm
   barrier-lapse warning both log `threadpool: N worker / M IOCP free`; `~0 free with
-  idle runspaces` is the starvation fingerprint (and confirms the floor is doing its
-  job when it stays healthy).
+  idle runspaces` is the fingerprint. **Guards:** `RunspaceManager.Tests` reads the
+  floor back via `GetMinThreads`; `RunspaceWarmCoverage.Tests` statically asserts
+  `SetMinThreads` precedes `CreateRunspacePool`; and `AsyncJob.LogStallHeartbeat`
+  carries a latched runtime backstop — one `SetMinThreads` bump if a stall ever
+  shows the starvation signature again (idle runspaces + ≤1 free worker thread), so
+  a busy-runspace stall like a slow scan never trips it.
 
 - **Startup provenance stamp.** Right after `DONUT starting up.`,
   `BuildProvenance::Stamp` logs one line with the git short SHA (+`dirty` flag) on

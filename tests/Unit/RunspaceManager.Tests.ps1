@@ -30,11 +30,21 @@ Describe "RunspaceManager" {
         It "Should not recreate pool if already initialized" {
             [RunspaceManager]::Initialize(1, 5)
             $firstPool = [RunspaceManager]::RunspacePool
-            
+
             [RunspaceManager]::Initialize(2, 10)  # Should be ignored
             $secondPool = [RunspaceManager]::RunspacePool
-            
+
             $firstPool | Should -Be $secondPool
+        }
+
+        It "raises the ThreadPool floor before opening the pool (starvation guard)" {
+            # Pool dispatch/completion run on ThreadPool threads; the floor MUST be
+            # raised or 8 concurrent warm opens starve dispatch (see implementation-notes).
+            [RunspaceManager]::Initialize(8, 8)
+            $w = 0; $io = 0
+            [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)
+            $w | Should -BeGreaterOrEqual 16 -Because "max(16, max*2) with max=8 is 16"
+            $io | Should -BeGreaterOrEqual 16
         }
     }
 

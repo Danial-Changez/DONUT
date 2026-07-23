@@ -32,6 +32,8 @@ class AsyncJob {
     hidden [datetime] $NextStallLogUtc
     hidden [int] $StallWarnAfterSeconds = 90
     hidden [int] $StallRepeatSeconds = 300
+    # Process-wide latch: the dispatch-starvation self-heal fires at most once.
+    hidden static [bool] $ThreadPoolHealed = $false
 
     # Test convenience only - production sites must pass the real logger, or job
     # failures leave no trace in Donut.log (AsyncJobLoggerCoverage.Tests enforces).
@@ -124,9 +126,11 @@ class AsyncJob {
     hidden [void] LogStallHeartbeat() {
         $elapsed = [long]([datetime]::UtcNow - $this.StartedAtUtc).TotalSeconds
         $pool = 'unknown'
+        $freeRunspaces = -1
         try {
             $p = [RunspaceManager]::GetPool()
-            $pool = "$($p.GetAvailableRunspaces())/$($p.GetMaxRunspaces()) free"
+            $freeRunspaces = $p.GetAvailableRunspaces()
+            $pool = "$freeRunspaces/$($p.GetMaxRunspaces()) free"
         }
         catch {
             $this.Logger.LogDebug(
@@ -147,9 +151,11 @@ class AsyncJob {
         # ThreadPool free threads: near 0 with idle runspaces = starved dispatch
         # (jobs queued because no thread is free to hand them a runspace).
         $tp = 'unknown'
+        $freeWorkers = -1
         try {
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
+            $freeWorkers = $w
             $tp = "$w worker / $io IOCP free"
         }
         catch {
@@ -161,7 +167,31 @@ class AsyncJob {
             "(pool: $pool, threadpool: $tp, state: $state$firstError). Idle runspaces " +
             "with ~0 free threads means dispatch is starved; otherwise the worker " +
             "itself has not returned.")
+        $this.HealThreadPoolIfStarved($freeRunspaces, $freeWorkers)
         $this.NextStallLogUtc = [datetime]::UtcNow.AddSeconds($this.StallRepeatSeconds)
+    }
+
+    # Latched backstop for the confirmed ThreadPool-starvation regression: if a job
+    # stalls with idle runspaces AND ~0 free ThreadPool threads, raise the floor once.
+    hidden [void] HealThreadPoolIfStarved([int]$freeRunspaces, [int]$freeWorkers) {
+        if ([AsyncJob]::ThreadPoolHealed) { return }
+        # Only idle runspaces + starved workers count; a busy-runspace stall (a slow
+        # scan) is real work, not starvation, and must NOT trip this.
+        if ($freeRunspaces -le 0 -or $freeWorkers -lt 0 -or $freeWorkers -gt 1) { return }
+        [AsyncJob]::ThreadPoolHealed = $true
+        try {
+            $w = 0; $io = 0
+            [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)
+            $target = $w + 8
+            [void][System.Threading.ThreadPool]::SetMinThreads($target, [Math]::Max($io, $target))
+            $this.Logger.LogWarning(
+                "Pool dispatch looked starved ($freeRunspaces runspaces idle, $freeWorkers " +
+                "worker thread(s) free); raised ThreadPool floor to $target as a self-heal. " +
+                "The startup floor in RunspaceManager should prevent this - investigate if it recurs.")
+        }
+        catch {
+            $this.Logger.LogException("ThreadPool self-heal failed", $_)
+        }
     }
 
     [void] DrainStream($stream) {

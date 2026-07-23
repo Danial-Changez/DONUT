@@ -162,4 +162,15 @@ Describe "Runspace warm coverage" {
             "a lapsed barrier must self-heal the pool instead of leaving the app " +
             "alive but unable to run any job")
     }
+
+    It "raises the ThreadPool floor before creating the pool (dispatch-starvation guard)" {
+        # The confirmed 2026-07-23 regression: pool dispatch/completion run on
+        # ThreadPool threads; concurrent warm opens starved the default floor, so
+        # runspaces sat idle while jobs hung Running. The floor MUST precede creation.
+        $manager = Join-Path $PSScriptRoot '../../src/Core/RunspaceManager.psm1'
+        (Get-Content $manager -Raw) |
+            Should -Match '(?s)SetMinThreads.{0,400}CreateRunspacePool' -Because (
+            "the ThreadPool floor must be raised before the pool is opened, or 8 " +
+            "concurrent warm opens starve dispatch and every job hangs")
+    }
 }

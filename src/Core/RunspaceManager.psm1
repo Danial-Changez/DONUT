@@ -34,6 +34,11 @@ class RunspaceManager {
     static [void] Initialize([int]$MinRunspaces, [int]$MaxRunspaces) {
         if (-not [RunspaceManager]::RunspacePool) {
             try {
+                # Pool dispatch/completion run on .NET ThreadPool threads (floor = CPU
+                # count); concurrent warm opens starve it, so raise the floor FIRST.
+                $floor = [Math]::Max(16, $MaxRunspaces * 2)
+                [void][System.Threading.ThreadPool]::SetMinThreads($floor, $floor)
+                [RunspaceManager]::Log("INFO", "ThreadPool min threads raised to $floor (worker+IOCP) so pool dispatch never starves.")
                 [RunspaceManager]::RunspacePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($MinRunspaces, $MaxRunspaces)
                 [RunspaceManager]::RunspacePool.Open()
                 [RunspaceManager]::Log("INFO", "Runspace pool opened (min=$MinRunspaces, max=$MaxRunspaces).")
