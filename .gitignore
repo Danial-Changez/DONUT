@@ -35,5 +35,8 @@ web/.astro/
 web/public/diagrams/
 tools/.cache/
 
+# Diagnostic runs: bisect worktrees + harness output bundles (see docs/development/testing.md)
+.diag/
+
 # Legacy
 MainWindow-*

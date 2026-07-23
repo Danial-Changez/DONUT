@@ -100,27 +100,40 @@ script-block/module events for the run window (enabled per-process via
 live runspace stacks captured by the wedge probe while the stuck shells are
 still running.
 
+Run it from an **elevated** pwsh (the app runs elevated; the pool's Kerberos /
+DCOM / AMSI context differs under an admin token):
+
 ```powershell
-# Full pipeline on a lab machine; send/upload the zip it prints last:
+# Full pipeline; send/upload the zip it prints last:
 pwsh -File tools\Invoke-DiagnosticRun.ps1 -TargetHost <host> -IncludeDiskScan
 ```
 
-The script imports nothing from `src/`, so a **fixed copy** can drive
-`git bisect` against any checkout. Protocol when a regression has no obvious
-first-bad commit:
+Everything the diagnostics need stays **under the repo**: `.gitignore` excludes
+`.diag/`, so bisect worktrees and output bundles live there without polluting
+`git status`. The harness imports nothing from `src/`, so pointing `-SourceRoot`
+at another checkout runs that checkout's worker under this harness. Protocol
+when a regression has no obvious first-bad commit:
 
-1. **Split code vs. environment first.** Copy the harness + probe out of the
-   tree (`Copy-Item tools\Invoke-DiagnosticRun.ps1, tools\Get-DonutRunspaceStacks.ps1
-   $env:TEMP\donut-harness\`), then run it against worktrees of the suspected
-   good commits *today* (`git worktree add ..\donut-<sha> <sha>`, then
-   `-SourceRoot ..\donut-<sha>\src`). A historically-good commit failing today
-   means the machine changed, not the code — diff the two runs'
-   `provenance.json` Defender signature dates and pwsh versions.
-2. **Bisect each symptom separately** — different symptoms can have different
-   first-bad commits:
+1. **Split code vs. environment first.** Check the suspected-good commits out as
+   worktrees under `.diag/` and run the in-tree harness against each *today*:
    ```powershell
+   git worktree add .diag\wt\64dbec8 64dbec8
+   git worktree add .diag\wt\9304ab3 9304ab3
+   pwsh -File tools\Invoke-DiagnosticRun.ps1 -SourceRoot .diag\wt\64dbec8\src -TargetHost <host> -OutDir .diag\out\64dbec8
+   pwsh -File tools\Invoke-DiagnosticRun.ps1 -SourceRoot .diag\wt\9304ab3\src -TargetHost <host> -OutDir .diag\out\9304ab3
+   pwsh -File tools\Invoke-DiagnosticRun.ps1 -SourceRoot .\src               -TargetHost <host> -OutDir .diag\out\HEAD
+   ```
+   A historically-good commit failing today means the machine changed, not the
+   code — diff the runs' `provenance.json` Defender signature dates and pwsh
+   versions. Clean up with `git worktree remove .diag\wt\<sha>` when done.
+2. **Bisect each symptom separately** — different symptoms can have different
+   first-bad commits. `git bisect` rewrites the working tree, so the predicate
+   script must survive checkouts: keep a copy in `.diag/` (untracked, so
+   `git checkout` never touches it):
+   ```powershell
+   Copy-Item tools\Invoke-DiagnosticRun.ps1, tools\Get-DonutRunspaceStacks.ps1 .diag\
    git bisect start <bad> <good>
-   git bisect run pwsh -NoProfile -File $env:TEMP\donut-harness\Invoke-DiagnosticRun.ps1 `
+   git bisect run pwsh -NoProfile -File .diag\Invoke-DiagnosticRun.ps1 `
        -SourceRoot .\src -SkipEventLog -BisectExitCodes [-TargetHost <host>]
    ```
    `-BisectExitCodes` maps pass→0, symptom→1, harness-broken→125
@@ -131,8 +144,8 @@ first-bad commit:
    `%LOCALAPPDATA%`, but *launching the app* from an old checkout re-saves the
    shared config. Back it up first and restore after:
    ```powershell
-   Copy-Item $env:LOCALAPPDATA\DONUT\config\config.json $env:TEMP\config.bak.json
-   Copy-Item $env:TEMP\config.bak.json $env:LOCALAPPDATA\DONUT\config\config.json
+   Copy-Item $env:LOCALAPPDATA\DONUT\config\config.json .diag\config.bak.json
+   Copy-Item .diag\config.bak.json $env:LOCALAPPDATA\DONUT\config\config.json
    ```
 
 ## Code coverage
