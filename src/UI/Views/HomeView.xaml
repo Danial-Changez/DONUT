@@ -409,7 +409,6 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                   </Grid.ColumnDefinitions>
                   <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                            VerticalAlignment="Center" Fill="{Binding DotBrush}" />
@@ -421,29 +420,11 @@
                                FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding Subtitle}" />
                   </StackPanel>
-                  <StackPanel Grid.Column="2" Width="120" Margin="12,0,12,0" VerticalAlignment="Center"
-                              Visibility="{Binding ProgressVisible, Converter={StaticResource BoolToVis}}">
-                    <ProgressBar Style="{DynamicResource ThinProgressBar}" Minimum="0" Maximum="100"
-                                 Value="{Binding Percent}" IsIndeterminate="{Binding ProgressIndeterminate}"
-                                 Foreground="{Binding ProgressBrush}" />
-                    <!-- Live milestone from dcu-cli's outputLog, e.g. "3/5 scanning devices". -->
-                    <TextBlock Text="{Binding StepText}" FontFamily="{DynamicResource FontSans}" FontSize="9.5"
-                               Foreground="{DynamicResource BodyTextSecondary}" Margin="0,3,0,0"
-                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis">
-                      <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                          <Style.Triggers>
-                            <DataTrigger Binding="{Binding StepText}" Value="">
-                              <Setter Property="Visibility" Value="Collapsed" />
-                            </DataTrigger>
-                          </Style.Triggers>
-                        </Style>
-                      </TextBlock.Style>
-                    </TextBlock>
-                  </StackPanel>
+                  <!-- The card reads busy from the "Scanning..." chip; the live bar lives in
+                       the detail pane's Available Updates card, not here (declutter). -->
                   <!-- Status chip = Arcane StatusBadge: rounded (not a pill), tinted
                        fill + 30% border, 400-shade text (all VM-driven). -->
-                  <Border Grid.Column="3" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
+                  <Border Grid.Column="2" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
                           Margin="0,0,8,0" Background="{Binding ChipBackground}"
                           BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                           Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
@@ -468,7 +449,7 @@
                                  VerticalAlignment="Center" />
                     </StackPanel>
                   </Border>
-                  <Button Grid.Column="4" Content="Run" Command="{Binding RunCommand}"
+                  <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                           Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="32"
                           Padding="14,4" VerticalAlignment="Center"
                           ToolTip="Run the active command on this machine" />
@@ -591,7 +572,17 @@
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Text="AVAILABLE UPDATES"
                          Style="{DynamicResource MicroLabel}" Margin="0,0,0,8" />
-              <!-- Hint until an update scan has populated the list. -->
+              <!-- Live scan/apply progress, shown right where the result will land while a
+                   job runs (Steps Left pattern): the dcu milestone + the ThinProgressBar. -->
+              <StackPanel Grid.Row="1" VerticalAlignment="Top"
+                          Visibility="{Binding SelectedMachine.ProgressVisible, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding SelectedMachine.StepText}" FontFamily="{DynamicResource FontSans}" FontSize="12"
+                           Foreground="{DynamicResource BodyTextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <ProgressBar Style="{DynamicResource ThinProgressBar}" Minimum="0" Maximum="100"
+                             Value="{Binding SelectedMachine.Percent}" IsIndeterminate="{Binding SelectedMachine.ProgressIndeterminate}"
+                             Foreground="{Binding SelectedMachine.ProgressBrush}" />
+              </StackPanel>
+              <!-- Hint until an update scan has populated the list (hidden while scanning). -->
               <TextBlock Grid.Row="1" VerticalAlignment="Top"
                          Text="Run a scan on this machine to list its available updates."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -601,6 +592,9 @@
                     <Setter Property="Visibility" Value="Visible" />
                     <Style.Triggers>
                       <DataTrigger Binding="{Binding SelectedMachine.HasUpdates}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding SelectedMachine.ProgressVisible}" Value="True">
                         <Setter Property="Visibility" Value="Collapsed" />
                       </DataTrigger>
                     </Style.Triggers>
