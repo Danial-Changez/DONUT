@@ -52,8 +52,18 @@ Before committing:
 ```powershell
 .\tools\Invoke-Format.ps1 -Check   # layout must be clean
 .\tools\Invoke-Lint.ps1            # zero non-layout findings
-Invoke-Pester -Path tests          # full suite green
+.\tools\Invoke-Tests.ps1           # full suite green (pinned Pester 5)
 ```
+
+> **Always run the suite through `tools/Invoke-Tests.ps1`, never a bare
+> `Invoke-Pester`.** The suite uses Pester 5 syntax; a bare invocation binds to
+> whichever Pester wins module resolution. On machines that also carry Windows
+> PowerShell's built-in Pester 3.4.0 or a user-scoped Pester 6+, the v3 commands
+> can shadow mid-run — after which every remaining test fails with
+> `'-Be' is not a valid Should operator` or `The Mock command may only be used
+> inside a Describe block`. Those cascades are a tooling artifact, not product
+> failures. The runner pins the newest installed Pester 5.5+ and refuses to run
+> on any other major version.
 
 The analyzer rules live in `PSScriptAnalyzerSettings.psd1`; the conventions they
 enforce are described in [Coding style](./coding-style.md).
