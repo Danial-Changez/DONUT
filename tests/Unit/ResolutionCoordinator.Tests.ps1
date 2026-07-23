@@ -50,6 +50,9 @@ class FakeHome {
     [void] DropPendingRunOnResolveFailure([string]$h) { $this.DroppedRuns.Add($h) }
     [void] RenderReachability([string]$h) { $this.Rendered.Add($h) }
     [object] GetRecord([string]$h) { return $null }
+    [System.Collections.Generic.List[string]] $DeferredWarmReasons =
+    [System.Collections.Generic.List[string]]::new()
+    [void] StartDeferredWarms([string]$reason) { $this.DeferredWarmReasons.Add($reason) }
 }
 
 # Records SaveConfig for the warm/DC-persist path.
@@ -113,6 +116,21 @@ Describe "ResolutionCoordinator" {
             $script:resolver.ActiveDc | Should -Be 'DC01'
             $script:config.Settings['activeDomainController'] | Should -Be 'DC01'
             $script:cfgMgr.SaveCount | Should -Be 1
+            # The DC warm finishing ends the startup crunch: the deferred finder/Lens
+            # warms must be released exactly once here.
+            $script:fakeHome.DeferredWarmReasons.Count | Should -Be 1
+        }
+
+        It "releases the deferred warms even when the DC warm FAILS" {
+            # A failed warm must not leave the finder/Lens warms waiting on the
+            # fallback timer - the crunch is over either way.
+            $job = [AsyncJob]::new('', [JobKind]::Resolve)
+            $job.Status = 'Failed'
+            $job.FailureMessage = 'boom'
+
+            $script:coord.CompleteResolve($job)
+
+            $script:fakeHome.DeferredWarmReasons.Count | Should -Be 1
         }
 
         It "does not re-save the config when only the controller ORDER changed" {

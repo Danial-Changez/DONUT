@@ -586,4 +586,22 @@ Describe "AppConfig" {
             $b.Settings.commands.scan.args.catalogLocation | Should -Be 'B'
         }
     }
+
+    Context "DeepClone cycle safety" {
+        It "clones a self-referencing tree without recursing forever" {
+            # DeepClone runs on the UI thread for every job prep; without a cycle
+            # guard a Settings tree that ever contains a cycle would freeze the
+            # dispatcher in pure CPU. The clone must terminate and preserve the
+            # cycle shape within the copy.
+            $a = @{ name = 'a' }
+            $b = @{ parent = $a }
+            $a.child = $b
+
+            $clone = [AppConfig]::DeepClone($a)
+
+            $clone.name | Should -Be 'a'
+            [object]::ReferenceEquals($clone.child.parent, $clone) | Should -BeTrue
+            [object]::ReferenceEquals($clone.child, $b) | Should -BeFalse
+        }
+    }
 }

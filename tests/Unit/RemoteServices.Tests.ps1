@@ -96,7 +96,9 @@ Describe "RemoteServices" {
             $result = $service.PrepareApplyUpdates("TestHost", $updates)
 
             $result.Arguments.JobType | Should -Be "Apply"
-            $result.Arguments.Options | Should -Be $updates
+            # Snapshot contract: same content, never the caller's live reference.
+            $result.Arguments.Options['KB123456'] | Should -Be "Security Update"
+            [object]::ReferenceEquals($result.Arguments.Options, $updates) | Should -BeFalse
         }
     }
 
@@ -340,6 +342,23 @@ Describe "RemoteServices" {
             $result = $service.PrepareApplyUpdates("TestHost", @{})
 
             $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+        }
+
+        It "Should carry an Options snapshot, never the live reference" {
+            # Same rule as Settings: apply's selected-updates table is UI state, and
+            # a worker enumerating a live table the UI mutates can spin forever.
+            $probe = [MockNetworkProbe]::new()
+            $matcher = [DriverMatchingService]::new()
+            $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{})
+            $service = [RemoteUpdateService]::new($cfg, $probe, $matcher)
+            $selected = @{ 'KB123' = @{ name = 'driver' } }
+
+            $result = $service.PrepareApplyUpdates("TestHost", $selected)
+
+            $result.Arguments.Options['KB123'].name | Should -Be 'driver'
+            [object]::ReferenceEquals($result.Arguments.Options, $selected) |
+                Should -BeFalse -Because (
+                "no live hashtable may cross the runspace boundary")
         }
     }
 }

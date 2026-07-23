@@ -111,13 +111,27 @@ class AppConfig {
     }
 
     # Recursively clones a hashtable, copying nested hashtables by value so the
-    # result shares no mutable structure with the source.
+    # result shares no mutable structure with the source. Cycle-safe: a table that
+    # (directly or transitively) contains itself maps to its own clone instead of
+    # recursing forever - this runs on the UI thread for every job prep, and an
+    # unguarded recursion over a cyclic Settings tree would freeze the dispatcher.
     hidden static [hashtable] DeepClone([hashtable]$source) {
+        $seen = [System.Collections.Generic.Dictionary[object, object]]::new(
+            [System.Collections.Generic.ReferenceEqualityComparer]::Instance)
+        return [AppConfig]::DeepCloneCore($source, $seen)
+    }
+
+    hidden static [hashtable] DeepCloneCore(
+        [hashtable]$source,
+        [System.Collections.Generic.Dictionary[object, object]]$seen
+    ) {
+        if ($seen.ContainsKey($source)) { return [hashtable]$seen[$source] }
         $copy = @{}
+        $seen[$source] = $copy
         foreach ($k in @($source.Keys)) {
             $v = $source[$k]
             if ($v -is [hashtable]) {
-                $copy[$k] = [AppConfig]::DeepClone($v)
+                $copy[$k] = [AppConfig]::DeepCloneCore($v, $seen)
             }
             else {
                 $copy[$k] = $v

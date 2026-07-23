@@ -293,6 +293,11 @@ class ResolutionCoordinator {
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
+            # A finished DC warm - even a failed one - ends the startup crunch: let
+            # the deferred finder/Lens warms go.
+            if ([string]::IsNullOrWhiteSpace($job.HostName)) {
+                $this.Home.StartDeferredWarms('DC warm-up finished (failed)')
+            }
             return
         }
         foreach ($item in @($job.Result)) {
@@ -310,6 +315,8 @@ class ResolutionCoordinator {
                 else {
                     $this.Logger.LogWarning("DC warm-up completed but found no reachable controller.")
                 }
+                # The startup crunch is over either way: release the deferred warms.
+                $this.Home.StartDeferredWarms('DC warm-up completed')
             }
             elseif ($mode -eq 'Host') {
                 $hn = [string]$item.HostName

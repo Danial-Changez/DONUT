@@ -176,6 +176,29 @@ Describe "Runspace warm coverage" {
             "alive but unable to run any job")
     }
 
+    It "startup submits only the warm shells + DC warm; other pool work is deferred" {
+        # At 64dbec8 (known good) startup submitted exactly the warm shells and the
+        # DC warm. The stampede that accreted afterwards - one live-LDAP finder warm
+        # per forest, the Lens agent bring-up (20 s mutex + ScheduledTasks COM), the
+        # startup-task heal (whose own retry comment records the 'Collection was
+        # modified' module-analysis race) - all inside the same two seconds contended
+        # the process-wide module-analysis/loader locks against the warm barrier, and
+        # pool jobs froze for minutes in pure-CPU segments.
+        $homePresenter = Join-Path $PSScriptRoot '../../src/UI/Presenters/HomePresenter.psm1'
+        $rawHome = Get-Content $homePresenter -Raw
+        $rawHome | Should -Match 'StartDeferredWarms' -Because (
+            "finder/Lens warms must wait for the DC warm (or the fallback timer)")
+        $rawHome | Should -Match 'DeferredWarmTimer' -Because (
+            "a fallback must still release the warms when the DC warm never lands")
+        (Get-Content $Coordinator -Raw) | Should -Match 'StartDeferredWarms' -Because (
+            "CompleteResolve must release the deferred warms when the DC warm lands")
+        $donutApp = Join-Path $ScriptsDir 'DonutApp.ps1'
+        (Get-Content $donutApp -Raw) |
+            Should -Match '(?s)DispatcherTimer.{0,800}ApplyStartupTask' -Because (
+            "the startup-task heal must run on a deferral timer, never as a " +
+            "boot-time pool job racing the warm shells")
+    }
+
     It "WarmPool never blocks on - and never kills - a warm job that missed the deadline" {
         # Dispose/Stop on a still-running pipeline waits for it synchronously; a
         # pipeline wedged in a hooked native call never yields, and that hang shipped

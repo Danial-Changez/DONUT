@@ -63,7 +63,11 @@ class RemoteJobService {
             Arguments      = @{
                 HostName   = $hostName
                 JobType    = $jobType
-                Options    = $options
+                # Snapshot, same rule as Settings below: no live hashtable may cross
+                # the runspace boundary (a worker enumerating a table the UI mutates
+                # can spin forever on a corrupted bucket chain).
+                Options    = if ($null -ne $options) { [AppConfig]::DeepClone($options) }
+                else { @{} }
                 # Seeded by the presenter (AttachResolvedIp) before Start. A dedicated
                 # arg, never an Options key, so it can't leak onto a dcu-cli command line.
                 ResolvedIp = ''

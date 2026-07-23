@@ -113,6 +113,10 @@ class HomePresenter : AsyncJobPresenter {
     # Async state ($ActiveJobs is inherited from AsyncJobPresenter)
     [DispatcherTimer] $Timer
     [DispatcherTimer] $IdleRefreshTimer   # advances idle rows' relative times every 30s
+    # Finder/Lens warm deferral: started when the DC warm completes, or by this
+    # fallback timer - never during the startup crunch (see Initialize).
+    hidden [bool] $DeferredWarmsStarted = $false
+    hidden [DispatcherTimer] $DeferredWarmTimer
 
     # Host name -> HostViewModel (same instances live in $Vm.Machines)
     [hashtable] $Rows
@@ -266,12 +270,32 @@ class HomePresenter : AsyncJobPresenter {
         $this.Resolution.WarmPool()
 
         # The DC warm is the keystone - every resolve/inventory/scan gates on an
-        # active DC - so it is submitted FIRST. When warm jobs miss the barrier and
-        # park (holding runspaces), whatever is queued first gets the first free
-        # runspace; this used to be the finder warm, and the DC resolve starved.
+        # active DC - so it is the ONLY job submitted at startup beyond the warm
+        # shells. The finder/Lens warms are deferred until it completes (fallback
+        # timer below): at 64dbec8 startup submitted exactly warm shells + DC warm
+        # and everything worked; the stampede that accreted afterwards - one live
+        # LDAP warm per forest, the Lens agent bring-up (20 s mutex + ScheduledTasks
+        # COM), the startup-task heal - all inside the same two seconds contended
+        # the process-wide module-analysis/loader locks and WMI/Task Scheduler
+        # against the warm barrier, and pool jobs froze for minutes in segments
+        # that are pure CPU.
         $this.Resolution.StartWarm()
+        $presenter = $this
+        $this.DeferredWarmTimer = [DispatcherTimer]::new()
+        $this.DeferredWarmTimer.Interval = [TimeSpan]::FromSeconds(90)
+        $this.DeferredWarmTimer.Add_Tick({
+                $presenter.StartDeferredWarms('fallback timer')
+            }.GetNewClosure())
+        $this.DeferredWarmTimer.Start()
+    }
 
-        # Prime the finder + Lens agent in the background (non-blocking, unlike WarmPool).
+    # Primes the finder + Lens agent once the startup crunch is over - called when
+    # the DC warm completes (either way) or by the fallback timer. Single-shot.
+    [void] StartDeferredWarms([string]$reason) {
+        if ($this.DeferredWarmsStarted) { return }
+        $this.DeferredWarmsStarted = $true
+        if ($this.DeferredWarmTimer) { $this.DeferredWarmTimer.Stop() }
+        $this.Logger.LogInfo("Starting deferred finder/Lens warms ($reason).")
         $this.Finder.WarmAdSearch()
         $this.Finder.WarmLens()
     }

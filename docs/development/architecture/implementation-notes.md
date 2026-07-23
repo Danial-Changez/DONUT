@@ -70,6 +70,24 @@ model.
   `tests/Integration/StartupResolveSmoke.Tests.ps1` runs the real warm + resolve
   scripts on a real pool and asserts they always terminate (the "`Started Resolve
   job.` then silence" regression family).
+- **Startup is STAGED — only the warm shells + the DC warm touch the pool at boot:**
+  the finder/Lens warms and the startup-task heal are deferred until the DC warm
+  completes (`HomePresenter.StartDeferredWarms`, with a 90 s fallback timer;
+  `DonutApp.ps1` defers `ApplyStartupTask` 120 s). At 64dbec8 (known good) startup
+  submitted exactly warm shells + DC warm; the stampede that accreted afterwards —
+  one live-LDAP finder warm per forest, the Lens agent bring-up (20 s named mutex +
+  ScheduledTasks COM + heartbeat wait), and the startup-task heal (another
+  concurrent `Import-Module ScheduledTasks`; its own retry comment records the
+  "Collection was modified" module-analysis race the boot storm causes) — all
+  landed on the 8-runspace pool inside the same two seconds. That contends the
+  **process-wide** module-analysis/loader locks and the WMI/Task Scheduler services
+  against the warm barrier, and pool jobs freeze for minutes inside segments that
+  are pure CPU (the `+0/+0/+0` GC watchdog signature). Never add pool work to the
+  boot window; defer it behind the DC warm like these. Relatedly, **no live
+  hashtable may cross the runspace boundary** — `Settings` *and* `Options` are
+  deep-cloned on the UI thread at prep time (`RemoteServices.BuildWorkerArgs`), and
+  `AppConfig.DeepClone` is cycle-guarded so a self-referencing tree cannot spin the
+  dispatcher. `RunspaceWarmCoverage.Tests.ps1` guards the staging statically.
 - **Thread safety:** `LogService` is thread-safe via **lock-free atomic appends** —
   every writer opens `Donut.log` in Append mode with ReadWrite sharing and emits one
   line per `Write` call, which the kernel serializes. It deliberately holds **no
