@@ -68,6 +68,13 @@ try {
 
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
+
+    # Pool dispatch/completion run on .NET ThreadPool threads (floor = CPU count);
+    # concurrent warm opens starve it, so raise the floor first (implementation-notes).
+    $tpFloor = [Math]::Max(16, $throttleLimit * 2)
+    [void][System.Threading.ThreadPool]::SetMinThreads($tpFloor, $tpFloor)
+    $logger.LogInfo("ThreadPool min threads raised to $tpFloor (worker+IOCP) so pool dispatch never starves.")
+
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     # min = max pins every runspace: idle cleanup only disposes above the minimum, so
     # min=1 let warmed runspaces die and later jobs cold-load under the loader lock.

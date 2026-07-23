@@ -144,10 +144,23 @@ class AsyncJob {
             $this.Logger.LogDebug(
                 "Stall heartbeat: shell state unreadable: $($_.Exception.Message)")
         }
+        # ThreadPool free threads: near 0 with idle runspaces = starved dispatch
+        # (jobs queued because no thread is free to hand them a runspace).
+        $tp = 'unknown'
+        try {
+            $w = 0; $io = 0
+            [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
+            $tp = "$w worker / $io IOCP free"
+        }
+        catch {
+            $this.Logger.LogDebug(
+                "Stall heartbeat: threadpool state unreadable: $($_.Exception.Message)")
+        }
         $this.Logger.LogWarning(
             "[$($this.HostName)] $($this.JobType) job still running after $elapsed s " +
-            "(pool: $pool, state: $state$firstError). 0 free means it is queued behind " +
-            "busy or stuck runspaces; otherwise the worker itself has not returned.")
+            "(pool: $pool, threadpool: $tp, state: $state$firstError). Idle runspaces " +
+            "with ~0 free threads means dispatch is starved; otherwise the worker " +
+            "itself has not returned.")
         $this.NextStallLogUtc = [datetime]::UtcNow.AddSeconds($this.StallRepeatSeconds)
     }
 

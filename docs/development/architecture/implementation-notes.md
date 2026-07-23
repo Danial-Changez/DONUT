@@ -93,6 +93,23 @@ model.
   errored warm counted as warmed and the log showed nothing at all. AsyncJob's
   stall heartbeat likewise reports `state:` and `firstError=` for the wedged shell.
 
+- **ThreadPool floor (pool-dispatch starvation).** A `RunspacePool` dispatches
+  pipelines and fires their completion callbacks on **.NET ThreadPool** threads,
+  whose floor defaults to `Environment.ProcessorCount`. At startup the app opens
+  8 warm runspaces at once (each compiling the full `using module` graph), which
+  saturates that floor; further dispatch/completion callbacks then wait on the
+  ThreadPool's slow ~1-thread/second injection. The field signature is unmistakable
+  and misleading: the pool reports runspaces *idle/Available* while every warm and
+  the DC-resolve job sit at `state=Running` for minutes — they are queued and never
+  dispatched, not wedged inside a runspace (a wedged pipeline would read *Busy*).
+  The identical scripts complete in ~2 s in the headless harness, whose process has
+  nothing else touching the ThreadPool. `DonutApp.ps1` raises the floor with
+  `ThreadPool::SetMinThreads(max(16, throttle*2))` **before** the pool is created,
+  so dispatch never waits on thread injection. The stall heartbeat and the warm
+  barrier-lapse warning both log `threadpool: N worker / M IOCP free`; `~0 free with
+  idle runspaces` is the starvation fingerprint (and confirms the floor is doing its
+  job when it stays healthy).
+
 - **Startup provenance stamp.** Right after `DONUT starting up.`,
   `BuildProvenance::Stamp` logs one line with the git short SHA (+`dirty` flag) on
   clones — falling back to the launcher-written `version.txt` on prod installs —

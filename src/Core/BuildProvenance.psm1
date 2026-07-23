@@ -34,10 +34,8 @@ class BuildProvenance {
                 (Get-Command git -ErrorAction SilentlyContinue)) {
                 $sha = & git -C $root rev-parse --short HEAD 2>$null
                 if ($global:LASTEXITCODE -eq 0 -and $sha) {
-                    $dirty = ''
-                    if (@(& git -C $root status --porcelain 2>$null).Count -gt 0) {
-                        $dirty = '+dirty'
-                    }
+                    $status = & git -C $root status --porcelain 2>$null
+                    $dirty = if (@($status).Count -gt 0) { '+dirty' } else { '' }
                     return "commit $sha$dirty"
                 }
             }

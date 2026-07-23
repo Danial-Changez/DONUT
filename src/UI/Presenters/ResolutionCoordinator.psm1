@@ -165,10 +165,21 @@ class ResolutionCoordinator {
         # Only shells still holding a runspace warrant compensation - an errored warm
         # completed and released its slot, so it must not inflate the raise.
         if ($parked -gt 0) {
+            # ThreadPool free-thread count at the lapse: ~0 with idle runspaces is the
+            # starved-dispatch signature (raise the floor in DonutApp, not here).
+            $tp = 'unknown'
+            try {
+                $w = 0; $io = 0
+                [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
+                $tp = "$w worker / $io IOCP free"
+            }
+            catch {
+                $this.Logger.LogDebug("Warm lapse: threadpool state unreadable: $($_.Exception.Message)")
+            }
             $this.Logger.LogWarning(
                 "$parked of $($shells.Count) runspace warm job(s) did not finish within " +
-                "$($this.WarmTimeoutSeconds) s. They keep running in the background; each " +
-                "is harvested when it completes and holds its pool runspace until then.")
+                "$($this.WarmTimeoutSeconds) s (threadpool: $tp). They keep running in the " +
+                "background; each is harvested when it completes and holds its pool runspace until then.")
             # Self-heal: parked shells hold their runspaces, so raise the max to keep
             # jobs running; ReapWarmShells returns the slack as late warms land.
             try {
