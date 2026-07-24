@@ -58,8 +58,9 @@ class HostResolver : RemoteJobService {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $name = $hostName.Trim()
         $this.InFlight.Remove($name)
-        if ([string]::IsNullOrWhiteSpace($ip)) { return }
-        $this.IpCache[$name] = @{ Ip = $ip.Trim(); Online = $online; CheckedAt = [datetime]::UtcNow }
+        # Cache even an empty-IP (unresolvable) verdict: a missing entry reads as 'Unknown',
+        # which the inventory/run gates re-resolve in a tight loop - back off to the TTL.
+        $this.IpCache[$name] = @{ Ip = "$ip".Trim(); Online = $online; CheckedAt = [datetime]::UtcNow }
     }
 
     # Cached IP for a host, or $null when not resolved yet.

@@ -25,10 +25,15 @@ Describe "HostResolver" {
             $r.GetCachedIp("PC-2") | Should -BeNullOrEmpty
         }
 
-        It "ignores a blank IP" {
+        It "caches a blank-IP verdict as Offline so an unresolvable host backs off, not loops" {
+            # A missing cache entry reads as 'Unknown', which the inventory/run gates
+            # re-resolve every DNS-timeout - the infinite resolve loop. Cache it instead.
             $r = New-Resolver
-            $r.CacheVerdict("PC-1", "", $true)
-            $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty
+            $r.SetActiveDc("DC1")
+            $r.CacheVerdict("PC-1", "", $false)
+            $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty        # no usable IP
+            $r.IsHostOnline("PC-1") | Should -Be 'Offline'        # cached, not 'Unknown'
+            $r.NeedsResolve("PC-1") | Should -BeFalse             # backs off until the TTL
         }
 
         It "tracks tri-state reachability" {
