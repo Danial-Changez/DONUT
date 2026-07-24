@@ -42,6 +42,7 @@ package "Donut.Models" #15233B {
         UpdateApply
         Inventory
         DiskScan
+        DeleteFolders
         Resolve
     }
 
@@ -240,6 +241,11 @@ package "Donut.Models" #15233B {
     class MachineListShaper {
         +{static} Categorize(running, reachability, idleStatus): string
         +{static} StatusRank(category): int
+    }
+
+    class FolderDeletionPolicy {
+        +{static} $Protected: string[]
+        +{static} IsDeletable(path): bool
     }
 
     class MachineNameMatcher {

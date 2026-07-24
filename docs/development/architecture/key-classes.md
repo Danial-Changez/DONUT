@@ -26,6 +26,7 @@ consumes the result and exposes it to the bindings.
 | `HotkeyGesture` | Pure parse/build of hotkey gestures (`Ctrl+Alt+D` ↔ Win32 modifiers + virtual key ↔ WPF `Key`); rejects modifier-less and Shift-only combos |
 | `TourStep` / `TourSteps` | The guided tour's ordered step content (title, body, target key, placement) — pure data so the tour is unit-tested headless |
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
+| `FolderDeletionPolicy` | Pure safety rule for the storage "Delete selected" action: is a scanned folder safe to remove? Blocks the volume root, the `Users` container, and protected system dirs (Windows/Program Files/ProgramData/…). Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
 | `RecentConnection` / `RecentConnectionsStore` | Persisted "recent machines" backing the Home list (status, counts, cached inventory + disk usage) |

@@ -3,8 +3,10 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
+using module "..\ViewModels\FolderNodeViewModel.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
+using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
@@ -115,6 +117,11 @@ class InventoryPresenter {
         if ($this.FindFoldersButton) {
             $this.FindFoldersButton.Add_Click({
                     $presenter.FindBigFolders($presenter.Home.SelectedHost) }.GetNewClosure())
+        }
+        $deleteFolders = $view.FindName('btnDeleteFolders')
+        if ($deleteFolders) {
+            $deleteFolders.Add_Click({
+                    $presenter.DeleteSelectedFolders($presenter.Home.SelectedHost) }.GetNewClosure())
         }
 
         # The folders TreeView keeps its own inner ScrollViewer, which marks the wheel handled so
@@ -410,5 +417,64 @@ class InventoryPresenter {
         # Apply regardless of selection: shows now if selected, ready if selected later.
         $row = $this.Home.GetRow($hostName)
         if ($row) { $row.ApplyFolders($report) }
+    }
+
+    # Deletes the folders the operator checked in the tree (destructive - confirmed first). Only
+    # deletable rows carry a checkbox and the worker re-checks each path; re-scans on completion.
+    [void] DeleteSelectedFolders([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        $row = $this.Home.GetRow($hostName)
+        if ($null -eq $row) { return }
+        $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))
+        if ($selected.Count -eq 0) {
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check one or more folders to delete first.") }
+            return
+        }
+
+        $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
+        $list = @($selected | ForEach-Object { "$($_.Path)  ($($_.SizeText))" })
+        $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
+            "Delete folders on $hostName",
+            "Permanently delete $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? This runs as SYSTEM and cannot be undone.",
+            $list)
+        if (-not $confirmed) {
+            $this.AppendLog($hostName, "Folder deletion cancelled.")
+            return
+        }
+
+        try {
+            $this.AppendSeparator($hostName)
+            $this.AppendLog($hostName, "Deleting $($selected.Count) folder(s)...")
+            $this.ShowJobProgress($hostName, $true, 0, $true)
+            $paths = @($selected | ForEach-Object { $_.Path })
+            $prep = $this.DiskUsageService.PrepareDeleteFolders($hostName, $paths)
+            $this.Home.AttachResolvedIp($prep, $hostName)
+            $job = [AsyncJob]::new($hostName, [JobKind]::DeleteFolders, $this.Logger)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.Home.ActiveJobs.Add($job)
+        }
+        catch {
+            $this.AppendLog($hostName, "Folder deletion could not start: $_")
+            $this.Logger.LogException("Folder deletion failed to start for $hostName", $_)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start folder deletion.") }
+            $this.ShowJobProgress($hostName, $false, 0, $false)
+        }
+    }
+
+    # Delete job finished: report the count and re-scan so the tree reflects the freed space.
+    [void] CompleteDeleteFolders([AsyncJob]$job) {
+        $hostName = $job.HostName
+        $this.ShowJobProgress($hostName, $false, 0, $false)
+        if ($job.Status -eq 'Failed') {
+            $this.AppendLog($hostName, "Folder deletion failed.")
+            $this.Home.Resolution.InvalidateResolved($hostName)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Folder deletion failed. Open the log for details.") }
+            return
+        }
+        $count = 0
+        if ($job.Result -and $job.Result.Deleted) { $count = [int]$job.Result.Deleted }
+        $this.AppendLog($hostName, "Deleted $count folder(s). Re-scanning...")
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Deleted $count folder(s) on $hostName.") }
+        $this.FindBigFolders($hostName)
     }
 }

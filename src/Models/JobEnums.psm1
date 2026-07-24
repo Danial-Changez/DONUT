@@ -25,5 +25,6 @@ enum JobKind {
     UpdateApply
     Inventory
     DiskScan
+    DeleteFolders
     Resolve
 }

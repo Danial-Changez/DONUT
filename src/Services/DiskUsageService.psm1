@@ -29,6 +29,12 @@ class DiskUsageService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "DiskScan", @{ TopN = $this.Config.GetFolderScanCount() })
     }
 
+    # Worker args for the destructive "DeleteFolders" job. The operator-selected paths (already
+    # filtered to deletable) ride in Options and cross the boundary as JSON, never a command line.
+    [hashtable] PrepareDeleteFolders([string]$hostName, [string[]]$paths) {
+        return $this.BuildWorkerArgs($hostName, "DeleteFolders", @{ Paths = $paths })
+    }
+
     # Reads the compact top-N JSON the worker wrote (the heavy CSV parse already ran on
     # the pool thread), so this is cheap on the dispatcher. $null when missing/unparseable.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {

@@ -589,7 +589,8 @@ class HomePresenter : AsyncJobPresenter {
         $line = $null
         while ($job.Logs.TryDequeue([ref]$line)) { $lines.Add($line) }
 
-        if ($job.JobType -eq [JobKind]::Inventory -or $job.JobType -eq [JobKind]::DiskScan) {
+        if ($job.JobType -eq [JobKind]::Inventory -or $job.JobType -eq [JobKind]::DiskScan -or
+            $job.JobType -eq [JobKind]::DeleteFolders) {
             if ($lines.Count -gt 0) { $this.Detail.AppendLogLines($job.HostName, $lines.ToArray()) }
             return
         }
@@ -650,6 +651,10 @@ class HomePresenter : AsyncJobPresenter {
         }
         if ($job.JobType -eq [JobKind]::DiskScan) {
             $this.Detail.CompleteDiskScan($job)
+            return
+        }
+        if ($job.JobType -eq [JobKind]::DeleteFolders) {
+            $this.Detail.CompleteDeleteFolders($job)
             return
         }
 

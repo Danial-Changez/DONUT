@@ -35,6 +35,23 @@ WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there abo
 licensing); the scan deploys it to the target, parses the CSV export, and cleans up.
 :::
 
+## Deleting folders
+
+Each folder row in the tree has a checkbox. Tick the ones you want to reclaim, then
+**Delete selected** in the card header. DONUT shows a confirmation dialog listing the
+folders and their combined size before anything is removed — the delete runs as SYSTEM
+on the target and **cannot be undone**. When it finishes, the storage scan re-runs so the
+tree reflects the freed space.
+
+:::caution
+Protected system locations are never deletable — they don't get a checkbox at all: the
+volume root, `Windows` (and everything under it, including `Installer`), `Program Files`
+/ `Program Files (x86)`, `ProgramData`, `System Volume Information`, `$Recycle.Bin`,
+`Recovery`, and the `Users` container itself (individual profiles/subfolders under it are
+deletable). The rule is enforced twice — in the UI and again inside the remote script —
+so a folder that shouldn't be removed can't be, even by mistake.
+:::
+
 ## Under the hood
 
 ![Inventory and storage sequence diagram](/diagrams/inventory_sequence_diagram.svg)

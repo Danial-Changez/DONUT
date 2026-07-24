@@ -735,8 +735,20 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
-                         Margin="0,0,0,8" />
+              <!-- Header: label + a destructive "Delete selected" action (shown once folders
+                   are populated). Red is earned here - it's a genuinely destructive action. -->
+              <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Delete selected"
+                        Style="{DynamicResource ButtonDestructive}" FontSize="11" Height="26" Padding="10,0"
+                        Visibility="{Binding SelectedMachine.HasFolders, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Permanently delete the checked folders on this machine" />
+              </Grid>
               <TextBlock Grid.Row="1"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -765,10 +777,17 @@
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                       <Grid Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="24" />
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" Text="{Binding Label}" ToolTip="{Binding Path}"
+                        <!-- Delete checkbox: only on deletable folders (protected system dirs
+                             show none), two-way bound so the presenter reads the selection. -->
+                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
+                                  ToolTip="Select this folder for deletion" />
+                        <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
                                  FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
                           <TextBox.Style>
                             <!-- Selectable (mirrors SelectableText), with root rows brighter.
@@ -797,7 +816,7 @@
                             </Style>
                           </TextBox.Style>
                         </TextBox>
-                        <TextBox Grid.Column="1" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
+                        <TextBox Grid.Column="2" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
                                  FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                                  Foreground="{DynamicResource BodyTextSecondary}"
                                  Margin="10,0,0,0" VerticalAlignment="Center" />

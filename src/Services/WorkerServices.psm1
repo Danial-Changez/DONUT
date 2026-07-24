@@ -5,6 +5,7 @@ using module ".\RemoteServices.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DiskUsage.psm1"
+using module "..\Models\FolderDeletionPolicy.psm1"
 using module "..\Models\RemoteError.psm1"
 using module "..\Models\DcuLog.psm1"
 using module "..\Models\DcuProgress.psm1"
@@ -130,6 +131,9 @@ class ExecutionService {
         }
         elseif ($JobType -eq 'DiskScan') {
             return $service.RunDiskScanPhase($device, $Options)
+        }
+        elseif ($JobType -eq 'DeleteFolders') {
+            return $service.RunDeleteFoldersPhase($device, $Options)
         }
         elseif ($JobType -eq 'Resolve') {
             return $service.RunResolvePhase($device, $Options)
@@ -605,6 +609,47 @@ class ExecutionService {
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
         $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
+    }
+
+    # Deletes the operator-selected folders on the target as SYSTEM (psexec); the presenter
+    # re-scans on completion. Each path is re-validated here and again in the remote script.
+    [hashtable] RunDeleteFoldersPhase([DeviceContext] $device, [hashtable] $options) {
+        $paths = @()
+        if ($null -ne $options -and $options.Paths) { $paths = @($options.Paths) }
+        $paths = @($paths | Where-Object { [FolderDeletionPolicy]::IsDeletable($_) })
+        if ($paths.Count -eq 0) {
+            $this.Logger.LogWarning("[$($device.HostName)] DeleteFolders: no deletable paths after the safety filter.")
+            return @{ Deleted = 0 }
+        }
+        $this.Logger.LogInfo("[$($device.HostName)] Deleting $($paths.Count) folder(s).")
+
+        $ip = $this.ResolvedIpFor($device.HostName)
+        if (-not $this.Probe.IsSmbAvailable($ip)) {
+            $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot delete folders.")
+            throw [RpcUnavailableException]::new($ip)
+        }
+        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildDeleteCommand($paths), 'DonutDelete', 15)
+        return @{ Deleted = $paths.Count }
+    }
+
+    # The remote delete script: each path is a single-quoted literal (quotes doubled to block
+    # injection), re-checked against the same safety rules, then removed with -LiteralPath -Recurse.
+    static [string] BuildDeleteCommand([string[]]$paths) {
+        $literals = @($paths | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" })
+        $arr = $literals -join ', '
+        return @"
+`$ErrorActionPreference = 'Continue'
+`$targets = @($arr)
+`$blocked = @('windows','program files','program files (x86)','programdata','system volume information','`$recycle.bin','recovery','perflogs','`$winreagent','boot','msocache','`$sysreset')
+foreach (`$t in `$targets) {
+    `$p = "`$t".Trim().TrimEnd('\')
+    if (`$p -notmatch '^[A-Za-z]:\\.+') { continue }
+    `$rest = `$p.Substring(3)
+    if (`$rest.ToLowerInvariant() -eq 'users') { continue }
+    if (`$blocked -contains `$rest.Split('\')[0].ToLowerInvariant()) { continue }
+    if (Test-Path -LiteralPath `$p) { Remove-Item -LiteralPath `$p -Recurse -Force -ErrorAction SilentlyContinue }
+}
+"@
     }
 
     # Parses the (large) WizTree CSV on the pool thread and writes a compact top-N
