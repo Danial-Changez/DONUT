@@ -63,13 +63,13 @@ class DialogPresenter {
         }
     }
 
-    [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems) {
+    [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems) {
         return $this.ShowConfirmation($title, $message, $listItems, 'Confirm', $false)
     }
 
     # Destructive-aware confirmation: $primaryText names the action (per the modal pattern -
     # not a generic "Confirm"), and $isDestructive paints the primary button red.
-    [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems,
+    [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems,
         [string]$primaryText, [bool]$isDestructive) {
         $this.Initialize()
         $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
@@ -78,7 +78,7 @@ class DialogPresenter {
         return $this.ShowModal()
     }
 
-    [void] ShowAlert([string]$title, [string]$message, [string[]]$listItems) {
+    [void] ShowAlert([string]$title, [string]$message, [object[]]$listItems) {
         $this.Initialize()
         # No secondary button: the primary just acknowledges (result is ignored).
         $this.Window.DataContext = $this.NewVm($title, $message, $listItems, 'OK', '')
@@ -101,7 +101,7 @@ class DialogPresenter {
     hidden [DialogViewModel] NewVm(
         [string]$title,
         [string]$message,
-        [string[]]$listItems,
+        [object[]]$listItems,
         [string]$primaryText,
         [string]$secondaryText
     ) {
@@ -110,7 +110,15 @@ class DialogPresenter {
         $vm.HasTitle = -not [string]::IsNullOrEmpty($title)
         $vm.Message = $message
         $vm.HasMessage = -not [string]::IsNullOrEmpty($message)
-        $vm.ListItems = @($listItems | Where-Object { $null -ne $_ })
+        # Normalize each item to { Left; Right }: a plain string is left-only; an object with
+        # a Right (e.g. a size) renders right-aligned. Lets the view align values in a column.
+        $vm.ListItems = @(
+            foreach ($it in $listItems) {
+                if ($null -eq $it) { continue }
+                if ($it -is [string]) { [pscustomobject]@{ Left = $it; Right = '' } }
+                else { [pscustomobject]@{ Left = "$($it.Left)"; Right = "$($it.Right)" } }
+            }
+        )
         $vm.HasList = ($vm.ListItems.Count -gt 0)
 
         $self = $this

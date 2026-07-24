@@ -5,9 +5,16 @@
         Width="440"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
-        AllowsTransparency="True"
-        ResizeMode="NoResize"
-        Background="{x:Null}">
+        Background="{DynamicResource PrimaryBackground}"
+        AllowsTransparency="False"
+        ResizeMode="NoResize">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="0"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <!-- Window-scoped ScrollViewer template: the stock template fills the
@@ -63,7 +70,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border CornerRadius="10"
+    <Border CornerRadius="0"
             BorderThickness="1">
         <Border.Background>
             <LinearGradientBrush StartPoint="0,0"
@@ -105,7 +112,7 @@
                 <Button x:Name="btnClose"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
                         Style="{DynamicResource controlButton}"
-                        Tag="{DynamicResource AccentPink}">
+                        Tag="{DynamicResource Destructive}">
                     <Path Style="{DynamicResource controlButtonIcon}"
                           Data="{DynamicResource xMark}" />
                 </Button>
@@ -143,9 +150,21 @@
                             <Border Background="{DynamicResource SurfaceMuted}"
                                     BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
                                     CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
-                                <TextBlock Text="{Binding}" Foreground="{DynamicResource BodyTextPrimary}"
-                                           FontFamily="{DynamicResource FontMono}" FontSize="12"
-                                           TextWrapping="Wrap" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Left}"
+                                               Foreground="{DynamicResource BodyTextPrimary}"
+                                               FontFamily="{DynamicResource FontMono}" FontSize="12"
+                                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Right}"
+                                               Foreground="{DynamicResource BodyTextSecondary}"
+                                               FontFamily="{DynamicResource FontMono}" FontSize="12"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               Margin="12,0,0,0" />
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

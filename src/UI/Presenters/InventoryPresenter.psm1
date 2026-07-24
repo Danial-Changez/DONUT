@@ -432,7 +432,7 @@ class InventoryPresenter {
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
-        $list = @($selected | ForEach-Object { "$($_.Path)  ($($_.SizeText))" })
+        $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear folder contents on $hostName",
             "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? The folders are kept. This runs as SYSTEM and cannot be undone.",
