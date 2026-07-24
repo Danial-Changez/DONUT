@@ -750,4 +750,21 @@ Describe "WorkerServices" {
             [ExecutionService]::IsUsableInventory(@{ totalSpaceBytes = 512000000000 }) | Should -BeTrue
         }
     }
+
+    Context "BuildDeleteCommand" {
+        It "clears contents (not the folder) and injection-proofs paths" {
+            $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp\a", "C:\o'brien"))
+            $s | Should -Match "Get-ChildItem -LiteralPath"       # clears contents...
+            $s | Should -Match "Remove-Item -Recurse -Force"
+            $s | Should -Not -Match "Remove-Item -LiteralPath"    # ...never removes the folder itself
+            $s | Should -Match "o''brien"                         # embedded single quote doubled
+        }
+        It "carries the safety guards: logged-on profiles, blocklist, allowlist" {
+            $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp"))
+            $s | Should -Match "Win32_UserProfile"                # skip currently logged-on profiles
+            $s | Should -Match "Loaded"
+            $s | Should -Match "ccmcache"                         # allowlist
+            $s | Should -Match "system volume information"        # blocklist
+        }
+    }
 }

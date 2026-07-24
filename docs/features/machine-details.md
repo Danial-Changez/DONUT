@@ -52,6 +52,11 @@ volume root, `Windows` (and everything under it, including `Installer`), `Progra
 clearable). The rule is enforced twice — in the UI and again inside the remote script —
 so a folder that shouldn't be touched can't be, even by mistake.
 
+The remote script additionally refuses to touch **any profile that is currently logged on**
+(the console user *and* any RDP sessions — every profile with a loaded registry hive), so an
+active user's data is never cleared even if their profile folder was selected. Stale (logged-off)
+profiles can still be cleared.
+
 A short allowlist of well-known reclaimable caches *is* clearable even though it lives under
 `Windows`: `ccmcache` (SCCM), `Temp`, `SoftwareDistribution\Download` (Windows Update),
 `Prefetch`, `Logs`, and `Downloaded Program Files`. The owning service recreates them as

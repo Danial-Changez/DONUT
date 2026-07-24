@@ -642,9 +642,19 @@ class ExecutionService {
 `$targets = @($arr)
 `$allowed = @('windows\ccmcache','windows\temp','windows\softwaredistribution\download','windows\prefetch','windows\logs','windows\downloaded program files')
 `$blocked = @('windows','program files','program files (x86)','programdata','system volume information','`$recycle.bin','recovery','perflogs','`$winreagent','boot','msocache','`$sysreset')
+`$profiles = @()
+try {
+    `$profiles = @(Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue |
+        Where-Object { `$_.Loaded -and -not `$_.Special -and `$_.LocalPath } |
+        ForEach-Object { `$_.LocalPath.ToLowerInvariant().TrimEnd('\') })
+} catch { }
 foreach (`$t in `$targets) {
     `$p = "`$t".Trim().TrimEnd('\')
     if (`$p -notmatch '^[A-Za-z]:\\.+') { continue }
+    `$pl = `$p.ToLowerInvariant()
+    `$inUse = `$false
+    foreach (`$u in `$profiles) { if (`$pl -eq `$u -or `$pl.StartsWith("`$u\")) { `$inUse = `$true; break } }
+    if (`$inUse) { continue }
     `$rest = `$p.Substring(3).ToLowerInvariant()
     `$ok = `$false
     foreach (`$c in `$allowed) { if (`$rest -eq `$c -or `$rest.StartsWith("`$c\")) { `$ok = `$true; break } }
