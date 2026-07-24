@@ -1,8 +1,8 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Dialog"
-        Height="300"
-        Width="450"
+        SizeToContent="Height"
+        Width="440"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -87,97 +87,88 @@
         </Border.BorderBrush>
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36" />
-                <!-- Control Bar -->
                 <RowDefinition Height="Auto" />
-                <!-- Header -->
+                <!-- Close bar (drag region + X) -->
                 <RowDefinition Height="Auto" />
-                <!-- Subheader -->
-                <RowDefinition Height="*" />
-                <!-- List/Content -->
+                <!-- Title -->
+                <RowDefinition Height="Auto" />
+                <!-- Message -->
+                <RowDefinition Height="Auto" />
+                <!-- List -->
                 <RowDefinition Height="Auto" />
                 <!-- Buttons -->
             </Grid.RowDefinitions>
-            
-            <!-- Control Bar -->
-            <StackPanel x:Name="panelControlBar"
-                        Grid.Row="0"
-                        Orientation="Horizontal"
-                        FlowDirection="RightToLeft"
-                        Background="Transparent"
-                        Margin="0,0,5,0">
+
+            <!-- Close bar: the whole row is the drag region; X sits top-right (no minimize on
+                 a modal). Esc also closes (wired in DialogPresenter). -->
+            <Grid x:Name="panelControlBar" Grid.Row="0" Background="Transparent" Height="36">
                 <Button x:Name="btnClose"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
                         Style="{DynamicResource controlButton}"
                         Tag="{DynamicResource AccentPink}">
                     <Path Style="{DynamicResource controlButtonIcon}"
                           Data="{DynamicResource xMark}" />
                 </Button>
-                <Button x:Name="btnMinimize"
-                        Style="{DynamicResource controlButton}"
-                        Tag="{DynamicResource AccentBlueLight}">
-                    <Path Style="{DynamicResource controlButtonIcon}"
-                          Width="13"
-                          Data="{DynamicResource Minimize}" />
-                </Button>
-            </StackPanel>
-            
-            <!-- Header -->
+            </Grid>
+
+            <!-- Title (left-aligned) -->
             <TextBlock Grid.Row="1"
                        Text="{Binding Title}"
                        Visibility="{Binding HasTitle, Converter={StaticResource BoolToVis}}"
                        Foreground="{DynamicResource TitleTextPrimary}"
-                       FontSize="24"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="18"
                        FontWeight="Bold"
-                       HorizontalAlignment="Center"
-                       Margin="0,8,0,0" />
+                       Margin="24,2,24,0"
+                       TextWrapping="Wrap" />
 
-            <!-- Subheader -->
+            <!-- Message (left-aligned, muted) -->
             <TextBlock Grid.Row="2"
                        Text="{Binding Message}"
                        Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
-                       Foreground="{DynamicResource TitleTextPrimary}"
-                       FontSize="16"
-                       FontWeight="Normal"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       Margin="8,8,8,8"
+                       Foreground="{DynamicResource BodyTextSecondary}"
+                       FontFamily="{DynamicResource FontSans}"
+                       FontSize="13"
+                       Margin="24,10,24,0"
                        TextWrapping="Wrap" />
 
-            <!-- List Content -->
-            <ListBox Grid.Row="3"
-                     x:Name="lstContent"
-                     ItemsSource="{Binding ListItems}"
-                     Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
-                     FontSize="16"
-                     Foreground="{DynamicResource TitleTextPrimary}"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     HorizontalContentAlignment="Center"
-                     Padding="24,0"
-                     MaxHeight="120"
-                     Margin="0,0,0,2"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            <!-- List: each item a subtle muted card (mono, for paths/versions) -->
+            <ScrollViewer Grid.Row="3"
+                          Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
+                          MaxHeight="168" VerticalScrollBarVisibility="Auto"
+                          Margin="24,12,24,0">
+                <ItemsControl x:Name="lstContent" ItemsSource="{Binding ListItems}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource SurfaceMuted}"
+                                    BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+                                    CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
+                                <TextBlock Text="{Binding}" Foreground="{DynamicResource BodyTextPrimary}"
+                                           FontFamily="{DynamicResource FontMono}" FontSize="12"
+                                           TextWrapping="Wrap" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
-            <!-- Buttons -->
+            <!-- Buttons: bottom-right, secondary then primary (primary rightmost). The primary's
+                 style (ButtonPrimary vs ButtonDestructive) is set by DialogPresenter. -->
             <StackPanel Grid.Row="4"
                         Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        Margin="0,0,0,15">
-                <Button x:Name="btnPrimary"
-                        Content="{Binding PrimaryText}"
-                        Command="{Binding PrimaryCommand}"
-                        Width="120"
-                        Height="40"
-                        Margin="0,8,8,0"
-                        Style="{DynamicResource ButtonTintPrimary}" />
+                        HorizontalAlignment="Right"
+                        Margin="24,22,24,20">
                 <Button x:Name="btnSecondary"
                         Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"
                         Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVis}}"
-                        Width="120"
-                        Height="40"
-                        Margin="8,8,0,0"
-                        Style="{DynamicResource ButtonOutline}" />
+                        MinWidth="96" Height="36" Margin="0,0,8,0"
+                        Style="{DynamicResource ButtonSecondary}" />
+                <Button x:Name="btnPrimary"
+                        Content="{Binding PrimaryText}"
+                        Command="{Binding PrimaryCommand}"
+                        MinWidth="96" Height="36"
+                        Style="{DynamicResource ButtonPrimary}" />
             </StackPanel>
         </Grid>
     </Border>

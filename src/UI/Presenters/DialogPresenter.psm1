@@ -44,10 +44,11 @@ class DialogPresenter {
             $btnClose = $this.Window.FindName("btnClose")
             if ($btnClose) { $btnClose.Add_Click({ $self.Window.Close() }.GetNewClosure()) }
 
-            $btnMinimize = $this.Window.FindName("btnMinimize")
-            if ($btnMinimize) {
-                $btnMinimize.Add_Click({ $self.Window.WindowState = 'Minimized' }.GetNewClosure())
-            }
+            # Esc cancels the modal (result stays $false), matching the X button.
+            $this.Window.Add_PreviewKeyDown({
+                    param($s, $e)
+                    if ($e.Key -eq 'Escape') { $self.Result = $false; $self.Window.Close() }
+                }.GetNewClosure())
 
             $panelControlBar = $this.Window.FindName("panelControlBar")
             if ($panelControlBar) {
@@ -63,8 +64,17 @@ class DialogPresenter {
     }
 
     [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems) {
+        return $this.ShowConfirmation($title, $message, $listItems, 'Confirm', $false)
+    }
+
+    # Destructive-aware confirmation: $primaryText names the action (per the modal pattern -
+    # not a generic "Confirm"), and $isDestructive paints the primary button red.
+    [bool] ShowConfirmation([string]$title, [string]$message, [string[]]$listItems,
+        [string]$primaryText, [bool]$isDestructive) {
         $this.Initialize()
-        $this.Window.DataContext = $this.NewVm($title, $message, $listItems, 'Confirm', 'Cancel')
+        $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
+        $vm.IsDestructive = $isDestructive
+        $this.Window.DataContext = $vm
         return $this.ShowModal()
     }
 
@@ -121,10 +131,22 @@ class DialogPresenter {
     # reentrancy guard, and returns the button verdict.
     hidden [bool] ShowModal() {
         $this.Result = $false
+        $this.ApplyPrimaryStyle()
         $this.PrepareToShow()
         $this.IsShowing = $true
         try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
         return $this.Result
+    }
+
+    # MVP (no MVVM style-swapping trigger): the presenter picks the primary button's style from
+    # the VM's IsDestructive - red for irreversible actions, the accent otherwise.
+    hidden [void] ApplyPrimaryStyle() {
+        $btn = $this.Window.FindName('btnPrimary')
+        if ($null -eq $btn) { return }
+        $vm = $this.Window.DataContext
+        $key = if ($vm -and $vm.IsDestructive) { 'ButtonDestructive' } else { 'ButtonPrimary' }
+        $style = $this.Window.TryFindResource($key)
+        if ($style) { $btn.Style = $style }
     }
 
     # Parents the dialog to the main window (or makes it topmost when there isn't one yet)

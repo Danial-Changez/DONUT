@@ -20,6 +20,7 @@ class DialogViewModel : ObservableObject {
     [bool]   $HasList = $false
     [string] $PrimaryText = 'OK'
     [object] $PrimaryCommand      # RelayCommand: Result = true, close
+    [bool]   $IsDestructive = $false   # presenter styles the primary button red when true
     [string] $SecondaryText = ''
     [bool]   $HasSecondary = $false
     [object] $SecondaryCommand    # RelayCommand: Result = false, close

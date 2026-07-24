@@ -436,7 +436,7 @@ class InventoryPresenter {
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear folder contents on $hostName",
             "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? The folders are kept. This runs as SYSTEM and cannot be undone.",
-            $list)
+            $list, 'Clear', $true)
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
             return
