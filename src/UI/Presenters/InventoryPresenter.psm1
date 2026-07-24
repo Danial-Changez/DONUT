@@ -51,16 +51,6 @@ class InventoryPresenter {
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
 
-    # Overview tile controls (mirror the selected remote machine)
-    [TextBox] $OvModel
-    [TextBox] $OvModelSub
-    [TextBox] $OvBattery
-    [TextBox] $OvBatterySub
-    [TextBox] $OvDisk
-    [TextBox] $OvDiskSub
-    [TextBox] $OvUpdates
-    [TextBox] $OvUpdatesSub
-
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox
     hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder tri-state cascade
@@ -95,15 +85,6 @@ class InventoryPresenter {
         $this.DetailContent = $view.FindName('DetailContent')
         $this.DetailHostText = $view.FindName('txtDetailHost')
         $this.DetailProbed = $view.FindName('txtDetailProbed')
-
-        $this.OvModel = $view.FindName('txtOvModel')
-        $this.OvModelSub = $view.FindName('txtOvModelSub')
-        $this.OvBattery = $view.FindName('txtOvBattery')
-        $this.OvBatterySub = $view.FindName('txtOvBatterySub')
-        $this.OvDisk = $view.FindName('txtOvDisk')
-        $this.OvDiskSub = $view.FindName('txtOvDiskSub')
-        $this.OvUpdates = $view.FindName('txtOvUpdates')
-        $this.OvUpdatesSub = $view.FindName('txtOvUpdatesSub')
 
         $this.DetailRefreshButton = $view.FindName('btnDetailRefresh')
         $this.DetailLog = $view.FindName('txtDetailLog')

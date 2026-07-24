@@ -275,8 +275,9 @@
       <StackPanel>
         <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}"
                    />
-        <TextBox x:Name="txtOvModel" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
-                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBlock x:Name="txtOvModel" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
         <TextBox x:Name="txtOvModelSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
@@ -287,8 +288,9 @@
       <StackPanel>
         <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}"
                    />
-        <TextBox x:Name="txtOvBattery" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
-                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBlock x:Name="txtOvBattery" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
         <TextBox x:Name="txtOvBatterySub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
@@ -299,8 +301,9 @@
       <StackPanel>
         <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}"
                    />
-        <TextBox x:Name="txtOvDisk" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
-                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBlock x:Name="txtOvDisk" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
         <TextBox x:Name="txtOvDiskSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
@@ -311,8 +314,9 @@
       <StackPanel>
         <TextBlock Text="UPDATES" Style="{DynamicResource MicroLabel}"
                    />
-        <TextBox x:Name="txtOvUpdates" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold"
-                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBlock x:Name="txtOvUpdates" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvUpdates}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
         <TextBox x:Name="txtOvUpdatesSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
