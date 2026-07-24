@@ -73,7 +73,7 @@ class DialogPresenter {
         [string]$primaryText, [bool]$isDestructive) {
         $this.Initialize()
         $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
-        if ($isDestructive) { $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonDestructive') }
+        if ($isDestructive) { $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonTintDestructive') }
         $this.Window.DataContext = $vm
         return $this.ShowModal()
     }
@@ -123,8 +123,9 @@ class DialogPresenter {
 
         $self = $this
         $vm.PrimaryText = $primaryText
-        # The view binds Button.Style to this (MVVM); the destructive overload overrides it.
-        $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonPrimary')
+        # The view binds Button.Style to this (MVVM); the destructive overload overrides it. Tint
+        # variants match the app's arcane action buttons (Run/Add), not the heavier solid fills.
+        $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonTintPrimary')
         $prim = { param($p) $self.Result = $true; $self.Window.Close() }.GetNewClosure()
         $vm.PrimaryCommand = [RelayCommand]::new([System.Action[object]]$prim)
 

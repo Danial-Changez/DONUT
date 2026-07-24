@@ -750,7 +750,7 @@
                 <TextBlock Grid.Column="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
                 <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Clear selected"
-                        Style="{DynamicResource ButtonDestructive}" FontSize="11" Height="26" Padding="10,0"
+                        Style="{DynamicResource ButtonTintDestructive}" FontSize="11" Height="26" Padding="10,0"
                         Visibility="{Binding SelectedMachine.HasFolders, Converter={StaticResource BoolToVis}}"
                         ToolTip="Permanently clear the contents of the checked folders (the folders are kept)" />
               </Grid>
