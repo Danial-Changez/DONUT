@@ -777,14 +777,14 @@
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                       <Grid Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="24" />
+                          <ColumnDefinition Width="22" />
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- Clear checkbox: only on clearable folders (protected system dirs
-                             show none), two-way bound so the presenter reads the selection. -->
-                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                  VerticalAlignment="Center"
+                        <!-- Clear checkbox (themed ModernCheckBox - violet when ticked): only on
+                             clearable folders; two-way bound so the presenter reads the selection. -->
+                        <CheckBox Grid.Column="0" Style="{DynamicResource ModernCheckBox}" Margin="0,0,6,0"
+                                  IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                                   Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
                                   ToolTip="Select to clear this folder's contents" />
                         <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
