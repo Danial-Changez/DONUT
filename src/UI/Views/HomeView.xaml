@@ -530,25 +530,37 @@
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
-          <!-- Header: host + actions -->
-          <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
-                       Foreground="{DynamicResource TitleTextPrimary}" />
-              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
-                       Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+          <!-- Header: host + actions, with a slim live-progress banner below it. -->
+          <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
+                         Foreground="{DynamicResource TitleTextPrimary}" />
+                <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+              </StackPanel>
+              <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
+                      Style="{DynamicResource ButtonTintScan}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
+              <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
+                      Style="{DynamicResource ButtonTintInfo}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
+            </Grid>
+            <!-- Live-progress banner: dcu milestone + ThinProgressBar, shown for ANY
+                 running job (scan/apply/inventory), collapsed when idle. -->
+            <StackPanel Margin="0,10,0,0"
+                        Visibility="{Binding SelectedMachine.ProgressVisible, Converter={StaticResource BoolToVis}}">
+              <TextBlock Text="{Binding SelectedMachine.StepText}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+                         Foreground="{DynamicResource BodyTextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+              <ProgressBar Style="{DynamicResource ThinProgressBar}" Minimum="0" Maximum="100"
+                           Value="{Binding SelectedMachine.Percent}" IsIndeterminate="{Binding SelectedMachine.ProgressIndeterminate}"
+                           Foreground="{Binding SelectedMachine.ProgressBrush}" />
             </StackPanel>
-            <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
-                    Style="{DynamicResource ButtonTintScan}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
-            <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
-                    Style="{DynamicResource ButtonTintInfo}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
-          </Grid>
+          </StackPanel>
 
           <!-- Row 1: available updates (left) + largest folders (right), side by side so a
                machine's pending updates and disk usage are visible together. Each card is
@@ -572,17 +584,7 @@
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Text="AVAILABLE UPDATES"
                          Style="{DynamicResource MicroLabel}" Margin="0,0,0,8" />
-              <!-- Live scan/apply progress, shown right where the result will land while a
-                   job runs (Steps Left pattern): the dcu milestone + the ThinProgressBar. -->
-              <StackPanel Grid.Row="1" VerticalAlignment="Top"
-                          Visibility="{Binding SelectedMachine.ProgressVisible, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="{Binding SelectedMachine.StepText}" FontFamily="{DynamicResource FontSans}" FontSize="12"
-                           Foreground="{DynamicResource BodyTextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                <ProgressBar Style="{DynamicResource ThinProgressBar}" Minimum="0" Maximum="100"
-                             Value="{Binding SelectedMachine.Percent}" IsIndeterminate="{Binding SelectedMachine.ProgressIndeterminate}"
-                             Foreground="{Binding SelectedMachine.ProgressBrush}" />
-              </StackPanel>
-              <!-- Hint until an update scan has populated the list (hidden while scanning). -->
+              <!-- Hint until an update scan has populated the list. -->
               <TextBlock Grid.Row="1" VerticalAlignment="Top"
                          Text="Run a scan on this machine to list its available updates."
                          Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -592,9 +594,6 @@
                     <Setter Property="Visibility" Value="Visible" />
                     <Style.Triggers>
                       <DataTrigger Binding="{Binding SelectedMachine.HasUpdates}" Value="True">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                      </DataTrigger>
-                      <DataTrigger Binding="{Binding SelectedMachine.ProgressVisible}" Value="True">
                         <Setter Property="Visibility" Value="Collapsed" />
                       </DataTrigger>
                     </Style.Triggers>

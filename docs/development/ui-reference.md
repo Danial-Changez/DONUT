@@ -22,7 +22,7 @@ neutral + violet-600 palette and shadcn button variants defined in `src/UI/Style
 | Machine-list status filter | **Module Tabs** | The segmented status chips act as the list module's header, with the action (Clear) on the right. |
 | Empty machine list | **Blank Slate** | The "No machines yet" guidance with numbered first steps. |
 | First-run onboarding | **Guided Tour** (one step at a time, spotlight + callout, always escapable) | Deliberately **not** all-at-once **Coachmarks**, which ui-patterns.com calls "borderline an anti-pattern" for overloading/obstructing. |
-| Scan / apply progress | **Steps Left / Completeness Meter** | The live dcu progress bar lives in the detail pane's *Available Updates* card — where the result lands — not on the machine list card (which already reads busy from its "Scanning…" chip). One place per the pattern's "remove competing distractions"; the bar → updates-list handoff gives a visible end to aim for. |
+| Scan / apply progress | **Steps Left / Completeness Meter** | A slim live-progress banner (dcu milestone + `ThinProgressBar`) sits under the detail-pane host header, shown for any running job and collapsed when idle — *not* on the machine-list card (which already reads busy from its "Scanning…" chip). Placed at the header rather than inside the Available Updates card because that card only populates on an apply-updates scan (`UpdateScan`), not a plain scan, so a header banner works for every job type. |
 
 ## Working notes distilled from the patterns
 
