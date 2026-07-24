@@ -879,6 +879,10 @@ exit `$LASTEXITCODE
 
         # Headless launch; progress is tailed from the outputLog (see StartPsExecHidden).
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
+        # Clear the PREVIOUS run's log over the share before tailing: psexec takes seconds
+        # to connect, so the tail would otherwise replay the last scan (bar jumps to 5/5).
+        try { Remove-Item -LiteralPath $remoteLogUnc -Force -ErrorAction Stop }
+        catch { $this.Logger.LogDebug("[$ip] Could not pre-clear $remoteLogUnc (may not exist yet): $($_.Exception.Message)") }
         $p = [ExecutionService]::StartPsExecHidden($psexecArgs)
         # $tickState is a hashtable holder: GetNewClosure copies locals by value, so
         # only a reference type lets the consumed-chars offset survive across ticks.

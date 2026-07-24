@@ -750,6 +750,8 @@ class HomePresenter : AsyncJobPresenter {
             $rc = $this.GetRecord($job.HostName)
             if ($rc) { $row.ApplyIdle($rc) }
         }
+        # The row is idle now; hide the terminal's progress bar for this host.
+        $this.Detail.ShowJobProgress($job.HostName, $false, 0, $false)
     }
 
     [RecentConnection] GetRecord([string]$hostName) {
@@ -766,6 +768,10 @@ class HomePresenter : AsyncJobPresenter {
         }
         $rebootRequired = $this.ManualRebootQueue.Contains($job.HostName)
         $row.ApplyStatus([FleetCardStatus]::FromJob($job.JobType, $job.Status, $rebootRequired))
+        # Drive the terminal's progress bar from the row's live state: a running job
+        # shows it (percent or indeterminate); a finished one hides it.
+        $this.Detail.ShowJobProgress($job.HostName, ($job.Status -eq 'Running'),
+            $row.Percent, $row.ProgressIndeterminate)
     }
 
     # Aborts a pending apply ($true) when the identity check confirmed the IP answers

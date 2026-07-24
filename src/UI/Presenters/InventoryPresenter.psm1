@@ -241,6 +241,25 @@ class InventoryPresenter {
         $this.LogBuffers.Remove($hostName)
     }
 
+    # The one driver of the terminal's progress bar for the selected host - ANY job
+    # (inventory, disk scan, scan, apply): a percentage when known, else indeterminate.
+    [void] ShowJobProgress([string]$hostName, [bool]$running, [double]$percent, [bool]$indeterminate) {
+        if ($hostName -ne $this.Home.SelectedHost -or -not $this.DetailProgress) { return }
+        if (-not $running) {
+            $this.DetailProgress.IsIndeterminate = $false
+            $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
+            return
+        }
+        if ($percent -gt 0 -and -not $indeterminate) {
+            $this.DetailProgress.IsIndeterminate = $false
+            $this.DetailProgress.Value = $percent
+        }
+        else {
+            $this.DetailProgress.IsIndeterminate = $true
+        }
+        $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
+    }
+
     # Runs the inventory probe for an online host (single-flight; non-forced calls skip
     # hosts with fresh cached inventory). HomePresenter's gate confirms reachability.
     [void] RunInventoryProbe([string]$hostName, [bool]$force) {
@@ -251,10 +270,7 @@ class InventoryPresenter {
         if (-not $force -and -not $this.InventoryIsStale($hostName)) { return }
         try {
             $this.AppendLog($hostName, "Gathering inventory...")
-            if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-                $this.DetailProgress.IsIndeterminate = $true
-                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
-            }
+            $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.InventoryService.PrepareInventory($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
             $job = [AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger)
@@ -263,9 +279,7 @@ class InventoryPresenter {
         }
         catch {
             $this.AppendLog($hostName, "Inventory probe could not start: $_")
-            if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
-            }
+            $this.ShowJobProgress($hostName, $false, 0, $false)
         }
     }
 
@@ -290,10 +304,7 @@ class InventoryPresenter {
         # The card may have been cleared mid-probe; persisting now would re-create a
         # ghost recents entry - drop the result instead.
         if (-not $this.Home.Rows.ContainsKey($hostName)) { return }
-        if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-            $this.DetailProgress.IsIndeterminate = $false
-            $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
-        }
+        $this.ShowJobProgress($hostName, $false, 0, $false)
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Inventory probe failed.")
@@ -330,10 +341,7 @@ class InventoryPresenter {
         $this.Home.MoveRowToTop($hostName)
         try {
             $this.AppendLog($hostName, "Scanning C: for largest folders...")
-            if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-                $this.DetailProgress.IsIndeterminate = $true
-                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
-            }
+            $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
             $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger)
@@ -344,19 +352,14 @@ class InventoryPresenter {
             $this.AppendLog($hostName, "Disk scan could not start: $_")
             $this.Logger.LogException("Disk scan failed to start for $hostName", $_)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start disk scan.") }
-            if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-                $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
-            }
+            $this.ShowJobProgress($hostName, $false, 0, $false)
         }
     }
 
     # Disk-scan job finished: parse the WizTree CSV + cache + render the folder list.
     [void] CompleteDiskScan([AsyncJob]$job) {
         $hostName = $job.HostName
-        if ($hostName -eq $this.Home.SelectedHost -and $this.DetailProgress) {
-            $this.DetailProgress.IsIndeterminate = $false
-            $this.DetailProgress.Visibility = [System.Windows.Visibility]::Collapsed
-        }
+        $this.ShowJobProgress($hostName, $false, 0, $false)
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Disk scan failed.")
