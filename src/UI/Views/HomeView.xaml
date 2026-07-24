@@ -416,7 +416,7 @@
                   <!-- Status chip = Arcane StatusBadge: rounded (not a pill), tinted
                        fill + 30% border, 400-shade text (all VM-driven). -->
                   <Border Grid.Column="2" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
-                          Margin="0,0,8,0" Background="{Binding ChipBackground}"
+                          Margin="16,0,8,0" Background="{Binding ChipBackground}"
                           BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                           Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
                     <!-- Glyph + label so status reads by shape, not colour alone. Segoe UI
@@ -515,10 +515,11 @@
           </Grid.Style>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <!-- Cards size to content up to a cap; the terminal takes the rest. Empty cards
-                 (just their hints) collapse so the terminal grows; populated cards stay clamped
-                 and scroll internally, so a full-screen window doesn't balloon them. -->
-            <RowDefinition Height="Auto" MaxHeight="300" />
+            <!-- Cards + terminal are 1:1 (half/half) at the default window size; once the window
+                 grows tall the cards row hits its MaxHeight and the terminal (still '*') takes all
+                 the extra, so the terminal is favoured while the cards stretch to ~3-4 update
+                 cards / a full folder list before capping. -->
+            <RowDefinition Height="*" MaxHeight="400" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
