@@ -13,8 +13,8 @@ parallel — streaming progress, logs, and results back into the UI live.
 - **Remote DCU execution** — runs `dcu-cli.exe` on networked Dell machines over
   PsExec; no agents to install on targets.
 - **Parallel execution** — PowerShell runspaces run many machines at once, with each
-  machine shown as a row in the Home list. Rows are kept newest-action-first and can
-  be filtered by status (All / Online / Offline / Attention).
+  machine shown as a row in the Home list. Rows are kept newest-action-first and grouped
+  worst-first, so machines needing attention surface at the top.
 - **Per-machine detail panel** — selecting a machine prefetches a lightweight
   inventory probe (model, Dell service tag, battery health, disk, uptime), lists the
   available updates found by a scan, and offers an on-demand **storage scan** of the

@@ -240,7 +240,6 @@ package "Donut.Models" #15233B {
     class MachineListShaper {
         +{static} Categorize(running, reachability, idleStatus): string
         +{static} StatusRank(category): int
-        +{static} MatchesStatus(category, filter): bool
     }
 
     class MachineNameMatcher {
@@ -295,11 +294,19 @@ package "Donut.Core" #102A20 {
         +Result: object
         +Start(scriptPath, arguments, tempConfig): void
         +Poll(): void
+        +DrainStream(): void
         +Cleanup(): void
+    }
+
+    class WorkerProcess {
+        +{static} $Launcher: scriptblock
+        +{static} Prepare(scriptPath, arguments, configPath): hashtable
+        +{static} Interpret(launcherOutput): hashtable
     }
 
     class RunspaceManager {
         +{static} Initialize(min, max): void
+        +{static} SetLogger(logger): void
         +{static} GetPool(): RunspacePool
         +{static} Close(): void
     }
@@ -773,6 +780,8 @@ ExecutionService --> DriverMatchingService
 ExecutionService ..> DeviceContext
 
 AsyncJob --> RunspaceManager
+AsyncJob --> WorkerProcess
+WorkerProcess ..> RunspaceManager
 AsyncJob ..> JobStatus
 AsyncJob ..> JobKind
 

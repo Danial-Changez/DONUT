@@ -74,6 +74,7 @@ component "PowerShell Classes (src)" {
         [ConfigManager]
         [NetworkProbe]
         [AsyncJob]
+        [WorkerProcess]
         [RunspaceManager]
         [HostListSource]
     }
@@ -149,6 +150,8 @@ database "%LOCALAPPDATA%\\DONUT" {
 [LensAgent.ps1] ..> [ActiveDirectoryService] : AD finder search (LDAP)
 [ActiveDirectoryService] ..> [AdUnlockWorker.ps1] : unlock account
 [AsyncJob] ..> [RunspaceManager] : uses pool
+[AsyncJob] ..> [WorkerProcess] : spawns child pwsh (isolation)
+[WorkerProcess] ..> [RemoteWorker.ps1] : runs as a separate process
 
 [ConfigPresenter] ..> [ConfigManager]
 [ConfigManager] ..> [AppConfig]

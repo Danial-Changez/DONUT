@@ -13,8 +13,8 @@ an update is available you'll be prompted to apply it.
 ## The guided tour
 
 The first time the window opens, a short **guided tour** walks the essentials — the
-search bar, the Scan/Apply mode toggle, the machine list and its status filter, and
-Settings. It's five steps, one idea each:
+search bar, the Scan/Apply mode toggle, the machine list, the detail pane, and
+Settings. One idea per step:
 
 - **Esc** exits at any point; **Skip tour** is offered on the welcome step.
 - Replay it anytime with the **`?`** button in the title bar.

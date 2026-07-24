@@ -14,9 +14,10 @@ version, battery health, free disk space, and uptime. The probe re-runs when sta
 
 ## Available updates
 
-After a scan (or the scan phase of an apply), the pane lists each update DCU found:
-name, category, urgency badge (Urgent / Recommended / Optional), the version
-transition (`1.2.0 → 1.4.1`), and download size.
+Once any scan completes — a plain **Scan** or the scan phase of an apply — the pane
+lists each update DCU found, sorted most-urgent first: name, category, urgency badge
+(Urgent / Recommended / Optional), the version transition (`1.2.0 → 1.4.1`), and
+download size. Selecting a machine with a recent scan shows its results without re-running.
 
 ## Live log
 
@@ -25,7 +26,7 @@ same content that lands in `%LOCALAPPDATA%\DONUT\logs\<hostname>.log`.
 
 ## Storage scan (biggest folders)
 
-**Find big folders** runs WizTree headlessly on the target and shows the largest
+**Storage scan** runs WizTree headlessly on the target and shows the largest
 folders on `C:` as an expandable tree with sizes. Useful before pushing large
 updates to a nearly-full disk.
 

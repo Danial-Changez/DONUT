@@ -21,7 +21,7 @@ consumes the result and exposes it to the bindings.
 | `RemoteError` (exception hierarchy) | Typed, severity-tagged remote failures: offline / unresolvable / RPC blocked / DCU not installed / launch fault / **connection lost** (psexec transport codes 233, 64, ...) / **timed out** (watchdog); `RemoteFailure` re-derives the reason from a worker message that crossed the runspace boundary |
 | `ScanCacheDecision` | Pure rule: is a host's last scan still fresh enough to reuse (24h)? |
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
-| `MachineListShaper` | Pure mapper behind the machine-list status filter: categorize a row (running / attention / online / offline), rank categories worst-first, match a row against the active filter chip |
+| `MachineListShaper` | Pure mapper for the machine-list order: categorize a row (running / attention / online / offline) and rank categories worst-first for the list's fixed status-grouped sort |
 | `MachineNameMatcher` | Pure classifier for search text: does it look like a machine name (config-editable regex patterns, e.g. `^CAP-`) or match an AD computer exactly? Drives the finder's "Add as a machine" pre-selection |
 | `HotkeyGesture` | Pure parse/build of hotkey gestures (`Ctrl+Alt+D` ↔ Win32 modifiers + virtual key ↔ WPF `Key`); rejects modifier-less and Shift-only combos |
 | `TourStep` / `TourSteps` | The guided tour's ordered step content (title, body, target key, placement) — pure data so the tour is unit-tested headless |
@@ -37,8 +37,9 @@ consumes the result and exposes it to the bindings.
 |-------|---------|
 | `ConfigManager` | Load/save JSON config, directory initialization |
 | `NetworkProbe` | Domain-controller-authoritative DNS resolution (cached DC discovery + `Resolve-DnsName -Server`, fail-hard), reverse-DNS validation, RPC/online checks |
-| `AsyncJob` | Runspace-based async job wrapper with PowerShell execution |
-| `RunspaceManager` | Static RunspacePool management for parallel execution |
+| `AsyncJob` | Async job wrapper: runs each job as an isolated child `pwsh` process (via `WorkerProcess`) launched from a pool runspace, drains its output/result streams, and polls to completion |
+| `WorkerProcess` | Child-process worker protocol: `Prepare` marshals args to a temp file, the `$Launcher` scriptblock spawns `RemoteWorker.ps1` as a separate `pwsh` process on a pool runspace, and `Interpret` reads back its JSON result — process isolation so parallel `using module` class-graph compiles can't deadlock |
+| `RunspaceManager` | Static RunspacePool management for parallel execution; also raises the .NET ThreadPool floor before pool creation so dispatch/completion callbacks can't starve |
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure "relative time" formatter (`2m ago`) |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
@@ -73,7 +74,7 @@ All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
 | Class | Purpose |
 |-------|---------|
 | `HomeViewModel` | The Home page: `Machines` (bound to the virtualizing ListBox), `SelectedMachine`, and the AD finder's `SearchResults` |
-| `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress/step text, status category (for the filter chips), overview-strip facts, probed subtitle, the available-updates list, folders tree, Run/Gather commands |
+| `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress/step text, the status sort-rank, overview-strip facts, probed subtitle, the available-updates list, folders tree, Run/Gather commands |
 | `FolderNodeViewModel` | Display-ready largest-folders tree node (pure, computed per report) |
 | `SearchRowViewModel` | AD finder dropdown row — section header, "Add as a machine" action, or result, with Pick/Unlock commands (pure) |
 | `PersonLensViewModel` / `LensDeviceViewModel` | The user Lens shown in the detail pane: person fields + a device collection, each device with a Reveal-BitLocker toggle and an Add-to-machine-list command |
@@ -95,7 +96,7 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 |-------|---------|
 | `MainPresenter` | Composition root: main window, lazy Config construction, the settings overlay, shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list + status filter, and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
+| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list (status-grouped sort), and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |
 | `ResolutionCoordinator` | The `Resolve` job lifecycle and runspace-pool warm: start-early IP resolution via the shared `HostResolver`, verdict caching, and DC discovery/persist. When a verdict lands it re-issues queued runs/gathers through `HomePresenter`'s seam methods |
 | `FinderPresenter` | The search bar's live multi-forest AD finder (debounced in-process search on the pool via `AdSearchWorker`, one job per forest + inline unlock) and the **user Lens** (de-elevated agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via the duck-typed back-ref |

@@ -1,6 +1,6 @@
 ---
 title: The machine list
-description: Adding machines, running one or all, and filtering rows by status.
+description: Adding machines, running one or all, and how the list is ordered.
 ---
 
 The Home list is DONUT's center: one row per machine, newest action first.
@@ -23,19 +23,12 @@ The Home list is DONUT's center: one row per machine, newest action first.
   idle machine (Apply asks once to confirm).
 - Rows move to the top when you act on them, so current work stays visible.
 
-## Status filter
+## Order & clearing
 
-The chips above the list filter rows by status:
-
-| Chip | Shows |
-|------|-------|
-| **All** | Everything |
-| **Online** | Reachable, idle machines |
-| **Offline** | Unreachable machines |
-| **Attention** | Failed runs and reboot-required machines |
-
-Within a filter, rows group worst-first so problems surface at the top.
-**Clear completed** removes settled rows in one click.
+The list keeps itself grouped worst-first: machines needing attention (failed runs or a
+required reboot) rise to the top, then running, online, offline, and not-yet-known — each
+alphabetical within its group. Acting on a machine also floats its row to the top so current
+work stays visible. **Clear** removes settled (completed) rows in one click.
 
 ## Empty list?
 

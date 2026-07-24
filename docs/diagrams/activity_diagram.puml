@@ -1,10 +1,11 @@
 @startuml activity_diagram
-title Remote Worker Flow (ExecutionService, in a pool runspace)
+title Remote Worker Flow (ExecutionService, in an isolated child pwsh process)
 
 start
 :Receive HostName + JobType + Options + ResolvedIp;
 note right
-  Runs on a RunspaceManager pool thread, never the
+  Runs in an isolated child pwsh process (spawned by
+  WorkerProcess from a pool runspace), never the
   WPF dispatcher. ResolvedIp is the prefetched IP
   (HostResolver), so the worker skips DNS on the
   hot path; each phase gates its own transport
