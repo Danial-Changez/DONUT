@@ -507,6 +507,16 @@
                                       Fill="{DynamicResource PrimaryForeground}"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center" />
+                                <!-- Indeterminate (some children checked): a dash, not a tick. -->
+                                <Rectangle x:Name="dash"
+                                           Width="8"
+                                           Height="2"
+                                           RadiusX="1"
+                                           RadiusY="1"
+                                           Fill="{DynamicResource PrimaryForeground}"
+                                           Visibility="Collapsed"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                         <ContentPresenter Margin="8,0,0,0"
@@ -523,6 +533,18 @@
                                     Property="BorderBrush"
                                     Value="{DynamicResource Primary}" />
                             <Setter TargetName="check"
+                                    Property="Visibility"
+                                    Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsChecked"
+                                 Value="{x:Null}">
+                            <Setter TargetName="box"
+                                    Property="Background"
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="box"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource Primary}" />
+                            <Setter TargetName="dash"
                                     Property="Visibility"
                                     Value="Visible" />
                         </Trigger>

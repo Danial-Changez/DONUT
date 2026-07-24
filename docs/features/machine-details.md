@@ -38,8 +38,12 @@ licensing); the scan deploys it to the target, parses the CSV export, and cleans
 ## Clearing folder contents
 
 Each folder row in the tree has a checkbox. Tick the ones you want to reclaim, then
-**Clear selected** in the card header. DONUT shows a confirmation dialog listing the
-folders and their combined size before anything is removed — the operation **clears each
+**Clear selected** in the card header. Checkboxes are hierarchical, like the Windows
+"Turn Windows features on or off" list: checking a parent checks every clearable folder
+under it, and unchecking one child leaves the parent half-filled (indeterminate) and
+spares that child — so you can clear most of a folder while keeping specific subfolders.
+DONUT shows a confirmation dialog listing the folders and their combined size before
+anything is removed — the operation **clears each
 folder's contents but keeps the folder itself** (so a cache like `ccmcache` is emptied, not
 removed, and the owning service refills it). It runs as SYSTEM on the target and **cannot be
 undone**. When it finishes, the storage scan re-runs so the tree reflects the freed space.

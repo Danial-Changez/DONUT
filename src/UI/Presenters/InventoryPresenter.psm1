@@ -63,6 +63,7 @@ class InventoryPresenter {
 
     [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox
+    hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder tri-state cascade
     # A probe fresher than this is reused instead of re-gathered (non-forced calls).
     [timespan] $InventoryTtl = [timespan]::FromMinutes(3)
 
@@ -137,7 +138,24 @@ class InventoryPresenter {
                     $parent = [System.Windows.Media.VisualTreeHelper]::GetParent($s)
                     if ($parent) { $parent.RaiseEvent($ev) }
                 })
+            # Tri-state cascade: a folder checkbox toggling propagates to descendants + ancestors.
+            $checkHandler = [System.Windows.RoutedEventHandler] { param($s, $e) $presenter.OnFolderCheckToggled($e) }.GetNewClosure()
+            $folders.AddHandler([System.Windows.Controls.Primitives.ToggleButton]::CheckedEvent, $checkHandler)
+            $folders.AddHandler([System.Windows.Controls.Primitives.ToggleButton]::UncheckedEvent, $checkHandler)
         }
+    }
+
+    # Relays a folder checkbox toggle into the node's tri-state cascade (guarded against the
+    # PropertyChanged echo the cascade itself raises). Pure tree logic lives on the node.
+    [void] OnFolderCheckToggled([System.Windows.RoutedEventArgs]$e) {
+        if ($this.CascadingChecks) { return }
+        $cb = $e.OriginalSource -as [System.Windows.Controls.CheckBox]
+        if ($null -eq $cb) { return }
+        $node = $cb.DataContext -as [FolderNodeViewModel]
+        if ($null -eq $node -or -not $node.IsDeletable) { return }
+        $this.CascadingChecks = $true
+        try { $node.SetChecked([bool]$cb.IsChecked) }
+        finally { $this.CascadingChecks = $false }
     }
 
     # Selection changed: open the detail panel for the new host, or clear on deselect.
