@@ -34,17 +34,4 @@ Describe "MachineListShaper" {
             [MachineListShaper]::StatusRank('Nonsense') | Should -Be 4
         }
     }
-
-    Context "MatchesStatus" {
-        It "Matches everything for All or blank" {
-            [MachineListShaper]::MatchesStatus('Offline', 'All') | Should -BeTrue
-            [MachineListShaper]::MatchesStatus('Offline', '') | Should -BeTrue
-            [MachineListShaper]::MatchesStatus('Offline', $null) | Should -BeTrue
-        }
-        It "Matches only the selected category otherwise" {
-            [MachineListShaper]::MatchesStatus('Online', 'Online') | Should -BeTrue
-            [MachineListShaper]::MatchesStatus('Online', 'Offline') | Should -BeFalse
-            [MachineListShaper]::MatchesStatus('NeedsAttention', 'NeedsAttention') | Should -BeTrue
-        }
-    }
 }

@@ -83,8 +83,6 @@ class HomePresenter : AsyncJobPresenter {
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
-    [object] $MachineView           # the ListBox's CollectionView (status filter + sort live here)
-    [string] $ListStatusFilter = 'All'
     [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
@@ -234,13 +232,6 @@ class HomePresenter : AsyncJobPresenter {
         }
         if ($this.ModeButton) {
             $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure())
-        }
-        # Status filter chips funnel into ApplyMachineShaping (see .NOTES on handler $this).
-        $chips = $this.ViewContent.FindName('StatusFilterChips')
-        if ($chips) {
-            foreach ($chip in $chips.Children) {
-                $chip.Add_Checked({ param($s, $e) $presenter.SetListStatusFilter([string]$s.Tag) }.GetNewClosure())
-            }
         }
         $this.Finder.Initialize()
 
@@ -950,42 +941,19 @@ class HomePresenter : AsyncJobPresenter {
         return $null
     }
 
-    # Wires the ListBox's CollectionView for live sort + filter. GetDefaultView returns the
-    # same view the ListBox binds to (ItemsSource=Machines), so shaping it reorders the list.
+    # Wires the ListBox's CollectionView for live status-grouped sort. GetDefaultView returns
+    # the same view the ListBox binds to (ItemsSource=Machines), so sorting it reorders the list.
     [void] InitMachineListShaping() {
         $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($this.HomeVm.Machines)
         if ($null -eq $view) { return }
-        $this.MachineView = $view
         if ($view -is [System.Windows.Data.ListCollectionView]) {
             $view.IsLiveSorting = $true
-            $view.IsLiveFiltering = $true
             foreach ($p in @('SortStatusRank', 'HostName')) { [void]$view.LiveSortingProperties.Add($p) }
-            [void]$view.LiveFilteringProperties.Add('StatusCategory')
         }
-        # Status-grouped order is fixed; only the status filter changes at runtime.
+        # Attention first, then alphabetical - a fixed status-grouped order (no runtime filter).
         $asc = [System.ComponentModel.ListSortDirection]::Ascending
         [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('SortStatusRank', $asc))
         [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
-        $this.ApplyMachineShaping()
-    }
-
-    # (Re)applies the current status filter to the CollectionView; setting Filter refreshes
-    # the view, so the list re-filters at once.
-    [void] ApplyMachineShaping() {
-        $view = $this.MachineView
-        if ($null -eq $view) { return }
-        $status = $this.ListStatusFilter
-        # No $this inside: the closure captures $status; types resolve at module scope.
-        $view.Filter = [System.Predicate[object]] {
-            param($o)
-            return [MachineListShaper]::MatchesStatus(([HostViewModel]$o).StatusCategory, $status)
-        }.GetNewClosure()
-    }
-
-    [void] SetListStatusFilter([string]$filter) {
-        if ([string]::IsNullOrWhiteSpace($filter)) { return }
-        $this.ListStatusFilter = $filter
-        $this.ApplyMachineShaping()
     }
 
     # Moves a host's card to the top on operator actions only - background completions

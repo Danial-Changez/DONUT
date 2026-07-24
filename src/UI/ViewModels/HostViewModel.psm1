@@ -42,9 +42,8 @@ class HostViewModel : ObservableObject {
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
 
-    # Machine-list shaping keys (maintained by RefreshShape): the Home list's CollectionView
-    # sorts on SortStatusRank (then HostName) and filters on StatusCategory.
-    [string] $StatusCategory = 'Unknown'
+    # Machine-list sort key (maintained by RefreshShape): the Home list's CollectionView sorts
+    # on SortStatusRank (then HostName), so attention-worthy machines rise to the top.
     [int]    $SortStatusRank = 4
 
     # Detail-header + overview-strip bindables: both mirror the selected machine via
@@ -195,11 +194,10 @@ class HostViewModel : ObservableObject {
         $this.Set('OvUpdates', "$count")
     }
 
-    # Recompute the list-shaping category + rank from the current running/reachability/idle
-    # state; called whenever any of those change so the CollectionView re-sorts/re-filters.
+    # Recompute the list sort rank from the current running/reachability/idle state; called
+    # whenever any of those change so the CollectionView re-sorts (attention first).
     hidden [void] RefreshShape() {
         $cat = [MachineListShaper]::Categorize($this.ProgressVisible, $this.Reachability, $this.IdleStatus)
-        $this.Set('StatusCategory', $cat)
         $this.Set('SortStatusRank', [MachineListShaper]::StatusRank($cat))
     }
 
