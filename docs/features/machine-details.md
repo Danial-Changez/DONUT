@@ -50,6 +50,12 @@ volume root, `Windows` (and everything under it, including `Installer`), `Progra
 `Recovery`, and the `Users` container itself (individual profiles/subfolders under it are
 deletable). The rule is enforced twice — in the UI and again inside the remote script —
 so a folder that shouldn't be removed can't be, even by mistake.
+
+A short allowlist of well-known reclaimable caches *is* deletable even though it lives under
+`Windows`: `ccmcache` (SCCM), `Temp`, `SoftwareDistribution\Download` (Windows Update),
+`Prefetch`, `Logs`, and `Downloaded Program Files`. The owning service recreates them as
+needed. To add or remove entries, edit `FolderDeletionPolicy.AllowedCaches` **and** the
+mirrored list in `ExecutionService.BuildDeleteCommand`.
 :::
 
 ## Under the hood

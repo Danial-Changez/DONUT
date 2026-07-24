@@ -640,13 +640,18 @@ class ExecutionService {
         return @"
 `$ErrorActionPreference = 'Continue'
 `$targets = @($arr)
+`$allowed = @('windows\ccmcache','windows\temp','windows\softwaredistribution\download','windows\prefetch','windows\logs','windows\downloaded program files')
 `$blocked = @('windows','program files','program files (x86)','programdata','system volume information','`$recycle.bin','recovery','perflogs','`$winreagent','boot','msocache','`$sysreset')
 foreach (`$t in `$targets) {
     `$p = "`$t".Trim().TrimEnd('\')
     if (`$p -notmatch '^[A-Za-z]:\\.+') { continue }
-    `$rest = `$p.Substring(3)
-    if (`$rest.ToLowerInvariant() -eq 'users') { continue }
-    if (`$blocked -contains `$rest.Split('\')[0].ToLowerInvariant()) { continue }
+    `$rest = `$p.Substring(3).ToLowerInvariant()
+    `$ok = `$false
+    foreach (`$c in `$allowed) { if (`$rest -eq `$c -or `$rest.StartsWith("`$c\")) { `$ok = `$true; break } }
+    if (-not `$ok) {
+        if (`$rest -eq 'users') { continue }
+        if (`$blocked -contains `$rest.Split('\')[0]) { continue }
+    }
     if (Test-Path -LiteralPath `$p) { Remove-Item -LiteralPath `$p -Recurse -Force -ErrorAction SilentlyContinue }
 }
 "@

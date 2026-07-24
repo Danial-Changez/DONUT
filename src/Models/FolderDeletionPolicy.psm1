@@ -20,16 +20,30 @@ class FolderDeletionPolicy {
         '$winreagent', 'boot', 'msocache', '$sysreset'
     )
 
+    # Known safe-to-clear caches that live under an otherwise-protected root; a folder equal to
+    # or under one of these is deletable despite the blocklist (path tail after "X:\", lowercase).
+    static [string[]] $AllowedCaches = @(
+        'windows\ccmcache',                        # SCCM client package cache
+        'windows\temp',                            # system temp
+        'windows\softwaredistribution\download',   # Windows Update download cache
+        'windows\prefetch',
+        'windows\logs',
+        'windows\downloaded program files'
+    )
+
     # True when $path is safe to delete: an absolute local path, not the drive root, not the
-    # whole Users store, and not a protected system directory or a descendant of one.
+    # whole Users store, and not a protected system directory - unless it is a known cache above.
     static [bool] IsDeletable([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) { return $false }
         $p = $path.Trim().TrimEnd('\')
         # Must be "X:\<something>" - this also rejects the bare volume root "C:\".
         if ($p -notmatch '^[A-Za-z]:\\.+') { return $false }
-        $rest = $p.Substring(3)
-        if ($rest.ToLowerInvariant() -eq 'users') { return $false }
-        $first = $rest.Split('\')[0].ToLowerInvariant()
-        return -not ([FolderDeletionPolicy]::Protected -contains $first)
+        $rest = $p.Substring(3).ToLowerInvariant()
+        # A known cache (or anything under it) is deletable even beneath a protected root.
+        foreach ($c in [FolderDeletionPolicy]::AllowedCaches) {
+            if ($rest -eq $c -or $rest.StartsWith("$c\")) { return $true }
+        }
+        if ($rest -eq 'users') { return $false }
+        return -not ([FolderDeletionPolicy]::Protected -contains $rest.Split('\')[0])
     }
 }
