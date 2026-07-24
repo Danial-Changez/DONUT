@@ -322,7 +322,9 @@
   <!-- ==================== Machine list (left) + detail pane (right) ==================== -->
   <Grid Grid.Row="2">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="2*" MinWidth="300" />
+      <!-- Machine list is clamped (MaxWidth): a 15-char name + status + Run needs ~340, so on a
+           wide/full-screen window the detail pane absorbs the extra space instead of a huge list. -->
+      <ColumnDefinition Width="2*" MinWidth="280" MaxWidth="360" />
       <ColumnDefinition Width="6" />
       <ColumnDefinition Width="3*" MinWidth="320" />
     </Grid.ColumnDefinitions>
@@ -513,9 +515,10 @@
           </Grid.Style>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <!-- Folders + log split the remaining height equally, so a window resize
-                 grows/shrinks both by the same amount. -->
-            <RowDefinition Height="*" />
+            <!-- Cards size to content up to a cap; the terminal takes the rest. Empty cards
+                 (just their hints) collapse so the terminal grows; populated cards stay clamped
+                 and scroll internally, so a full-screen window doesn't balloon them. -->
+            <RowDefinition Height="Auto" MaxHeight="300" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
 
