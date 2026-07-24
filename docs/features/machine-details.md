@@ -35,23 +35,24 @@ WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there abo
 licensing); the scan deploys it to the target, parses the CSV export, and cleans up.
 :::
 
-## Deleting folders
+## Clearing folder contents
 
 Each folder row in the tree has a checkbox. Tick the ones you want to reclaim, then
-**Delete selected** in the card header. DONUT shows a confirmation dialog listing the
-folders and their combined size before anything is removed — the delete runs as SYSTEM
-on the target and **cannot be undone**. When it finishes, the storage scan re-runs so the
-tree reflects the freed space.
+**Clear selected** in the card header. DONUT shows a confirmation dialog listing the
+folders and their combined size before anything is removed — the operation **clears each
+folder's contents but keeps the folder itself** (so a cache like `ccmcache` is emptied, not
+removed, and the owning service refills it). It runs as SYSTEM on the target and **cannot be
+undone**. When it finishes, the storage scan re-runs so the tree reflects the freed space.
 
 :::caution
-Protected system locations are never deletable — they don't get a checkbox at all: the
+Protected system locations are never clearable — they don't get a checkbox at all: the
 volume root, `Windows` (and everything under it, including `Installer`), `Program Files`
 / `Program Files (x86)`, `ProgramData`, `System Volume Information`, `$Recycle.Bin`,
 `Recovery`, and the `Users` container itself (individual profiles/subfolders under it are
-deletable). The rule is enforced twice — in the UI and again inside the remote script —
-so a folder that shouldn't be removed can't be, even by mistake.
+clearable). The rule is enforced twice — in the UI and again inside the remote script —
+so a folder that shouldn't be touched can't be, even by mistake.
 
-A short allowlist of well-known reclaimable caches *is* deletable even though it lives under
+A short allowlist of well-known reclaimable caches *is* clearable even though it lives under
 `Windows`: `ccmcache` (SCCM), `Temp`, `SoftwareDistribution\Download` (Windows Update),
 `Prefetch`, `Logs`, and `Downloaded Program Files`. The owning service recreates them as
 needed. To add or remove entries, edit `FolderDeletionPolicy.AllowedCaches` **and** the

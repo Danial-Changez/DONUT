@@ -611,17 +611,17 @@ class ExecutionService {
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
     }
 
-    # Deletes the operator-selected folders on the target as SYSTEM (psexec); the presenter
-    # re-scans on completion. Each path is re-validated here and again in the remote script.
+    # Clears the CONTENTS of the operator-selected folders on the target as SYSTEM (psexec),
+    # keeping the folders. Each path is re-validated here and again in the remote script.
     [hashtable] RunDeleteFoldersPhase([DeviceContext] $device, [hashtable] $options) {
         $paths = @()
         if ($null -ne $options -and $options.Paths) { $paths = @($options.Paths) }
         $paths = @($paths | Where-Object { [FolderDeletionPolicy]::IsDeletable($_) })
         if ($paths.Count -eq 0) {
-            $this.Logger.LogWarning("[$($device.HostName)] DeleteFolders: no deletable paths after the safety filter.")
+            $this.Logger.LogWarning("[$($device.HostName)] ClearFolders: no deletable paths after the safety filter.")
             return @{ Deleted = 0 }
         }
-        $this.Logger.LogInfo("[$($device.HostName)] Deleting $($paths.Count) folder(s).")
+        $this.Logger.LogInfo("[$($device.HostName)] Clearing $($paths.Count) folder(s).")
 
         $ip = $this.ResolvedIpFor($device.HostName)
         if (-not $this.Probe.IsSmbAvailable($ip)) {
@@ -632,8 +632,8 @@ class ExecutionService {
         return @{ Deleted = $paths.Count }
     }
 
-    # The remote delete script: each path is a single-quoted literal (quotes doubled to block
-    # injection), re-checked against the same safety rules, then removed with -LiteralPath -Recurse.
+    # The remote clear script: each path is a single-quoted literal (quotes doubled to block
+    # injection), re-checked against the safety rules, then its CONTENTS removed (folder kept).
     static [string] BuildDeleteCommand([string[]]$paths) {
         $literals = @($paths | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" })
         $arr = $literals -join ', '
@@ -652,7 +652,10 @@ foreach (`$t in `$targets) {
         if (`$rest -eq 'users') { continue }
         if (`$blocked -contains `$rest.Split('\')[0]) { continue }
     }
-    if (Test-Path -LiteralPath `$p) { Remove-Item -LiteralPath `$p -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath `$p) {
+        Get-ChildItem -LiteralPath `$p -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 "@
     }

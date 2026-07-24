@@ -735,8 +735,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <!-- Header: label + a destructive "Delete selected" action (shown once folders
-                   are populated). Red is earned here - it's a genuinely destructive action. -->
+              <!-- Header: label + a destructive "Clear selected" action (shown once folders are
+                   populated). Red is earned here - it permanently removes the folders' contents. -->
               <Grid Grid.Row="0" Margin="0,0,0,8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
@@ -744,10 +744,10 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
                            VerticalAlignment="Center" />
-                <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Delete selected"
+                <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Clear selected"
                         Style="{DynamicResource ButtonDestructive}" FontSize="11" Height="26" Padding="10,0"
                         Visibility="{Binding SelectedMachine.HasFolders, Converter={StaticResource BoolToVis}}"
-                        ToolTip="Permanently delete the checked folders on this machine" />
+                        ToolTip="Permanently clear the contents of the checked folders (the folders are kept)" />
               </Grid>
               <TextBlock Grid.Row="1"
                          Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
@@ -781,12 +781,12 @@
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- Delete checkbox: only on deletable folders (protected system dirs
+                        <!-- Clear checkbox: only on clearable folders (protected system dirs
                              show none), two-way bound so the presenter reads the selection. -->
                         <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
                                   VerticalAlignment="Center"
                                   Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
-                                  ToolTip="Select this folder for deletion" />
+                                  ToolTip="Select to clear this folder's contents" />
                         <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
                                  FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
                           <TextBox.Style>

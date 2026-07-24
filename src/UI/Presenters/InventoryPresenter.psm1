@@ -427,24 +427,24 @@ class InventoryPresenter {
         if ($null -eq $row) { return }
         $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))
         if ($selected.Count -eq 0) {
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check one or more folders to delete first.") }
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check one or more folders to clear first.") }
             return
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
         $list = @($selected | ForEach-Object { "$($_.Path)  ($($_.SizeText))" })
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
-            "Delete folders on $hostName",
-            "Permanently delete $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? This runs as SYSTEM and cannot be undone.",
+            "Clear folder contents on $hostName",
+            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? The folders are kept. This runs as SYSTEM and cannot be undone.",
             $list)
         if (-not $confirmed) {
-            $this.AppendLog($hostName, "Folder deletion cancelled.")
+            $this.AppendLog($hostName, "Clear cancelled.")
             return
         }
 
         try {
             $this.AppendSeparator($hostName)
-            $this.AppendLog($hostName, "Deleting $($selected.Count) folder(s)...")
+            $this.AppendLog($hostName, "Clearing $($selected.Count) folder(s)...")
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $paths = @($selected | ForEach-Object { $_.Path })
             $prep = $this.DiskUsageService.PrepareDeleteFolders($hostName, $paths)
@@ -454,27 +454,27 @@ class InventoryPresenter {
             $this.Home.ActiveJobs.Add($job)
         }
         catch {
-            $this.AppendLog($hostName, "Folder deletion could not start: $_")
-            $this.Logger.LogException("Folder deletion failed to start for $hostName", $_)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start folder deletion.") }
+            $this.AppendLog($hostName, "Clear could not start: $_")
+            $this.Logger.LogException("Folder clear failed to start for $hostName", $_)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start clearing folders.") }
             $this.ShowJobProgress($hostName, $false, 0, $false)
         }
     }
 
-    # Delete job finished: report the count and re-scan so the tree reflects the freed space.
+    # Clear job finished: report the count and re-scan so the tree reflects the freed space.
     [void] CompleteDeleteFolders([AsyncJob]$job) {
         $hostName = $job.HostName
         $this.ShowJobProgress($hostName, $false, 0, $false)
         if ($job.Status -eq 'Failed') {
-            $this.AppendLog($hostName, "Folder deletion failed.")
+            $this.AppendLog($hostName, "Clear failed.")
             $this.Home.Resolution.InvalidateResolved($hostName)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Folder deletion failed. Open the log for details.") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clearing folders failed. Open the log for details.") }
             return
         }
         $count = 0
         if ($job.Result -and $job.Result.Deleted) { $count = [int]$job.Result.Deleted }
-        $this.AppendLog($hostName, "Deleted $count folder(s). Re-scanning...")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Deleted $count folder(s) on $hostName.") }
+        $this.AppendLog($hostName, "Cleared $count folder(s). Re-scanning...")
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s) on $hostName.") }
         $this.FindBigFolders($hostName)
     }
 }
