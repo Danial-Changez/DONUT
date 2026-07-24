@@ -336,28 +336,31 @@
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- List header (module-tabs pattern): the status filter chips are the list's header,
-           with Clear completed as the right-aligned action. Chips are wired by the presenter,
-           which drives the ListBox's CollectionView; the list stays status-grouped. -->
-      <Grid Grid.Row="0" Margin="14,12,14,8">
-        <Border CornerRadius="9" Background="{DynamicResource Secondary}" Padding="3"
-                HorizontalAlignment="Left" VerticalAlignment="Center">
-          <StackPanel x:Name="StatusFilterChips" Orientation="Horizontal" TextElement.FontSize="12">
-            <RadioButton Content="All" Tag="All" GroupName="statusFilter" IsChecked="True"
-                         Padding="11,6" Style="{DynamicResource SegmentToggle}" />
-            <RadioButton Content="Online" Tag="Online" GroupName="statusFilter"
-                         Padding="11,6" Style="{DynamicResource SegmentToggle}" />
-            <RadioButton Content="Offline" Tag="Offline" GroupName="statusFilter"
-                         Padding="11,6" Style="{DynamicResource SegmentToggle}" />
-            <RadioButton Content="Attention" Tag="NeedsAttention" GroupName="statusFilter"
-                         Padding="11,6" ToolTip="Failed or reboot required"
-                         Style="{DynamicResource SegmentToggle}" />
-          </StackPanel>
-        </Border>
-        <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonGhost}"
-                FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
-                ToolTip="Clear completed machines from the list" />
-      </Grid>
+      <!-- List header: a MicroLabel titles the pane (every other section has one), with the
+           module-tabs status filter below and Clear (completed) as the right-aligned action.
+           Chips are wired by the presenter, which drives the ListBox's status-grouped view. -->
+      <StackPanel Grid.Row="0">
+        <TextBlock Text="MACHINES" Style="{DynamicResource MicroLabel}" Margin="14,12,14,6" />
+        <Grid Margin="14,0,14,8">
+          <Border CornerRadius="9" Background="{DynamicResource Secondary}" Padding="3"
+                  HorizontalAlignment="Left" VerticalAlignment="Center">
+            <StackPanel x:Name="StatusFilterChips" Orientation="Horizontal" TextElement.FontSize="12">
+              <RadioButton Content="All" Tag="All" GroupName="statusFilter" IsChecked="True"
+                           Padding="11,6" Style="{DynamicResource SegmentToggle}" />
+              <RadioButton Content="Online" Tag="Online" GroupName="statusFilter"
+                           Padding="11,6" Style="{DynamicResource SegmentToggle}" />
+              <RadioButton Content="Offline" Tag="Offline" GroupName="statusFilter"
+                           Padding="11,6" Style="{DynamicResource SegmentToggle}" />
+              <RadioButton Content="Attention" Tag="NeedsAttention" GroupName="statusFilter"
+                           Padding="11,6" ToolTip="Failed or reboot required"
+                           Style="{DynamicResource SegmentToggle}" />
+            </StackPanel>
+          </Border>
+          <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
+                  FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
+                  ToolTip="Clear completed machines from the list" />
+        </Grid>
+      </StackPanel>
 
       <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
            a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
