@@ -150,6 +150,8 @@ class MainPresenter {
         $this.MainVm.OpenSettingsCommand = [RelayCommand]::new([System.Action[object]]$openSettings)
         $closeSettings = { param($p) $presenter.CloseSettings() }.GetNewClosure()
         $this.MainVm.CloseSettingsCommand = [RelayCommand]::new([System.Action[object]]$closeSettings)
+        $toggleSettings = { param($p) $presenter.ToggleSettings() }.GetNewClosure()
+        $this.MainVm.ToggleSettingsCommand = [RelayCommand]::new([System.Action[object]]$toggleSettings)
         $min = { param($p) $presenter.Window.WindowState = 'Minimized' }.GetNewClosure()
         $this.MainVm.MinimizeCommand = [RelayCommand]::new([System.Action[object]]$min)
         $max = { param($p)
@@ -177,6 +179,11 @@ class MainPresenter {
         $this.MainVm.OpenTourCommand = [RelayCommand]::new([System.Action[object]]$openTour)
         $closeTour = { param($p) $presenter.Tour.Finish() }.GetNewClosure()
         $this.MainVm.CloseTourCommand = [RelayCommand]::new([System.Action[object]]$closeTour)
+        $openDocs = { param($p)
+            try { Start-Process 'https://danial-changez.github.io/DONUT/' }
+            catch { $presenter.Logger.LogException('Failed to open documentation', $_) }
+        }.GetNewClosure()
+        $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -332,7 +339,7 @@ class MainPresenter {
         try {
             $key = [System.Windows.Input.Key]$gesture.WpfKey
             $mods = [System.Windows.Input.ModifierKeys]$gesture.Modifiers
-            $kb = [System.Windows.Input.KeyBinding]::new($this.MainVm.OpenSettingsCommand, $key, $mods)
+            $kb = [System.Windows.Input.KeyBinding]::new($this.MainVm.ToggleSettingsCommand, $key, $mods)
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
         }
@@ -487,6 +494,13 @@ class MainPresenter {
 
     [void] CloseSettings() {
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
+    }
+
+    # The configurable shortcut opens AND closes the overlay (the gear opens; Esc still closes),
+    # mirroring the global hotkey's show/hide toggle instead of only opening.
+    [void] ToggleSettings() {
+        if ($this.MainVm -and $this.MainVm.IsSettingsOpen) { $this.CloseSettings() }
+        else { $this.OpenSettings() }
     }
 
     # Pops the QR overlay for a BitLocker recovery key, rendered to an in-memory image only

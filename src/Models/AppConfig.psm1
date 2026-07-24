@@ -20,6 +20,8 @@ class AppConfig {
     static [hashtable] $Defaults = @{
         activeCommand         = 'scan'
         throttleLimit         = 8
+        # Largest folders the on-demand storage scan returns (top-N by size).
+        folderScanCount       = 12
         # How long a run keeps trying to reconnect + resume after a network drop (either
         # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
         recoveryWindowMinutes = 30
@@ -224,6 +226,19 @@ class AppConfig {
 
     [void] SetThrottleLimit([int]$limit) {
         $this.SetSetting('throttleLimit', $limit)
+    }
+
+    [int] GetFolderScanCount() {
+        if ($null -ne $this.Settings -and $this.Settings.ContainsKey('folderScanCount')) {
+            $val = $this.Settings['folderScanCount']
+            if ($val -is [int]) { return $val }
+            if ($val -is [string] -and $val -match '^\d+$') { return [int]$val }
+        }
+        return 12
+    }
+
+    [void] SetFolderScanCount([int]$count) {
+        $this.SetSetting('folderScanCount', $count)
     }
 
     # Minutes a dropped run keeps reconnecting + resuming before settling Unconfirmed.

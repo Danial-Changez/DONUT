@@ -19,6 +19,7 @@ class MainViewModel : ObservableObject {
     [bool]   $IsSettingsOpen = $false
     [object] $OpenSettingsCommand
     [object] $CloseSettingsCommand
+    [object] $ToggleSettingsCommand   # the configurable shortcut opens AND closes the overlay
     [object] $MinimizeCommand
     [object] $MaximizeCommand     # toggles Maximized <-> Normal
     [object] $CloseCommand
@@ -34,4 +35,5 @@ class MainViewModel : ObservableObject {
     [bool]   $IsTourOpen = $false
     [object] $OpenTourCommand
     [object] $CloseTourCommand
+    [object] $OpenDocsCommand     # opens the online documentation in the default browser
 }

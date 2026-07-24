@@ -18,13 +18,14 @@ up).
 |-----|----------------|------------------|
 | `activeCommand` | string, `"scan"` | The mode the pill starts on: `scan` or `applyUpdates` |
 | `throttleLimit` | int, `8` | How many machines run concurrently on the runspace pool |
+| `folderScanCount` | int, `12` | How many largest folders the on-demand [storage scan](../features/machine-details.md#storage-scan-biggest-folders) returns (top-N by size) |
 | `recoveryWindowMinutes` | int, `30` | After a network drop mid-run, how long DONUT keeps trying to reconnect and resume the log tail before settling the row as *Unconfirmed* |
 | `domains` | string[], org forests | The AD forests the [finder](../features/ad-finder.md) searches; each is queried independently |
 | `adminServiceHost` | string, org SMS Provider | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup |
 | `startWithWindows` | bool, `false` | Register the elevated logon scheduled task ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
 | `globalHotkey` | string, `"Ctrl+Alt+D"` | Global show/restore hotkey; blank disables it |
-| `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) to open Settings; blank disables |
+| `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
 | `machineNamePatterns` | string[], `^CAP-`, `^B[0-9]{4}`, `^WVD` | Regex patterns that mark search text as a machine name (vs. a person), so the finder pre-selects "Add as a machine". Edit as naming conventions change |
 | `hasSeenTour` | bool, `false` | Set once the first-run [guided tour](../get-started/first-launch.md#the-guided-tour) is shown or skipped; the `?` button replays regardless |
 | `commands` | object | Per-command DCU argument maps — see the [DCU command reference](./dcu-commands.md) |
@@ -35,6 +36,7 @@ up).
 {
   "activeCommand": "scan",
   "throttleLimit": 8,
+  "folderScanCount": 12,
   "recoveryWindowMinutes": 30,
   "startWithWindows": false,
   "closeToTray": false,

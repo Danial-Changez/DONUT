@@ -3,8 +3,8 @@ using module "..\..\src\Models\TourSteps.psm1"
 Describe "TourSteps" {
     BeforeAll { $script:Steps = [TourSteps]::Build() }
 
-    It "Is short - five steps (per the Guided Tour pattern)" {
-        $Steps.Count | Should -Be 5
+    It "Is short - six steps (per the Guided Tour pattern)" {
+        $Steps.Count | Should -Be 6
     }
 
     It "Opens with a centered welcome that has no target" {
@@ -21,7 +21,7 @@ Describe "TourSteps" {
     }
 
     It "Covers the essential controls in order" {
-        ($Steps | ForEach-Object { $_.TargetKey }) | Should -Be @('', 'search', 'mode', 'list', 'settings')
+        ($Steps | ForEach-Object { $_.TargetKey }) | Should -Be @('', 'search', 'mode', 'list', 'detail', 'settings')
     }
 
     It "Gives every step a title and body" {

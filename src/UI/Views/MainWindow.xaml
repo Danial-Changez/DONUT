@@ -87,6 +87,17 @@
                                       Width="13"
                                       Data="{DynamicResource Minimize}" />
                             </Button>
+                            <!-- Docs opens the online documentation in the default browser. -->
+                            <Button x:Name="btnDocs"
+                                    Command="{Binding OpenDocsCommand}"
+                                    Style="{DynamicResource controlButton}"
+                                    Tag="{DynamicResource Primary}"
+                                    ToolTip="Open the documentation">
+                                <Path Style="{DynamicResource controlButtonIcon}"
+                                      Width="14"
+                                      Height="14"
+                                      Data="{DynamicResource File}" />
+                            </Button>
                             <!-- Help replays the guided tour. -->
                             <Button x:Name="btnHelp"
                                     Command="{Binding OpenTourCommand}"

@@ -234,6 +234,13 @@ class ConfigPresenter {
             $throttle.Add_LostFocus({ param($s, $e) $self.PersistThrottle($s) }.GetNewClosure())
         }
 
+        $folders = $view.FindName('folderScanCount')
+        if ($folders) {
+            $folders.Text = [string]$this.Config.GetFolderScanCount()
+            $folders.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())   # clear error while editing
+            $folders.Add_LostFocus({ param($s, $e) $self.PersistFolderScanCount($s) }.GetNewClosure())
+        }
+
         $startWin = $view.FindName('chkStartWithWindows')
         if ($startWin) {
             $startWin.IsChecked = $this.Config.GetStartWithWindows()
@@ -286,6 +293,20 @@ class ConfigPresenter {
         else {
             $this.SetFieldError($box, $true)
             if ($this.Toast) { $this.Toast.ShowError('Throttle limit', 'Enter a whole number of 1 or more.') }
+        }
+    }
+
+    # Validates the storage-scan folder count on lost-focus and persists when it's >= 1.
+    hidden [void] PersistFolderScanCount([object]$box) {
+        $text = ([string]$box.Text).Trim()
+        if ($text -match '^\d+$' -and [int]$text -ge 1) {
+            $this.SetFieldError($box, $false)
+            $this.Config.SetFolderScanCount([int]$text)
+            $this.SaveConfigSafely()
+        }
+        else {
+            $this.SetFieldError($box, $true)
+            if ($this.Toast) { $this.Toast.ShowError('Folders to scan', 'Enter a whole number of 1 or more.') }
         }
     }
 

@@ -23,9 +23,10 @@ lets the target machine's DCU defaults apply.
   task. See [Tray, hotkey & autostart](./tray-hotkey-autostart.md).
 - **Close to tray** — the window's X hides to the tray instead of exiting.
 - **Global hotkey** — shows/restores DONUT from anywhere (default `Ctrl+Alt+D`).
-- **Open Settings shortcut** — an in-app shortcut while DONUT is focused (default
-  `Ctrl+,`).
+- **Settings shortcut** — an in-app shortcut (while DONUT is focused) that toggles Settings
+  open and closed (default `Ctrl+,`); Esc also closes.
 - **Throttle limit** — how many machines run concurrently (default 8).
+- **Folders to scan** — how many largest folders the storage scan returns (default 12).
 
 ## Recording a keybind
 

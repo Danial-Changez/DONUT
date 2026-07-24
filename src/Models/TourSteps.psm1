@@ -5,8 +5,8 @@
 .DESCRIPTION
     Each step is one idea, spotlighting one UI element (TargetKey) with a callout. The
     presenter maps TargetKey to a live control and positions the spotlight + callout;
-    an empty TargetKey is a centered card (the welcome). Kept short (5 steps) per the
-    Guided Tour pattern - one concept each, well under the 3-4 things people hold at once.
+    an empty TargetKey is a centered card (the welcome). Kept short (6 steps) per the
+    Guided Tour pattern - one concept each, always escapable so it never overwhelms.
 
 .NOTES
     Pure content/data so it can be unit-tested headless; no WPF here.
@@ -41,13 +41,19 @@ class TourSteps {
             }
             [TourStep]@{
                 Title     = 'Your machines, by status'
-                Body      = "Machines you add live here, grouped worst-first. Use the chips to filter - All, Online, Offline, or Attention (failed or reboot-needed)."
+                Body      = "Machines you add live here, grouped worst-first - anything needing attention (failed or reboot-needed) rises to the top. Clear removes the settled ones."
                 TargetKey = 'list'
                 Placement = 'right'
             }
             [TourStep]@{
+                Title     = 'Inspect a machine'
+                Body      = 'Select a machine to open its detail pane - inventory, the available updates a scan found, a live log, and an on-demand storage scan of its biggest folders.'
+                TargetKey = 'detail'
+                Placement = 'left'
+            }
+            [TourStep]@{
                 Title     = 'Settings & help'
-                Body      = 'The gear opens Settings - your keybinds, startup, and options save as you change them. Replay this tour anytime with the ? button.'
+                Body      = 'The gear opens Settings - keybinds, startup, and options save as you change them. The book icon opens the full docs, and the ? replays this tour.'
                 TargetKey = 'settings'
                 Placement = 'below'
             }

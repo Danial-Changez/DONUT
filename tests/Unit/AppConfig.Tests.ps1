@@ -17,6 +17,10 @@ Describe "AppConfig" {
             [AppConfig]::Defaults.throttleLimit | Should -Be 8
         }
 
+        It "Should have default folderScanCount as 12" {
+            [AppConfig]::Defaults.folderScanCount | Should -Be 12
+        }
+
         It "Should have 'scan' command with args" {
             [AppConfig]::Defaults.commands.scan | Should -Not -BeNullOrEmpty
             [AppConfig]::Defaults.commands.scan.args | Should -Not -BeNullOrEmpty
