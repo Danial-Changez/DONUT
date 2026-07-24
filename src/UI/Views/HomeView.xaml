@@ -777,7 +777,9 @@
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                       <Grid Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="22" />
+                          <!-- Auto, not fixed: a hidden checkbox collapses to 0 so protected rows
+                               sit flush against the expander instead of reserving empty space. -->
+                          <ColumnDefinition Width="Auto" />
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
