@@ -597,6 +597,7 @@ class HomePresenter : AsyncJobPresenter {
 
         $latestPct = -1
         $latestStep = 0
+        $installing = $false
         $sawReconnect = $false
         $sawNormalLine = $false
         # Reconnect status lines drive the "Reconnecting…" card; strip their marker for the
@@ -614,6 +615,7 @@ class HomePresenter : AsyncJobPresenter {
             if ($pct -ge 0) { $latestPct = $pct }
             $step = [DcuProgress]::ParseScanStep($entry)
             if ($step -gt $latestStep) { $latestStep = $step }
+            if ([DcuProgress]::IsInstalling($entry)) { $installing = $true }
         }
         if ($display.Count -gt 0) { $this.Detail.AppendLogLines($job.HostName, $display.ToArray()) }
 
@@ -621,8 +623,13 @@ class HomePresenter : AsyncJobPresenter {
         if ($sawReconnect) { $this.Reconnecting[$job.HostName] = $true }
         elseif ($sawNormalLine) { [void]$this.Reconnecting.Remove($job.HostName) }
 
+        # Download drives a determinate percent; the install phase (no dcu sub-percent) flips the
+        # bar to indeterminate so it keeps moving instead of freezing at the download's 100%.
         $row = $this.GetRow($job.HostName)
-        if ($row -and $latestPct -ge 0) { $row.SetPercent($latestPct) }
+        if ($row) {
+            if ($installing) { $row.SetIndeterminate() }
+            elseif ($latestPct -ge 0) { $row.SetPercent($latestPct) }
+        }
 
         # Scan milestones -> "N/5 label", ratcheted per host. Scans drive the bar from
         # the step; an apply's own percent lines own the bar (-1).

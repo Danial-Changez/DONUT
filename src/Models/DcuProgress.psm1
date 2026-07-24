@@ -33,6 +33,13 @@ class DcuProgress {
         return $value
     }
 
+    # True for a dcu-cli apply INSTALL line ("Installing updates..."). dcu emits no sub-percentage
+    # while installing, so the bar goes indeterminate here instead of freezing at download's 100%.
+    static [bool] IsInstalling([string]$line) {
+        if ([string]::IsNullOrWhiteSpace($line)) { return $false }
+        return [bool]($line -match '(?i)installing\s+update')
+    }
+
     # --- Scan-phase steps ---
 
     # A dcu-cli scan emits no percentages but walks fixed milestone lines; mapping them
@@ -66,9 +73,8 @@ class DcuProgress {
 
     # --- Reconnect / resume status lines ---
 
-    # The worker prefixes reconnect/resume status lines with this token so the pump can turn
-    # them into a "Reconnecting…" card (and strip it for display). ASCII with a leading '[r'
-    # so it renders in any font and never collides with a dcu-cli line (those start "[<date>").
+    # The worker prefixes reconnect/resume status lines with this token so the pump can turn them
+    # into a "Reconnecting…" card (and strip it). ASCII '[r' so it never collides with a dcu line.
     static [string] $ReconnectMarker = '[reconnect] '
 
     # True when a tailed line is one of the worker's reconnect/resume status lines. It never

@@ -52,6 +52,16 @@ Describe "DcuProgress" {
         }
     }
 
+    Context "IsInstalling - the apply install phase" {
+        It "matches dcu install lines (case-insensitive), not download or scan" {
+            [DcuProgress]::IsInstalling("Installing updates (1 of 3)...") | Should -BeTrue
+            [DcuProgress]::IsInstalling("installing update...") | Should -BeTrue
+            [DcuProgress]::IsInstalling("Downloading updates (1 of 3), (12.26%)...") | Should -BeFalse
+            [DcuProgress]::IsInstalling("Scanning system devices ...") | Should -BeFalse
+            [DcuProgress]::IsInstalling($null) | Should -BeFalse
+        }
+    }
+
     Context "ParsePercent - robustness" {
         It "Takes the last percentage when several appear" {
             [DcuProgress]::ParsePercent("phase (10.00%) then (90.00%)") | Should -Be 90

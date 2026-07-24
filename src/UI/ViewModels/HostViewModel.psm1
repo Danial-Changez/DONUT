@@ -128,6 +128,13 @@ class HostViewModel : ObservableObject {
         if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
+    # Switches the bar to an animated indeterminate state for a phase that reports activity but
+    # no sub-percentage (a dcu-cli install), instead of leaving it frozen at the last percent.
+    [void] SetIndeterminate() {
+        $this.Set('ProgressVisible', $true)
+        $this.Set('ProgressIndeterminate', $true)
+    }
+
     # --- Idle (persisted) state, from a stored RecentConnection ---
     [void] ApplyIdle([RecentConnection]$rc) {
         $this.IdleStatus = $rc.LastStatus
