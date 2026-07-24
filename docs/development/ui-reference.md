@@ -26,6 +26,22 @@ neutral + violet-600 palette and shadcn button variants defined in `src/UI/Style
 | Available Updates card | **Blank Slate** (per-card empty state) | The card shows a "Run a scan on this machine…" hint until it holds results, then the update list. It fills from the last completed scan's report — not only an apply scan: a plain **Scan** populates it on completion (minus the apply prompt), and selecting a machine re-fills it from the report already on disk (a completed/cached scan shows without re-running). Single driver: `HomePresenter.RenderUpdatesFromReport` (called from `ProceedWithApply`, the plain-scan branch of `OnJobCompleted`, and `InventoryPresenter.SelectHost`). Reading is never a re-scan — selection only renders what a prior scan wrote. |
 | Identity verdict (on the updates card) | **Progressive Disclosure** | The machine-identity safety check (does the box at the resolved IP answer to the intended name before a destructive apply?) is a compact colour-coded header pill — green `VERIFIED` / amber `UNVERIFIED` / red `WRONG MACHINE` — with the full sentence in its tooltip, instead of a full-width line eating a row on a dense card. State is `HostViewModel.IdentityState` (`Match`/`Mismatch`/`Unknown`), set alongside the rows in `RenderUpdatesFromReport`; the apply confirm dialog still re-checks identity independently (`AbortOnIdentityMismatch`), so shrinking the display costs no safety. |
 
+## Colour hierarchy (button variants)
+
+ui-patterns.com has **no** dedicated pattern for button colour / CTA prominence (its catalogue
+is interaction-focused); the nearest principles it endorses are **Reduction** (simplify, cut
+attention load) and **Tunnelling** (direct focus). For *look*, the canonical source is DONUT's
+shadcn button variants in `src/UI/Styles/ButtonStyles.xaml`. The rule we follow:
+
+- **Reserve saturated colour for meaning or the one primary action.** Status/urgency badges
+  (amber `UNVERIFIED`, sky `Recommended`, green `Completed`) and the primary CTA earn colour
+  because it *encodes* something.
+- **Decorative tints are the anti-pattern.** A `ButtonTint*` fill whose colour signals nothing
+  (e.g. "Storage scan" in indigo, "Refresh info" in cyan) just competes with the meaningful
+  colour nearby. Secondary/utility actions use the neutral **`ButtonSecondary`** (grey) — or
+  `ButtonOutline`/`ButtonGhost` — so they read as subordinate. The detail-pane header buttons
+  follow this: neutral grey, subordinate to the row's `Run`.
+
 ## Working notes distilled from the patterns
 
 - **Guided Tour**: one idea per step, keep it short (people hold ~3–4 things at once), always

@@ -544,10 +544,12 @@
               <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
+            <!-- Neutral secondary variant (not a coloured tint): these are utility actions
+                 subordinate to Run, so colour stays reserved for status + the primary action. -->
             <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
-                    Style="{DynamicResource ButtonTintScan}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
             <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
-                    Style="{DynamicResource ButtonTintInfo}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
+                    Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
           </Grid>
 
           <!-- Row 1: available updates (left) + largest folders (right), side by side so a
