@@ -523,6 +523,7 @@ class HomePresenter : AsyncJobPresenter {
             return
         }
 
+        $this.Detail.AppendSeparator($hostName)
         $this.Detail.AppendLog($hostName, "Starting $command for $hostName...")
         $this.ScanSteps.Remove($hostName)   # fresh job, fresh step ratchet
 
@@ -885,7 +886,8 @@ class HomePresenter : AsyncJobPresenter {
             $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
                 $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
         }
-        return $updateRows
+        # Show most-urgent first (Urgent -> Recommended -> Optional -> unknown), then by name.
+        return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)
     }
 
     # First child element's trimmed text (empty when absent). SelectSingleNode('name'), never

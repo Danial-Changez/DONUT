@@ -116,6 +116,21 @@ class InventoryPresenter {
             $this.FindFoldersButton.Add_Click({
                     $presenter.FindBigFolders($presenter.Home.SelectedHost) }.GetNewClosure())
         }
+
+        # The folders TreeView keeps its own inner ScrollViewer, which marks the wheel handled so
+        # the outer scroller never moves; re-raise the wheel to the parent so it bubbles up.
+        $folders = $view.FindName('DiskFoldersList')
+        if ($folders) {
+            $folders.Add_PreviewMouseWheel({
+                    param($s, $e)
+                    if ($e.Handled) { return }
+                    $e.Handled = $true
+                    $ev = [System.Windows.Input.MouseWheelEventArgs]::new($e.MouseDevice, $e.Timestamp, $e.Delta)
+                    $ev.RoutedEvent = [System.Windows.UIElement]::MouseWheelEvent
+                    $parent = [System.Windows.Media.VisualTreeHelper]::GetParent($s)
+                    if ($parent) { $parent.RaiseEvent($ev) }
+                })
+        }
     }
 
     # Selection changed: open the detail panel for the new host, or clear on deselect.
@@ -201,6 +216,14 @@ class InventoryPresenter {
         $this.AppendLogLines($hostName, @($text))
     }
 
+    # A blank line between operations (e.g. a disk scan then an update scan); skipped while the
+    # host's log is still empty so a run never opens with a leading blank line.
+    [void] AppendSeparator([string]$hostName) {
+        if ($this.LogBuffers.ContainsKey($hostName) -and $this.LogBuffers[$hostName].Count -gt 0) {
+            $this.AppendLogLines($hostName, @(''))
+        }
+    }
+
     # Batched append: one AppendText + one ScrollToEnd per batch instead of per line.
     [void] AppendLogLines([string]$hostName, [string[]]$lines) {
         if ($null -eq $lines -or $lines.Count -eq 0) { return }
@@ -272,6 +295,7 @@ class InventoryPresenter {
         }
         if (-not $force -and -not $this.InventoryIsStale($hostName)) { return }
         try {
+            $this.AppendSeparator($hostName)
             $this.AppendLog($hostName, "Gathering inventory...")
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.InventoryService.PrepareInventory($hostName)
@@ -343,6 +367,7 @@ class InventoryPresenter {
         }
         $this.Home.MoveRowToTop($hostName)
         try {
+            $this.AppendSeparator($hostName)
             $this.AppendLog($hostName, "Scanning C: for largest folders...")
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)

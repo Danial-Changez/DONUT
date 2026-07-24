@@ -13,10 +13,10 @@ Describe "DcuUpdate" {
             $u.Urgency | Should -Be 'Recommended'
         }
 
-        It "formats an unmatched update as 'new (latest)'" {
+        It "formats an unmatched update as the target version alone (no '(latest)')" {
             $u = [DcuUpdate]::Create('Dell BIOS', '1.36.0', '', $false, $false,
                 'Urgent', 'BIOS', 'BIOS', 28033352)
-            $u.VersionText | Should -Be '1.36.0  (latest)'
+            $u.VersionText | Should -Be '1.36.0'
             $u.HasMatch | Should -BeFalse
         }
 
@@ -29,6 +29,21 @@ Describe "DcuUpdate" {
                 Should -Be '2 GB'
             ([DcuUpdate]::Create('x', '1', '', $false, $false, '', '', '', 0)).SizeText |
                 Should -Be ''
+        }
+    }
+
+    Context "UrgencyRank - severity ordering" {
+        It "ranks Urgent < Recommended < Optional < unknown (case-insensitive)" {
+            [DcuUpdate]::UrgencyRank('Urgent') | Should -Be 0
+            [DcuUpdate]::UrgencyRank('recommended') | Should -Be 1
+            [DcuUpdate]::UrgencyRank('Optional') | Should -Be 2
+            [DcuUpdate]::UrgencyRank('') | Should -Be 3
+            [DcuUpdate]::UrgencyRank('anything-else') | Should -Be 3
+        }
+        It "sorts a mixed list most-urgent first" {
+            $ranks = @('Optional', 'Urgent', 'Recommended') |
+                ForEach-Object { [DcuUpdate]::UrgencyRank($_) } | Sort-Object
+            $ranks | Should -Be @(0, 1, 2)
         }
     }
 

@@ -19,7 +19,7 @@ class DcuUpdate {
     [string] $Category = ''
     [string] $Type = ''
     [string] $Urgency = ''       # Urgent | Recommended | Optional (drives the severity badge)
-    [string] $VersionText = ''   # "1.2.0 -> 1.4.1" (matched) or "1.36.0 (latest)"
+    [string] $VersionText = ''   # "1.2.0 -> 1.4.1" (matched) or "1.36.0" (no installed baseline)
     [string] $SizeText = ''      # "26.7 MB" / "1.3 GB" (blank when size unknown)
     [bool]   $IsNewer = $false
     [bool]   $HasMatch = $false
@@ -39,7 +39,9 @@ class DcuUpdate {
             $u.VersionText = "$currentVersion  →  $newVersion"
         }
         else {
-            $u.VersionText = "$newVersion  (latest)"
+            # No matched installed version to diff against - show the target version alone
+            # ("(latest)" was redundant: every DCU update is the latest available).
+            $u.VersionText = "$newVersion"
         }
         $u.SizeText = [DcuUpdate]::FormatSize($sizeBytes)
         return $u
@@ -53,5 +55,16 @@ class DcuUpdate {
         $mb = 1048576.0
         if ($bytes -ge $gb) { return "$(([Math]::Round($bytes / $gb, 1)).ToString($ci)) GB" }
         return "$(([Math]::Round($bytes / $mb, 1)).ToString($ci)) MB"
+    }
+
+    # Severity order for the updates list: Urgent first, then Recommended, Optional, unknown.
+    static [int] UrgencyRank([string]$urgency) {
+        switch ("$urgency".Trim().ToLowerInvariant()) {
+            'urgent' { return 0 }
+            'recommended' { return 1 }
+            'optional' { return 2 }
+            default { return 3 }
+        }
+        return 3
     }
 }
