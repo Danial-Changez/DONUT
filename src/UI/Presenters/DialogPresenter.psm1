@@ -73,7 +73,7 @@ class DialogPresenter {
         [string]$primaryText, [bool]$isDestructive) {
         $this.Initialize()
         $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
-        $vm.IsDestructive = $isDestructive
+        if ($isDestructive) { $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonDestructive') }
         $this.Window.DataContext = $vm
         return $this.ShowModal()
     }
@@ -115,6 +115,8 @@ class DialogPresenter {
 
         $self = $this
         $vm.PrimaryText = $primaryText
+        # The view binds Button.Style to this (MVVM); the destructive overload overrides it.
+        $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonPrimary')
         $prim = { param($p) $self.Result = $true; $self.Window.Close() }.GetNewClosure()
         $vm.PrimaryCommand = [RelayCommand]::new([System.Action[object]]$prim)
 
@@ -131,22 +133,10 @@ class DialogPresenter {
     # reentrancy guard, and returns the button verdict.
     hidden [bool] ShowModal() {
         $this.Result = $false
-        $this.ApplyPrimaryStyle()
         $this.PrepareToShow()
         $this.IsShowing = $true
         try { $this.Window.ShowDialog() | Out-Null } finally { $this.IsShowing = $false }
         return $this.Result
-    }
-
-    # MVP (no MVVM style-swapping trigger): the presenter picks the primary button's style from
-    # the VM's IsDestructive - red for irreversible actions, the accent otherwise.
-    hidden [void] ApplyPrimaryStyle() {
-        $btn = $this.Window.FindName('btnPrimary')
-        if ($null -eq $btn) { return }
-        $vm = $this.Window.DataContext
-        $key = if ($vm -and $vm.IsDestructive) { 'ButtonDestructive' } else { 'ButtonPrimary' }
-        $style = $this.Window.TryFindResource($key)
-        if ($style) { $btn.Style = $style }
     }
 
     # Parents the dialog to the main window (or makes it topmost when there isn't one yet)

@@ -152,8 +152,8 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <!-- Buttons: bottom-right, secondary then primary (primary rightmost). The primary's
-                 style (ButtonPrimary vs ButtonDestructive) is set by DialogPresenter. -->
+            <!-- Buttons: bottom-right, secondary then primary (primary rightmost). The primary
+                 binds its Style from the VM (accent, or destructive-red for irreversible acts). -->
             <StackPanel Grid.Row="4"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
@@ -168,7 +168,7 @@
                         Content="{Binding PrimaryText}"
                         Command="{Binding PrimaryCommand}"
                         MinWidth="96" Height="36"
-                        Style="{DynamicResource ButtonPrimary}" />
+                        Style="{Binding PrimaryStyle}" />
             </StackPanel>
         </Grid>
     </Border>
