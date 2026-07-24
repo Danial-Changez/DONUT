@@ -146,6 +146,9 @@ class InventoryPresenter {
         $rc = $this.Home.GetRecord($hostName)
         $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
         $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        # Fill the Available Updates card from the last scan's report on disk (if any), so a
+        # completed/cached scan shows without re-running. Read-only: selecting never re-scans.
+        [void]$this.Home.RenderUpdatesFromReport($hostName)
         # Same-instance re-applies are skipped, so re-selecting keeps the folder tree's
         # expansion state.
         $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }

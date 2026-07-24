@@ -674,6 +674,16 @@ class HomePresenter : AsyncJobPresenter {
             $transitioned = $this.ProceedWithApply($job.HostName)
         }
 
+        # A plain scan fills the same Available Updates card as an apply scan, minus the
+        # apply prompt: the operator sees what's pending before deciding to apply.
+        if ($job.Status -eq 'Completed' -and $job.JobType -eq 'Scan') {
+            $scanRows = $this.RenderUpdatesFromReport($job.HostName)
+            $summary = if ($null -eq $scanRows) { 'no report generated' }
+            elseif ($scanRows.Count -eq 0) { 'no updates found' }
+            else { "$($scanRows.Count) update(s) available" }
+            $this.Detail.AppendLog($job.HostName, "Scan complete: $summary.")
+        }
+
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
             $this.CheckForManualReboot($job)
             if ($this.Toasts) {
@@ -790,41 +800,18 @@ class HomePresenter : AsyncJobPresenter {
     [bool] ProceedWithApply([string]$hostName) {
         if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
 
-        $report = $this.UpdateService.ParseUpdateReport($hostName)
-
-        if (-not $report) {
+        $updateRows = $this.RenderUpdatesFromReport($hostName)
+        if ($null -eq $updateRows) {
             $this.Detail.AppendLog($hostName, "No report generated or scan failed.")
             return $false
         }
-
-        $updateNodes = $report.SelectNodes("//update")
-        if ($updateNodes.Count -eq 0) {
+        if ($updateRows.Count -eq 0) {
             $this.Detail.AppendLog($hostName, "No updates found.")
             if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "No updates found.") }
             return $false
         }
 
-        $this.Detail.AppendLog($hostName, "Found $($updateNodes.Count) updates. Analyzing driver matches...")
-
-        $installedDrivers = $this.GetInstalledDriversFromReport($report)
-        $updateRows = $this.BuildUpdateRows($report, $installedDrivers)
-
-        # Identity verdict (the parallel check may not have landed yet).
-        $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
-            "Identity verified: answers as '$($this.Resolver.GetVerifiedName($hostName))'."
-        }
-        else {
-            "Identity not verified yet (name check pending) - proceed with care."
-        }
-
-        # Render the readable list in the detail pane (per host; shows on selection).
-        $vm = $this.GetRow($hostName)
-        if ($null -ne $vm) {
-            $vm.Set('Updates', $updateRows)
-            $vm.Set('UpdatesHeader', "UPDATES FOUND ($($updateRows.Count))")
-            $vm.Set('UpdatesIdentityText', $identityLine)
-            $vm.Set('HasUpdates', $true)
-        }
+        $this.Detail.AppendLog($hostName, "Found $($updateRows.Count) update(s).")
         $this.CopyUpdatesToClipboard($hostName, @($updateRows | ForEach-Object { "$($_.Name), $($_.VersionText)" }))
 
         # Run all consented up front: apply straight away, no per-host dialog.
@@ -846,6 +833,37 @@ class HomePresenter : AsyncJobPresenter {
         # Re-check after the dialog: a Mismatch may have landed while it was open.
         if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
         return $this.StartApply($hostName)
+    }
+
+    # Renders a host's scan report into the detail-pane Available Updates card and returns
+    # the update rows. $null = no report on disk; @() = a report with zero updates (card cleared).
+    [array] RenderUpdatesFromReport([string]$hostName) {
+        $report = $this.UpdateService.ParseUpdateReport($hostName)
+        if (-not $report) { return $null }
+
+        $vm = $this.GetRow($hostName)
+        if ($report.SelectNodes("//update").Count -eq 0) {
+            if ($null -ne $vm) { $vm.Set('HasUpdates', $false) }
+            return @()
+        }
+
+        $updateRows = $this.BuildUpdateRows($report, $this.GetInstalledDriversFromReport($report))
+
+        # Identity verdict (the parallel check may not have landed yet).
+        $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
+            "Identity verified: answers as '$($this.Resolver.GetVerifiedName($hostName))'."
+        }
+        else {
+            "Identity not verified yet (name check pending) - proceed with care."
+        }
+
+        if ($null -ne $vm) {
+            $vm.Set('Updates', $updateRows)
+            $vm.Set('UpdatesHeader', "UPDATES FOUND ($($updateRows.Count))")
+            $vm.Set('UpdatesIdentityText', $identityLine)
+            $vm.Set('HasUpdates', $true)
+        }
+        return $updateRows
     }
 
     # Parses each <update>'s child elements into typed DcuUpdate rows (read explicitly - the
