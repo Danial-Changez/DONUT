@@ -556,7 +556,7 @@
                scrolls on its own, and shows a hint until it has data. -->
           <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="1.25*" />
               <ColumnDefinition Width="12" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
@@ -570,8 +570,56 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Text="AVAILABLE UPDATES"
-                         Style="{DynamicResource MicroLabel}" Margin="0,0,0,8" />
+              <!-- Header: label + a compact identity pill (full verdict in its tooltip), so
+                   the safety signal stays glanceable without a full sentence eating a row. -->
+              <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="AVAILABLE UPDATES"
+                           Style="{DynamicResource MicroLabel}" VerticalAlignment="Center" />
+                <Border Grid.Column="1" CornerRadius="9" Padding="8,1" BorderThickness="1"
+                        VerticalAlignment="Center"
+                        ToolTip="{Binding SelectedMachine.UpdatesIdentityText}"
+                        Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
+                  <Border.Style>
+                    <Style TargetType="Border">
+                      <Setter Property="Background" Value="{DynamicResource TintAmber}" />
+                      <Setter Property="BorderBrush" Value="{DynamicResource TintAmberBorder}" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding SelectedMachine.IdentityState}" Value="Match">
+                          <Setter Property="Background" Value="{DynamicResource TintGreen}" />
+                          <Setter Property="BorderBrush" Value="{DynamicResource TintGreenBorder}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding SelectedMachine.IdentityState}" Value="Mismatch">
+                          <Setter Property="Background" Value="{DynamicResource TintRed}" />
+                          <Setter Property="BorderBrush" Value="{DynamicResource TintRedBorder}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Border.Style>
+                  <TextBlock VerticalAlignment="Center" FontFamily="{DynamicResource FontSans}"
+                             FontSize="10" FontWeight="SemiBold">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Text" Value="UNVERIFIED" />
+                        <Setter Property="Foreground" Value="{DynamicResource AccentYellow}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding SelectedMachine.IdentityState}" Value="Match">
+                            <Setter Property="Text" Value="VERIFIED" />
+                            <Setter Property="Foreground" Value="{DynamicResource AccentGreen}" />
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding SelectedMachine.IdentityState}" Value="Mismatch">
+                            <Setter Property="Text" Value="WRONG MACHINE" />
+                            <Setter Property="Foreground" Value="{DynamicResource AccentRed}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </Border>
+              </Grid>
               <!-- Hint until an update scan has populated the list. -->
               <TextBlock Grid.Row="1" VerticalAlignment="Top"
                          Text="Run a scan on this machine to list its available updates."
@@ -588,21 +636,15 @@
                   </Style>
                 </TextBlock.Style>
               </TextBlock>
-              <!-- Populated list (identity line + updates), shown once a scan has landed. -->
-              <Grid Grid.Row="1" Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="{Binding SelectedMachine.UpdatesIdentityText}"
-                           FontFamily="{DynamicResource FontSans}" FontSize="11" TextWrapping="Wrap"
-                           Foreground="{DynamicResource BodyTextTertiary}" Margin="0,0,0,8" />
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+              <!-- Populated list, shown once a scan has landed (identity now lives in the
+                   header pill, not a full-width sentence, to keep the card compact). -->
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                            Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
                 <ItemsControl ItemsSource="{Binding SelectedMachine.Updates}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
                       <Border Background="{DynamicResource PanelBackgroundHover}" BorderBrush="{DynamicResource PanelBorder}"
-                              BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
+                              BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,5">
                         <Grid>
                           <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -660,7 +702,7 @@
                             </Border>
                           </Grid>
                           <!-- Line 2: category badge + version change + NEW + size -->
-                          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+                          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,4,0,0" VerticalAlignment="Center">
                             <Border Style="{DynamicResource BadgeMuted}" Margin="0,0,8,0" VerticalAlignment="Center">
                               <TextBlock Style="{DynamicResource BadgeMutedText}" Text="{Binding Category}" />
                             </Border>
@@ -679,7 +721,6 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </ScrollViewer>
-              </Grid>
             </Grid>
           </Border>
 

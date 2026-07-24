@@ -72,7 +72,8 @@ class HostViewModel : ObservableObject {
     [object] $Updates = @()
     [bool]   $HasUpdates = $false
     [string] $UpdatesHeader = ''
-    [string] $UpdatesIdentityText = ''
+    [string] $UpdatesIdentityText = ''   # full verdict sentence (identity pill's tooltip)
+    [string] $IdentityState = 'Unknown'  # Match / Mismatch / Unknown - drives the pill
 
     # Backing state for idle/reachability recomposition: the chip/subtitle are rebuilt
     # from these whenever either the stored status or the live reachability changes.

@@ -849,18 +849,21 @@ class HomePresenter : AsyncJobPresenter {
 
         $updateRows = $this.BuildUpdateRows($report, $this.GetInstalledDriversFromReport($report))
 
-        # Identity verdict (the parallel check may not have landed yet).
-        $identityLine = if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') {
-            "Identity verified: answers as '$($this.Resolver.GetVerifiedName($hostName))'."
-        }
-        else {
-            "Identity not verified yet (name check pending) - proceed with care."
+        # Identity verdict drives the header pill; the sentence is its tooltip. The name
+        # check runs with the apply, so a plain scan usually reads 'Unknown'.
+        $verdict = $this.Resolver.IdentityVerdict($hostName)
+        $reported = $this.Resolver.GetVerifiedName($hostName)
+        $identityLine = switch ($verdict) {
+            'Match' { "Identity verified: the machine at this IP answers as '$reported'." }
+            'Mismatch' { "Wrong machine: this IP answers as '$reported', not $hostName - do not apply." }
+            default { "Identity not verified yet - the name check runs before an apply." }
         }
 
         if ($null -ne $vm) {
             $vm.Set('Updates', $updateRows)
             $vm.Set('UpdatesHeader', "UPDATES FOUND ($($updateRows.Count))")
             $vm.Set('UpdatesIdentityText', $identityLine)
+            $vm.Set('IdentityState', $verdict)
             $vm.Set('HasUpdates', $true)
         }
         return $updateRows
