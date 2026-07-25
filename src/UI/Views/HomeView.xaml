@@ -855,9 +855,10 @@
               </ProgressBar>
               <!-- Wrap + no horizontal scrollbar: the themed ScrollBar template is
                    vertical-only, so a horizontal bar renders as a stray white box. -->
-              <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" Background="Transparent" BorderThickness="0"
-                       Foreground="{DynamicResource TerminalText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
-                       TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="6" />
+              <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" IsTabStop="False" Background="Transparent"
+                       BorderThickness="0" Foreground="{DynamicResource TerminalText}" FontFamily="{DynamicResource FontMono}"
+                       FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                       HorizontalScrollBarVisibility="Disabled" Margin="6" />
             </Grid>
           </Border>
         </Grid>

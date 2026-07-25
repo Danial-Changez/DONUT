@@ -55,15 +55,15 @@
                                 FlowDirection="RightToLeft">
                         <Button x:Name="btnClose"
                                 Style="{DynamicResource controlButton}"
-                                Tag="{DynamicResource AccentPink}"
-                                Cursor="Hand">
+                                Tag="{DynamicResource Destructive}"
+                                ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
                         <Button x:Name="btnMinimize"
                                 Style="{DynamicResource controlButton}"
                                 Tag="{DynamicResource AccentBlueLight}"
-                                Cursor="Hand">
+                                ToolTip="Minimize">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Width="13"
                                   Data="{DynamicResource Minimize}" />
@@ -122,12 +122,14 @@
                             <TextBlock x:Name="AccessHelp"
                                        TextAlignment="Center"
                                        Margin="8,6,8,6"
+                                       FontFamily="{DynamicResource FontSans}"
+                                       FontSize="12"
                                        Foreground="{DynamicResource TitleTextPrimary}">
                                 <Run Text="GitHub access is required to use this app. " />
                                 <Hyperlink x:Name="AccessLink"
-                                           NavigateUri="https://github.com/">                                    
-                                    Sign Up Here
-                                </Hyperlink>
+                                           NavigateUri="https://github.com/signup"
+                                           Foreground="{DynamicResource AccentPurpleLight}"
+                                           TextDecorations="None">Sign up here</Hyperlink>
                             </TextBlock>
                         </Border>
                         <!-- Output panel anchored bottom-center -->
@@ -146,6 +148,7 @@
                                      AcceptsReturn="True"
                                      VerticalScrollBarVisibility="Auto"
                                      IsReadOnly="True"
+                                     IsTabStop="False"
                                      FontFamily="{DynamicResource FontMono}"
                                      FontSize="13.5"
                                      Background="Transparent"

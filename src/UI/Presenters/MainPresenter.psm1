@@ -521,20 +521,30 @@ class MainPresenter {
         $this.MainVm.Set('QrImage', $img)
         $this.MainVm.Set('QrCaption', "BitLocker recovery key - $caption")
         $this.MainVm.Set('IsQrOpen', $true)
+        # Focus the card so the overlay's Esc key binding is in scope (settings idiom).
+        $qrCard = $this.Window.FindName('qrCard')
+        if ($qrCard) { [void]$qrCard.Focus() }
     }
 
     [void] CloseQr() {
         if ($this.MainVm) { $this.MainVm.Set('IsQrOpen', $false) }
     }
 
+    # Resolves a UIColors Color key to RGBA bytes for the QR encoder ($fallback when absent).
+    hidden [byte[]] QrColorBytes([string]$key, [byte[]]$fallback) {
+        $c = $this.Window.TryFindResource($key)
+        if ($c -is [System.Windows.Media.Color]) { return [byte[]]($c.R, $c.G, $c.B, $c.A) }
+        return $fallback
+    }
+
     # Encodes text to a QR PNG (in memory) via the bundled QR helper, returned as a frozen,
     # cross-thread-safe BitmapImage (ECC level Q for glare tolerance). $null on any failure.
     hidden [System.Windows.Media.ImageSource] BuildQrImage([string]$payload) {
         try {
-            # Themed but still dark-on-light so any reader can scan it: violet-900 modules on a
-            # soft violet-50 plate (~9:1 contrast) instead of stark #000 on #FFF. RGBA bytes.
-            $dark = [byte[]](0x4C, 0x1D, 0x95, 0xFF)    # violet-900 (brand modules)
-            $light = [byte[]](0xF5, 0xF3, 0xFF, 0xFF)   # violet-50 (softened background)
+            # Module/plate colours come from UIColors.xaml (QrModuleDark/LightColor) so the
+            # palette stays single-sourced; fall back to the same violets if unresolvable.
+            $dark = $this.QrColorBytes('QrModuleDarkColor', [byte[]](0x4C, 0x1D, 0x95, 0xFF))
+            $light = $this.QrColorBytes('QrModuleLightColor', [byte[]](0xF5, 0xF3, 0xFF, 0xFF))
             $png = [Donut.Qr.QrCode]::EncodePng($payload, 20, $dark, $light)
             $ms = [System.IO.MemoryStream]::new($png)
             $img = [System.Windows.Media.Imaging.BitmapImage]::new()

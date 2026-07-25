@@ -33,9 +33,9 @@
                     <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}"
                                   Offset="0" />
                     <GradientStop Color="{DynamicResource WindowBorderAccentColor}"
-                                  Offset="0" />
+                                  Offset="0.5" />
                     <GradientStop Color="{DynamicResource WindowBorderSecondaryColor}"
-                                  Offset="0" />
+                                  Offset="1" />
                 </LinearGradientBrush>
             </Border.BorderBrush>
             <Grid>
@@ -68,21 +68,24 @@
                             <Button x:Name="btnClose"
                                     Command="{Binding CloseCommand}"
                                     Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource Destructive}">
+                                    Tag="{DynamicResource Destructive}"
+                                    ToolTip="Close">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource xMark}" />
                             </Button>
                             <Button x:Name="btnMaximize"
                                     Command="{Binding MaximizeCommand}"
                                     Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentYellow}">
+                                    Tag="{DynamicResource AccentYellow}"
+                                    ToolTip="Maximize / restore">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Data="{DynamicResource Square}" />
                             </Button>
                             <Button x:Name="btnMinimize"
                                     Command="{Binding MinimizeCommand}"
                                     Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentBlueLight}">
+                                    Tag="{DynamicResource AccentBlueLight}"
+                                    ToolTip="Minimize">
                                 <Path Style="{DynamicResource controlButtonIcon}"
                                       Width="13"
                                       Data="{DynamicResource Minimize}" />
@@ -209,7 +212,8 @@
                     <MouseBinding MouseAction="LeftClick" Command="{Binding CloseQrCommand}" />
                 </Border.InputBindings>
             </Border>
-            <Border Width="360"
+            <Border x:Name="qrCard"
+                    Width="360"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     CornerRadius="10"
@@ -298,8 +302,9 @@
                     IsHitTestVisible="False" Width="0" Height="0" Visibility="Collapsed"
                     BorderBrush="{DynamicResource Primary}" BorderThickness="2" CornerRadius="10" />
             <Border x:Name="tourCallout" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Focusable="True"
                     Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}"
-                    BorderThickness="1" CornerRadius="12" Padding="16,16,16,14">
+                    BorderThickness="1" CornerRadius="10" Padding="16,14">
                 <StackPanel>
                     <TextBlock x:Name="tourTitle" Text="Welcome"
                                FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="Bold"

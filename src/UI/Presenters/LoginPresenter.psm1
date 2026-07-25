@@ -59,6 +59,16 @@ class LoginPresenter {
                 }.GetNewClosure())
         }
 
+        # The sign-up hyperlink did nothing without a navigate handler.
+        $accessLink = $this.LoginWindow.FindName('AccessLink')
+        if ($accessLink) {
+            $accessLink.Add_RequestNavigate({
+                    param($s, $e)
+                    try { Start-Process $e.Uri.AbsoluteUri }
+                    catch { $presenter.Logger.LogException('Failed to open the sign-up link', $_) }
+                }.GetNewClosure())
+        }
+
         $this.LoginSuccess = $false
 
         $this.LoadImages()

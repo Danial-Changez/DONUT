@@ -83,6 +83,9 @@
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
+    <!-- QR module/plate: violet-900 on violet-50 (~9:1, still scanner-safe dark-on-light). -->
+    <Color x:Key="QrModuleDarkColor"> #4C1D95</Color>
+    <Color x:Key="QrModuleLightColor"> #F5F3FF</Color>
     <!-- Font Colors (Arcane neutral: foreground #FAFAFA, muted-foreground #A1A1A1) -->
     <Color x:Key="TitleTextPrimaryColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="TitleTextPrimary"
