@@ -83,9 +83,12 @@
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
-    <!-- QR module/plate: violet-900 on violet-50 (~9:1, still scanner-safe dark-on-light). -->
-    <Color x:Key="QrModuleDarkColor"> #4C1D95</Color>
-    <Color x:Key="QrModuleLightColor"> #F5F3FF</Color>
+    <!-- QR: INVERTED by choice - violet-300 modules on a transparent background so the
+         code sits directly on the dark card (~10:1 vs #171717). Field-gated on the
+         hardware scanner reading inverted codes; if it fails, revert to dark-on-light
+         (modules #4C1D95, back #F5F3FF opaque) and restore the QrPlate border. -->
+    <Color x:Key="QrModuleColor"> #C4B5FD</Color>
+    <Color x:Key="QrModuleBackColor"> #00000000</Color>
     <!-- Font Colors (Arcane neutral: foreground #FAFAFA, muted-foreground #A1A1A1) -->
     <Color x:Key="TitleTextPrimaryColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="TitleTextPrimary"
@@ -220,9 +223,6 @@
     <SolidColorBrush x:Key="TerminalBackground"
                      Color="{StaticResource TerminalBackgroundColor}" />
     <!-- QR plate: stays LIGHT for scannability - never dark-theme this -->
-    <Color x:Key="QrPlateColor"> #F5F3FF</Color>
-    <SolidColorBrush x:Key="QrPlate"
-                     Color="{StaticResource QrPlateColor}" />
     <!-- List rows (Arcane table): hover = primary@10%, selected = primary@20%,
          separator = white@4% (border/40 over the 10% hairline) -->
     <Color x:Key="RowHoverColor"> #1A8022FE</Color>

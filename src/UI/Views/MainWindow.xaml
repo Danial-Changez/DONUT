@@ -246,17 +246,11 @@
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
-                    <!-- Light "code chip": a QR must stay dark-on-light to scan, so the plate
-                         stays light but is tinted to violet-50 (matching the QR's own light
-                         colour, no seam) and framed in the theme's violet to sit deliberately
-                         inside the dark card. -->
+                    <!-- Inverted themed QR (violet-300 modules, transparent back) blending
+                         straight into the card - no plate. The 12px inset is the quiet zone. -->
                     <Border Grid.Row="1"
                             Margin="0,14,0,0"
                             Padding="12"
-                            Background="{DynamicResource QrPlate}"
-                            BorderBrush="{DynamicResource WindowBorderAccent}"
-                            BorderThickness="1"
-                            CornerRadius="8"
                             HorizontalAlignment="Center">
                         <Image Source="{Binding QrImage}"
                                Width="280"

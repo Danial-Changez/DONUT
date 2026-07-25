@@ -17,10 +17,11 @@ namespace Donut.Qr
     public static class QrCode
     {
         /// <summary>
-        /// Encodes <paramref name="text"/> to a QR-code PNG in the given module colours. ECC
-        /// level Q (~25% recovery) keeps the code scannable under mild on-screen glare. Keep
-        /// <paramref name="darkRgba"/> dark and <paramref name="lightRgba"/> light: decoders
-        /// need dark-on-light, so the colours may be themed but not inverted.
+        /// Encodes <paramref name="text"/> to a QR-code PNG in the given module colours
+        /// (RGBA, so a transparent background is supported). ECC level Q (~25% recovery)
+        /// keeps the code scannable under mild on-screen glare. DONUT renders it INVERTED
+        /// (light modules on the dark card) - deliberate, and field-gated on the hardware
+        /// scanner decoding inverse QR; revert to dark-on-light if it cannot.
         /// </summary>
         /// <param name="text">The payload to encode (e.g. a BitLocker recovery key).</param>
         /// <param name="pixelsPerModule">Size of each QR module in pixels.</param>

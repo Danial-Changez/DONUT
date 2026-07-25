@@ -541,11 +541,11 @@ class MainPresenter {
     # cross-thread-safe BitmapImage (ECC level Q for glare tolerance). $null on any failure.
     hidden [System.Windows.Media.ImageSource] BuildQrImage([string]$payload) {
         try {
-            # Module/plate colours come from UIColors.xaml (QrModuleDark/LightColor) so the
-            # palette stays single-sourced; fall back to the same violets if unresolvable.
-            $dark = $this.QrColorBytes('QrModuleDarkColor', [byte[]](0x4C, 0x1D, 0x95, 0xFF))
-            $light = $this.QrColorBytes('QrModuleLightColor', [byte[]](0xF5, 0xF3, 0xFF, 0xFF))
-            $png = [Donut.Qr.QrCode]::EncodePng($payload, 20, $dark, $light)
+            # INVERTED by choice (see UIColors QrModule* for the revert recipe): violet-300
+            # modules on a transparent back so the code blends into the dark card.
+            $modules = $this.QrColorBytes('QrModuleColor', [byte[]](0xC4, 0xB5, 0xFD, 0xFF))
+            $back = $this.QrColorBytes('QrModuleBackColor', [byte[]](0x00, 0x00, 0x00, 0x00))
+            $png = [Donut.Qr.QrCode]::EncodePng($payload, 20, $modules, $back)
             $ms = [System.IO.MemoryStream]::new($png)
             $img = [System.Windows.Media.Imaging.BitmapImage]::new()
             $img.BeginInit()
