@@ -58,6 +58,13 @@ model.
   = the old behavior). A wedged child is `Kill()`-able — the recovery a wedged pipeline
   never had. DC discovery (`Warm`, needs the AD module) and the identity check (`Name`,
   DCOM CIM) stay on the worker path.
+  *Deferred upgrade (build only if field logs show resolve wall time still gating
+  something a user watches):* a **pinned** resolver — `-Serve` switch on
+  `ResolveWorker.ps1` (JSON-lines requests on stdin, result files keyed by request id)
+  supervised LensAgent-style (heartbeat, kill/respawn, bring-up at
+  `StartDeferredWarms` time — never on a hot path), falling back per-request to the
+  one-shot child. Saves ~1–1.5 s per resolve over the one-shot lane; not worth the
+  supervision complexity until proven needed.
   on the pool (AD search, Lens broker, unlock, startup task) share one Core helper for
   start / complete / async-stop / reap instead of three hand-rolled copies. The rules it
   pins: never `Dispose()` a running pipeline (it blocks the UI thread — `BeginStop` and
