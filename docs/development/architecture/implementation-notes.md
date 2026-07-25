@@ -222,6 +222,15 @@ model.
   deep-cloned on the UI thread at prep time (`RemoteServices.BuildWorkerArgs`), and
   `AppConfig.DeepClone` is cycle-guarded so a self-referencing tree cannot spin the
   dispatcher. `RunspaceWarmCoverage.Tests.ps1` guards the staging statically.
+- **Debug-log gate:** `[DEBUG]` breadcrumbs are opt-in (`debugLogging` setting, default
+  off; `Start-Donut -DebugLog` forces a session on without persisting). The gate lives
+  on `LogService.DebugEnabled` — INFO/WARN/ERROR always flow — and the toggle applies
+  live: the app shares one logger instance, and workers receive the parent's
+  *effective* state per job (`BuildWorkerArgs`/`PrepareResolveFast` ship
+  `Logger.DebugEnabled`; `RemoteWorker` stamps it into the rebuilt config so the child
+  service graph gates identically). The class default stays verbose so tests and the
+  diagnostic tools never lose breadcrumbs. **Any field diagnosis needs `-DebugLog` (or
+  the toggle) on before reproducing** — the wedge forensics all live at DEBUG.
 - **Thread safety:** `LogService` is thread-safe via **lock-free atomic appends** —
   every writer opens `Donut.log` in Append mode with ReadWrite sharing and emits one
   line per `Write` call, which the kernel serializes. It deliberately holds **no

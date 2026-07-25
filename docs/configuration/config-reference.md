@@ -28,6 +28,7 @@ up).
 | `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
 | `machineNamePatterns` | string[], `^CAP-`, `^B[0-9]{4}`, `^WVD` | Regex patterns that mark search text as a machine name (vs. a person), so the finder pre-selects "Add as a machine". Edit as naming conventions change |
 | `hasSeenTour` | bool, `false` | Set once the first-run [guided tour](../get-started/first-launch.md#the-guided-tour) is shown or skipped; the `?` button replays regardless |
+| `debugLogging` | bool, `false` | Verbose `[DEBUG]` breadcrumbs in `Donut.log` (job/worker/resolve tracing). INFO/WARN/ERROR always flow; applies live and to every worker child. `Start-Donut -DebugLog` forces it on for one session without persisting |
 | `commands` | object | Per-command DCU argument maps — see the [DCU command reference](./dcu-commands.md) |
 
 ## Example

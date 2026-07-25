@@ -159,6 +159,7 @@ class HostResolver : RemoteJobService {
                 HostName = $hostName
                 Dc       = $this.ActiveDc
                 LogsDir  = $this.Config.LogsPath
+                DebugLog = $this.Logger.DebugEnabled
             }
         }
     }

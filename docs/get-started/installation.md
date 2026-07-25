@@ -52,6 +52,8 @@ pwsh -File src\Start-Donut.ps1
 The script compiles the C# helpers in-process, so it needs nothing beyond
 PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host, it relaunches
 itself under `pwsh -Sta` automatically. Add `-Tray` to start hidden in the system
-tray (the packaged launcher takes the equivalent `--tray`).
+tray (the packaged launcher takes the equivalent `--tray`). Add `-DebugLog` to
+force verbose `[DEBUG]` logging for that session (see
+[Settings](../features/settings.md#general-section)).
 
 Next: [First launch](./first-launch.md).

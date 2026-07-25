@@ -42,6 +42,7 @@ class ResolveProcessJob : AsyncJob {
                     '-LogsDir', [string]$arguments.LogsDir, '-ResultFile', $this.FastResultFile)) {
                 $psi.ArgumentList.Add($a)
             }
+            if ([bool]$arguments.DebugLog) { $psi.ArgumentList.Add('-DebugLog') }
             # NO stream redirection: undrained pipes wedge children; the verdict rides
             # the result file and diagnostics ride Donut.log.
             $psi.UseShellExecute = $false

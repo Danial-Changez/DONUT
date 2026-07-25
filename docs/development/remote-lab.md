@@ -90,6 +90,9 @@ warm+DC-only diagnostic automatically (no target host).
 One `DonutDiag-<machine>-<sha>-<timestamp>.zip` artifact — verdict JSON,
 harness `Donut.log`, provenance (commit, pwsh, Defender signature age),
 PowerShell/Defender event CSVs, and live runspace stacks if the warm barrier
-lapsed. Interpreting it and the bisect workflow it feeds:
+lapsed. The harness forces its workers' `[DEBUG]` on; but when reproducing in
+the **real app**, launch it with `Start-Donut -DebugLog` (or the Settings →
+Diagnostics toggle) first — `debugLogging` defaults off, and the tailed app log
+is breadcrumb-free without it. Interpreting it and the bisect workflow it feeds:
 [testing.md](./testing.md), "Headless diagnostic runs and the empirical bisect
 protocol". The wedge probe on its own: `tools/Get-DonutRunspaceStacks.ps1`.

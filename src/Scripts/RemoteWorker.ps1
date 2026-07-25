@@ -56,6 +56,8 @@ param(
     [string]$ReportsDir,
     [hashtable]$Settings,
     [string]$ConfigPath,
+    # Parent's effective debug-log state (setting OR session override); gates [DEBUG].
+    [bool]$DebugLog,
     # Child-process path: args ride in through a JSON file (Options/Settings can't
     # cross a command line), the result rides back through ResultFile.
     [string]$ArgsFile,
@@ -78,7 +80,12 @@ if ($ArgsFile) {
     $ReportsDir = [string]$a.ReportsDir
     $Settings = if ($null -ne $a.Settings) { [hashtable]$a.Settings } else { $null }
     if ($a.ContainsKey('ConfigPath')) { $ConfigPath = [string]$a.ConfigPath }
+    if ($a.ContainsKey('DebugLog')) { $DebugLog = [bool]$a.DebugLog }
 }
+
+# Carry the parent's effective debug state into the rebuilt config, so the service
+# graph (which gates from Config) honors the -DebugLog session override too.
+if ($null -ne $Settings) { $Settings['debugLogging'] = [bool]$DebugLog }
 
 # First possible trace: the gap from "Started X job." to this line IS the queue +
 # graph-compile time; "Started" with no "Worker up" = no runspace or stuck compile.
@@ -86,6 +93,7 @@ $workerLog = $null
 try {
     if (-not [string]::IsNullOrWhiteSpace($LogsDir)) {
         $workerLog = [LogService]::new($LogsDir)
+        $workerLog.DebugEnabled = [bool]$DebugLog
         $modeText = if ($Options -and $Options.Mode) { [string]$Options.Mode } else { '' }
         $workerLog.LogDebug(
             "[$HostName] Worker up: JobType=$JobType Mode=$modeText " +

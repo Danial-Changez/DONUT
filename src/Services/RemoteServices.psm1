@@ -78,6 +78,8 @@ class RemoteJobService {
                 # UI-thread deep clone of the live config: a worker enumerating a
                 # table the UI mutates can spin forever on a corrupted bucket chain.
                 Settings   = [AppConfig]::DeepClone($this.Config.Settings)
+                # The EFFECTIVE debug state (setting OR -DebugLog session override).
+                DebugLog   = $this.Logger.DebugEnabled
             }
         }
     }

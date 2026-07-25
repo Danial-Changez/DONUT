@@ -6,11 +6,16 @@
     Writes [INFO]/[WARN]/[ERROR]/[DEBUG] lines to a per-run log file under a lock,
     with exception and structured-event helpers. NullLogService is the no-op used
     when a collaborator is constructed without a logger; Coalesce returns the
-    given logger or a NullLogService so callers never null-check.
+    given logger or a NullLogService so callers never null-check. DEBUG is gated
+    by DebugEnabled (composition points set it from the 'debugLogging' setting or
+    the Start-Donut -DebugLog session override; the class default stays verbose
+    so tests and diagnostic tools see everything).
 #>
 class LogService {
     [string] $LogFilePath
     [System.Object] $SyncRoot
+    # Gates LogDebug only - INFO/WARN/ERROR always flow.
+    [bool] $DebugEnabled = $true
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
     # Does not bind a file path; WriteLog must be overridden by the derived type.
@@ -46,6 +51,7 @@ class LogService {
     }
 
     [void] LogDebug([string]$message) {
+        if (-not $this.DebugEnabled) { return }
         $this.WriteLog("DEBUG", $message)
     }
 

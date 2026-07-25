@@ -181,14 +181,15 @@ Describe "HostResolver" {
             $prep.Arguments.Options.Ip   | Should -Be "10.0.0.5"
         }
 
-        It "PrepareResolveFast targets ResolveWorker with three CLI args and no Settings" {
+        It "PrepareResolveFast targets ResolveWorker with four CLI args and no Settings" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $prep = $r.PrepareResolveFast("PC-1")
             $prep.ScriptPath | Should -Match 'ResolveWorker\.ps1$'
             $prep.Arguments.HostName | Should -Be "PC-1"
             $prep.Arguments.Dc | Should -Be "DC1"
-            $prep.Arguments.Keys.Count | Should -Be 3   # no Settings snapshot rides along
+            $prep.Arguments.ContainsKey('DebugLog') | Should -BeTrue
+            $prep.Arguments.Keys.Count | Should -Be 4   # no Settings snapshot rides along
         }
     }
 

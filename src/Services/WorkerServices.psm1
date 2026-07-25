@@ -105,6 +105,7 @@ class ExecutionService {
         # Shared logger; the two breadcrumbs bracket the constructor chain so a
         # wedged bring-up names its segment (ctors vs dispatch vs phase entry).
         $localLogger = [LogService]::new($LogsDir)
+        $localLogger.DebugEnabled = $Config.GetDebugLogging()
         $localLogger.LogDebug("[$HostName] Worker service: constructing collaborators...")
         $localProbe = [NetworkProbe]::new($localLogger)
         $localMatcher = [DriverMatchingService]::new($localLogger)

@@ -42,6 +42,8 @@ class AppConfig {
         machineNamePatterns   = @('^CAP-', '^B[0-9]{4}', '^WVD')
         # Set once the first-run guided tour is shown/skipped; the ? button replays it.
         hasSeenTour           = $false
+        # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
+        debugLogging          = $false
         commands              = @{
             scan         = @{
                 args = @{
@@ -268,6 +270,11 @@ class AppConfig {
     # Whether the first-run guided tour has already been shown (or skipped).
     [bool] GetHasSeenTour() {
         return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
+    }
+
+    # Verbose [DEBUG] logging (off by default; INFO/WARN/ERROR always flow). String-bool tolerant.
+    [bool] GetDebugLogging() {
+        return [AppConfig]::AsBool($this.GetSetting('debugLogging', $null), $false)
     }
 
     # Global show/restore hotkey gesture (e.g. 'Ctrl+Alt+D'). Blank/whitespace

@@ -257,6 +257,14 @@ class ConfigPresenter {
             $closeTray.Add_Unchecked($h)
         }
 
+        $debugLog = $view.FindName('chkDebugLogging')
+        if ($debugLog) {
+            $debugLog.IsChecked = $this.Config.GetDebugLogging()
+            $h = { param($s, $e) $self.PersistToggle('debugLogging', [bool]$s.IsChecked, 'DebugLog') }.GetNewClosure()
+            $debugLog.Add_Checked($h)
+            $debugLog.Add_Unchecked($h)
+        }
+
         # Keybind recorders (replace the old typed text boxes).
         $hkValue = $view.FindName('recGlobalHotkeyValue')
         $hkRecord = $view.FindName('recGlobalHotkeyRecord')

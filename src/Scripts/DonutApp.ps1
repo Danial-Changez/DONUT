@@ -62,7 +62,13 @@ try {
     # Central logger (logs directory is guaranteed by ConfigManager). Injected
     # into the collaborators that support it so runtime errors are recorded.
     $logger = [LogService]::new($configManager.LogsPath)
+    # DEBUG gate: the persisted setting, or the -DebugLog session override.
+    $logger.DebugEnabled = $global:AppConfig.GetDebugLogging() -or [bool]$global:DebugLogStart
     $logger.LogInfo("DONUT starting up.")
+    if ($logger.DebugEnabled) {
+        $src = if ($global:DebugLogStart) { '-DebugLog session override' } else { 'debugLogging setting' }
+        $logger.LogInfo("Debug logging enabled ($src).")
+    }
     # Provenance first: every field log must name the exact code that produced it.
     $logger.LogInfo([BuildProvenance]::Stamp($srcRoot))
     [RunspaceManager]::SetLogger($logger)

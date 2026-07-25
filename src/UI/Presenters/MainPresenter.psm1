@@ -370,6 +370,14 @@ class MainPresenter {
             }, $onDone)
     }
 
+    # Applies the debug-logging toggle to the live logger; workers pick the effective
+    # state up per job (BuildWorkerArgs ships Logger.DebugEnabled). -DebugLog wins.
+    [void] ApplyDebugLogging() {
+        $effective = $this.Config.GetDebugLogging() -or [bool]$global:DebugLogStart
+        $this.Logger.DebugEnabled = $effective
+        $this.Logger.LogInfo("Debug logging " + $(if ($effective) { 'enabled' } else { 'disabled' }) + " (settings toggle).")
+    }
+
     # Runs a pool worker script (a .ps1 whose using-module class types resolve in the
     # runspace) and reaps it on the UI thread - no runspace-less callback (see repo notes).
     hidden [void] RunOnPool([string]$scriptPath, [hashtable]$params, [object]$onDone) {
@@ -458,6 +466,7 @@ class MainPresenter {
                 Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
                 WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
                 StartupTask    = { $presenter.ApplyStartupTask() }.GetNewClosure()
+                DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
             }
             $this.ConfigPresenter = [ConfigPresenter]::new(
                 $this.Config, $this.ConfigManager, $configView, $this.ToastService, $sideEffects)

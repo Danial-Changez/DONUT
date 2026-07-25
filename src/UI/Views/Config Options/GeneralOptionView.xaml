@@ -120,4 +120,18 @@
             </StackPanel>
         </StackPanel>
     </Border>
+    <!-- Diagnostics: verbose logging opt-in (off by default; applies live, incl. workers). -->
+    <Border Style="{DynamicResource Card}"
+            Margin="0,0,0,12">
+        <StackPanel>
+            <TextBlock Text="DIAGNOSTICS"
+                       Style="{DynamicResource SettingsSectionLabel}" />
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton x:Name="chkDebugLogging"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Debug logging (verbose breadcrumbs in Donut.log)"
+                           Style="{DynamicResource SettingsToggleLabel}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
 </StackPanel>

@@ -232,6 +232,32 @@ Describe "LogService" {
             $content | Should -BeLike "*[DEBUG]*"
             $content | Should -BeLike "*Test debug message*"
         }
+
+        It "Drops DEBUG (and only DEBUG) when DebugEnabled is off" {
+            $logger = [LogService]::new($script:testLogDir)
+            $logger.DebugEnabled = $false
+
+            $logger.LogDebug("gated line")
+            $logger.LogInfo("info still flows")
+            $logger.LogWarning("warn still flows")
+
+            $content = Get-Content -Path $logger.LogFilePath -Raw
+            $content | Should -Not -BeLike "*gated line*"
+            $content | Should -BeLike "*info still flows*"
+            $content | Should -BeLike "*warn still flows*"
+        }
+
+        It "Re-enabling DebugEnabled resumes DEBUG writes (live toggle)" {
+            $logger = [LogService]::new($script:testLogDir)
+            $logger.DebugEnabled = $false
+            $logger.LogDebug("before")
+            $logger.DebugEnabled = $true
+            $logger.LogDebug("after")
+
+            $content = Get-Content -Path $logger.LogFilePath -Raw
+            $content | Should -Not -BeLike "*before*"
+            $content | Should -BeLike "*[DEBUG]*after*"
+        }
     }
 
     Context "LogException" {

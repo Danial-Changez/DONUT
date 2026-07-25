@@ -169,7 +169,9 @@ Set-Content -Path $PidFile -Value $PID
 Save-Verdict
 try {
     $worker = Join-Path (Join-Path $SourceRoot 'Scripts') 'RemoteWorker.ps1'
-    $common = @{ SourceRoot = $SourceRoot; LogsDir = $LogsDir; ReportsDir = $ReportsDir }
+    # DebugLog forced on: the DEBUG breadcrumbs ARE what this harness collects.
+    $common = @{ SourceRoot = $SourceRoot; LogsDir = $LogsDir; ReportsDir = $ReportsDir
+                 DebugLog = $true }
     $pool = [runspacefactory]::CreateRunspacePool($WarmCount, $WarmCount)
     $pool.Open()
 

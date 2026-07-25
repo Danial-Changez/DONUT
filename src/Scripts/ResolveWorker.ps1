@@ -26,7 +26,9 @@ param(
     [string]$HostName,
     [string]$Dc,
     [string]$LogsDir,
-    [string]$ResultFile
+    [string]$ResultFile,
+    # Parent's effective debug-log state; this worker's lines are all [DEBUG].
+    [switch]$DebugLog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -81,6 +83,7 @@ if ([string]::IsNullOrWhiteSpace($ResultFile)) { return }
 try {
     $log = if (-not [string]::IsNullOrWhiteSpace($LogsDir)) { [LogService]::new($LogsDir) }
     else { [NullLogService]::new() }
+    $log.DebugEnabled = [bool]$DebugLog
     $log.LogDebug("[$HostName] Fast resolve up: DC='$Dc'.")
 
     $ip = Resolve-TargetIp -TargetHost $HostName -Server $Dc -Log $log

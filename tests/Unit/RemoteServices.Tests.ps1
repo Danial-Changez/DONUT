@@ -446,6 +446,18 @@ Describe "RemoteServices" {
             $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
         }
 
+        It "Should carry the logger's effective debug state as the DebugLog arg" {
+            $probe = [MockNetworkProbe]::new()
+            $service = [ScanService]::new($config, $probe)
+
+            # Constructed without a logger -> NullLogService, whose class default is
+            # verbose; the arg mirrors whatever the injected logger's gate says.
+            $service.PrepareScan("TestHost").Arguments.DebugLog | Should -BeTrue
+
+            $service.Logger.DebugEnabled = $false
+            $service.PrepareScan("TestHost").Arguments.DebugLog | Should -BeFalse
+        }
+
         It "Should carry an Options snapshot, never the live reference" {
             # Same rule as Settings: apply's selected-updates table is UI state, and
             # a worker enumerating a live table the UI mutates can spin forever.

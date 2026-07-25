@@ -46,7 +46,7 @@ consumes the result and exposes it to the bindings.
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure time helpers: relative labels (`2m ago`) + ISO8601 parse (`ParseIso`, blank → MinValue) |
 | `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
-| `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
+| `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op. `DEBUG` is gated by `DebugEnabled` (the `debugLogging` setting / `-DebugLog` override); other levels always flow |
 | `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
 
 ## Services (`src/Services/`)

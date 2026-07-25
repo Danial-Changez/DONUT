@@ -27,6 +27,10 @@ lets the target machine's DCU defaults apply.
   open and closed (default `Ctrl+,`); Esc also closes.
 - **Throttle limit** — how many machines run concurrently (default 8).
 - **Folders to scan** — how many largest folders the storage scan returns (default 12).
+- **Debug logging** — verbose `[DEBUG]` breadcrumbs in `Donut.log`, off by default
+  (failures and warnings always log). Applies immediately — no restart — including to
+  the worker processes jobs spawn. For a one-off diagnostic session, launch with
+  `Start-Donut -DebugLog` instead; that forces it on without changing this setting.
 
 ## Recording a keybind
 

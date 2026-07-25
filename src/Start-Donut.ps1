@@ -16,7 +16,8 @@
 #>
 
 # -Tray starts hidden in the system tray (used by the autostart scheduled task).
-param([switch]$Tray)
+# -DebugLog forces verbose [DEBUG] logging this session without touching settings.
+param([switch]$Tray, [switch]$DebugLog)
 
 # WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
 # instead of failing later in the XAML load.
@@ -27,9 +28,10 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -or
         Write-Error "DONUT requires PowerShell 7+ (pwsh). Install it from https://aka.ms/powershell"
         exit 1
     }
-    # The param() block empties $args, so forward the switch explicitly.
+    # The param() block empties $args, so forward the switches explicitly.
     $childArgs = @('-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
     if ($Tray) { $childArgs += '-Tray' }
+    if ($DebugLog) { $childArgs += '-DebugLog' }
     & $pwsh.Source @childArgs
     exit $LASTEXITCODE
 }
@@ -54,6 +56,8 @@ if (-not $global:SingleInstanceOwned) {
 
 # Read by DonutApp.ps1 for the hidden-start decision on the dev path.
 $global:TrayStart = [bool]$Tray
+# Session-only debug override, read by DonutApp.ps1 (and the settings side-effect).
+$global:DebugLogStart = [bool]$DebugLog
 
 # Resolves a loaded assembly to its on-disk path: Add-Type references must use the
 # runtime WPF paths or the compiler binds 4.0 facades and dies with CS1705.

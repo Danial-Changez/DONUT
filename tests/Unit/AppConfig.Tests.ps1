@@ -290,6 +290,19 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetDebugLogging" {
+        It "Should default to false and read a real/string boolean" {
+            [AppConfig]::Defaults.debugLogging | Should -Be $false
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})).GetDebugLogging() | Should -Be $false
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                        debugLogging = $true
+                    })).GetDebugLogging() | Should -Be $true
+            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                        debugLogging = 'true'
+                    })).GetDebugLogging() | Should -Be $true
+        }
+    }
+
     Context "GetGlobalHotkey" {
         It "Should return the default gesture when unset" {
             [AppConfig]::Defaults.globalHotkey | Should -Be 'Ctrl+Alt+D'
