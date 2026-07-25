@@ -22,10 +22,8 @@ class FakeInventoryService : InventoryService {
 class FakeRow {
     [MachineInventory] $AppliedInventory
     [string] $ProbedIp = $null
-    [int] $PendingUpdates = -1
     [void] ApplyInventory([MachineInventory]$inv) { $this.AppliedInventory = $inv }
     [void] SetProbed([string]$ip, [string]$iso) { $this.ProbedIp = $ip }
-    [void] SetPendingUpdates([int]$count) { $this.PendingUpdates = $count }
     [void] ApplyFolders([object]$report) {}
 }
 
@@ -128,7 +126,6 @@ Describe "InventoryPresenter" {
             $script:store.Inventories['PC1'] | Should -Be $inv           # persisted
             $script:fakeHome.Rows['PC1'].AppliedInventory | Should -Be $inv  # tile populated
             $script:fakeHome.Rows['PC1'].ProbedIp | Should -Be '10.0.0.9'
-            $script:fakeHome.Rows['PC1'].PendingUpdates | Should -Be 4
         }
 
         It "drops the result when the card was cleared mid-probe" {

@@ -309,16 +309,15 @@
       </StackPanel>
     </Border>
 
-    <!-- Updates pending -->
+    <!-- BIOS / firmware version (the update count already lives on the machine card + the
+         Available Updates card, so this slot shows a fact that isn't surfaced elsewhere). -->
     <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}">
       <StackPanel>
-        <TextBlock Text="UPDATES" Style="{DynamicResource MicroLabel}"
+        <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}"
                    />
-        <TextBlock x:Name="txtOvUpdates" Text="{Binding SelectedMachine.OvUpdates, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvUpdates}"
+        <TextBlock x:Name="txtOvBios" Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"
                    FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvUpdatesSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvUpdatesSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
-                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
   </Grid>

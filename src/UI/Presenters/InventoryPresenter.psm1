@@ -206,7 +206,6 @@ class InventoryPresenter {
         if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
         $probedIso = if ($null -ne $useInv -and $useInv.ProbedAt) { $useInv.ProbedAt } else { '' }
         $vm.SetProbed($this.Home.Resolver.GetCachedIp($hostName), $probedIso)
-        $vm.SetPendingUpdates($(if ($null -ne $rc) { $rc.UpdateCount } else { 0 }))
     }
 
     # Re-renders the overview strip (e.g. after a job changes pending-update counts).

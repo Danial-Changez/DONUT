@@ -56,8 +56,7 @@ class HostViewModel : ObservableObject {
     [string] $OvBatterySub = ''
     [string] $OvDisk = '—'
     [string] $OvDiskSub = ''
-    [string] $OvUpdates = '0'
-    [string] $OvUpdatesSub = 'pending update(s)'
+    [string] $OvBios = '—'   # current system BIOS/firmware version (from the inventory probe)
     hidden [string] $CachedIp = ''   # last resolved IP, for ProbedText recomposition
 
     # Largest-folders tree (bound by the detail pane's TreeView via SelectedMachine.Folders):
@@ -156,7 +155,6 @@ class HostViewModel : ObservableObject {
 
         # Populate the overview strip from the cached record so selecting the row shows its
         # facts immediately (no re-probe needed).
-        $this.SetPendingUpdates($rc.UpdateCount)
         if ($null -ne $rc.Inventory) { $this.ApplyInventory($rc.Inventory) }
         $this.RefreshShape()
     }
@@ -167,6 +165,7 @@ class HostViewModel : ObservableObject {
         if ($null -eq $inv) { return }
         $this.Set('OvModel', $(if ($inv.Model) { $inv.Model } else { '—' }))
         $this.Set('OvModelSub', $(if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $this.HostName }))
+        $this.Set('OvBios', $(if ($inv.BiosVersion) { $inv.BiosVersion } else { '—' }))
 
         $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
         $this.Set('OvBattery', [InventoryFormat]::BatteryHealthLabel($inv.HasBattery, $health))
@@ -195,10 +194,6 @@ class HostViewModel : ObservableObject {
                     if ($probed) { "$($this.CachedIp)  ·  $probed" } else { $this.CachedIp }
                 }
                 else { $probed }))
-    }
-
-    [void] SetPendingUpdates([int]$count) {
-        $this.Set('OvUpdates', "$count")
     }
 
     # Recompute the list sort rank from the current running/reachability/idle state; called
