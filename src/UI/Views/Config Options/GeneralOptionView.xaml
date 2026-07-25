@@ -80,11 +80,16 @@
             </Grid>
         </StackPanel>
     </Border>
-    <!-- Throttle limit -->
-    <Border Style="{DynamicResource Card}">
+    <!-- Tuning: throttle limit + storage-scan folder count, grouped in one card. -->
+    <Border Style="{DynamicResource Card}"
+            Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="THROTTLE LIMIT"
+            <TextBlock Text="TUNING"
                        Style="{DynamicResource SettingsSectionLabel}" />
+            <TextBlock Text="Throttle limit - how many machines run concurrently on the pool."
+                       Style="{DynamicResource SettingsFieldLabel}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8" />
             <StackPanel Orientation="Horizontal">
                 <Path Data="{DynamicResource Rocket}"
                       Fill="{DynamicResource ThrottleLimit}"
@@ -97,13 +102,10 @@
                          Width="120"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
-        </StackPanel>
-    </Border>
-    <!-- Folders to scan (storage-scan top-N) -->
-    <Border Style="{DynamicResource Card}">
-        <StackPanel>
-            <TextBlock Text="FOLDERS TO SCAN"
-                       Style="{DynamicResource SettingsSectionLabel}" />
+            <TextBlock Text="Folders to scan - largest folders the storage scan returns."
+                       Style="{DynamicResource SettingsFieldLabel}"
+                       TextWrapping="Wrap"
+                       Margin="0,16,0,8" />
             <StackPanel Orientation="Horizontal">
                 <Path Data="{DynamicResource DriverLibrary}"
                       Fill="{DynamicResource ThrottleLimit}"

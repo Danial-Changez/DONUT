@@ -326,9 +326,9 @@
   <!-- ==================== Machine list (left) + detail pane (right) ==================== -->
   <Grid Grid.Row="2">
     <Grid.ColumnDefinitions>
-      <!-- Machine list is clamped (MaxWidth): a 15-char name + status + Run needs ~340, so on a
-           wide/full-screen window the detail pane absorbs the extra space instead of a huge list. -->
-      <ColumnDefinition Width="2*" MinWidth="280" MaxWidth="360" />
+      <!-- Machine list is clamped (MaxWidth): wide enough for a full 15-char name + status chip
+           + Run, while a wide/full-screen window still gives the detail pane the extra space. -->
+      <ColumnDefinition Width="2*" MinWidth="300" MaxWidth="460" />
       <ColumnDefinition Width="6" />
       <ColumnDefinition Width="3*" MinWidth="320" />
     </Grid.ColumnDefinitions>
