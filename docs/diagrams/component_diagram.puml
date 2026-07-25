@@ -19,6 +19,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [Start-Donut.ps1]
     [DonutApp.ps1]
     [RemoteWorker.ps1]
+    [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
     [LensLookupWorker.ps1]
     [LensAgent.ps1]
@@ -67,7 +68,6 @@ component "PowerShell Classes (src)" {
         [SelfUpdateService]
         [StartupTaskService]
         [SystemInfoService]
-        [LogService]
         [ResourceService]
     }
     package "Core" #102A20 {
@@ -77,6 +77,7 @@ component "PowerShell Classes (src)" {
         [WorkerProcess]
         [RunspaceManager]
         [HostListSource]
+        [LogService]
     }
     package "Models" #15233B {
         [AppConfig]
@@ -133,8 +134,10 @@ database "%LOCALAPPDATA%\\DONUT" {
 [ResolutionCoordinator] ..> [HostResolver] : resolve + prefetch IP
 [FinderPresenter] ..> [ActiveDirectoryService] : forests + prefix config
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
-[FinderPresenter] ..> [LensLookupWorker.ps1] : Lens + AD search (pool)
-[LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup / search on the pool
+[FinderPresenter] ..> [AdSearchWorker.ps1] : AD search (pool, one job per forest)
+[AdSearchWorker.ps1] ..> [ActiveDirectoryService] : in-process forest search (LDAP)
+[FinderPresenter] ..> [LensLookupWorker.ps1] : Lens lookups (pool)
+[LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
 [PersonLensService] ..> [LensAgent.ps1] : supervises (task) + request/response exchange
 [HomePresenter] ..> [AsyncJob] : queues
 [HomePresenter] ..> [RecentConnectionsStore] : persists
@@ -146,8 +149,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [DiskUsageService] ..> [ExecutionService]
 [RemoteUpdateService] ..> [DriverMatchingService]
 
-[ExecutionService] ..> [RemoteWorker.ps1] : invokes via PsExec
-[LensAgent.ps1] ..> [ActiveDirectoryService] : AD finder search (LDAP)
+[RemoteWorker.ps1] ..> [ExecutionService] : dispatches job phases (PsExec to target)
 [ActiveDirectoryService] ..> [AdUnlockWorker.ps1] : unlock account
 [AsyncJob] ..> [RunspaceManager] : uses pool
 [AsyncJob] ..> [WorkerProcess] : spawns child pwsh (isolation)

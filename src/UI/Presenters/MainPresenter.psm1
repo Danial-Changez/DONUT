@@ -254,7 +254,7 @@ class MainPresenter {
                 catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
             }.GetNewClosure())
 
-        # Diagnostic (remove once pinned): logs UI-thread stalls over 1 s - the freeze.
+        # Permanent diagnostic: logs UI-thread stalls over 1 s with GC-delta fingerprints.
         $this.Watchdog = [DispatcherWatchdog]::new($this.Logger, 1000)
         $this.Watchdog.Start()
 

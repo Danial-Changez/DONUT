@@ -30,9 +30,12 @@ model.
   re-emitting each line into the pool runspace's Information stream — where
   `AsyncJob.DrainStream` → `job.Logs` → the existing `DcuProgress` parser drives the
   `ThinProgressBar` exactly as before. Stderr is drained on a `ReadToEndAsync` task so a
-  full pipe can't wedge the child. *(The in-process warm/barrier machinery below — pool warm, compile
-  serialization, the ThreadPool floor — is now vestigial for worker jobs and slated for
-  removal; it is retained for one release so the change stays reviewable.)*
+  full pipe can't wedge the child. *(The pool warm's original purpose — pre-compiling the
+  worker class graph into pool runspaces — is vestigial for worker jobs now that children
+  compile their own graph. The warm pass stays anyway: it carries the load-bearing
+  first-use exercises (removing them regressed the first resolve/disk-scan, 07e524b), and
+  the compile serialization + ThreadPool floor are guarded regression fixes. Any shrink is
+  a separate field-verified investigation, not a cleanup.)*
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.

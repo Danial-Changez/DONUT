@@ -25,10 +25,10 @@ root/
 ├── assets/                 <-- Assets
 │   ├── Images/
 │   └── Screenshots/
-├── bin/                    <-- Binaries/Dependencies
 ├── docs/                   <-- Documentation (also the source of this site)
 ├── src/                    <-- Source Code
 │   ├── Core/               <-- Base classes, enums, infrastructure (reusable)
+│   ├── Lib/                <-- Bundled binary dependencies (e.g. QRCoder.dll)
 │   ├── Models/             <-- Data classes (DTOs) + pure mappers
 │   ├── Services/           <-- Business logic (DONUT-specific)
 │   ├── Scripts/            <-- Standalone scripts + remote workers
@@ -102,10 +102,11 @@ compiled into `Donut.Launcher` for production and `Add-Type`-compiled by
 ### Presenters are coordinators
 
 The `*Presenter` classes keep their original names for continuity, but their role is
-**coordinator / UI-service**, not MVP passive-view presenter — they no longer poke
-controls. A rename to `*Coordinator`/`*Service` would be cosmetic churn across the UI
+**coordinator / UI-service**, not MVP passive-view presenter — bindings are the default
+render path, and presenters keep only the imperative control work MVVM sanctions.
+A rename to `*Coordinator`/`*Service` would be cosmetic churn across the UI
 layer, so the name is retained by choice (`ToastService` already carries the accurate
-suffix). A few surfaces stay deliberately imperative, each the standard MVVM answer:
+suffix). The surfaces that stay deliberately imperative, each the standard MVVM answer:
 
 - **`DialogPresenter`** is a *dialog service* — showing a modal and returning a result
   is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
@@ -117,6 +118,14 @@ suffix). A few surfaces stay deliberately imperative, each the standard MVVM ans
   would restate the key list for no behaviour gain. Settings persist in real time —
   there is no Save button; toggles and keybind changes write through immediately and
   fire their side-effects (hotkey re-registration, scheduled-task reconcile).
+- **`TourPresenter`** computes spotlight/callout geometry against live control bounds —
+  measurement is inherently view-side work.
+- **`LoginPresenter`** owns the modal window lifecycle (content binds `LoginViewModel`).
+- **`InventoryPresenter`** appends to the per-host terminal and resolves detail-pane
+  seams by name — a live log append has no binding-friendly shape.
+- **`FinderPresenter`** repositions/highlights the search dropdown popup imperatively;
+  rows themselves bind `SearchRowViewModel`s.
+- **`TrayPresenter`** drives the WinForms `NotifyIcon`, which has no binding surface.
 
 ### Design decisions
 

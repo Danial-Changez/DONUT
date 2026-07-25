@@ -13,7 +13,7 @@ consumes the result and exposes it to the bindings.
 |-------|---------|
 | `AppConfig` | Configuration container with defaults, settings merge, and DCU CLI argument building |
 | `DeviceContext` | Remote device state: hostname, IP, online status, status message |
-| `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `Resolve`) |
+| `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `DeleteFolders`, `Resolve`) |
 | `FleetCardStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
 | `DcuProgress` | Pure parser: a DCU output line → percent complete, plus the scan's milestone step (`N/5` beside the progress bar) |
 | `DcuLog` | Pure parser for dcu-cli's `-outputLog`: extracts the authoritative "return code: N" line and classifies it (only {0, 1, 5} are success/reboot; everything else is an error) |
@@ -43,19 +43,21 @@ consumes the result and exposes it to the bindings.
 | `RunspaceManager` | Static RunspacePool management for parallel execution; also raises the .NET ThreadPool floor before pool creation so dispatch/completion callbacks can't starve |
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure "relative time" formatter (`2m ago`) |
+| `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
-| `DispatcherWatchdog` | **Diagnostic (temporary):** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, to pin the intermittent disk-scan-mid-scan freeze (suspected CLR loader-lock contention). Paired with per-phase timing in `ExecutionService.RunDiskScanPhase`; both are removed once the freeze is pinned |
+| `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
 
 ## Services (`src/Services/`)
 
-All remote services subclass `RemoteJobService` (shared worker-arg building); they
-only **prepare/parse** off the UI thread — the worker does the network I/O.
+All remote services subclass `RemoteJobService` (shared worker-arg building; lives in
+`RemoteServices.psm1`); they only **prepare/parse** off the UI thread — the worker does
+the network I/O.
 
 | Class | Purpose |
 |-------|---------|
-| `ExecutionService` | Remote PsExec execution, DCU CLI invocation, per-phase dispatch (resolve/scan/apply/inventory/disk), artifact copy |
-| `ScanService` | Prepare scan operations |
-| `RemoteUpdateService` | Prepare update scan/apply with driver matching; parse + count the update report |
+| `ExecutionService` (`WorkerServices.psm1`) | Remote PsExec execution, DCU CLI invocation, per-phase dispatch (resolve/scan/apply/inventory/disk/delete), artifact copy |
+| `ScanService` (`RemoteServices.psm1`) | Prepare scan operations |
+| `RemoteUpdateService` (`RemoteServices.psm1`) | Prepare update scan/apply with driver matching; parse + count the update report |
 | `InventoryService` | Prepare + parse the per-machine CIM inventory probe |
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select) |

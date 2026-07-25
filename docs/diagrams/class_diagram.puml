@@ -134,6 +134,7 @@ package "Donut.Models" #15233B {
 
     class WizTreeCsv {
         +{static} ParseTopFolders(csvText, topN): DiskUsageReport
+        +{static} ParseTopFoldersFromFile(path, topN): DiskUsageReport
     }
 
     class FolderTreeNode {
@@ -326,9 +327,11 @@ package "Donut.Core" #102A20 {
     class TimeFormat {
         +{static} Relative(when): string
     }
-}
 
-package "Donut.Services" #221634 {
+    class BuildProvenance {
+        +{static} Stamp(sourceRoot): string
+    }
+
     class LogService {
         +LogInfo(message): void
         +LogError(message): void
@@ -338,6 +341,13 @@ package "Donut.Services" #221634 {
     }
     class NullLogService extends LogService
 
+    class DispatcherWatchdog {
+        +Start(): void
+        +Reset(): void
+    }
+}
+
+package "Donut.Services" #221634 {
     class RemoteJobService {
         #Config: AppConfig
         #Probe: NetworkProbe
