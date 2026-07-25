@@ -30,6 +30,10 @@ neutral + violet-600 palette and shadcn button variants defined in `src/UI/Style
 
 ## Colour hierarchy (button variants)
 
+The status accents (row dot/chip/progress) are defined once in `UIColors.xaml`;
+`HomePresenter.SeedRowPalette` resolves them at startup and hands `HostViewModel` frozen
+brushes (10%/30% alpha tints derived there) — no hexes live outside `src/UI/Styles`.
+
 ui-patterns.com has **no** dedicated pattern for button colour / CTA prominence (its catalogue
 is interaction-focused); the nearest principles it endorses are **Reduction** (simplify, cut
 attention load) and **Tunnelling** (direct focus). For *look*, the canonical source is DONUT's

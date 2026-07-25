@@ -667,6 +667,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +ApplyInventory(inv) / ApplyFolders(report): void
         +SetPercent(pct) / SetScanStep(text, pct): void
         +SetReachability(state) / SetProbed(ip, iso): void
+        +{static} SetPalette(palette): void
     }
 
     class FolderNodeViewModel {

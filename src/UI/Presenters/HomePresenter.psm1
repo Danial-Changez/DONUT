@@ -239,6 +239,9 @@ class HomePresenter : AsyncJobPresenter {
         # the host window so the dropdown stays glued to the search box.
         $this.ViewContent.Add_Loaded({ $presenter.HookHostWindow() }.GetNewClosure())
 
+        # Row brushes resolve from UIColors.xaml exactly once, before any row exists.
+        $this.SeedRowPalette()
+
         # Seed recents from WSID.txt the first time, then build a row per recent.
         if ($this.Store.Count() -eq 0) {
             $this.Store.SeedFrom($this.ReadWsidHosts())
@@ -1024,11 +1027,33 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    [System.Windows.Media.Brush] ResBrush([string]$key) {
-        $res = $null
-        if ($this.MachineList) { $res = $this.MachineList.TryFindResource($key) }
-        if ($res -is [System.Windows.Media.Brush]) { return $res }
-        return [System.Windows.Media.Brushes]::Gray
+    # Seeds HostViewModel's static palette from UIColors.xaml so row accents have exactly
+    # one source; the 10%/30% alpha tints derive here instead of from duplicated hexes.
+    hidden [void] SeedRowPalette() {
+        $palette = @{}
+        $missing = @()
+        foreach ($key in @('AccentGreen', 'AccentRed', 'AccentYellow', 'AccentOrange',
+                'AccentCyan', 'AccentPurple', 'BodyTextTertiary')) {
+            $res = $null
+            if ([System.Windows.Application]::Current) {
+                $res = [System.Windows.Application]::Current.TryFindResource($key)
+            }
+            if ($res -isnot [System.Windows.Media.SolidColorBrush]) { $missing += $key; continue }
+
+            $base = if ($res.IsFrozen) { $res } else { $f = $res.Clone(); $f.Freeze(); $f }
+            $c = $base.Color
+            $tint = [System.Windows.Media.SolidColorBrush]::new(
+                [System.Windows.Media.Color]::FromArgb(26, $c.R, $c.G, $c.B))
+            $border = [System.Windows.Media.SolidColorBrush]::new(
+                [System.Windows.Media.Color]::FromArgb(77, $c.R, $c.G, $c.B))
+            $tint.Freeze()
+            $border.Freeze()
+            $palette[$key] = @{ Brush = $base; Tint = $tint; TintBorder = $border }
+        }
+        if ($missing.Count -gt 0) {
+            $this.Logger.LogWarning("Row palette keys missing from UIColors.xaml: $($missing -join ', ')")
+        }
+        [HostViewModel]::SetPalette($palette)
     }
 
     [void] CheckForManualReboot([AsyncJob]$job) {

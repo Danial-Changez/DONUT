@@ -20,9 +20,9 @@ using module ".\FolderNodeViewModel.psm1"
     the idle mappers below when one isn't).
 
 .NOTES
-    Brushes are built from the accent hexes in UIColors.xaml (kept in sync here; the app
-    runs without a WPF Application, so a converter can't resolve resource keys). RunCommand
-    / GatherCommand are assigned by the coordinator after construction.
+    Row brushes come from the static Palette that HomePresenter seeds out of
+    UIColors.xaml (presenter resolves, VM holds, view binds - no duplicated hexes).
+    RunCommand / GatherCommand are assigned by the coordinator after construction.
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
@@ -309,43 +309,31 @@ class HostViewModel : ObservableObject {
         return ''
     }
 
-    # Accent hexes mirror UIColors.xaml (change both together). Kept here because these
-    # brushes are built statically, before/outside resource-dictionary lookup.
-    static [hashtable] $Accents = @{
-        AccentGreen      = '#34D399'
-        AccentRed        = '#F87171'
-        AccentYellow     = '#FBBF24'
-        AccentOrange     = '#FB923C'
-        AccentCyan       = '#38BDF8'
-        AccentPurple     = '#8E51FF'
-        BodyTextTertiary = '#8C8C8C'
+    # Palette seeded once by HomePresenter.SeedRowPalette from UIColors.xaml so the
+    # accents have exactly one source; key -> @{ Brush; Tint; TintBorder }, all frozen.
+    static [hashtable] $Palette = @{}
+
+    static [void] SetPalette([hashtable]$palette) {
+        [HostViewModel]::Palette = if ($null -ne $palette) { $palette } else { @{} }
     }
 
     static [Brush] BrushFor([string]$key) {
-        $hex = [HostViewModel]::Accents[$key]
-        if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
-        $b = [SolidColorBrush]::new([Color]([ColorConverter]::ConvertFromString($hex)))
-        $b.Freeze()
-        return $b
+        $entry = [HostViewModel]::Palette[$key]
+        if ($entry) { return $entry.Brush }
+        return [Brushes]::Gray   # unseeded palette / unknown key: visible but neutral
     }
 
     # Chip background = the accent at 10% alpha (Arcane's status-badge fill).
     static [Brush] TintFor([string]$key) {
-        $hex = [HostViewModel]::Accents[$key]
-        if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
-        $c = [Color]([ColorConverter]::ConvertFromString($hex))
-        $b = [SolidColorBrush]::new([Color]::FromArgb(26, $c.R, $c.G, $c.B))
-        $b.Freeze()
-        return $b
+        $entry = [HostViewModel]::Palette[$key]
+        if ($entry) { return $entry.Tint }
+        return [Brushes]::Transparent
     }
 
     # Chip border = the accent at 30% alpha (the badge's hairline edge).
     static [Brush] TintBorderFor([string]$key) {
-        $hex = [HostViewModel]::Accents[$key]
-        if (-not $hex) { $hex = [HostViewModel]::Accents['BodyTextTertiary'] }
-        $c = [Color]([ColorConverter]::ConvertFromString($hex))
-        $b = [SolidColorBrush]::new([Color]::FromArgb(77, $c.R, $c.G, $c.B))
-        $b.Freeze()
-        return $b
+        $entry = [HostViewModel]::Palette[$key]
+        if ($entry) { return $entry.TintBorder }
+        return [Brushes]::Transparent
     }
 }
