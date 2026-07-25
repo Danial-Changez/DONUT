@@ -112,24 +112,8 @@
     <Style x:Key="StatSub"
            TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
-    </Style>
-    <!-- Mono chip (Arcane latency pill): muted fill, hairline border, mono value. -->
-    <Style x:Key="MonoChip"
-           TargetType="Border">
-        <Setter Property="CornerRadius" Value="6" />
-        <Setter Property="Padding" Value="6,2" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource SurfaceMuted}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
-    </Style>
-    <Style x:Key="MonoChipText"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource FontMono}" />
-        <Setter Property="FontSize" Value="10.5" />
-        <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
     </Style>
     <!-- Thin usage/progress meter (Arcane dash meter): 5px rounded-full secondary
          track; the fill colour comes from each instance's Foreground (VM-driven).
@@ -175,42 +159,5 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-    </Style>
-    <!-- Icon tiles (Arcane card-header icon): 32px rounded square, tinted fill+ring. -->
-    <Style x:Key="IconTileViolet"
-           TargetType="Border">
-        <Setter Property="Width" Value="32" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="CornerRadius" Value="6.7" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintViolet}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
-    </Style>
-    <Style x:Key="IconTileGreen"
-           TargetType="Border">
-        <Setter Property="Width" Value="32" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="CornerRadius" Value="6.7" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintGreen}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintGreenBorder}" />
-    </Style>
-    <Style x:Key="IconTileAmber"
-           TargetType="Border">
-        <Setter Property="Width" Value="32" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="CornerRadius" Value="6.7" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintAmber}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintAmberBorder}" />
-    </Style>
-    <Style x:Key="IconTileRed"
-           TargetType="Border">
-        <Setter Property="Width" Value="32" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="CornerRadius" Value="6.7" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintRed}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintRedBorder}" />
     </Style>
 </ResourceDictionary>
