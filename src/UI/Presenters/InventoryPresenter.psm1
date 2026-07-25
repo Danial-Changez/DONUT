@@ -10,6 +10,7 @@ using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
+using module "..\..\Core\TimeFormat.psm1"
 
 <#
 .SYNOPSIS
