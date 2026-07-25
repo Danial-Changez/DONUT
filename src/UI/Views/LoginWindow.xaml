@@ -16,18 +16,8 @@
                         Stretch="UniformToFill" />
         </Border.Background>
         <Border CornerRadius="10"
-                BorderThickness="2">
-            <Border.BorderBrush>
-                <LinearGradientBrush StartPoint="0,0"
-                                     EndPoint="1,1">
-                    <GradientStop Color="{DynamicResource LoginWindowBorderPrimaryColor}"
-                                  Offset="0" />
-                    <GradientStop Color="{DynamicResource LoginWindowBorderAccentColor}"
-                                  Offset="0.75" />
-                    <GradientStop Color="{DynamicResource LoginWindowBorderSecondaryColor}"
-                                  Offset="1" />
-                </LinearGradientBrush>
-            </Border.BorderBrush>
+                BorderThickness="2"
+                BorderBrush="{DynamicResource PanelBorder}">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,1"
                                      EndPoint="1,0"

@@ -834,7 +834,7 @@
                 <ProgressBar.Foreground>
                   <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                     <GradientStop Color="{DynamicResource PrimaryColor}" Offset="0" />
-                    <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}" Offset="1" />
+                    <GradientStop Color="{DynamicResource AccentPurpleColor}" Offset="1" />
                   </LinearGradientBrush>
                 </ProgressBar.Foreground>
               </ProgressBar>

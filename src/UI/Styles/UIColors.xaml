@@ -23,26 +23,8 @@
     <Color x:Key="LoginBackgroundColor"> #121214</Color>
     <SolidColorBrush x:Key="LoginBackground"
                      Color="{StaticResource LoginBackgroundColor}" />
-    <!-- Window Border Colors (subtle violet -> zinc gradient; Arcane violet ramp) -->
-    <Color x:Key="WindowBorderPrimaryColor"> #8E51FF</Color>
-    <SolidColorBrush x:Key="WindowBorderPrimary"
-                     Color="{StaticResource WindowBorderPrimaryColor}" />
-    <Color x:Key="WindowBorderAccentColor"> #8022FE</Color>
-    <SolidColorBrush x:Key="WindowBorderAccent"
-                     Color="{StaticResource WindowBorderAccentColor}" />
-    <Color x:Key="WindowBorderSecondaryColor"> #3F3F46</Color>
-    <SolidColorBrush x:Key="WindowBorderSecondary"
-                     Color="{StaticResource WindowBorderSecondaryColor}" />
-    <!-- Login Window Border Colors -->
-    <Color x:Key="LoginWindowBorderPrimaryColor"> #8022FE</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderPrimary"
-                     Color="{StaticResource LoginWindowBorderPrimaryColor}" />
-    <Color x:Key="LoginWindowBorderAccentColor"> #8E51FF</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderAccent"
-                     Color="{StaticResource LoginWindowBorderAccentColor}" />
-    <Color x:Key="LoginWindowBorderSecondaryColor"> #3F3F46</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderSecondary"
-                     Color="{StaticResource LoginWindowBorderSecondaryColor}" />
+    <!-- Window borders are the neutral PanelBorder hairline (the violet gradient ramp
+         was removed as ornament - colour stays reserved for status + primary actions). -->
     <!-- Button/Accent Colors. Status accents follow Arcane's dark recipe: the visible
          text/dot shade is the Tailwind 400 step (tints derive from the 500 step below). -->
     <Color x:Key="AccentPurpleColor"> #8E51FF</Color>

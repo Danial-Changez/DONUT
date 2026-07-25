@@ -26,18 +26,8 @@
         <Border CornerRadius="0"
                 BorderThickness="1"
                 Background="Transparent"
+                BorderBrush="{DynamicResource PanelBorder}"
                 x:Name="rootBorder">
-            <Border.BorderBrush>
-                <LinearGradientBrush StartPoint="0,0"
-                                     EndPoint="1,1">
-                    <GradientStop Color="{DynamicResource WindowBorderPrimaryColor}"
-                                  Offset="0" />
-                    <GradientStop Color="{DynamicResource WindowBorderAccentColor}"
-                                  Offset="0.5" />
-                    <GradientStop Color="{DynamicResource WindowBorderSecondaryColor}"
-                                  Offset="1" />
-                </LinearGradientBrush>
-            </Border.BorderBrush>
             <Grid>
                 <!-- Main Section -->
                 <Border CornerRadius="0">
@@ -175,16 +165,14 @@
                                    Style="{DynamicResource TextPaneTitle}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left" />
+                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
                         <Button HorizontalAlignment="Right"
-                                Width="34"
-                                Height="30"
+                                Height="36"
                                 Command="{Binding CloseSettingsCommand}"
                                 Style="{DynamicResource controlButton}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
-                                  Width="12"
-                                  Height="12"
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
@@ -232,17 +220,15 @@
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
                                    Margin="0,0,40,0" />
+                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
                         <Button HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
-                                Width="34"
-                                Height="30"
+                                Height="36"
                                 Command="{Binding CloseQrCommand}"
                                 Style="{DynamicResource controlButton}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
-                                  Width="12"
-                                  Height="12"
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>

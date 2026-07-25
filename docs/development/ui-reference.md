@@ -52,6 +52,10 @@ shadcn button variants in `src/UI/Styles/ButtonStyles.xaml`. The rule we follow:
   `ButtonOutline`/`ButtonGhost` — so they read as subordinate. The detail-pane header buttons
   follow this: neutral grey, subordinate to the row's `Run`. Same rule on the Lens device
   card: `Add` (the row's action) is the one tint; `Reveal key`/`QR` are grey utilities.
+- **Chrome is neutral.** Window and popup borders are the `PanelBorder` hairline — the old
+  violet gradient ramp was ornament (Reduction: it competed with status colour and marked
+  nothing). Overlay/dialog close buttons share the title-bar close's 50x36 footprint so the
+  hover pad reads identically everywhere.
 - **One tint per row, and it marks the row's primary action.** `Run` = `ButtonTintSuccess`,
   `Add` = `ButtonTintPrimary`, `Unlock` (a locked search row's one action) =
   `ButtonTintPrimary`, `Clear selected` = `ButtonTintDestructive`. `ButtonOutline` is
