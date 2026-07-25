@@ -5,6 +5,7 @@ using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
+using module "..\..\Core\PoolScriptJob.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\PersonLens.psm1"
 using module "..\..\Models\MachineNameMatcher.psm1"
@@ -209,47 +210,21 @@ class FinderPresenter {
         }
     }
 
-    # Returns the job envelope the poll loops expect (@{ Ps; Handle }); throws on failure
-    # so each call site keeps its own catch/log/toast behavior.
+    # Thin seams over the shared PoolScriptJob mechanics; the timers stay owned here.
     hidden [hashtable] StartPoolScript([string]$scriptPath, [hashtable]$parameters) {
-        $ps = [System.Management.Automation.PowerShell]::Create()
-        $ps.RunspacePool = [RunspaceManager]::GetPool()
-        $ps.AddCommand($scriptPath) | Out-Null
-        foreach ($k in $parameters.Keys) { $ps.AddParameter($k, $parameters[$k]) | Out-Null }
-        return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
+        return [PoolScriptJob]::Start($scriptPath, $parameters)
     }
 
-    # Dispose a pool job's handle without ever blocking the UI thread: a finished job disposes
-    # now; a still-running one (even a native-stuck LDAP/SCCM query) is stopped async and reaped.
     hidden [void] DisposeJob([object]$ps) {
-        if ($null -eq $ps) { return }
-        try {
-            if ($ps.InvocationStateInfo.State -eq 'Running') {
-                # No scriptblock callback: BeginStop fires it on a runspace-less threadpool
-                # thread, where any scriptblock throws before its body runs (crashing the app).
-                $ps.BeginStop($null, $null) | Out-Null
-                $this.StoppingJobs.Add($ps)
-                if (-not $this.ReapTimer.IsEnabled) { $this.ReapTimer.Start() }
-            }
-            else {
-                $ps.Dispose()
-            }
+        if ([PoolScriptJob]::DisposeSafe($ps, $this.StoppingJobs, $this.Logger)) {
+            if (-not $this.ReapTimer.IsEnabled) { $this.ReapTimer.Start() }
         }
-        catch { $this.Logger.LogDebug("Job dispose failed: $($_.Exception.Message)") }
     }
 
-    # Disposes each async-stopped job once its pipeline goes terminal; disposing a still-Stopping
-    # one would block, so those wait for a later tick. Stops the timer when the list drains.
     hidden [void] ReapStoppingJobs() {
-        for ($i = $this.StoppingJobs.Count - 1; $i -ge 0; $i--) {
-            $ps = $this.StoppingJobs[$i]
-            $state = [string]$ps.InvocationStateInfo.State
-            if ($state -ne 'Running' -and $state -ne 'Stopping') {
-                try { $ps.Dispose() } catch { }
-                $this.StoppingJobs.RemoveAt($i)
-            }
+        if ([PoolScriptJob]::ReapStopping($this.StoppingJobs, $this.Logger)) {
+            $this.ReapTimer.Stop()
         }
-        if ($this.StoppingJobs.Count -eq 0) { $this.ReapTimer.Stop() }
     }
 
     # Fire-and-forget warm: one throwaway search per forest primes the worker graph

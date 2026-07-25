@@ -39,6 +39,13 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
+- **In-process pool scripts (`PoolScriptJob`):** the scripts that must run *in-process*
+  on the pool (AD search, Lens broker, unlock, startup task) share one Core helper for
+  start / complete / async-stop / reap instead of three hand-rolled copies. The rules it
+  pins: never `Dispose()` a running pipeline (it blocks the UI thread — `BeginStop` and
+  reap on a timer instead), and never pass `BeginStop` a scriptblock callback (it fires
+  on a runspace-less thread where any scriptblock throws). Envelopes stay hashtables
+  (`@{ Ps; Handle }`) so each poll loop attaches its own per-job state.
 - **Warm compile serialization — the actual DC-warm/scan regression (fixed
   2026-07-23).** Compiling a `using module` class graph in **4+ runspaces at once
   deadlocks** on PowerShell's module-load lock (measured threshold: 2–3 concurrent

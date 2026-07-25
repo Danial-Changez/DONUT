@@ -7,6 +7,7 @@ using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
+using module "..\..\Core\PoolScriptJob.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using namespace Donut.Interop
@@ -373,16 +374,13 @@ class MainPresenter {
     # runspace) and reaps it on the UI thread - no runspace-less callback (see repo notes).
     hidden [void] RunOnPool([string]$scriptPath, [hashtable]$params, [object]$onDone) {
         try {
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = [RunspaceManager]::GetPool()
-            $ps.AddCommand($scriptPath) | Out-Null
-            foreach ($k in $params.Keys) { $ps.AddParameter($k, $params[$k]) | Out-Null }
-            $async = $ps.BeginInvoke()
+            $job = [PoolScriptJob]::Start($scriptPath, $params)
+            $job.OnDone = $onDone
 
             if ($null -eq $this.PoolJobs) {
                 $this.PoolJobs = [System.Collections.Generic.List[object]]::new()
             }
-            $this.PoolJobs.Add(@{ Ps = $ps; Async = $async; OnDone = $onDone })
+            $this.PoolJobs.Add($job)
 
             if ($null -eq $this.PoolReapTimer) {
                 $presenter = $this
@@ -402,11 +400,8 @@ class MainPresenter {
             if ($this.PoolReapTimer) { $this.PoolReapTimer.Stop() }
             return
         }
-        foreach ($job in @($this.PoolJobs | Where-Object { $_.Async.IsCompleted })) {
-            $result = $null
-            try { $result = $job.Ps.EndInvoke($job.Async) }
-            catch { $this.Logger.LogException("Pool job failed", $_) }
-            try { $job.Ps.Dispose() } catch { }
+        foreach ($job in @($this.PoolJobs | Where-Object { $_.Handle.IsCompleted })) {
+            $result = [PoolScriptJob]::Complete($job, $this.Logger)
             $this.PoolJobs.Remove($job) | Out-Null
             if ($job.OnDone) {
                 try { & $job.OnDone $result }

@@ -306,6 +306,13 @@ package "Donut.Core" #102A20 {
         +{static} Close(): void
     }
 
+    class PoolScriptJob {
+        +{static} Start(scriptPath, parameters): Hashtable
+        +{static} Complete(job, logger): object
+        +{static} DisposeSafe(ps, stoppingList, logger): bool
+        +{static} ReapStopping(stoppingList, logger): bool
+    }
+
     class HostListSource {
         +SourceRoot: string
         +ReadHosts(): string[]

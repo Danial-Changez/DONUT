@@ -41,6 +41,7 @@ consumes the result and exposes it to the bindings.
 | `AsyncJob` | Async job wrapper: runs each job as an isolated child `pwsh` process (via `WorkerProcess`) launched from a pool runspace, drains its output/result streams, and polls to completion |
 | `WorkerProcess` | Child-process worker protocol: `Prepare` marshals args to a temp file, the `$Launcher` scriptblock spawns `RemoteWorker.ps1` as a separate `pwsh` process on a pool runspace, and `Interpret` reads back its JSON result — process isolation so parallel `using module` class-graph compiles can't deadlock |
 | `RunspaceManager` | Static RunspacePool management for parallel execution; also raises the .NET ThreadPool floor before pool creation so dispatch/completion callbacks can't starve |
+| `PoolScriptJob` | Shared mechanics for in-process pool scripts (AD search, Lens broker, unlock, startup task): start on the pool, complete + dispose, async-stop (`BeginStop`, never a blocking `Dispose` on a running pipeline) and terminal-state reaping. The envelope stays `@{ Ps; Handle }` so poll loops attach per-job state |
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure time helpers: relative labels (`2m ago`) + ISO8601 parse (`ParseIso`, blank → MinValue) |
 | `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
