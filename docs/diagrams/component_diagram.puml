@@ -19,6 +19,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [Start-Donut.ps1]
     [DonutApp.ps1]
     [RemoteWorker.ps1]
+    [ResolveWorker.ps1]
     [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
     [LensLookupWorker.ps1]
@@ -133,6 +134,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [InventoryPresenter] ..> [InventoryService] : per-machine probe
 [InventoryPresenter] ..> [DiskUsageService] : storage scan
 [ResolutionCoordinator] ..> [HostResolver] : resolve + prefetch IP
+[ResolutionCoordinator] ..> [ResolveWorker.ps1] : fast IP resolve (direct child, no pool)
 [FinderPresenter] ..> [ActiveDirectoryService] : forests + prefix config
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
 [FinderPresenter] ..> [AdSearchWorker.ps1] : AD search (pool, one job per forest)

@@ -1,6 +1,7 @@
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\AsyncJob.psm1"
+using module "..\..\Core\ResolveProcessJob.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\HostResolver.psm1"
 using module "..\..\Models\JobEnums.psm1"
@@ -18,6 +19,12 @@ using module "..\..\Models\JobEnums.psm1"
     check, and handles CompleteResolve (cache the verdict / DC, then hand queued work
     back to HomePresenter to re-issue). HomePresenter keeps the AsyncJob pump and the
     PendingRuns / PendingGathers queue and forwards the Resolve kind here.
+
+    Per-host resolves ride the FAST LANE (implementation-notes: fast resolve lane): a
+    slim class-free ResolveWorker child spawned directly (ResolveProcessJob), capped at
+    FastResolveCap with a FIFO overflow queue - so resolves never wait behind scans in
+    the pool. ProcessFaults retry once on the classic worker path; three consecutive
+    faults latch the lane off for the session.
 
 .NOTES
     Mirrors the FinderPresenter / InventoryPresenter seam: a duck-typed [object] $Home
@@ -41,6 +48,17 @@ class ResolutionCoordinator {
     hidden [int] $WarmTimeoutSeconds = 30
     # Next time ReapWarmShells may dump parked-shell state lines (throttles to 1/min).
     hidden [datetime] $NextReapReportUtc = [datetime]::MinValue
+
+    # Fast-lane state: cap the concurrent slim resolve children (a paste-add must not
+    # spawn an unbounded pwsh burst), FIFO-queue the overflow, and track lane health.
+    hidden [int] $FastResolveCap = 4
+    hidden [int] $FastResolveActive = 0
+    hidden [System.Collections.Generic.Queue[string]] $PendingFastResolves = [System.Collections.Generic.Queue[string]]::new()
+    # One classic-path retry per host attempt (cleared on a successful verdict).
+    hidden [System.Collections.Generic.HashSet[string]] $FastFallbacks = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    # Latched off for the session after 3 consecutive ProcessFaults (worst case = classic path).
+    hidden [bool] $FastLaneHealthy = $true
+    hidden [int] $FastFaultStreak = 0
 
     ResolutionCoordinator(
         [AppConfig] $config,
@@ -239,23 +257,68 @@ class ResolutionCoordinator {
         $this.AbandonedWarmShells = $stillRunning
     }
 
-    # Resolves a host's IP in the background (single-flight); no-op until a DC is warm
-    # or if the host is already cached / in flight.
+    # Background single-flight IP resolve; no-op until a DC is warm or the host is
+    # cached/in-flight. Fast lane (capped direct child) by default; worker path = fallback.
     [void] PrefetchIp([string]$hostName) {
         if (-not $this.Resolver.NeedsResolve($hostName)) { return }
+        if (-not $this.FastLaneHealthy) { $this.StartClassicResolve($hostName); return }
+        if ($this.FastResolveActive -ge $this.FastResolveCap) {
+            # Latch while queued so single-flight holds; drained from CompleteResolve.
+            $this.Resolver.MarkInFlight($hostName)
+            $this.PendingFastResolves.Enqueue($hostName)
+            return
+        }
+        $this.StartFastResolve($hostName)
+    }
+
+    hidden [void] StartFastResolve([string]$hostName) {
+        try {
+            $this.Resolver.MarkInFlight($hostName)
+            $prep = $this.Resolver.PrepareResolveFast($hostName)
+            $job = $this.NewFastResolveJob($hostName)
+            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+            $this.Home.ActiveJobs.Add($job)
+            $this.FastResolveActive++
+            $this.Logger.LogDebug("[$hostName] fast IP pre-resolve submitted (direct child, no pool slot).")
+        }
+        catch {
+            # Release the latch if the job never started, or NeedsResolve stays false
+            # forever and the host wedges.
+            $this.Resolver.ClearInFlight($hostName)
+            $this.Logger.LogException("[$hostName] fast IP pre-resolve could not start", $_)
+        }
+    }
+
+    # Overridable seam (tests): the fast lane's job construction.
+    hidden [AsyncJob] NewFastResolveJob([string]$hostName) {
+        return [ResolveProcessJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
+    }
+
+    # The pre-fast-lane PrefetchIp body: a full worker child via the pool. Used when
+    # the lane is latched off and as the per-host ProcessFault fallback.
+    hidden [void] StartClassicResolve([string]$hostName) {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolve($hostName)
             $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
-            $this.Logger.LogDebug("[$hostName] IP pre-resolve job submitted.")
+            $this.Logger.LogDebug("[$hostName] IP pre-resolve job submitted (worker path).")
         }
         catch {
-            # Release the latch if the job never started, or NeedsResolve stays false
-            # forever and the host wedges.
             $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
+        }
+    }
+
+    # Starts queued fast resolves as slots free up; a lane latched off mid-queue sends
+    # the remainder down the classic path instead of dropping them.
+    hidden [void] StartNextFastResolve() {
+        while ($this.PendingFastResolves.Count -gt 0 -and
+            ($this.FastResolveActive -lt $this.FastResolveCap -or -not $this.FastLaneHealthy)) {
+            $next = $this.PendingFastResolves.Dequeue()
+            if ($this.FastLaneHealthy) { $this.StartFastResolve($next) }
+            else { $this.StartClassicResolve($next) }
         }
     }
 
@@ -284,7 +347,18 @@ class ResolutionCoordinator {
     # Resolve finished: cache the DC (warm) or the per-host verdict and refresh the indicator.
     # HomePresenter owns the run/gather queue, so re-issuing queued work is handed back to it.
     [void] CompleteResolve([AsyncJob]$job) {
+        $isFast = $job -is [ResolveProcessJob]
+        if ($isFast) { $this.FastResolveActive = [Math]::Max(0, $this.FastResolveActive - 1) }
+        try { $this.CompleteResolveCore($job, $isFast) }
+        finally {
+            # Whatever happened, a finished fast job frees a slot: drain the queue.
+            if ($isFast) { $this.StartNextFastResolve() }
+        }
+    }
+
+    hidden [void] CompleteResolveCore([AsyncJob]$job, [bool]$isFast) {
         if ($job.Status -eq 'Failed') {
+            if ($isFast) { $this.OnFastResolveFault($job); return }
             # A failed resolve/warm was silent, so a DC-warm or host-resolve failure looked
             # like nothing happened at all. Surface why (empty HostName = the startup DC warm).
             $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
@@ -299,6 +373,7 @@ class ResolutionCoordinator {
             }
             return
         }
+        if ($isFast) { $this.FastFaultStreak = 0 }
         foreach ($item in @($job.Result)) {
             if ($null -eq $item) { continue }
             $mode = [string]$item.Mode
@@ -330,6 +405,8 @@ class ResolutionCoordinator {
                     else { $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp") }
                 }
                 $this.Resolver.CacheVerdict($hn, $newIp, $online)
+                # A landed verdict re-arms this host's one-shot classic fallback.
+                [void]$this.FastFallbacks.Remove($hn)
                 $this.Home.RenderReachability($hn)
                 # Surface the fresh IP in the detail subtitle if this host's panel is open.
                 if ($hn -eq $this.Home.SelectedHost) {
@@ -349,6 +426,29 @@ class ResolutionCoordinator {
             elseif ($mode -eq 'WarmRunspace') {
                 # No-op: the job's purpose was loading the module graph into its runspace.
             }
+        }
+    }
+
+    # Fast child faulted (crash/kill/timeout - no verdict): retry the host once on the
+    # classic path; 3 consecutive faults latch the lane off (worst case = pre-lane behavior).
+    hidden [void] OnFastResolveFault([AsyncJob]$job) {
+        $hn = $job.HostName
+        $this.FastFaultStreak++
+        if ($this.FastFaultStreak -ge 3 -and $this.FastLaneHealthy) {
+            $this.FastLaneHealthy = $false
+            $this.Logger.LogWarning(
+                "Fast resolve lane disabled for this session after $($this.FastFaultStreak) consecutive faults; " +
+                "resolves fall back to the worker path.")
+        }
+        $this.Resolver.ClearInFlight($hn)
+        if ($this.FastFallbacks.Add($hn)) {
+            $this.Logger.LogWarning("[$hn] fast resolve fault: $($job.FailureMessage); retrying on the worker path.")
+            $this.StartClassicResolve($hn)
+        }
+        else {
+            # Second fault in one attempt: give up like a classic failure would.
+            $this.Logger.LogWarning("[$hn] fast resolve fault after a fallback: $($job.FailureMessage)")
+            $this.Home.DropPendingRunOnResolveFailure($hn)
         }
     }
 

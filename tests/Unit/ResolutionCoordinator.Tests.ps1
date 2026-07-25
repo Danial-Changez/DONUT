@@ -4,6 +4,7 @@
 # PrefetchIp directly.
 using module "..\..\src\UI\Presenters\ResolutionCoordinator.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
+using module "..\..\src\Core\ResolveProcessJob.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\JobEnums.psm1"
@@ -30,6 +31,29 @@ class FakeHostResolver : HostResolver {
     [void] SetActiveDc([string]$dc) { $this.ActiveDc = $dc }
     [void] CacheVerdict([string]$h, [string]$ip, [bool]$online) { $this.Verdicts[$h] = @($ip, $online) }
     [void] CacheName([string]$h, [string]$n) {}
+    [hashtable] PrepareResolveFast([string]$h) {
+        return @{ ScriptPath = 'ResolveWorker.ps1'; TempConfigPath = $null; Arguments = @{ HostName = $h } }
+    }
+}
+
+# A fast job that never spawns a process; tests flip its Status/ProcessFault directly.
+class FakeFastJob : ResolveProcessJob {
+    FakeFastJob([string]$h) : base($h, [JobKind]::Resolve, $null) {}
+    [void] Start([string]$s, [hashtable]$a, [string]$t) { $this.Status = [JobStatus]::Running }
+}
+
+# Overrides the two construction seams so no real child pwsh / pool job ever starts.
+class TestableCoordinator : ResolutionCoordinator {
+    [System.Collections.Generic.List[object]] $FastJobs = [System.Collections.Generic.List[object]]::new()
+    [System.Collections.Generic.List[string]] $ClassicStarts = [System.Collections.Generic.List[string]]::new()
+    TestableCoordinator([AppConfig]$c, [LogService]$l, [object]$m, [object]$t,
+        [HostResolver]$r, [object]$h) : base($c, $l, $m, $t, $r, $h) {}
+    hidden [AsyncJob] NewFastResolveJob([string]$hostName) {
+        $j = [FakeFastJob]::new($hostName)
+        $this.FastJobs.Add($j)
+        return $j
+    }
+    hidden [void] StartClassicResolve([string]$hostName) { $this.ClassicStarts.Add($hostName) }
 }
 
 # Records the pending-queue re-issue seams the coordinator hands back to.
@@ -157,6 +181,99 @@ Describe "ResolutionCoordinator" {
             $script:coord.CompleteResolve($job)
 
             $script:cfgMgr.SaveCount | Should -Be 1
+        }
+    }
+
+    Context "Fast resolve lane" {
+        BeforeEach {
+            $script:fastCoord = [TestableCoordinator]::new(
+                $script:config, [LogService]::new($env:TEMP), $script:cfgMgr, $null,
+                $script:resolver, $script:fakeHome)
+        }
+
+        # Marks a fast job terminal the way the pump would see it.
+        BeforeAll {
+            function Set-FastFault([object]$job, [string]$message = 'killed') {
+                $job.Status = [JobStatus]::Failed
+                $job.ProcessFault = $true
+                $job.FailureMessage = $message
+            }
+        }
+
+        It "prefetch uses the fast lane, caps concurrency at 4, and drains the FIFO overflow" {
+            foreach ($i in 1..5) { $script:fastCoord.PrefetchIp("PC$i") }
+            $script:fastCoord.FastJobs.Count | Should -Be 4       # the 5th queued, not started
+            $script:fakeHome.ActiveJobs.Count | Should -Be 4
+
+            $job = $script:fastCoord.FastJobs[0]
+            $job.Status = [JobStatus]::Completed
+            $job.Result = @{ Mode = 'Host'; HostName = 'PC1'; Ip = '10.0.0.5'; Online = $true }
+            $script:fastCoord.CompleteResolve($job)
+
+            # A finished fast job frees a slot: the queued host starts.
+            $script:fastCoord.FastJobs.Count | Should -Be 5
+            $script:fastCoord.FastJobs[4].HostName | Should -Be 'PC5'
+        }
+
+        It "a ProcessFault retries once on the classic path and releases the latch" {
+            $script:fastCoord.PrefetchIp('PC1')
+            $job = $script:fastCoord.FastJobs[0]
+            Set-FastFault $job
+
+            $script:fastCoord.CompleteResolve($job)
+
+            $script:resolver.Cleared | Should -Be @('PC1')
+            $script:fastCoord.ClassicStarts | Should -Be @('PC1')
+            $script:fakeHome.DroppedRuns.Count | Should -Be 0     # retried, not dropped
+        }
+
+        It "a repeat fault before any verdict drops the queued run instead of looping" {
+            $script:fastCoord.PrefetchIp('PC1')
+            Set-FastFault $script:fastCoord.FastJobs[0]
+            $script:fastCoord.CompleteResolve($script:fastCoord.FastJobs[0])
+
+            $script:fastCoord.PrefetchIp('PC1')
+            Set-FastFault $script:fastCoord.FastJobs[1]
+            $script:fastCoord.CompleteResolve($script:fastCoord.FastJobs[1])
+
+            $script:fastCoord.ClassicStarts | Should -Be @('PC1')   # only the first fell back
+            $script:fakeHome.DroppedRuns | Should -Be @('PC1')
+        }
+
+        It "three consecutive faults latch the lane off for the session" {
+            foreach ($i in 1..3) {
+                $script:fastCoord.PrefetchIp("PC$i")
+                Set-FastFault $script:fastCoord.FastJobs[$i - 1]
+                $script:fastCoord.CompleteResolve($script:fastCoord.FastJobs[$i - 1])
+            }
+
+            $script:fastCoord.PrefetchIp('PC9')
+
+            $script:fastCoord.FastJobs.Count | Should -Be 3         # no new fast child
+            $script:fastCoord.ClassicStarts[$script:fastCoord.ClassicStarts.Count - 1] |
+                Should -Be 'PC9'                                    # went down the worker path
+        }
+
+        It "a successful fast verdict resets the fault streak (latch counts CONSECUTIVE faults)" {
+            foreach ($i in 1..2) {
+                $script:fastCoord.PrefetchIp("PC$i")
+                Set-FastFault $script:fastCoord.FastJobs[$i - 1]
+                $script:fastCoord.CompleteResolve($script:fastCoord.FastJobs[$i - 1])
+            }
+            $script:fastCoord.PrefetchIp('PC3')
+            $ok = $script:fastCoord.FastJobs[2]
+            $ok.Status = [JobStatus]::Completed
+            $ok.Result = @{ Mode = 'Host'; HostName = 'PC3'; Ip = '10.0.0.3'; Online = $true }
+            $script:fastCoord.CompleteResolve($ok)
+
+            $script:fastCoord.PrefetchIp('PC4')
+            Set-FastFault $script:fastCoord.FastJobs[3]
+            $script:fastCoord.CompleteResolve($script:fastCoord.FastJobs[3])
+
+            # Streak reset by the success: one later fault must not latch the lane off.
+            $script:fastCoord.PrefetchIp('PC5')
+            $script:fastCoord.FastJobs[$script:fastCoord.FastJobs.Count - 1].HostName |
+                Should -Be 'PC5'
         }
     }
 }

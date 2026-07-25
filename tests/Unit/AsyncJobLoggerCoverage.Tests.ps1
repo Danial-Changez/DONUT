@@ -16,7 +16,7 @@ Describe "AsyncJob logger coverage" {
     BeforeAll {
         $script:SrcRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../src'))
 
-        # All [AsyncJob]::new(...) invocations in a file, via AST (comment/string safe).
+        # All [AsyncJob]/[ResolveProcessJob]::new(...) invocations, via AST (comment/string safe).
         function Get-AsyncJobConstructions([string]$path) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile(
                 $path, [ref]$null, [ref]$null)
@@ -24,7 +24,7 @@ Describe "AsyncJob logger coverage" {
                     param($n)
                     ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) -and
                     ($n.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) -and
-                    ($n.Expression.TypeName.Name -eq 'AsyncJob') -and
+                    ($n.Expression.TypeName.Name -in @('AsyncJob', 'ResolveProcessJob')) -and
                     ([string]$n.Member.SafeGetValue() -eq 'new')
                 }, $true)
         }

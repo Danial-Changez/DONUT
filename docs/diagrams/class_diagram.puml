@@ -299,6 +299,15 @@ package "Donut.Core" #102A20 {
         +{static} Interpret(launcherOutput): hashtable
     }
 
+    class ResolveProcessJob extends AsyncJob {
+        +Process: Process
+        +ProcessFault: bool
+        +TimeoutSeconds: int
+        +Start(scriptPath, arguments, tempConfig): void
+        +Poll(): void
+        +Cleanup(): void
+    }
+
     class RunspaceManager {
         +{static} Initialize(min, max): void
         +{static} SetLogger(logger): void
@@ -387,6 +396,7 @@ package "Donut.Services" #221634 {
         +Invalidate(host): void
         +PrepareWarm() / PrepareWarmRunspace(): Hashtable
         +PrepareResolve(host) / PrepareName(host): Hashtable
+        +PrepareResolveFast(host): Hashtable
         +IdentityVerdict(host): string
     }
 

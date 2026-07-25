@@ -22,6 +22,10 @@ box "Runspace pool (background threads)" #101B14
   participant "NetworkProbe\n(DNS / RPC-135 / SMB-445)" as N
 end box
 
+box "Fast resolve lane (direct child pwsh)" #1B1414
+  participant "ResolveProcessJob\n(Process.Start -> ResolveWorker.ps1)" as F
+end box
+
 box "Target environment" #1E1610
   participant "Domain Controller\n(AD + DNS)" as DC
   participant "Target host\n(admin share + dcu-cli)" as H
@@ -45,18 +49,21 @@ note over P,R #13291D
   cold runspace and froze the UI. Pinned, the warm holds for life.
 end note
 
-== Phase 1 — Resolve a host (start-early, on select) ==
+== Phase 1 — Resolve a host (start-early, on select; the FAST LANE) ==
 OP -> P : select row  (SelectHost)
 P -> R : NeedsResolve(host)? (DC known, not in-flight, uncached OR stale)
 alt needs resolve
   P -> R : MarkInFlight(host)
-  P -> J : Resolve{Host, Dc}
-  J -> W : RunResolvePhase(Host)
-  W -> N : ResolveWith(host, dc)   (DNS A-record via the DC)
-  N -> DC : Resolve-DnsName -Server dc
-  W -> N : IsRpcAvailable(ip)  (TCP 135, bounded 2s)
-  N -> H : connect 135
-  J --> P : CompleteResolve
+  P -> F : slim ResolveWorker child (DIRECT spawn - no pool slot)
+  note right of F #13291D
+    Fast lane: capped at 4 concurrent children (FIFO overflow queue);
+    no worker module graph, so ~1-2s instead of ~2.5-5s + pool wait.
+    A ProcessFault (crash/kill/timeout) retries ONCE on the classic
+    RemoteWorker path; 3 consecutive faults latch the lane off.
+  end note
+  F -> DC : Resolve-DnsName -Server dc  (A record, authoritative)
+  F -> H : connect 135  (TCP, bounded 2s, breadcrumb logged pre-connect)
+  F --> P : CompleteResolve  (verdict JSON via result file)
   alt job Failed (HadErrors, e.g. DNS/RPC errored)
     P -> R : ClearInFlight(host)
     note right of R #13291D

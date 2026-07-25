@@ -144,6 +144,25 @@ class HostResolver : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Host'; Dc = $this.ActiveDc })
     }
 
+    # Fast-lane variant: args for the slim ResolveWorker child (three CLI strings; no
+    # worker graph, no Settings snapshot - so no per-resolve DeepClone on the UI thread).
+    [hashtable] PrepareResolveFast([string]$hostName) {
+        $scriptPath = Join-Path $this.Config.SourceRoot "Scripts\ResolveWorker.ps1"
+        if (-not (Test-Path $scriptPath)) {
+            $this.Logger.LogError("ResolveWorker script not found at $scriptPath")
+            throw [System.IO.FileNotFoundException]::new('ResolveWorker script not found.', $scriptPath)
+        }
+        return @{
+            ScriptPath     = $scriptPath
+            TempConfigPath = $null
+            Arguments      = @{
+                HostName = $hostName
+                Dc       = $this.ActiveDc
+                LogsDir  = $this.Config.LogsPath
+            }
+        }
+    }
+
     # Identity job: ask the box at the host's cached IP for its own name. Fired in
     # parallel with the apply-scan; the verdict gates the destructive apply.
     [hashtable] PrepareName([string]$hostName) {

@@ -7,6 +7,7 @@ Describe "HostResolver" {
         $script:tempDir = Join-Path $env:TEMP "DonutTests_Resolver_$(Get-Random)"
         New-Item -Path (Join-Path $script:tempDir "Scripts") -ItemType Directory -Force | Out-Null
         New-Item -Path (Join-Path $script:tempDir "Scripts\RemoteWorker.ps1") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempDir "Scripts\ResolveWorker.ps1") -ItemType File -Force | Out-Null
         $script:config = [AppConfig]::new($script:tempDir, (Join-Path $script:tempDir "Logs"), (Join-Path $script:tempDir "Reports"), @{})
 
         function New-Resolver { [HostResolver]::new($script:config, [NetworkProbe]::new()) }
@@ -178,6 +179,16 @@ Describe "HostResolver" {
             $prep = $r.PrepareName("PC-1")
             $prep.Arguments.Options.Mode | Should -Be "Name"
             $prep.Arguments.Options.Ip   | Should -Be "10.0.0.5"
+        }
+
+        It "PrepareResolveFast targets ResolveWorker with three CLI args and no Settings" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $prep = $r.PrepareResolveFast("PC-1")
+            $prep.ScriptPath | Should -Match 'ResolveWorker\.ps1$'
+            $prep.Arguments.HostName | Should -Be "PC-1"
+            $prep.Arguments.Dc | Should -Be "DC1"
+            $prep.Arguments.Keys.Count | Should -Be 3   # no Settings snapshot rides along
         }
     }
 

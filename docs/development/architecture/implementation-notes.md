@@ -44,7 +44,20 @@ model.
   DiskPhases / ResolvePhase / ArtifactCopy. Deferred because its transport rules are
   accreted regression fixes, the 770-line test file couples to its seams, and every extra
   `using module` slows every child - revisit when feature work next lands there.
-- **In-process pool scripts (`PoolScriptJob`):** the scripts that must run *in-process*
+- **Fast resolve lane (`ResolveProcessJob` + `ResolveWorker.ps1`):** per-host IP
+  resolves skip the pool entirely. The classic path paid a full worker child (pwsh cold
+  start + the ~12-module class-graph compile, ~2.5–5 s) for one `Resolve-DnsName
+  -Server $dc` + one bounded TCP-135 probe — and, worse, held a pool runspace for the
+  child's life, so resolves queued for **minutes** behind running scans while gating the
+  queued runs. The fast lane spawns a slim, class-free `ResolveWorker.ps1` directly via
+  `Process.Start` (no pool slot, no runspace, no ThreadPool dispatch; ~1–2 s), capped at
+  4 concurrent with a FIFO overflow queue. The verdict rides a result file — never
+  redirected pipes (the proven wedge surface) — and file-absent-after-exit is the
+  `ProcessFault` signal: crash/kill/timeout retries that host **once** on the classic
+  worker path, and 3 consecutive faults latch the lane off for the session (worst case
+  = the old behavior). A wedged child is `Kill()`-able — the recovery a wedged pipeline
+  never had. DC discovery (`Warm`, needs the AD module) and the identity check (`Name`,
+  DCOM CIM) stay on the worker path.
   on the pool (AD search, Lens broker, unlock, startup task) share one Core helper for
   start / complete / async-stop / reap instead of three hand-rolled copies. The rules it
   pins: never `Dispose()` a running pipeline (it blocks the UI thread — `BeginStop` and
