@@ -116,24 +116,9 @@
              from the search bar can drive SelectedIndex; selection highlights the row. -->
         <ListBox x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}"
                  Background="Transparent" BorderThickness="0" MaxHeight="340"
+                 ItemContainerStyle="{StaticResource MachineListItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto">
-          <ListBox.ItemContainerStyle>
-            <Style TargetType="ListBoxItem">
-              <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-              <Setter Property="Padding" Value="0" />
-              <Setter Property="Margin" Value="0" />
-              <Setter Property="Background" Value="Transparent" />
-              <!-- Strip default selection chrome; the row Border draws its own highlight. -->
-              <Setter Property="Template">
-                <Setter.Value>
-                  <ControlTemplate TargetType="ListBoxItem">
-                    <ContentPresenter />
-                  </ControlTemplate>
-                </Setter.Value>
-              </Setter>
-            </Style>
-          </ListBox.ItemContainerStyle>
           <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid>
@@ -231,7 +216,7 @@
       ToolTip="Click to cycle the active command (Scan / Apply) using its defaults"
     >
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-        <TextBlock Text="&#x27F3;" FontFamily="Segoe UI Symbol" FontSize="13"
+        <TextBlock Text="&#x27F3;" FontFamily="{DynamicResource FontSymbol}" FontSize="13"
                    Foreground="{DynamicResource BodyTextTertiary}" VerticalAlignment="Center" Margin="0,0,7,0" />
         <TextBlock x:Name="txtMode" Text="Scan" FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                    Foreground="{DynamicResource TitleTextPrimary}" VerticalAlignment="Center" />
@@ -273,12 +258,11 @@
     <!-- Machine (model + service tag) -->
     <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
-        <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}"
-                   />
-        <TextBlock x:Name="txtOvModel" Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvModelSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+        <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}" />
+        <TextBlock Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
+                   Style="{DynamicResource StatValue}" />
+        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}"
+                 ToolTip="{Binding SelectedMachine.OvModelSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -286,12 +270,11 @@
     <!-- Battery health -->
     <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
-        <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}"
-                   />
-        <TextBlock x:Name="txtOvBattery" Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvBatterySub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+        <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}" />
+        <TextBlock Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
+                   Style="{DynamicResource StatValue}" />
+        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}"
+                 ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -299,12 +282,11 @@
     <!-- Disk free -->
     <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}">
       <StackPanel>
-        <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}"
-                   />
-        <TextBlock x:Name="txtOvDisk" Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
-        <TextBox x:Name="txtOvDiskSub" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+        <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}" />
+        <TextBlock Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
+                   Style="{DynamicResource StatValue}" />
+        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}"
+                 ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
       </StackPanel>
     </Border>
@@ -313,11 +295,9 @@
          Available Updates card, so this slot shows a fact that isn't surfaced elsewhere). -->
     <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}">
       <StackPanel>
-        <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}"
-                   />
-        <TextBlock x:Name="txtOvBios" Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="19" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,6,0,0" />
+        <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}" />
+        <TextBlock Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"
+                   Style="{DynamicResource StatValue}" />
       </StackPanel>
     </Border>
   </Grid>
@@ -345,8 +325,7 @@
            Clear (completed) as the right-aligned action, mirroring the detail pane's
            [title | buttons] row so the two panes read as a balanced pair (same top offset 14). -->
       <Grid Grid.Row="0" Margin="14,12,14,10">
-        <TextBlock Text="Machines" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
-                   Foreground="{DynamicResource TitleTextPrimary}"
+        <TextBlock Text="Machines" Style="{DynamicResource TextPaneTitle}"
                    HorizontalAlignment="Left" VerticalAlignment="Center" />
         <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
                 FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -426,7 +405,7 @@
                          Symbol is pinned so the symbols never fall back to tofu. -->
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding ChipForeground}"
-                                 FontFamily="Segoe UI Symbol" FontWeight="SemiBold" FontSize="11"
+                                 FontFamily="{DynamicResource FontSymbol}" FontWeight="SemiBold" FontSize="11"
                                  Margin="0,0,5,0" VerticalAlignment="Center">
                         <TextBlock.Style>
                           <Style TargetType="TextBlock">
@@ -535,9 +514,11 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
-                       Foreground="{DynamicResource TitleTextPrimary}" />
-              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
+              <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
+                       ToolTip="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18"
+                       FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
+              <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}"
+                       ToolTip="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
             </StackPanel>
             <!-- Neutral secondary variant (not a coloured tint): these are utility actions
@@ -578,7 +559,7 @@
                 <TextBlock Grid.Column="0" Text="AVAILABLE UPDATES"
                            Style="{DynamicResource MicroLabel}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
-                <Border Grid.Column="1" CornerRadius="9" Padding="8,1" BorderThickness="1"
+                <Border Grid.Column="1" CornerRadius="8.4" Padding="8,1" BorderThickness="1"
                         VerticalAlignment="Center"
                         ToolTip="{Binding SelectedMachine.UpdatesIdentityText}"
                         Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
@@ -836,7 +817,7 @@
           </Grid>
 
           <!-- Live job log -->
-          <Border Grid.Row="2" CornerRadius="8" Background="{DynamicResource TerminalBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+          <Border Grid.Row="2" CornerRadius="10" Background="{DynamicResource TerminalBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -886,7 +867,8 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Margin="0,0,0,10">
-              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
+              <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" ToolTip="{Binding DisplayName}"
+                       FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                        Foreground="{DynamicResource TitleTextPrimary}" />
               <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
                        Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" ToolTip="{Binding Upn}" />
@@ -951,7 +933,7 @@
                 <ItemsControl ItemsSource="{Binding Devices}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
+                      <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
                               Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
                         <Grid>
                           <Grid.ColumnDefinitions>

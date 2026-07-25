@@ -196,6 +196,8 @@
          through per-glyph, so missing fonts degrade without breaking layout. -->
     <FontFamily x:Key="FontSans">Montserrat, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">./Fonts/#Geist Mono, Cascadia Mono, Consolas</FontFamily>
+    <!-- Status glyphs (checkmarks, arrows) pin a symbol font so they never render as tofu. -->
+    <FontFamily x:Key="FontSymbol">Segoe UI Symbol</FontFamily>
     <!-- ============================================================
          Arcane recipe tokens (extracted from getarcaneapp/arcane frontend).
          Tint recipe (dark): fill = status-500 @10% (0x1A), border = @30% (0x4D);

@@ -171,11 +171,8 @@
                     <!-- Header: the title and close sit on one row, pinned above the scroll. -->
                     <Grid Grid.Row="0"
                           Margin="20,14,12,0">
-                        <TextBlock Text="Configuration"
-                                   FontFamily="{DynamicResource FontSans}"
-                                   FontSize="18"
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource TitleTextPrimary}"
+                        <TextBlock Text="Settings"
+                                   Style="{DynamicResource TextPaneTitle}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left" />
                         <Button HorizontalAlignment="Right"
@@ -230,11 +227,8 @@
                     <!-- Header: caption + close, mirroring the settings card. -->
                     <Grid Grid.Row="0">
                         <TextBlock Text="{Binding QrCaption}"
-                                   FontFamily="{DynamicResource FontSans}"
-                                   FontSize="14"
-                                   FontWeight="Bold"
+                                   Style="{DynamicResource TextSubtitle}"
                                    TextWrapping="Wrap"
-                                   Foreground="{DynamicResource TitleTextPrimary}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
                                    Margin="0,0,40,0" />
@@ -307,8 +301,7 @@
                     BorderThickness="1" CornerRadius="10" Padding="16,14">
                 <StackPanel>
                     <TextBlock x:Name="tourTitle" Text="Welcome"
-                               FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="Bold"
-                               Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                               Style="{DynamicResource TextTitle}" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <TextBlock x:Name="tourBody" Text=""
                                FontFamily="{DynamicResource FontSans}" FontSize="13.5"
                                Foreground="{DynamicResource BodyTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,14" />

@@ -101,19 +101,16 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
     </Style>
-    <!-- Stat tile value/subtitle (Arcane StatCard: value 2xl semibold tabular). -->
+    <!-- Stat tile value (Arcane StatCard). The tile sub-lines stay SelectableText
+         TextBoxes (service tag etc. are copy-valuable), so no TextBlock sub style. -->
     <Style x:Key="StatValue"
            TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize" Value="19" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
-    </Style>
-    <Style x:Key="StatSub"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="11.5" />
-        <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Margin" Value="0,6,0,0" />
     </Style>
     <!-- Thin usage/progress meter (Arcane dash meter): 5px rounded-full secondary
          track; the fill colour comes from each instance's Foreground (VM-driven).

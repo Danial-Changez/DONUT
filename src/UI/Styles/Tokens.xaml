@@ -48,6 +48,19 @@
     <!-- Named text roles. TitleText/BodyText etc. existed only as *brushes*; these are the
          matching TextBlock styles so headings/body copy stop being styled ad-hoc inline.
          Values are the dominant ones already in use (a starting scale for future adoption). -->
+    <!-- Pane/window titles: the 18px bold tier used by the Machines/detail/Lens/
+         Configuration/dialog headings (above TextTitle in the scale). -->
+    <Style x:Key="TextPaneTitle"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="18" />
+        <Setter Property="FontWeight"
+                Value="Bold" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource TitleTextPrimary}" />
+    </Style>
     <Style x:Key="TextTitle"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
