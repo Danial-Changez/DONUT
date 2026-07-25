@@ -43,10 +43,6 @@ class InventoryPresenter {
 
     # Detail-panel + overview controls. The header/overview values are selectable TextBoxes
     # (SelectableText) so the operator can copy them; still binding-driven, no method reads them.
-    [System.Windows.UIElement] $DetailEmptyHint
-    [System.Windows.UIElement] $DetailContent
-    [TextBox] $DetailHostText
-    [TextBox] $DetailProbed
     [Button] $DetailRefreshButton
     [TextBox] $DetailLog
     [ProgressBar] $DetailProgress
@@ -82,10 +78,6 @@ class InventoryPresenter {
     # Adopts the detail-header + overview tile controls from the Home view. The detail
     # log, progress bar, and probe buttons migrate with the probe lifecycle (stage 3).
     [void] Initialize([System.Windows.FrameworkElement] $view) {
-        $this.DetailEmptyHint = $view.FindName('DetailEmptyHint')
-        $this.DetailContent = $view.FindName('DetailContent')
-        $this.DetailHostText = $view.FindName('txtDetailHost')
-        $this.DetailProbed = $view.FindName('txtDetailProbed')
 
         $this.DetailRefreshButton = $view.FindName('btnDetailRefresh')
         $this.DetailLog = $view.FindName('txtDetailLog')

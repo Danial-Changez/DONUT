@@ -457,7 +457,8 @@ class FinderPresenter {
         $confirmed = $this.DialogPresenter.ShowConfirmation(
             "Unlock account",
             "Unlock the locked-out account '$upn'?",
-            @("$([string]$r.SamAccountName)  @  $([string]$r.Domain)")
+            @("$([string]$r.SamAccountName)  @  $([string]$r.Domain)"),
+            'Unlock', $false
         )
         if (-not $confirmed) { return }
 

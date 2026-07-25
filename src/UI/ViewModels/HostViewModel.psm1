@@ -69,7 +69,6 @@ class HostViewModel : ObservableObject {
     # Display-only (apply is gated by a confirm dialog); HasUpdates gates the section + folders.
     [object] $Updates = @()
     [bool]   $HasUpdates = $false
-    [string] $UpdatesHeader = ''
     [string] $UpdatesIdentityText = ''   # full verdict sentence (identity pill's tooltip)
     [string] $IdentityState = 'Unknown'  # Match / Mismatch / Unknown - drives the pill
 

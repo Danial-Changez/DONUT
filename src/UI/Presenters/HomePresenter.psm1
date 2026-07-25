@@ -301,7 +301,7 @@ class HomePresenter : AsyncJobPresenter {
                 $this.StartProcess($hostName)
             }
             else {
-                $this.Detail.AppendLog($hostName, "Host is offline - queued run skipped.")
+                $this.Detail.AppendLog($hostName, "Machine is offline - queued run skipped.")
                 if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - run skipped.") }
             }
         }
@@ -406,10 +406,12 @@ class HomePresenter : AsyncJobPresenter {
 
         $command = $this.Config.GetActiveCommand()
         if ($command -eq 'applyUpdates') {
+            # Applies are irreversible (BIOS/firmware installs): destructive tint + the
+            # action-specific label, per the modal pattern.
             $confirmed = $this.DialogPresenter.ShowConfirmation(
-                "Confirm Apply Updates",
-                "You are about to apply updates to $($idleHosts.Count) computer(s).",
-                $idleHosts
+                "Apply updates",
+                "You are about to apply updates to $($idleHosts.Count) machine(s).",
+                $idleHosts, 'Apply', $true
             )
             if (-not $confirmed) { return }
             # Batch consent: each host applies without its own dialog (see ProceedWithApply).
@@ -489,7 +491,7 @@ class HomePresenter : AsyncJobPresenter {
         # Never scan/apply an offline or unresolved host (reachability gating, .NOTES).
         $reach = $this.Resolver.IsHostOnline($hostName)
         if ($reach -eq 'Offline') {
-            $this.Detail.AppendLog($hostName, "Host is offline - skipping $command.")
+            $this.Detail.AppendLog($hostName, "Machine is offline - skipping $command.")
             if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - skipped.") }
             if ($row) { $row.SetReachability('Offline') }
             return
@@ -830,8 +832,9 @@ class HomePresenter : AsyncJobPresenter {
 
         # Single run: one small confirm (the list itself lives in the pane, not the dialog).
         $this.Detail.AppendLog($hostName, "Review the updates in the pane, then confirm.")
-        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply Updates",
-            "Apply $($updateRows.Count) update(s) to ${hostName}? Review the list in the detail pane.", @())
+        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply updates",
+            "Apply $($updateRows.Count) update(s) to ${hostName}? Review the list in the detail pane.",
+            @(), 'Apply', $true)
         if (-not $confirmed) {
             $this.Detail.AppendLog($hostName, "Cancelled by user.")
             return $false
@@ -866,7 +869,6 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($null -ne $vm) {
             $vm.Set('Updates', $updateRows)
-            $vm.Set('UpdatesHeader', "UPDATES FOUND ($($updateRows.Count))")
             $vm.Set('UpdatesIdentityText', $identityLine)
             $vm.Set('IdentityState', $verdict)
             $vm.Set('HasUpdates', $true)
@@ -966,7 +968,7 @@ class HomePresenter : AsyncJobPresenter {
         # Only gather from a known-online host so the worker reuses the cached IP.
         $state = $this.Resolver.IsHostOnline($hostName)
         if ($state -eq 'Offline') {
-            $this.Detail.AppendLog($hostName, "Host is offline - skipping inventory.")
+            $this.Detail.AppendLog($hostName, "Machine is offline - skipping inventory.")
             return
         }
         if ($state -ne 'Online' -or $this.Resolver.IsVerdictStale($hostName)) {

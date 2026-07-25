@@ -191,9 +191,12 @@
                                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                       </StackPanel>
+                      <!-- The row's one action earns the tint (colour hierarchy); Outline is
+                           reserved for low-emphasis navigation (tour Back). -->
                       <Button Grid.Column="2" Content="Unlock" Command="{Binding UnlockCommand}"
-                              Style="{DynamicResource ButtonOutline}" Height="32" FontSize="11"
+                              Style="{DynamicResource ButtonTintPrimary}" Height="32" FontSize="11"
                               VerticalAlignment="Center"
+                              ToolTip="Unlock this locked-out account"
                               Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
                     </Grid>
                   </Border>
@@ -393,8 +396,8 @@
                                FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding Subtitle}" />
                   </StackPanel>
-                  <!-- The card reads busy from the "Scanning..." chip; the live bar lives in
-                       the detail pane's Available Updates card, not here (declutter). -->
+                  <!-- The card reads busy from the "Scanning..." chip; the live bar sits atop
+                       the detail pane's terminal (DetailProgress), not here (declutter). -->
                   <!-- Status chip = Arcane StatusBadge: rounded (not a pill), tinted
                        fill + 30% border, 400-shade text (all VM-driven). -->
                   <Border Grid.Column="2" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
@@ -423,7 +426,7 @@
                     </StackPanel>
                   </Border>
                   <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
-                          Style="{DynamicResource ButtonTintSuccess}" FontSize="11.5" Height="32"
+                          Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
                           Padding="14,4" VerticalAlignment="Center"
                           ToolTip="Run the active command on this machine" />
                 </Grid>
@@ -692,7 +695,8 @@
                                 <TextBlock Style="{DynamicResource BadgeMutedText}" Text="{Binding Category}" />
                               </Border>
                               <TextBlock Text="{Binding VersionText}" FontFamily="{DynamicResource FontMono}" FontSize="11"
-                                         Foreground="{DynamicResource BodyTextPrimary}" VerticalAlignment="Center" />
+                                         Foreground="{DynamicResource BodyTextPrimary}" VerticalAlignment="Center"
+                                         TextTrimming="CharacterEllipsis" ToolTip="{Binding VersionText}" />
                               <Border Style="{DynamicResource BadgeGreen}" Margin="8,0,0,0" VerticalAlignment="Center"
                                       Visibility="{Binding IsNewer, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Style="{DynamicResource BadgeGreenText}" Text="NEW" />
@@ -905,19 +909,19 @@
               </Grid.RowDefinitions>
               <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
                 <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
                 <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" ToolTip="{Binding Manager}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
                 <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.Column="1">
                 <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" ToolTip="{Binding Office}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
               </StackPanel>
             </Grid>
 
@@ -1000,15 +1004,18 @@
                                   </Style.Triggers>
                                 </Style>
                               </ContentControl.Style>
+                              <!-- Reveal/QR are neutral utilities: one tint per row (Add), so the
+                                   cyan stops competing with the meaningful colour nearby. -->
                               <Button Content="Reveal key" Command="{Binding RevealCommand}"
-                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="32" />
+                                      Style="{DynamicResource ButtonSecondary}" FontSize="11" Height="32"
+                                      ToolTip="Reveal the latest BitLocker recovery key" />
                             </ContentControl>
                             <!-- QR of the latest recovery key: shown whenever the device has
                                  BitLocker (an alternate reveal - stays available after reveal). -->
                             <ContentControl Margin="0,0,6,0"
                                             Visibility="{Binding HasBitLocker, Converter={StaticResource BoolToVis}}">
                               <Button Content="QR" Command="{Binding ShowQrCommand}"
-                                      Style="{DynamicResource ButtonTintInfo}" FontSize="11" Height="32"
+                                      Style="{DynamicResource ButtonSecondary}" FontSize="11" Height="32"
                                       ToolTip="Show a QR code of the latest BitLocker recovery key" />
                             </ContentControl>
                             <Button Content="Add" Command="{Binding AddCommand}"

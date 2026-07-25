@@ -91,8 +91,8 @@ class DialogPresenter {
         if ($isRollback) {
             $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
         }
-        $this.Window.DataContext = $this.NewVm("Updates Detected!", $msg, @(),
-            'Update Now', 'Later')
+        $this.Window.DataContext = $this.NewVm("Updates detected", $msg, @(),
+            'Update now', 'Later')
         return $this.ShowModal()
     }
 

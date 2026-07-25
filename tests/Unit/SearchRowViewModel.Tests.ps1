@@ -23,12 +23,12 @@ Describe "SearchRowViewModel" {
         $vm.IsComputer | Should -BeFalse
     }
 
-    It "falls back to SamAccountName and appends the lock glyph for a locked user" {
+    It "falls back to SamAccountName and appends the locked suffix for a locked user" {
         $vm = [SearchRowViewModel]::FromResult([pscustomobject]@{
             Kind = 'User'; UserPrincipalName = ''; SamAccountName = 'jdoe'
             DisplayName = ''; Domain = 'forest-c.local'; LockedOut = $true
         })
-        $vm.Primary   | Should -Be "jdoe `u{1F512}"
+        $vm.Primary   | Should -Be 'jdoe  (locked)'   # ASCII, never an emoji (coding style)
         $vm.Secondary | Should -Be 'forest-c.local'   # blank display name dropped from the join
         $vm.CanUnlock | Should -BeTrue
     }

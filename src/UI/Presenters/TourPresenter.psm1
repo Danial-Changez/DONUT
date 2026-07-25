@@ -243,7 +243,6 @@ class TourPresenter {
             'list' { return $this.HomeElement('MachinePanel') }
             'detail' { return $this.HomeElement('DetailPane') }
             'settings' { return $this.Window.FindName('btnSettings') }
-            'help' { return $this.Window.FindName('btnHelp') }
             default { return $null }
         }
         return $null
