@@ -1,4 +1,5 @@
 using module "..\Models\AppConfig.psm1"
+using module "..\Models\DcuUpdate.psm1"
 using module "..\Models\RemoteError.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module "..\Core\LogService.psm1"
@@ -12,8 +13,9 @@ using module ".\DriverMatchingService.psm1"
     RemoteJobService is the shared base: it builds the RemoteWorker.ps1 argument
     hashtable (BuildWorkerArgs) and owns the log-then-throw policy for typed
     remote failures (Fail). ScanService prepares a DCU scan; RemoteUpdateService
-    prepares an update scan/apply and parses + counts the resulting update
-    report. The subclasses only PREPARE and PARSE off the UI thread — the worker
+    prepares an update scan/apply and parses the resulting update report into
+    typed DcuUpdate rows (driver-matched, urgency-sorted) for the detail pane.
+    The subclasses only PREPARE and PARSE off the UI thread — the worker
     does the network I/O, gating each phase's transport itself (bounded RPC/SMB
     port probes).
 
@@ -149,5 +151,64 @@ class RemoteUpdateService : RemoteJobService {
         $nodes = $report.SelectNodes("//update")
         if ($null -eq $nodes) { return 0 }
         return $nodes.Count
+    }
+
+    # $null = no report on disk; @() = a report with zero updates; else typed rows.
+    [array] GetUpdateRows([string]$hostName) {
+        $report = $this.ParseUpdateReport($hostName)
+        if (-not $report) { return $null }
+        if ($report.SelectNodes("//update").Count -eq 0) { return @() }
+        return $this.BuildUpdateRows($report)
+    }
+
+    # Parses each <update>'s child elements into typed DcuUpdate rows (read explicitly - the
+    # fields are child elements, so $node.InnerText would mash them). See NodeText.
+    hidden [array] BuildUpdateRows([xml]$report) {
+        $installedDrivers = $this.GetInstalledDriversFromReport($report)
+        $updateRows = @()
+        foreach ($node in $report.SelectNodes("//update")) {
+            $name = $this.NodeText($node, 'name')
+            $newVersion = $this.NodeText($node, 'version')
+            $category = $this.NodeText($node, 'category')
+            $bytesText = $this.NodeText($node, 'bytes')
+            [long]$bytes = 0
+            [void][long]::TryParse($bytesText, [ref]$bytes)
+
+            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
+            $currentVersion = ''
+            $isNewer = $false
+            $hasMatch = $false
+            if ($match) {
+                $hasMatch = $true
+                $currentVersion = $match.Driver.DriverVersion
+                $isNewer = $this.DriverMatcher.CompareVersions($currentVersion, $newVersion).IsNewer
+                if ([string]::IsNullOrWhiteSpace($category)) { $category = $match.Category }
+            }
+            $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
+                $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
+        }
+        # Show most-urgent first (Urgent -> Recommended -> Optional -> unknown), then by name.
+        return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)
+    }
+
+    # First child element's trimmed text (empty when absent). SelectSingleNode('name'), never
+    # $node.name - the latter collides with XmlElement.Name and returns the tag ("update").
+    hidden [string] NodeText([System.Xml.XmlNode]$node, [string]$child) {
+        $c = $node.SelectSingleNode($child)
+        if ($null -eq $c) { return '' }
+        return $c.InnerText.Trim()
+    }
+
+    hidden [array] GetInstalledDriversFromReport([xml]$report) {
+        $driverNodes = $report.SelectNodes("//drivers/driver")
+        if (-not $driverNodes) { return @() }
+        return $driverNodes | ForEach-Object {
+            @{
+                DriverName    = $_.GetAttribute("name")
+                ProviderName  = $_.GetAttribute("provider")
+                DriverVersion = $_.GetAttribute("version")
+                DriverDate    = $_.GetAttribute("date")
+            }
+        }
     }
 }

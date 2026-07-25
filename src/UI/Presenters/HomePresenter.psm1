@@ -28,7 +28,6 @@ using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Services\HostResolver.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
-using module "..\..\Models\DcuUpdate.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
@@ -842,16 +841,14 @@ class HomePresenter : AsyncJobPresenter {
     # Renders a host's scan report into the detail-pane Available Updates card and returns
     # the update rows. $null = no report on disk; @() = a report with zero updates (card cleared).
     [array] RenderUpdatesFromReport([string]$hostName) {
-        $report = $this.UpdateService.ParseUpdateReport($hostName)
-        if (-not $report) { return $null }
+        $updateRows = $this.UpdateService.GetUpdateRows($hostName)
+        if ($null -eq $updateRows) { return $null }
 
         $vm = $this.GetRow($hostName)
-        if ($report.SelectNodes("//update").Count -eq 0) {
+        if ($updateRows.Count -eq 0) {
             if ($null -ne $vm) { $vm.Set('HasUpdates', $false) }
             return @()
         }
-
-        $updateRows = $this.BuildUpdateRows($report, $this.GetInstalledDriversFromReport($report))
 
         # Identity verdict drives the header pill; the sentence is its tooltip. The name
         # check runs with the apply, so a plain scan usually reads 'Unknown'.
@@ -871,43 +868,6 @@ class HomePresenter : AsyncJobPresenter {
             $vm.Set('HasUpdates', $true)
         }
         return $updateRows
-    }
-
-    # Parses each <update>'s child elements into typed DcuUpdate rows (read explicitly - the
-    # fields are child elements, so $node.InnerText would mash them). See NodeText.
-    hidden [array] BuildUpdateRows([xml]$report, [array]$installedDrivers) {
-        $updateRows = @()
-        foreach ($node in $report.SelectNodes("//update")) {
-            $name = $this.NodeText($node, 'name')
-            $newVersion = $this.NodeText($node, 'version')
-            $category = $this.NodeText($node, 'category')
-            $bytesText = $this.NodeText($node, 'bytes')
-            [long]$bytes = 0
-            [void][long]::TryParse($bytesText, [ref]$bytes)
-
-            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
-            $currentVersion = ''
-            $isNewer = $false
-            $hasMatch = $false
-            if ($match) {
-                $hasMatch = $true
-                $currentVersion = $match.Driver.DriverVersion
-                $isNewer = $this.DriverMatcher.CompareVersions($currentVersion, $newVersion).IsNewer
-                if ([string]::IsNullOrWhiteSpace($category)) { $category = $match.Category }
-            }
-            $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
-                $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
-        }
-        # Show most-urgent first (Urgent -> Recommended -> Optional -> unknown), then by name.
-        return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)
-    }
-
-    # First child element's trimmed text (empty when absent). SelectSingleNode('name'), never
-    # $node.name - the latter collides with XmlElement.Name and returns the tag ("update").
-    hidden [string] NodeText([System.Xml.XmlNode]$node, [string]$child) {
-        $c = $node.SelectSingleNode($child)
-        if ($null -eq $c) { return '' }
-        return $c.InnerText.Trim()
     }
 
     # Launches the apply (phase 2) job. Shared by the single-confirm and Run-all paths.
@@ -1089,19 +1049,6 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {
             $this.ManualRebootQueue.Add($job.HostName)
-        }
-    }
-
-    [array] GetInstalledDriversFromReport([xml]$report) {
-        $driverNodes = $report.SelectNodes("//drivers/driver")
-        if (-not $driverNodes) { return @() }
-        return $driverNodes | ForEach-Object {
-            @{
-                DriverName    = $_.GetAttribute("name")
-                ProviderName  = $_.GetAttribute("provider")
-                DriverVersion = $_.GetAttribute("version")
-                DriverDate    = $_.GetAttribute("date")
-            }
         }
     }
 

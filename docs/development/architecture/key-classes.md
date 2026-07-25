@@ -57,7 +57,7 @@ the network I/O.
 |-------|---------|
 | `ExecutionService` (`WorkerServices.psm1`) | Remote PsExec execution, DCU CLI invocation, per-phase dispatch (resolve/scan/apply/inventory/disk/delete), artifact copy |
 | `ScanService` (`RemoteServices.psm1`) | Prepare scan operations |
-| `RemoteUpdateService` (`RemoteServices.psm1`) | Prepare update scan/apply with driver matching; parse + count the update report |
+| `RemoteUpdateService` (`RemoteServices.psm1`) | Prepare update scan/apply; parse + count the update report and build the detail pane's typed `DcuUpdate` rows (driver-matched, urgency-sorted) |
 | `InventoryService` | Prepare + parse the per-machine CIM inventory probe |
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select) |

@@ -366,6 +366,7 @@ package "Donut.Services" #221634 {
         +ParseUpdateReport(host): XmlDocument
         +PrepareApplyUpdates(host, options): Hashtable
         +CountUpdates(report): int
+        +GetUpdateRows(host): DcuUpdate[]
     }
 
     class HostResolver {

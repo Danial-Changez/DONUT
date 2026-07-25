@@ -246,6 +246,108 @@ Describe "RemoteServices" {
         }
     }
 
+    Context "GetUpdateRows (typed rows for the detail pane)" {
+        BeforeAll {
+            $script:rowsReportsDir = Join-Path $tempDir "Reports"
+            if (-not (Test-Path $script:rowsReportsDir)) {
+                New-Item -Path $script:rowsReportsDir -ItemType Directory -Force | Out-Null
+            }
+            # Real DCU shape: update fields are CHILD elements; installed drivers are attributes.
+            $script:rowsXml = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<updates>
+    <drivers>
+        <driver name="Realtek High Definition Audio Driver" provider="Realtek"
+                version="6.0.9000.1" date="2024-01-01"/>
+    </drivers>
+    <update>
+        <name>ZWidget Dock Firmware</name>
+        <version>2.0.0</version>
+        <urgency>Optional</urgency>
+        <type>Firmware</type>
+        <category>Docks</category>
+        <bytes>1048576</bytes>
+    </update>
+    <update>
+        <name>Dell Latitude 5330 System BIOS</name>
+        <version>1.36.0</version>
+        <urgency>Urgent</urgency>
+        <type>BIOS</type>
+        <category>BIOS</category>
+        <bytes>28033352</bytes>
+    </update>
+    <update>
+        <name>Realtek High Definition Audio Driver</name>
+        <version>6.0.9954.2</version>
+        <urgency>Recommended</urgency>
+        <type>Driver</type>
+        <category></category>
+        <bytes>264884984</bytes>
+    </update>
+</updates>
+"@
+            $script:rowsService = [RemoteUpdateService]::new(
+                $config, [MockNetworkProbe]::new(), [DriverMatchingService]::new())
+            Set-Content -Path (Join-Path $script:rowsReportsDir "RowsHost-Updates.xml") -Value $script:rowsXml
+        }
+
+        AfterAll {
+            Remove-Item -Path (Join-Path $script:rowsReportsDir "RowsHost-Updates.xml") -Force -ErrorAction SilentlyContinue
+        }
+
+        It "Returns null when no report exists (distinct from a zero-update report)" {
+            $rows = $script:rowsService.GetUpdateRows("NoSuchHost")
+            $null -eq $rows | Should -BeTrue
+        }
+
+        It "Returns an empty array for a report with zero updates" {
+            $emptyPath = Join-Path $script:rowsReportsDir "EmptyHost-Updates.xml"
+            Set-Content -Path $emptyPath -Value "<updates></updates>"
+
+            $rows = $script:rowsService.GetUpdateRows("EmptyHost")
+
+            $null -ne $rows | Should -BeTrue
+            $rows.Count | Should -Be 0
+            Remove-Item -Path $emptyPath -Force -ErrorAction SilentlyContinue
+        }
+
+        It "Sorts rows most-urgent first (Urgent -> Recommended -> Optional)" {
+            $rows = $script:rowsService.GetUpdateRows("RowsHost")
+
+            $rows.Count | Should -Be 3
+            $rows[0].Urgency | Should -Be "Urgent"
+            $rows[1].Urgency | Should -Be "Recommended"
+            $rows[2].Urgency | Should -Be "Optional"
+        }
+
+        It "Reads child elements explicitly (never the XmlElement.Name collision)" {
+            $rows = $script:rowsService.GetUpdateRows("RowsHost")
+
+            # A mashed InnerText/tag-name read would never produce these exact fields.
+            $rows[0].Name | Should -Be "Dell Latitude 5330 System BIOS"
+            $rows[0].SizeText | Should -Be "26.7 MB"
+            $rows[2].Type | Should -Be "Firmware"
+        }
+
+        It "Merges a driver match: version transition, IsNewer, and category backfill" {
+            $rows = $script:rowsService.GetUpdateRows("RowsHost")
+            $audio = $rows | Where-Object Name -Like "Realtek*"
+
+            $audio.HasMatch | Should -BeTrue
+            $audio.IsNewer | Should -BeTrue
+            $audio.VersionText | Should -Match "6\.0\.9000\.1"    # installed baseline shown
+            $audio.Category | Should -Not -BeNullOrEmpty          # backfilled from the match
+        }
+
+        It "Leaves unmatched rows with the target version alone" {
+            $rows = $script:rowsService.GetUpdateRows("RowsHost")
+            $bios = $rows | Where-Object Name -Like "*BIOS*"
+
+            $bios.HasMatch | Should -BeFalse
+            $bios.VersionText | Should -Be "1.36.0"
+        }
+    }
+
     # The worker phases gate their own transport and throw typed failures directly;
     # RemoteJobService.Fail is the shared log-then-throw policy they route through
     # (ResolvedIpFor, RunInventoryPhase), so the log entry and the exception can
