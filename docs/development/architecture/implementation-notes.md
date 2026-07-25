@@ -39,6 +39,11 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
+- **`ExecutionService` split (deferred):** the worker-side god-class carries ~6 concerns;
+  the agreed target decomposition is PsExecTransport / DcuPhases / InventoryProbe /
+  DiskPhases / ResolvePhase / ArtifactCopy. Deferred because its transport rules are
+  accreted regression fixes, the 770-line test file couples to its seams, and every extra
+  `using module` slows every child - revisit when feature work next lands there.
 - **In-process pool scripts (`PoolScriptJob`):** the scripts that must run *in-process*
   on the pool (AD search, Lens broker, unlock, startup task) share one Core helper for
   start / complete / async-stop / reap instead of three hand-rolled copies. The rules it
