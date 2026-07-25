@@ -13,8 +13,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
+                    <!-- Square hover pad: these buttons sit flush in window corners. -->
                     <Border Background="{TemplateBinding Background}"
-                            CornerRadius="4">
+                            CornerRadius="0">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
                     </Border>

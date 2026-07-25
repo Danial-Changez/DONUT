@@ -99,9 +99,9 @@
             <!-- Close bar: the whole row is the drag region; X sits top-right (no minimize on
                  a modal). Esc also closes (wired in DialogPresenter). -->
             <Grid x:Name="panelControlBar" Grid.Row="0" Background="Transparent" Height="36">
-                <!-- Stretches to the 36px bar so the hover pad matches the main window's. -->
+                <!-- Stretches to the 36px bar, flush to the window's edge (main-window idiom). -->
                 <Button x:Name="btnClose"
-                        HorizontalAlignment="Right" Margin="0,0,6,0"
+                        HorizontalAlignment="Right"
                         Style="{DynamicResource controlButton}"
                         Tag="{DynamicResource Destructive}"
                         ToolTip="Close">
