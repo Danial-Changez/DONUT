@@ -29,7 +29,7 @@ consumes the result and exposes it to the bindings.
 | `FolderDeletionPolicy` | Pure safety rule for the storage "Clear selected" action: is a scanned folder safe to clear? Blocks the volume root, the `Users` container, and protected system dirs (Windows/Program Files/ProgramData/…), with an allowlist for known caches (ccmcache, Temp, WU download, …). Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
-| `RecentConnection` / `RecentConnectionsStore` | Persisted "recent machines" backing the Home list (status, counts, cached inventory + disk usage) |
+| `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory + disk usage); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
 ## Core (`src/Core/`)
@@ -42,7 +42,7 @@ consumes the result and exposes it to the bindings.
 | `WorkerProcess` | Child-process worker protocol: `Prepare` marshals args to a temp file, the `$Launcher` scriptblock spawns `RemoteWorker.ps1` as a separate `pwsh` process on a pool runspace, and `Interpret` reads back its JSON result — process isolation so parallel `using module` class-graph compiles can't deadlock |
 | `RunspaceManager` | Static RunspacePool management for parallel execution; also raises the .NET ThreadPool floor before pool creation so dispatch/completion callbacks can't starve |
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
-| `TimeFormat` | Pure "relative time" formatter (`2m ago`) |
+| `TimeFormat` | Pure time helpers: relative labels (`2m ago`) + ISO8601 parse (`ParseIso`, blank → MinValue) |
 | `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op |
 | `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
@@ -65,6 +65,7 @@ the network I/O.
 | `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [Implementation notes](./implementation-notes.md#de-elevating-the-user-lens)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the per-user `DONUT-<user>` scheduled task (register / update / unregister) against the toggle |
+| `RecentConnectionsStore` | Persists the "recent machines" entries in `AppConfig.Settings['recentHosts']`: upsert/seed/cap/sort + coalesced saves through the config manager |
 | `SystemInfoService` | Local machine facts (identity, domain, battery) for the title bar |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
 | `ResourceService` | XAML resource dictionary loading |

@@ -145,7 +145,7 @@ class HostViewModel : ObservableObject {
             'never run'
         }
         else {
-            [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
+            [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
 
@@ -177,7 +177,7 @@ class HostViewModel : ObservableObject {
                 else { '' }))
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
-        $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([RecentConnectionsStore]::ParseSeen($inv.LastBootTime)))
+        $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
 
         $this.SetProbed($this.CachedIp, $inv.ProbedAt)
     }
@@ -187,7 +187,7 @@ class HostViewModel : ObservableObject {
     [void] SetProbed([string]$ip, [string]$probedIso) {
         if (-not [string]::IsNullOrWhiteSpace($ip)) { $this.CachedIp = $ip }
         $probed = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
-            "probed " + [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($probedIso))
+            "probed " + [TimeFormat]::Relative([TimeFormat]::ParseIso($probedIso))
         }
         $this.Set('ProbedText', $(
                 if (-not [string]::IsNullOrWhiteSpace($this.CachedIp)) {

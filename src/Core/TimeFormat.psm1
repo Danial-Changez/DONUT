@@ -1,13 +1,26 @@
 <#
 .SYNOPSIS
-    Pure helper for rendering coarse "time ago" labels.
+    Pure helpers for time parsing and coarse "time ago" labels.
 
 .DESCRIPTION
     Renders a relative time for a past instant (e.g. the machine-list subtitle
     "Completed · 2 min ago"). Input may be UTC or local Kind; it is normalised to
-    UTC and compared against UtcNow. WPF-free so it can be unit-tested.
+    UTC and compared against UtcNow. ParseIso turns a stored ISO8601 stamp into a
+    sortable DateTime (blank/invalid -> MinValue). WPF-free so it can be unit-tested.
 #>
 class TimeFormat {
+    # Parses a stored ISO8601 stamp into a sortable DateTime (blank/invalid -> MinValue).
+    static [datetime] ParseIso([string]$value) {
+        if ([string]::IsNullOrWhiteSpace($value)) { return [datetime]::MinValue }
+        $parsed = [datetime]::MinValue
+        $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
+        if ([datetime]::TryParse($value, [System.Globalization.CultureInfo]::InvariantCulture,
+                $styles, [ref]$parsed)) {
+            return $parsed
+        }
+        return [datetime]::MinValue
+    }
+
     static [string] Relative([datetime]$when) {
         $whenUtc = if ($when.Kind -eq [System.DateTimeKind]::Utc) {
             $when

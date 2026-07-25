@@ -38,4 +38,27 @@ Describe "TimeFormat" {
             [TimeFormat]::Relative($local) | Should -Be '5 min ago'
         }
     }
+
+    Context "ParseIso" {
+        It "Round-trips an ISO8601 'o' stamp with its UTC kind" {
+            $when = [datetime]::new(2026, 7, 24, 12, 30, 0, [System.DateTimeKind]::Utc)
+            $parsed = [TimeFormat]::ParseIso($when.ToString('o'))
+            $parsed | Should -Be $when
+            $parsed.Kind | Should -Be ([System.DateTimeKind]::Utc)
+        }
+
+        It "Returns MinValue for blank input" {
+            [TimeFormat]::ParseIso('') | Should -Be ([datetime]::MinValue)
+            [TimeFormat]::ParseIso($null) | Should -Be ([datetime]::MinValue)
+        }
+
+        It "Returns MinValue for garbage input" {
+            [TimeFormat]::ParseIso('not-a-date') | Should -Be ([datetime]::MinValue)
+        }
+
+        It "Sorts blanks oldest (MinValue is less than any real stamp)" {
+            $real = [TimeFormat]::ParseIso([datetime]::UtcNow.ToString('o'))
+            [TimeFormat]::ParseIso('') -lt $real | Should -BeTrue
+        }
+    }
 }

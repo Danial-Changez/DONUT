@@ -69,6 +69,7 @@ component "PowerShell Classes (src)" {
         [StartupTaskService]
         [SystemInfoService]
         [ResourceService]
+        [RecentConnectionsStore]
     }
     package "Core" #102A20 {
         [ConfigManager]
@@ -81,7 +82,7 @@ component "PowerShell Classes (src)" {
     }
     package "Models" #15233B {
         [AppConfig]
-        [RecentConnectionsStore]
+        [RecentConnection]
         [MachineInventory]
         [DiskUsageReport]
         [ScanCacheDecision]

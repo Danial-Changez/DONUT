@@ -206,18 +206,6 @@ package "Donut.Models" #15233B {
         +{static} FromHashtable(h): RecentConnection
     }
 
-    class RecentConnectionsStore {
-        +{static} Cap: int
-        +Upsert(host, status, jobType, count, reboot): void
-        +Touch(host): void
-        +UpsertInventory(host, inv): void
-        +UpsertDiskUsage(host, report): void
-        +Remove(host): void
-        +SeedFrom(hosts): void
-        +GetAll(): RecentConnection[]
-        +{static} ParseSeen(value): datetime
-    }
-
     enum PollOutcome {
         Authorized
         KeepPolling
@@ -326,6 +314,7 @@ package "Donut.Core" #102A20 {
 
     class TimeFormat {
         +{static} Relative(when): string
+        +{static} ParseIso(value): datetime
     }
 
     class BuildProvenance {
@@ -348,6 +337,17 @@ package "Donut.Core" #102A20 {
 }
 
 package "Donut.Services" #221634 {
+    class RecentConnectionsStore {
+        +{static} Cap: int
+        +Upsert(host, status, jobType, count, reboot): void
+        +Touch(host): void
+        +UpsertInventory(host, inv): void
+        +UpsertDiskUsage(host, report): void
+        +Remove(host): void
+        +SeedFrom(hosts): void
+        +GetAll(): RecentConnection[]
+    }
+
     class RemoteJobService {
         #Config: AppConfig
         #Probe: NetworkProbe

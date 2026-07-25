@@ -1,6 +1,7 @@
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\MachineInventory.psm1"
 using module "..\..\src\Models\RecentConnection.psm1"
+using module "..\..\src\Services\RecentConnectionsStore.psm1"
 
 Describe "RecentConnectionsStore" {
 

@@ -325,7 +325,7 @@ class InventoryPresenter {
     [bool] InventoryIsStale([string]$hostName) {
         $rc = $this.Home.GetRecord($hostName)
         if ($null -eq $rc -or $null -eq $rc.Inventory) { return $true }
-        $probed = [RecentConnectionsStore]::ParseSeen($rc.Inventory.ProbedAt)
+        $probed = [TimeFormat]::ParseIso($rc.Inventory.ProbedAt)
         if ($probed -eq [datetime]::MinValue) { return $true }
         return (([datetime]::UtcNow - $probed) -gt $this.InventoryTtl)
     }

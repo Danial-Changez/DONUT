@@ -26,6 +26,7 @@ using module "..\..\Services\ResourceService.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Services\HostResolver.psm1"
+using module "..\..\Services\RecentConnectionsStore.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\JobEnums.psm1"
@@ -470,7 +471,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($null -eq $rc) { return $false }
         return [ScanCacheDecision]::IsFresh(
             $rc.LastJobType,
-            [RecentConnectionsStore]::ParseSeen($rc.LastSeen),
+            [TimeFormat]::ParseIso($rc.LastSeen),
             [datetime]::UtcNow,
             $this.ScanCacheTtl,
             ($null -ne $this.UpdateService.ParseUpdateReport($hostName)))
@@ -509,7 +510,7 @@ class HomePresenter : AsyncJobPresenter {
         if (($command -eq 'scan' -or $command -eq 'applyUpdates') -and
             $this.RecentScanIsFresh($hostName)) {
             $rc = $this.GetRecord($hostName)
-            $age = [TimeFormat]::Relative([RecentConnectionsStore]::ParseSeen($rc.LastSeen))
+            $age = [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
             if ($command -eq 'applyUpdates') {
                 $this.Detail.AppendLog($hostName, "Reusing scan from $age (under 24h); skipping re-scan.")
                 $this.ProceedWithApply($hostName)
