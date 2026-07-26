@@ -472,7 +472,7 @@ class MainPresenter {
     hidden [void] EnsureConfigView() {
         if ($this.Views.ContainsKey('Config') -and $this.Views['Config']) { return }
 
-        $configView = $this.LoadView("ConfigView.xaml")
+        $configView = $this.LoadView("SettingsView.xaml")
         $this.Views['Config'] = $configView
         if ($configView) {
             $presenter = $this

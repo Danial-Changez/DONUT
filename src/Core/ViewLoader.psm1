@@ -6,7 +6,7 @@
     Wraps XamlReader.Load with the stream-dispose discipline so .xaml files are
     never left locked on disk. Each returned root owns its file's namescope -
     FindName works on that root and cannot see into other loaded roots, which is
-    what keeps composed views (shell + regions, ConfigView + option views) from
+    what keeps composed views (shell + regions, SettingsView + settings views) from
     reaching across their seams.
 
 .NOTES

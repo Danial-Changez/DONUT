@@ -82,13 +82,13 @@ class ConfigPresenter {
     }
 
     [void] LoadOptionView([string] $viewName) {
-        $fileName = "${viewName}OptionView.xaml"
-        $path = Join-Path $this.Config.SourceRoot "UI\Views\Config Options\$fileName"
+        $fileName = "${viewName}View.xaml"
+        $path = Join-Path $this.Config.SourceRoot "UI\Views\Settings\$fileName"
 
         if (Test-Path $path) {
             try {
                 $this.CurrentOptionView = [ViewLoader]::Load(
-                    $this.Config.SourceRoot, "UI\Views\Config Options\$fileName")
+                    $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
 
                 $this.ConfigOptionsContent.Content = $this.CurrentOptionView
                 $this.CurrentSection = $viewName
