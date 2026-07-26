@@ -245,9 +245,9 @@
                                ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
                              FontWeight="Normal"
                              Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
-                    <!-- Target identifiers: UPN and SAM tiles side by side, each the
-                         person-fields recipe (MicroLabel over a brighter selectable value -
-                         label and value must differ in colour, not just size). -->
+                    <!-- Target identifiers: UPN and SAM side by side on the shared Card
+                         recipe (same scheme as the home stat cards), each the
+                         person-fields pairing - MicroLabel grey over a brighter value. -->
                     <Grid Grid.Row="2"
                           Margin="24,12,24,0">
                         <Grid.ColumnDefinitions>
@@ -255,12 +255,9 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0"
-                                Margin="0,0,4,0"
-                                Background="{DynamicResource SurfaceMuted}"
-                                BorderBrush="{DynamicResource PanelBorder}"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="10,7">
+                                Margin="0,0,6,0"
+                                Style="{DynamicResource Card}"
+                                Padding="12,8">
                             <StackPanel>
                                 <TextBlock Text="UPN"
                                            Style="{DynamicResource MicroLabel}" />
@@ -274,12 +271,9 @@
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="1"
-                                Margin="4,0,0,0"
-                                Background="{DynamicResource SurfaceMuted}"
-                                BorderBrush="{DynamicResource PanelBorder}"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="10,7">
+                                Margin="6,0,0,0"
+                                Style="{DynamicResource Card}"
+                                Padding="12,8">
                             <StackPanel>
                                 <TextBlock Text="SAM"
                                            Style="{DynamicResource MicroLabel}" />
