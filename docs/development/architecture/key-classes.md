@@ -48,6 +48,7 @@ consumes the result and exposes it to the bindings.
 | `TimeFormat` | Pure time helpers: relative labels (`2m ago`) + ISO8601 parse (`ParseIso`, blank → MinValue) |
 | `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op. `DEBUG` is gated by `DebugEnabled` (the `debugLogging` setting / `-DebugLog` override); other levels always flow |
+| `ViewLoader` | The one runtime XAML loader (`XamlReader.Load` with stream-dispose so files never stay locked; throws on missing). Page loads wrap it in catch-and-null; `HomePresenter.ComposeRegions` calls it bare so a broken region fails the boot loudly. Each returned root owns its file's namescope |
 | `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
 
 ## Services (`src/Services/`)
@@ -104,12 +105,25 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 |-------|---------|
 | `MainPresenter` | Composition root: main window, lazy Config construction, the settings/QR/reset-password overlays (the reset runs `AdResetPasswordWorker` via `RunOnPool`), shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
-| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list (status-grouped sort), and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
+| `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list (status-grouped sort), and housekeeping. Composes the Home shell's regions (`ComposeRegions` + `FindHomeElement`, the tour's cross-namescope probe). Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |
 | `ResolutionCoordinator` | The `Resolve` job lifecycle and runspace-pool warm: start-early IP resolution via the shared `HostResolver` (fast lane by default — capped direct `ResolveProcessJob` children with a FIFO overflow queue, classic worker path as the per-fault fallback and after the 3-fault latch), verdict caching, and DC discovery/persist. When a verdict lands it re-issues queued runs/gathers through `HomePresenter`'s seam methods |
 | `FinderPresenter` | The search bar's live multi-forest AD finder (debounced in-process search on the pool via `AdSearchWorker`, one job per forest + inline unlock) and the **user Lens** (de-elevated agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via the duck-typed back-ref |
 | `ConfigPresenter` | Hosted in the settings overlay: command selection, the data-driven option-form binder, and real-time persistence (args on edit, toggles on change) with side-effect hooks for the hotkey and startup task |
 | `KeybindRecorder` | Wraps one keybind field (display + Record + Clear): captures modifiers + one key live, commits through `HotkeyGesture.FromKeys`, Esc cancels |
+
+### Home page regions (`src/UI/Views/Home/`)
+
+The Home page is a slot-frame shell (`HomeView.xaml`) composing one file per region; each
+region root owns its file's namescope, and exactly one presenter adopts each root:
+
+| Region file | Root name | Adopted by | Names it owns |
+|-------------|-----------|------------|---------------|
+| `ActionBar.xaml` | — | `FinderPresenter` (+ `HomePresenter` for mode/run-all) | `SearchBox`, `GoogleSearchBar`, `SearchResultsPopup`, `SearchResultsList`, `btnMode`, `txtMode`, `btnRunAll` |
+| `StatCards.xaml` | — | binding-only (`SelectedMachine.Ov*`) | — |
+| `MachinePane.xaml` | `MachinePanel` | `HomePresenter` | `btnClearTabs`, `MachineList`, `FleetEmptyHint` |
+| `DetailPane.xaml` | `DetailPane` | `InventoryPresenter` | `btnDetailRefresh`, `btnFindFolders`, `btnDeleteFolders`, `txtDetailLog`, `DetailProgress`, `DiskFoldersList`, `slotLens` |
+| `LensPane.xaml` (nested in DetailPane) | `LensPanel` | binding-only (`SelectedPerson`) | — |
 | `TrayPresenter` | The system-tray icon and menu: show/toggle the window, exit, the close-to-tray hint balloon, and the second-launch show-request listener |
 | `TourPresenter` | The first-run guided tour: spotlight + callout per `TourStep`, Back/Next/Skip navigation, first-run auto-start (`hasSeenTour`) and `?`-button replay |
 | `LoginPresenter` | GitHub Device Flow: poll timer + modal lifecycle behind `LoginViewModel` |
