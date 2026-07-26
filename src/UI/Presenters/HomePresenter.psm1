@@ -192,7 +192,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.IdleRefreshTimer.Start()
 
         $this.Finder = [FinderPresenter]::new(
-            $config, $view, $this.HomeVm, $this.Logger, $toasts, $this.DialogPresenter, $this)
+            $config, $this.HomeVm, $this.Logger, $toasts, $this.DialogPresenter, $this)
 
         # Split stage 1: the detail/inventory coordinator is constructed and wired, but
         # still inert - HomePresenter owns the detail controls + methods until later stages.
@@ -213,6 +213,10 @@ class HomePresenter : AsyncJobPresenter {
     # Loads the Home region files into the shell's slots. Deliberately uncatched: a
     # missing or unparsable region must fail the boot loudly, never render half a page.
     hidden [void] ComposeRegions() {
+        $bar = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\ActionBar.xaml')
+        $this.ViewContent.FindName('slotActionBar').Content = $bar
+        $this.RegionRoots['actionBar'] = $bar
+
         $detail = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\DetailPane.xaml')
         $this.ViewContent.FindName('slotDetailArea').Content = $detail
         $this.RegionRoots['detailPane'] = $detail
@@ -238,13 +242,14 @@ class HomePresenter : AsyncJobPresenter {
 
     [void] Initialize() {
         $this.ComposeRegions()
-        $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
+        $bar = $this.RegionRoots['actionBar']
+        $this.SearchBar = $bar.FindName('GoogleSearchBar')
+        $this.RunAllButton = $bar.FindName('btnRunAll')
+        $this.ModePill = $bar.FindName('txtMode')
+        $this.ModeButton = $bar.FindName('btnMode')
         $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
-        $this.RunAllButton = $this.ViewContent.FindName('btnRunAll')
         $this.MachineList = $this.ViewContent.FindName('MachineList')
         $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
-        $this.ModePill = $this.ViewContent.FindName('txtMode')
-        $this.ModeButton = $this.ViewContent.FindName('btnMode')
 
         # The detail panel (header, log, progress, probe buttons) is owned by
         # InventoryPresenter and wired in its own Initialize.
@@ -265,7 +270,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ModeButton) {
             $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure())
         }
-        $this.Finder.Initialize()
+        $this.Finder.Initialize($this.RegionRoots['actionBar'])
 
         # A WPF Popup is its own top-level window and does not follow the parent; hook
         # the host window so the dropdown stays glued to the search box.
