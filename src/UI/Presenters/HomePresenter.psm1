@@ -1061,12 +1061,18 @@ class HomePresenter : AsyncJobPresenter {
         $this.RefreshIdleTimes()
     }
 
-    # Re-renders idle rows from their stored record so relative-time subtitles advance.
+    # Re-renders idle rows from their stored record so relative-time subtitles advance,
+    # and re-probes any verdict that aged past the TTL - reachability updates on its
+    # own instead of rotting until the next user action. PrefetchIp is single-flight
+    # and TTL-gated, so each idle host costs at most one bounded probe per TTL.
     [void] RefreshIdleTimes() {
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {
                 $row = $this.GetRow($rc.Hostname)
                 if ($row) { $row.ApplyIdle($rc) }
+                if ($this.Resolver.IsVerdictStale($rc.Hostname)) {
+                    $this.Resolution.PrefetchIp($rc.Hostname)
+                }
             }
         }
     }

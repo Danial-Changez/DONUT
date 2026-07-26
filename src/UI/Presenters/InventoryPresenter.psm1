@@ -10,6 +10,7 @@ using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
+using module "..\..\Models\RemoteError.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 
 <#
@@ -183,10 +184,24 @@ class InventoryPresenter {
         $this.UpdateOverviewTiles()
     }
 
-    # Sets the detail-header subtitle (IP + probe freshness) on the host's view-model.
-    hidden [void] RenderDetailSubtitle([string]$hostName, [string]$probedIso) {
+    # Sets the detail-header subtitle (the resolved IP) on the host's view-model.
+    hidden [void] RenderDetailSubtitle([string]$hostName) {
         $vm = $this.Home.GetRow($hostName)
-        if ($vm) { $vm.SetProbed($this.Home.Resolver.GetCachedIp($hostName), $probedIso) }
+        if ($vm) { $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName)) }
+    }
+
+    # A failed probe used to vanish: the exception type dies at the runspace boundary,
+    # so re-derive the reason and flip the row's verdict for offline-class failures.
+    # The re-probe then self-corrects a transient (or confirms the offline).
+    hidden [void] ReflectFailure([string]$hostName, [string]$failureMessage) {
+        $reason = [RemoteFailure]::ReasonFromMessage($failureMessage)
+        if ($reason -in @([RemoteFailureReason]::Offline, [RemoteFailureReason]::Unresolvable,
+                [RemoteFailureReason]::ConnectionLost, [RemoteFailureReason]::TimedOut)) {
+            $ip = $this.Home.Resolver.GetCachedIp($hostName)
+            $this.Home.Resolver.CacheVerdict($hostName, $ip, $false)
+            $this.Home.RenderReachability($hostName)
+        }
+        $this.Home.Resolution.InvalidateResolved($hostName)
     }
 
     # Syncs the host view-model's detail/overview bindables from its inventory.
@@ -197,8 +212,7 @@ class InventoryPresenter {
         elseif ($null -ne $rc) { $rc.Inventory }
         else { $null }
         if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
-        $probedIso = if ($null -ne $useInv -and $useInv.ProbedAt) { $useInv.ProbedAt } else { '' }
-        $vm.SetProbed($this.Home.Resolver.GetCachedIp($hostName), $probedIso)
+        $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName))
     }
 
     # Re-renders the overview strip (e.g. after a job changes pending-update counts).
@@ -333,7 +347,7 @@ class InventoryPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Inventory probe failed.")
-            $this.Home.Resolution.InvalidateResolved($hostName)
+            $this.ReflectFailure($hostName, $job.FailureMessage)
             return
         }
 
@@ -389,7 +403,7 @@ class InventoryPresenter {
 
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Disk scan failed.")
-            $this.Home.Resolution.InvalidateResolved($hostName)
+            $this.ReflectFailure($hostName, $job.FailureMessage)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Disk scan failed. Open the log for details.") }
             return
         }
@@ -458,7 +472,7 @@ class InventoryPresenter {
         $this.ShowJobProgress($hostName, $false, 0, $false)
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Clear failed.")
-            $this.Home.Resolution.InvalidateResolved($hostName)
+            $this.ReflectFailure($hostName, $job.FailureMessage)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clearing folders failed. Open the log for details.") }
             return
         }

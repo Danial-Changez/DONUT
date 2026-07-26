@@ -683,7 +683,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
         +ApplyInventory(inv) / ApplyFolders(report): void
         +SetPercent(pct) / SetScanStep(text, pct): void
-        +SetReachability(state) / SetProbed(ip, iso): void
+        +SetReachability(state) / SetResolvedIp(ip): void
         +{static} SetPalette(palette): void
     }
 

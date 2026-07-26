@@ -49,7 +49,7 @@ class HostViewModel : ObservableObject {
     # Detail-header + overview-strip bindables: both mirror the selected machine via
     # SelectedMachine.*, populated from inventory by ApplyInventory.
     [string] $DetailTitle = ''
-    [string] $ProbedText = ''
+    [string] $DetailIp = ''   # resolved IP under the hostname (freshness lives on the card)
     [string] $OvModel = '—'
     [string] $OvModelSub = 'double-click to gather inventory'
     [string] $OvBattery = '—'
@@ -57,7 +57,7 @@ class HostViewModel : ObservableObject {
     [string] $OvDisk = '—'
     [string] $OvDiskSub = ''
     [string] $OvBios = '—'   # current system BIOS/firmware version (from the inventory probe)
-    hidden [string] $CachedIp = ''   # last resolved IP, for ProbedText recomposition
+    hidden [string] $CachedIp = ''   # last resolved IP, kept across re-renders
 
     # Largest-folders tree (bound by the detail pane's TreeView via SelectedMachine.Folders):
     # display-ready FolderNodeViewModel roots + an emptiness flag for the hint text.
@@ -148,7 +148,7 @@ class HostViewModel : ObservableObject {
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
 
-        $this.SetDotKey([HostViewModel]::IdleColorKey($rc.LastStatus))
+        $this.RenderDot()
         $this.ApplyChip()
         $this.ApplySubtitle()
 
@@ -177,22 +177,13 @@ class HostViewModel : ObservableObject {
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
         $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
-
-        $this.SetProbed($this.CachedIp, $inv.ProbedAt)
     }
 
-    # Sets the detail-header subtitle: the resolved IP plus the probe freshness (either part
-    # omitted when unknown). $ip is remembered so a later probe keeps showing it.
-    [void] SetProbed([string]$ip, [string]$probedIso) {
+    # Sets the detail-header subtitle to the resolved IP (Reduction: probe freshness
+    # already shows on the machine card, so the pane doesn't repeat it).
+    [void] SetResolvedIp([string]$ip) {
         if (-not [string]::IsNullOrWhiteSpace($ip)) { $this.CachedIp = $ip }
-        $probed = if ([string]::IsNullOrWhiteSpace($probedIso)) { '' } else {
-            "probed " + [TimeFormat]::Relative([TimeFormat]::ParseIso($probedIso))
-        }
-        $this.Set('ProbedText', $(
-                if (-not [string]::IsNullOrWhiteSpace($this.CachedIp)) {
-                    if ($probed) { "$($this.CachedIp)  ·  $probed" } else { $this.CachedIp }
-                }
-                else { $probed }))
+        $this.Set('DetailIp', $this.CachedIp)
     }
 
     # Recompute the list sort rank from the current running/reachability/idle state; called
@@ -216,11 +207,7 @@ class HostViewModel : ObservableObject {
     # "Offline" chip + subtitle tag). Online/Unknown restores the idle rendering.
     [void] SetReachability([string]$state) {
         $this.Reachability = $state
-        switch ($state) {
-            'Online' { $this.SetDotKey('AccentGreen') }
-            'Offline' { $this.SetDotKey('AccentRed') }
-            default { }
-        }
+        $this.RenderDot()
         $this.ApplyChip()
         $this.ApplySubtitle()
         $title = if ($state -eq 'Offline') { "$($this.HostName)  -  offline" }
@@ -230,6 +217,19 @@ class HostViewModel : ObservableObject {
     }
 
     # --- Internal composition helpers ---
+
+    # The dot has TWO writers (ApplyIdle every 30s tick, SetReachability on verdicts);
+    # both flow through this one precedence so neither can clobber the other. It derives
+    # from the same pure mapper as the list sort: attention > offline > online > idle.
+    hidden [void] RenderDot() {
+        $cat = [MachineListShaper]::Categorize($false, $this.Reachability, $this.IdleStatus)
+        $key = switch ($cat) {
+            'Offline' { 'AccentRed' }
+            'Online' { 'AccentGreen' }
+            default { [HostViewModel]::IdleColorKey($this.IdleStatus) }
+        }
+        $this.SetDotKey($key)
+    }
 
     hidden [void] ApplyChip() {
         $status = if ($this.Reachability -eq 'Offline') { 'Offline' } else { $this.IdleStatus }

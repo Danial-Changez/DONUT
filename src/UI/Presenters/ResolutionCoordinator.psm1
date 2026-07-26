@@ -366,6 +366,13 @@ class ResolutionCoordinator {
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
+            # A dead resolve can't confirm the old verdict: drop it and paint Unknown
+            # (grey) rather than leaving a possibly-wrong dot. No auto re-probe here -
+            # that would churn while the DC is down; the next select/add/run re-resolves.
+            if (-not [string]::IsNullOrWhiteSpace($job.HostName)) {
+                $this.Resolver.Invalidate($job.HostName)
+                $this.Home.RenderReachability($job.HostName)
+            }
             # A finished DC warm - even a failed one - ends the startup crunch: let
             # the deferred finder/Lens warms go.
             if ([string]::IsNullOrWhiteSpace($job.HostName)) {
@@ -410,12 +417,7 @@ class ResolutionCoordinator {
                 $this.Home.RenderReachability($hn)
                 # Surface the fresh IP in the detail subtitle if this host's panel is open.
                 if ($hn -eq $this.Home.SelectedHost) {
-                    $rcSel = $this.Home.GetRecord($hn)
-                    $iso = ''
-                    if ($null -ne $rcSel -and $null -ne $rcSel.Inventory) {
-                        $iso = $rcSel.Inventory.ProbedAt
-                    }
-                    $this.Home.Detail.RenderDetailSubtitle($hn, $iso)
+                    $this.Home.Detail.RenderDetailSubtitle($hn)
                 }
                 # HomePresenter owns the queue: hand the verdict back to re-issue queued work.
                 $this.Home.ReissueAfterResolve($hn, $online)
