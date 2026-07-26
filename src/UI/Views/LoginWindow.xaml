@@ -65,7 +65,7 @@
                            Stretch="Uniform"
                            HorizontalAlignment="Left"
                            VerticalAlignment="Center"
-                           Margin="14,0,0,0"
+                           Margin="16,0,0,0"
                            IsHitTestVisible="False" />
                 </DockPanel>
                 <!-- OAuth Section -->

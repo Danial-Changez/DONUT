@@ -1,11 +1,11 @@
 using module "..\..\src\Models\TempPassword.psm1"
 
 Describe "TempPassword.Generate" {
-    It "matches the phone-readable Xxxxx-Xxxxx-99 format at 14 chars" {
+    It "matches the phone-readable Xxxxx-Xxxxx-99! format at 15 chars" {
         foreach ($i in 1..50) {
             $p = [TempPassword]::Generate()
-            $p.Length | Should -Be 14
-            $p | Should -MatchExactly '^[A-Z][a-z]{4}-[A-Z][a-z]{4}-[2-9]{2}$'
+            $p.Length | Should -Be 15
+            $p | Should -MatchExactly '^[A-Z][a-z]{4}-[A-Z][a-z]{4}-[2-9]{2}[!#$%+=]$'
         }
     }
 
@@ -15,12 +15,12 @@ Describe "TempPassword.Generate" {
         }
     }
 
-    It "meets AD complexity by construction (upper + lower + digit + symbol)" {
+    It "meets AD complexity by construction (upper + lower + digit + special)" {
         $p = [TempPassword]::Generate()
         $p | Should -Match '[A-Z]'
         $p | Should -Match '[a-z]'
         $p | Should -Match '[2-9]'
-        $p | Should -Match '-'
+        $p | Should -MatchExactly '[!#$%+=]'
     }
 
     It "does not repeat across generations" {

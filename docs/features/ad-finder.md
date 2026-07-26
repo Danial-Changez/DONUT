@@ -26,12 +26,14 @@ grouped by kind.
 ## Reset a password
 
 **Reset…** opens a card over the shell (the settings/QR overlay idiom — Esc, the X,
-or the backdrop close it) armed with the picked user. The temporary password is a
-visible field: type one, or press **Generate** for a phone-readable
-`Xxxxx-Xxxxx-99` (crypto-random; the pools drop the ambiguous `0/O`, `1/l/I`, `i/o`
-glyphs so it survives being read aloud, and the mixed case + digits + hyphens meet
-AD complexity by construction). **Copy** and **QR** mirror the BitLocker key
-affordances — the QR pops the same overlay, on top of the card.
+or the backdrop close it) armed with the picked user, whose identity renders as a
+single subtle mono card (the modal list-item treatment). The temporary password is
+a visible full-width field: type one, or press **Generate** for a phone-readable
+`Xxxxx-Xxxxx-99!` (crypto-random; the pools drop the ambiguous `0/O`, `1/l/I`,
+`i/o` glyphs and the trailing special comes from the easily-named `! # $ % + =`,
+so it survives being read aloud — four AD complexity classes by construction).
+**Copy** and **QR** mirror the BitLocker key affordances — disabled until a
+password exists, and the QR pops the same overlay, on top of the card.
 
 **Require password change at next logon** is pre-checked (Good Defaults: a temp
 password should almost always force a change); untick it for the rare exception.

@@ -28,7 +28,7 @@ consumes the result and exposes it to the bindings.
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
 | `FolderDeletionPolicy` | Pure safety rule for the storage "Clear selected" action: is a scanned folder safe to clear? Blocks the volume root, the `Users` container, and protected system dirs (Windows/Program Files/ProgramData/…), with an allowlist for known caches (ccmcache, Temp, WU download, …). Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
-| `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99`, no ambiguous glyphs) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
+| `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99!` — no ambiguous glyphs, trailing special from `!#$%+=`) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
 | `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory + disk usage); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |

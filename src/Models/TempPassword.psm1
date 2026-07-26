@@ -3,11 +3,12 @@
     Crypto-random temporary password generator for AD resets.
 
 .DESCRIPTION
-    Generates phone-readable 'Xxxxx-Xxxxx-99' passwords: two capitalized chunks
-    and two digits joined by hyphens. Pools exclude the ambiguous glyphs
-    (0/O, 1/l/I, i/o) so a helpdesk operator can read one out loud without a
-    phonetic alphabet. Four AD complexity classes are met by construction
-    (upper, lower, digit, hyphen); 14 chars comfortably clears default policy.
+    Generates phone-readable 'Xxxxx-Xxxxx-99!' passwords: two capitalized
+    chunks, two digits, and a trailing special, joined by hyphens. Pools
+    exclude the ambiguous glyphs (0/O, 1/l/I, i/o) and the specials are the
+    easily-named few (! # $ % + =), so a helpdesk operator can read one out
+    loud without a phonetic alphabet. Four AD complexity classes are met by
+    construction; 15 chars comfortably clears default policy.
 
 .NOTES
     Pure and WPF-free so it unit-tests anywhere. ToSecure exists because the
@@ -19,10 +20,11 @@ class TempPassword {
     hidden static [string] $Upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
     hidden static [string] $Lower = 'abcdefghjkmnpqrstuvwxyz'
     hidden static [string] $Digits = '23456789'
+    hidden static [string] $Specials = '!#$%+='
 
-    # Returns a fresh 'Xxxxx-Xxxxx-99' temp password (14 chars).
+    # Returns a fresh 'Xxxxx-Xxxxx-99!' temp password (15 chars).
     static [string] Generate() {
-        $sb = [System.Text.StringBuilder]::new(14)
+        $sb = [System.Text.StringBuilder]::new(15)
         foreach ($chunk in 1..2) {
             [void]$sb.Append([TempPassword]::Pick([TempPassword]::Upper))
             foreach ($i in 1..4) {
@@ -32,6 +34,7 @@ class TempPassword {
         }
         [void]$sb.Append([TempPassword]::Pick([TempPassword]::Digits))
         [void]$sb.Append([TempPassword]::Pick([TempPassword]::Digits))
+        [void]$sb.Append([TempPassword]::Pick([TempPassword]::Specials))
         return $sb.ToString()
     }
 
