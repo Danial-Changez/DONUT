@@ -117,9 +117,10 @@
                             </StackPanel>
                             <!-- The DONUT wordmark (source set in MainPresenter.LoadImages).
                                  Left inset matches contentMain's 25 so the logo sits on the
-                                 same column as the search bar. Hit-test off for DragMove. -->
+                                 same column as the search bar; 20px tall so it breathes in
+                                 the 36px bar. Hit-test off for DragMove. -->
                             <Image x:Name="Logo"
-                                   Height="24"
+                                   Height="20"
                                    Stretch="Uniform"
                                    HorizontalAlignment="Left"
                                    VerticalAlignment="Center"
@@ -220,19 +221,13 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Close bar (DialogWindow idiom): full-bleed 36px row, X flush in the
-                         corner - its hover pad rounds the top-right to match the card. -->
+                    <!-- Close bar (DialogWindow idiom): full-bleed 36px row holding only the
+                         X, flush in the corner - the title sits BELOW the bar so it clears
+                         the card's top edge instead of hugging it. -->
                     <Grid Grid.Row="0"
                           Height="36">
-                        <TextBlock Style="{DynamicResource TextPaneTitle}"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Left"
-                                   Margin="24,0,56,0"
-                                   TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
-                                 FontWeight="Normal"
-                                 Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
                         <Button HorizontalAlignment="Right"
                                 Command="{Binding CloseResetCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
@@ -242,10 +237,19 @@
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
+                    <TextBlock Grid.Row="1"
+                               Style="{DynamicResource TextPaneTitle}"
+                               HorizontalAlignment="Left"
+                               Margin="24,2,24,0"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
+                             FontWeight="Normal"
+                             Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
                     <!-- Target identifiers: UPN and SAM tiles side by side, each the
-                         person-fields recipe (MicroLabel over selectable mono value). -->
-                    <Grid Grid.Row="1"
-                          Margin="24,10,24,0">
+                         person-fields recipe (MicroLabel over a brighter selectable value -
+                         label and value must differ in colour, not just size). -->
+                    <Grid Grid.Row="2"
+                          Margin="24,12,24,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
@@ -265,7 +269,7 @@
                                          ToolTip="{Binding ResetVm.TargetUpn}"
                                          FontFamily="{DynamicResource FontMono}"
                                          FontSize="12"
-                                         Foreground="{DynamicResource BodyTextPrimary}"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
                                          Margin="0,3,0,0" />
                             </StackPanel>
                         </Border>
@@ -283,7 +287,7 @@
                                          ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                          FontFamily="{DynamicResource FontMono}"
                                          FontSize="12"
-                                         Foreground="{DynamicResource BodyTextPrimary}"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
                                          Margin="0,3,0,0">
                                     <TextBox.Text>
                                         <MultiBinding StringFormat="{}{0} @ {1}"
@@ -301,7 +305,7 @@
                     <!-- Temp password: the field with Copy/QR icon utilities beside it -
                          they wake once a password exists (Progressive Disclosure,
                          mirroring the BitLocker reveal). -->
-                    <StackPanel Grid.Row="2"
+                    <StackPanel Grid.Row="3"
                                 Margin="24,16,24,0">
                         <TextBlock Text="TEMPORARY PASSWORD"
                                    Style="{DynamicResource MicroLabel}"
@@ -393,14 +397,14 @@
                         </Grid>
                     </StackPanel>
                     <!-- Good Defaults: a temp password should force a change at next logon. -->
-                    <CheckBox Grid.Row="3"
+                    <CheckBox Grid.Row="4"
                               Style="{DynamicResource ModernCheckBox}"
                               IsChecked="{Binding ResetVm.ChangeAtLogon, Mode=TwoWay}"
                               Margin="24,16,24,0"
                               Content="Require password change at next logon" />
                     <!-- Footer pairs the flow: Generate on the left feeds the destructive
                          primary on the right. X / Esc / backdrop close the card. -->
-                    <Grid Grid.Row="4"
+                    <Grid Grid.Row="5"
                           Margin="24,20,24,20">
                         <Button Content="Generate"
                                 Command="{Binding ResetVm.GenerateCommand}"
