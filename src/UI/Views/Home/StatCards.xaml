@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============= Overview strip: mirrors the SELECTED remote machine ============= -->
+<!-- Machine-only: collapse it while the Lens (a user) is shown in the detail pane. -->
+<Grid
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Margin="0,0,0,18"
+>
+  <Grid.Style>
+    <Style TargetType="Grid">
+      <Setter Property="Visibility" Value="Visible" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding DetailMode}" Value="Person">
+          <Setter Property="Visibility" Value="Collapsed" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+  </Grid.Style>
+  <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="*" />
+    <ColumnDefinition Width="*" />
+    <ColumnDefinition Width="*" />
+    <ColumnDefinition Width="*" />
+  </Grid.ColumnDefinitions>
+
+  <!-- Machine (model + service tag) -->
+  <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}">
+    <StackPanel>
+      <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}" />
+      <TextBlock Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
+                 Style="{DynamicResource StatValue}" />
+      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}"
+               ToolTip="{Binding SelectedMachine.OvModelSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+    </StackPanel>
+  </Border>
+
+  <!-- Battery health -->
+  <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}">
+    <StackPanel>
+      <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}" />
+      <TextBlock Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
+                 Style="{DynamicResource StatValue}" />
+      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}"
+               ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+    </StackPanel>
+  </Border>
+
+  <!-- Disk free -->
+  <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}">
+    <StackPanel>
+      <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}" />
+      <TextBlock Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
+                 Style="{DynamicResource StatValue}" />
+      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}"
+               ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+    </StackPanel>
+  </Border>
+
+  <!-- BIOS / firmware version (the update count already lives on the machine card + the
+       Available Updates card, so this slot shows a fact that isn't surfaced elsewhere). -->
+  <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}">
+    <StackPanel>
+      <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}" />
+      <TextBlock Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"
+                 Style="{DynamicResource StatValue}" />
+    </StackPanel>
+  </Border>
+</Grid>

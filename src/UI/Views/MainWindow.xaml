@@ -134,7 +134,7 @@
                 </Border>
             </Grid>
         </Border>
-        <!-- Settings overlay: non-modal dim + centered card hosting ConfigView. Not a
+        <!-- Settings overlay: non-modal dim + centered card hosting SettingsView. Not a
              ShowDialog, so background scans keep pumping behind it. -->
         <Grid x:Name="settingsOverlay"
               Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVis}}">

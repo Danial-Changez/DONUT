@@ -9,10 +9,11 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Core\PoolScriptJob.psm1"
+using module "..\..\Core\ViewLoader.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using namespace Donut.Interop
-using module ".\ConfigPresenter.psm1"
+using module ".\SettingsPresenter.psm1"
 using module ".\HomePresenter.psm1"
 using module ".\TourPresenter.psm1"
 using module ".\TrayPresenter.psm1"
@@ -25,10 +26,10 @@ using module "..\ViewModels\ResetPasswordViewModel.psm1"
     Owns the main window, its child presenters, and the settings overlay.
 
 .DESCRIPTION
-    Builds and shows MainWindow, hosts the Home page, opens the Config view in the
-    settings overlay on demand, and constructs the Home / Config presenters plus the
-    shared ToastService. Applies the merged XAML resources to the window. Also owns
-    the shell overlays: QR (BitLocker keys + temp passwords) and reset-password.
+    Builds and shows MainWindow, hosts the Home page, opens the settings view in its
+    overlay on demand, and constructs the Home / Settings presenters plus the shared
+    ToastService. Applies the merged XAML resources to the window. Also owns the
+    shell overlays: QR (BitLocker keys + temp passwords) and reset-password.
 #>
 class MainPresenter {
     [AppConfig] $Config
@@ -36,7 +37,7 @@ class MainPresenter {
     [System.Windows.Window] $Window
     [hashtable] $Controls
     [hashtable] $Views
-    [ConfigPresenter] $ConfigPresenter
+    [SettingsPresenter] $SettingsPresenter
     [HomePresenter] $HomePresenter
     [TrayPresenter] $TrayPresenter
     [object] $Tour                   # TourPresenter (guided first-run tour)
@@ -138,7 +139,7 @@ class MainPresenter {
 
         $this.Views = @{}
 
-        # Home is built eagerly; Config builds lazily on first settings open, so
+        # Home is built eagerly; Settings builds lazily on first open, so
         # startup never pays for a view the user may not open.
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
@@ -454,34 +455,26 @@ class MainPresenter {
         if ($logo -and $this.LogoImage) { $logo.Source = $this.LogoImage }
     }
 
+    # Page-level load: missing/broken views log and return null (the shell copes);
+    # region composition inside HomePresenter uses ViewLoader directly and fails loud.
     [object] LoadView([string]$fileName) {
-        $path = Join-Path $this.Config.SourceRoot "UI\Views\$fileName"
-        if (Test-Path $path) {
-            try {
-                # Stream disposed so the view file isn't left locked (see Initialize).
-                $stream = [System.IO.File]::OpenRead($path)
-                try {
-                    return [System.Windows.Markup.XamlReader]::Load($stream)
-                }
-                finally {
-                    $stream.Dispose()
-                }
-            }
-            catch {
-                $this.Logger.LogException("Failed to load view $fileName", $_)
-            }
+        try {
+            return [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\$fileName")
+        }
+        catch {
+            $this.Logger.LogException("Failed to load view $fileName", $_)
         }
         return $null
     }
 
-    # Builds the Config view + presenter once, on first settings open, and hosts it in
-    # the overlay card. ConfigPresenter toasts + closes the overlay on save.
-    hidden [void] EnsureConfigView() {
-        if ($this.Views.ContainsKey('Config') -and $this.Views['Config']) { return }
+    # Builds the settings view + presenter once, on first open, and hosts it in
+    # the overlay card. SettingsPresenter persists edits live (no Save button).
+    hidden [void] EnsureSettingsView() {
+        if ($this.Views.ContainsKey('Settings') -and $this.Views['Settings']) { return }
 
-        $configView = $this.LoadView("ConfigView.xaml")
-        $this.Views['Config'] = $configView
-        if ($configView) {
+        $settingsView = $this.LoadView("SettingsView.xaml")
+        $this.Views['Settings'] = $settingsView
+        if ($settingsView) {
             $presenter = $this
             # Real-time settings re-apply the bits that live outside the config file, each
             # when its own control changes (the overlay closes via its X / Esc / backdrop).
@@ -491,10 +484,10 @@ class MainPresenter {
                 StartupTask    = { $presenter.ApplyStartupTask() }.GetNewClosure()
                 DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
             }
-            $this.ConfigPresenter = [ConfigPresenter]::new(
-                $this.Config, $this.ConfigManager, $configView, $this.ToastService, $sideEffects)
+            $this.SettingsPresenter = [SettingsPresenter]::new(
+                $this.Config, $this.ConfigManager, $settingsView, $this.ToastService, $sideEffects)
             if ($this.Controls['settingsContent']) {
-                $this.Controls['settingsContent'].Content = $configView
+                $this.Controls['settingsContent'].Content = $settingsView
             }
         }
     }
@@ -510,10 +503,10 @@ class MainPresenter {
         if ($this.HomePresenter) { $this.HomePresenter.UpdateSearchButtonLabel() }
     }
 
-    # Opens the settings overlay, building the Config view lazily on first use. A
+    # Opens the settings overlay, building the settings view lazily on first use. A
     # visibility toggle (not ShowDialog), so background jobs keep pumping behind it.
     [void] OpenSettings() {
-        $this.EnsureConfigView()
+        $this.EnsureSettingsView()
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $true) }
         # Focus the card so the overlay's Esc key binding is in scope.
         if ($this.Controls['settingsCard']) { $this.Controls['settingsCard'].Focus() }

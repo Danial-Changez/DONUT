@@ -11,6 +11,7 @@ using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
+using module "..\..\Core\ViewLoader.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
 using module "..\..\Services\SystemInfoService.psm1"
@@ -75,6 +76,9 @@ class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
     [object] $ConfigManager           # duck-typed; used to persist recents
     [System.Windows.FrameworkElement] $ViewContent
+    # Region roots composed into the shell's slots; each XamlReader.Load root owns its
+    # file's namescope, so lookups go to the owning region (see FindHomeElement).
+    hidden [hashtable] $RegionRoots = @{}
     [TextBox] $SearchBar
     [Button] $ClearButton
     [Button] $RunAllButton
@@ -188,7 +192,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.IdleRefreshTimer.Start()
 
         $this.Finder = [FinderPresenter]::new(
-            $config, $view, $this.HomeVm, $this.Logger, $toasts, $this.DialogPresenter, $this)
+            $config, $this.HomeVm, $this.Logger, $toasts, $this.DialogPresenter, $this)
 
         # Split stage 1: the detail/inventory coordinator is constructed and wired, but
         # still inert - HomePresenter owns the detail controls + methods until later stages.
@@ -202,17 +206,55 @@ class HomePresenter : AsyncJobPresenter {
             $config, $this.Logger, $this.ConfigManager, $this.Toasts, $this.Resolver, $this)
 
         $this.Initialize()
-        $this.Detail.Initialize($this.ViewContent)
+        # The detail controls live in the DetailPane region's own namescope.
+        $this.Detail.Initialize($this.RegionRoots['detailPane'])
+    }
+
+    # Loads the Home region files into the shell's slots. Deliberately uncatched: a
+    # missing or unparsable region must fail the boot loudly, never render half a page.
+    hidden [void] ComposeRegions() {
+        foreach ($r in @(
+                @{ Key = 'actionBar'; File = 'ActionBar.xaml'; Slot = 'slotActionBar' },
+                @{ Key = 'statCards'; File = 'StatCards.xaml'; Slot = 'slotStatCards' },
+                @{ Key = 'machinePane'; File = 'MachinePane.xaml'; Slot = 'slotMachinePane' },
+                @{ Key = 'detailPane'; File = 'DetailPane.xaml'; Slot = 'slotDetailArea' })) {
+            $root = [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\Home\$($r.File)")
+            $this.ViewContent.FindName($r.Slot).Content = $root
+            $this.RegionRoots[$r.Key] = $root
+        }
+        # The Lens nests inside the detail pane's namescope, not the shell's.
+        $lens = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\LensPane.xaml')
+        $this.RegionRoots['detailPane'].FindName('slotLens').Content = $lens
+        $this.RegionRoots['lens'] = $lens
+    }
+
+    # Tour seam: probes the shell root, then each region root (its own Name first, then
+    # its namescope) - region names are invisible to the shell's FindName by design.
+    [object] FindHomeElement([string]$name) {
+        $roots = @($this.ViewContent) + @(
+            $this.RegionRoots['actionBar'], $this.RegionRoots['statCards'],
+            $this.RegionRoots['machinePane'], $this.RegionRoots['detailPane'],
+            $this.RegionRoots['lens'])
+        foreach ($root in $roots) {
+            if ($null -eq $root) { continue }
+            if ($root.Name -eq $name) { return $root }
+            $hit = $root.FindName($name)
+            if ($hit) { return $hit }
+        }
+        return $null
     }
 
     [void] Initialize() {
-        $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
-        $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
-        $this.RunAllButton = $this.ViewContent.FindName('btnRunAll')
-        $this.MachineList = $this.ViewContent.FindName('MachineList')
-        $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
-        $this.ModePill = $this.ViewContent.FindName('txtMode')
-        $this.ModeButton = $this.ViewContent.FindName('btnMode')
+        $this.ComposeRegions()
+        $bar = $this.RegionRoots['actionBar']
+        $this.SearchBar = $bar.FindName('GoogleSearchBar')
+        $this.RunAllButton = $bar.FindName('btnRunAll')
+        $this.ModePill = $bar.FindName('txtMode')
+        $this.ModeButton = $bar.FindName('btnMode')
+        $pane = $this.RegionRoots['machinePane']
+        $this.ClearButton = $pane.FindName('btnClearTabs')
+        $this.MachineList = $pane.FindName('MachineList')
+        $this.EmptyHint = $pane.FindName('FleetEmptyHint')
 
         # The detail panel (header, log, progress, probe buttons) is owned by
         # InventoryPresenter and wired in its own Initialize.
@@ -233,7 +275,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.ModeButton) {
             $this.ModeButton.Add_Click({ $presenter.CycleMode() }.GetNewClosure())
         }
-        $this.Finder.Initialize()
+        $this.Finder.Initialize($this.RegionRoots['actionBar'])
 
         # A WPF Popup is its own top-level window and does not follow the parent; hook
         # the host window so the dropdown stays glued to the search box.

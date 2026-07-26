@@ -90,7 +90,6 @@ class FinderPresenter {
 
     FinderPresenter(
         [AppConfig]$config,
-        [System.Windows.FrameworkElement]$view,
         [HomeViewModel]$homeVm,
         [LogService]$logger,
         [ToastService]$toasts,
@@ -98,7 +97,6 @@ class FinderPresenter {
         [object]$homePresenter
     ) {
         $this.Config = $config
-        $this.ViewContent = $view
         $this.HomeVm = $homeVm
         $this.Logger = $logger
         $this.Toasts = $toasts
@@ -138,9 +136,11 @@ class FinderPresenter {
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
     }
 
-    # Finds the finder's two imperative controls and wires the search-bar events.
-    # Called by HomePresenter.Initialize (which owns overall startup ordering).
-    [void] Initialize() {
+    # Adopts the ActionBar region root (its namescope holds the finder's controls) and
+    # wires the search-bar events. Called by HomePresenter.Initialize, which composes
+    # the regions first - the InventoryPresenter adopt-in-Initialize pattern.
+    [void] Initialize([System.Windows.FrameworkElement]$view) {
+        $this.ViewContent = $view
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
         $this.SearchPopup = $this.ViewContent.FindName('SearchResultsPopup')
         $this.ResultsList = $this.ViewContent.FindName('SearchResultsList')

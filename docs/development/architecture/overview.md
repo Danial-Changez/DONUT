@@ -33,7 +33,7 @@ root/
 │   ├── Services/           <-- Business logic (DONUT-specific)
 │   ├── Scripts/            <-- Standalone scripts + remote workers
 │   ├── UI/                 <-- UI Layer
-│   │   ├── Views/          <-- XAML files (templates + bindings)
+│   │   ├── Views/          <-- XAML files (shells + composed regions; Home/, Settings/)
 │   │   ├── Styles/         <-- XAML styles
 │   │   ├── ViewModels/     <-- Bindable state + commands
 │   │   ├── Presenters/     <-- Coordinators / UI services (jobs, timers, dialogs)
@@ -78,7 +78,14 @@ login window, settings overlay, and shell chrome all bind their own view-models.
    - **Services**: project-specific modules (e.g. `SelfUpdateService`).
    - **Core**: general, reusable modules (e.g. `NetworkProbe`).
 2. **View layer (`src/UI/Views`)** — XAML: structure, layout, `DataTemplate`s, and
-   bindings. No code-behind.
+   bindings. No code-behind. Pages compose from files: `HomeView.xaml` is a slot-frame
+   shell whose regions live under `Views/Home/` (ActionBar / StatCards / MachinePane /
+   DetailPane, with LensPane nested inside the detail region), loaded at startup by
+   `HomePresenter.ComposeRegions` via `ViewLoader`; the settings page composes
+   `SettingsView.xaml` + `Views/Settings/*` the same way. Every `XamlReader.Load` root
+   owns its file's namescope, so a presenter is handed its region root and cannot reach
+   into another region's names; `StaticResource` keys (converters) are declared
+   per-file, shared styles live in `UI/Styles` and resolve via `DynamicResource`.
 3. **ViewModel layer (`src/UI/ViewModels`)** — bindable state (`ObservableObject`
    subclasses) + `RelayCommand`s. Calls the pure Model mappers for display decisions,
    so WPF-free logic stays unit-testable.
@@ -110,10 +117,10 @@ suffix). The surfaces that stay deliberately imperative, each the standard MVVM 
 
 - **`DialogPresenter`** is a *dialog service* — showing a modal and returning a result
   is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
-- **`MainPresenter`** keeps lazy Config construction (the Config view builds on first
+- **`MainPresenter`** keeps lazy Settings construction (the settings view builds on first
   settings-overlay open — a startup-cost win) and the Home fade-in; the shell's
   settings-overlay/chrome *inputs* are bound commands on `MainViewModel`.
-- **`ConfigPresenter`** keeps its data-driven form binder: every named control in a
+- **`SettingsPresenter`** keeps its data-driven form binder: every named control in a
   command's option view maps 1:1 to a dcu-cli arg key, so a typed property per field
   would restate the key list for no behaviour gain. Settings persist in real time —
   there is no Save button; toggles and keybind changes write through immediately and
@@ -185,5 +192,6 @@ runspace-pool warm) — following a consistent seam:
 `TourPresenter` walks `TourSteps` (pure data, unit-tested headless) one step at a
 time: four dim panels frame a spotlight "hole" over the target control, with a callout
 card beside it. It auto-runs once (`hasSeenTour` in config) and can be replayed from
-the `?` button. Targets live inside `HomeView`'s namescope, so they resolve through
-the `HomePresenter`'s view content rather than `Window.FindName`.
+the `?` button. Targets live inside the Home regions' own namescopes, so they resolve
+through `HomePresenter.FindHomeElement` — which probes the shell and each region root —
+rather than `Window.FindName` or a single view namescope.
