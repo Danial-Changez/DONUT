@@ -265,9 +265,10 @@ class TourPresenter {
         }
     }
 
-    # Finds a named element inside HomeView (its own namescope, so not Window.FindName).
+    # Finds a named element inside the Home page. The page is a shell composing region
+    # files, each with its own namescope - FindHomeElement probes shell + every region.
     hidden [object] HomeElement([string]$name) {
-        if ($null -eq $this.Home -or $null -eq $this.Home.ViewContent) { return $null }
-        return $this.Home.ViewContent.FindName($name)
+        if ($null -eq $this.Home) { return $null }
+        return $this.Home.FindHomeElement($name)
     }
 }

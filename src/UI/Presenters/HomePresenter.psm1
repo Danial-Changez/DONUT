@@ -206,14 +206,20 @@ class HomePresenter : AsyncJobPresenter {
             $config, $this.Logger, $this.ConfigManager, $this.Toasts, $this.Resolver, $this)
 
         $this.Initialize()
-        $this.Detail.Initialize($this.ViewContent)
+        # The detail controls live in the DetailPane region's own namescope.
+        $this.Detail.Initialize($this.RegionRoots['detailPane'])
     }
 
     # Loads the Home region files into the shell's slots. Deliberately uncatched: a
     # missing or unparsable region must fail the boot loudly, never render half a page.
     hidden [void] ComposeRegions() {
+        $detail = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\DetailPane.xaml')
+        $this.ViewContent.FindName('slotDetailArea').Content = $detail
+        $this.RegionRoots['detailPane'] = $detail
+
+        # The Lens nests inside the detail pane's namescope, not the shell's.
         $lens = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\LensPane.xaml')
-        $this.ViewContent.FindName('slotLens').Content = $lens
+        $detail.FindName('slotLens').Content = $lens
         $this.RegionRoots['lens'] = $lens
     }
 
