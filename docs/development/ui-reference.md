@@ -67,8 +67,28 @@ shadcn button variants in `src/UI/Styles/ButtonStyles.xaml`. The rule we follow:
   card: `Add` (the row's action) is the one tint; `Reveal key`/`QR` are grey utilities.
 - **Chrome is neutral.** Window and popup borders are the `PanelBorder` hairline — the old
   violet gradient ramp was ornament (Reduction: it competed with status colour and marked
-  nothing). Overlay/dialog close buttons share the title-bar close's 50x36 footprint so the
-  hover pad reads identically everywhere.
+  nothing). Popup close buttons follow the *Popup chrome contract* below.
+
+## Popup chrome contract
+
+Every popup — the modal `DialogWindow` (apply-updates / disk-clear confirms, alerts, the
+update prompt) and the shell overlay cards (settings, QR, reset) — shares one chrome:
+
+- **X, always, flush in the top-right corner** with the title-bar close's 50x36 pad:
+  `controlButton` (square pad) on square windows, `controlButtonCardClose` (top-right
+  corner rounded to the card radius) on radius-10 cards. Never inset into the gutter.
+- **Corner radius has two tiers:** top-level windows are `CornerRadius="0"` (Win11's DWM
+  rounds the outer frame); in-window overlay cards are `RadiusCard` (10).
+- **Header is one 48px row** (`MinHeight` where a dynamic caption may wrap, e.g. the QR
+  card): the title sits beside the X, vertically centered with clear top air, `TextPaneTitle`
+  at a 24px left inset, single-line with ellipsis + tooltip when the text is dynamic; the X
+  pins `Top`. On `DialogWindow` this row doubles as the drag region.
+- **Content gutters are 24px** inside every popup.
+- **Footers hold decisions only** — an action-named primary and a verdict secondary
+  (`Cancel` / `Later`; `OK` alone on alerts). A dismiss-only "Close" button is banned:
+  X + Esc (+ backdrop click on overlays) already dismiss.
+- Esc/backdrop behaviour per the *Overlay Esc discipline* note; the guided tour is the
+  documented exception (no X, inert backdrop, Skip/Esc exit).
 - **One tint per row, and it marks the row's primary action.** `Run` = `ButtonTintSuccess`,
   `Add` = `ButtonTintPrimary`, `Unlock` (a locked search row's one action) =
   `ButtonTintPrimary`, `Clear selected` = `ButtonTintDestructive`. `ButtonOutline` is

@@ -85,9 +85,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <!-- Close bar (drag region + X) -->
-                <RowDefinition Height="Auto" />
-                <!-- Title -->
+                <!-- Header (drag region: title + X) -->
                 <RowDefinition Height="Auto" />
                 <!-- Message -->
                 <RowDefinition Height="Auto" />
@@ -96,12 +94,22 @@
                 <!-- Buttons -->
             </Grid.RowDefinitions>
 
-            <!-- Close bar: the whole row is the drag region; X sits top-right (no minimize on
-                 a modal). Esc also closes (wired in DialogPresenter). -->
-            <Grid x:Name="panelControlBar" Grid.Row="0" Background="Transparent" Height="36">
-                <!-- Stretches to the 36px bar, flush to the window's edge (main-window idiom). -->
+            <!-- Header (popup chrome contract): 48px row, the whole row is the drag region;
+                 X pinned Top with its flush 50x36 pad (square - the window is square), the
+                 title centered beside it with top air. Esc also closes (DialogPresenter). -->
+            <Grid x:Name="panelControlBar" Grid.Row="0" Background="Transparent" Height="48">
+                <TextBlock Text="{Binding Title}"
+                           Visibility="{Binding HasTitle, Converter={StaticResource BoolToVis}}"
+                           Style="{DynamicResource TextPaneTitle}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Left"
+                           Margin="24,0,56,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Title}" />
                 <Button x:Name="btnClose"
                         HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Height="36"
                         Style="{DynamicResource controlButton}"
                         Tag="{DynamicResource Destructive}"
                         ToolTip="Close">
@@ -110,24 +118,16 @@
                 </Button>
             </Grid>
 
-            <!-- Title (left-aligned) -->
-            <TextBlock Grid.Row="1"
-                       Text="{Binding Title}"
-                       Visibility="{Binding HasTitle, Converter={StaticResource BoolToVis}}"
-                       Style="{DynamicResource TextPaneTitle}"
-                       Margin="24,2,24,0"
-                       TextWrapping="Wrap" />
-
             <!-- Message (left-aligned, muted) -->
-            <TextBlock Grid.Row="2"
+            <TextBlock Grid.Row="1"
                        Text="{Binding Message}"
                        Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
                        Style="{DynamicResource TextBody}"
-                       Margin="24,10,24,0"
+                       Margin="24,6,24,0"
                        TextWrapping="Wrap" />
 
             <!-- List: each item a subtle muted card (mono, for paths/versions) -->
-            <ScrollViewer Grid.Row="3"
+            <ScrollViewer Grid.Row="2"
                           Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
                           MaxHeight="168" VerticalScrollBarVisibility="Auto"
                           Margin="24,12,24,0">
@@ -160,7 +160,7 @@
 
             <!-- Buttons: bottom-right, secondary then primary (primary rightmost). The primary
                  binds its Style from the VM (accent, or destructive-red for irreversible acts). -->
-            <StackPanel Grid.Row="4"
+            <StackPanel Grid.Row="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">

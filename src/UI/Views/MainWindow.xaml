@@ -162,18 +162,20 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <!-- Header: the title and close sit on one row, pinned above the scroll. -->
+                    <!-- Header (popup chrome contract): 48px full-bleed row, X flush in the
+                         card corner (rounded-TR pad), title centered beside it with top air. -->
                     <Grid Grid.Row="0"
-                          Margin="20,14,12,0">
+                          Height="48">
                         <TextBlock Text="Settings"
                                    Style="{DynamicResource TextPaneTitle}"
                                    VerticalAlignment="Center"
-                                   HorizontalAlignment="Left" />
-                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
+                                   HorizontalAlignment="Left"
+                                   Margin="24,0,56,0" />
                         <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
                                 Height="36"
                                 Command="{Binding CloseSettingsCommand}"
-                                Style="{DynamicResource controlButton}"
+                                Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
@@ -182,7 +184,7 @@
                     </Grid>
                     <ScrollViewer Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
-                                  Margin="20,12,20,20">
+                                  Margin="24,8,24,20">
                         <ContentControl x:Name="settingsContent" />
                     </ScrollViewer>
                 </Grid>
@@ -438,26 +440,28 @@
                     Background="{DynamicResource PrimaryBackground}"
                     BorderBrush="{DynamicResource PanelBorder}"
                     BorderThickness="1">
-                <Grid Margin="20,14,20,20">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Header: caption + close, mirroring the settings card. -->
-                    <Grid Grid.Row="0">
+                    <!-- Header (popup chrome contract): X flush in the corner; MinHeight so
+                         a long wrapped caption can grow the row without moving the X. -->
+                    <Grid Grid.Row="0"
+                          MinHeight="48">
                         <TextBlock Text="{Binding QrCaption}"
+                                   ToolTip="{Binding QrCaption}"
                                    Style="{DynamicResource TextSubtitle}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
-                                   Margin="0,0,40,0" />
-                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
+                                   Margin="24,10,56,10" />
                         <Button HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 Height="36"
                                 Command="{Binding CloseQrCommand}"
-                                Style="{DynamicResource controlButton}"
+                                Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
@@ -467,7 +471,7 @@
                     <!-- Inverted themed QR (violet-300 modules, transparent back) blending
                          straight into the card - no plate. The 12px inset is the quiet zone. -->
                     <Border Grid.Row="1"
-                            Margin="0,14,0,0"
+                            Margin="24,4,24,0"
                             Padding="12"
                             HorizontalAlignment="Center">
                         <Image Source="{Binding QrImage}"
@@ -479,7 +483,7 @@
                     <!-- Hint varies with the payload (recovery key vs temp password);
                          MainPresenter.ShowQr sets it alongside the caption. -->
                     <TextBlock Grid.Row="2"
-                               Margin="0,12,0,0"
+                               Margin="24,12,24,20"
                                Text="{Binding QrHint}"
                                FontFamily="{DynamicResource FontSans}"
                                FontSize="11"
