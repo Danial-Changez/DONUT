@@ -26,8 +26,9 @@ grouped by kind.
 ## Reset a password
 
 **Reset…** opens a card over the shell (the settings/QR overlay idiom — Esc, the X,
-or the backdrop close it) titled with the picked user's name; their UPN and
-`sam @ domain` sit in two side-by-side tiles (the person-fields recipe). The
+or the backdrop close it) titled with the picked user's name; their UPN and SAM sit in two side-by-side
+tiles (the person-fields recipe — the reset still runs against the account's
+home domain, it just isn't repeated on the card). The
 temporary password is a visible field: type one, or press **Generate** (in the
 footer, beside the primary) for a phone-readable `Xxxxx-Xxxxx-99!` (crypto-random;
 the pools drop the ambiguous `0/O`, `1/l/I`, `i/o` glyphs and the trailing special

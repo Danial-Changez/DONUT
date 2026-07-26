@@ -279,21 +279,12 @@
                                 <TextBlock Text="SAM"
                                            Style="{DynamicResource MicroLabel}" />
                                 <TextBox Style="{DynamicResource SelectableText}"
-                                         ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                         Text="{Binding ResetVm.TargetSam, Mode=OneWay}"
+                                         ToolTip="{Binding ResetVm.TargetSam}"
                                          FontFamily="{DynamicResource FontMono}"
                                          FontSize="12"
                                          Foreground="{DynamicResource TitleTextPrimary}"
-                                         Margin="0,3,0,0">
-                                    <TextBox.Text>
-                                        <MultiBinding StringFormat="{}{0} @ {1}"
-                                                      Mode="OneWay">
-                                            <Binding Path="ResetVm.TargetSam"
-                                                     Mode="OneWay" />
-                                            <Binding Path="ResetVm.TargetDomain"
-                                                     Mode="OneWay" />
-                                        </MultiBinding>
-                                    </TextBox.Text>
-                                </TextBox>
+                                         Margin="0,3,0,0" />
                             </StackPanel>
                         </Border>
                     </Grid>
