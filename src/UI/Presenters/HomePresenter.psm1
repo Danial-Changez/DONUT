@@ -213,24 +213,28 @@ class HomePresenter : AsyncJobPresenter {
     # Loads the Home region files into the shell's slots. Deliberately uncatched: a
     # missing or unparsable region must fail the boot loudly, never render half a page.
     hidden [void] ComposeRegions() {
-        $bar = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\ActionBar.xaml')
-        $this.ViewContent.FindName('slotActionBar').Content = $bar
-        $this.RegionRoots['actionBar'] = $bar
-
-        $detail = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\DetailPane.xaml')
-        $this.ViewContent.FindName('slotDetailArea').Content = $detail
-        $this.RegionRoots['detailPane'] = $detail
-
+        foreach ($r in @(
+                @{ Key = 'actionBar'; File = 'ActionBar.xaml'; Slot = 'slotActionBar' },
+                @{ Key = 'statCards'; File = 'StatCards.xaml'; Slot = 'slotStatCards' },
+                @{ Key = 'machinePane'; File = 'MachinePane.xaml'; Slot = 'slotMachinePane' },
+                @{ Key = 'detailPane'; File = 'DetailPane.xaml'; Slot = 'slotDetailArea' })) {
+            $root = [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\Home\$($r.File)")
+            $this.ViewContent.FindName($r.Slot).Content = $root
+            $this.RegionRoots[$r.Key] = $root
+        }
         # The Lens nests inside the detail pane's namescope, not the shell's.
         $lens = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\LensPane.xaml')
-        $detail.FindName('slotLens').Content = $lens
+        $this.RegionRoots['detailPane'].FindName('slotLens').Content = $lens
         $this.RegionRoots['lens'] = $lens
     }
 
     # Tour seam: probes the shell root, then each region root (its own Name first, then
     # its namescope) - region names are invisible to the shell's FindName by design.
     [object] FindHomeElement([string]$name) {
-        $roots = @($this.ViewContent) + @($this.RegionRoots.Values)
+        $roots = @($this.ViewContent) + @(
+            $this.RegionRoots['actionBar'], $this.RegionRoots['statCards'],
+            $this.RegionRoots['machinePane'], $this.RegionRoots['detailPane'],
+            $this.RegionRoots['lens'])
         foreach ($root in $roots) {
             if ($null -eq $root) { continue }
             if ($root.Name -eq $name) { return $root }
@@ -247,9 +251,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.RunAllButton = $bar.FindName('btnRunAll')
         $this.ModePill = $bar.FindName('txtMode')
         $this.ModeButton = $bar.FindName('btnMode')
-        $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
-        $this.MachineList = $this.ViewContent.FindName('MachineList')
-        $this.EmptyHint = $this.ViewContent.FindName('FleetEmptyHint')
+        $pane = $this.RegionRoots['machinePane']
+        $this.ClearButton = $pane.FindName('btnClearTabs')
+        $this.MachineList = $pane.FindName('MachineList')
+        $this.EmptyHint = $pane.FindName('FleetEmptyHint')
 
         # The detail panel (header, log, progress, probe buttons) is owned by
         # InventoryPresenter and wired in its own Initialize.
