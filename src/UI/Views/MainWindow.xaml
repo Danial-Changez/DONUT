@@ -221,14 +221,23 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Close bar (DialogWindow idiom): full-bleed 36px row holding only the
-                         X, flush in the corner - the title sits BELOW the bar so it clears
-                         the card's top edge instead of hugging it. -->
+                    <!-- Header: one 48px row - the X keeps its flush 50x36 corner pad
+                         (pinned Top), while the title centers in the taller row so it
+                         clears the card's top edge instead of hugging it. -->
                     <Grid Grid.Row="0"
-                          Height="36">
+                          Height="48">
+                        <TextBlock Style="{DynamicResource TextPaneTitle}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="24,0,56,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
+                                 FontWeight="Normal"
+                                 Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
                         <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Height="36"
                                 Command="{Binding CloseResetCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
@@ -237,19 +246,11 @@
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
-                    <TextBlock Grid.Row="1"
-                               Style="{DynamicResource TextPaneTitle}"
-                               HorizontalAlignment="Left"
-                               Margin="24,2,24,0"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
-                             FontWeight="Normal"
-                             Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
                     <!-- Target identifiers: UPN and SAM side by side on the shared Card
                          recipe (same scheme as the home stat cards), each the
                          person-fields pairing - MicroLabel grey over a brighter value. -->
-                    <Grid Grid.Row="2"
-                          Margin="24,12,24,0">
+                    <Grid Grid.Row="1"
+                          Margin="24,6,24,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
@@ -299,7 +300,7 @@
                     <!-- Temp password: the field with Copy/QR icon utilities beside it -
                          they wake once a password exists (Progressive Disclosure,
                          mirroring the BitLocker reveal). -->
-                    <StackPanel Grid.Row="3"
+                    <StackPanel Grid.Row="2"
                                 Margin="24,16,24,0">
                         <TextBlock Text="TEMPORARY PASSWORD"
                                    Style="{DynamicResource MicroLabel}"
@@ -391,14 +392,14 @@
                         </Grid>
                     </StackPanel>
                     <!-- Good Defaults: a temp password should force a change at next logon. -->
-                    <CheckBox Grid.Row="4"
+                    <CheckBox Grid.Row="3"
                               Style="{DynamicResource ModernCheckBox}"
                               IsChecked="{Binding ResetVm.ChangeAtLogon, Mode=TwoWay}"
                               Margin="24,16,24,0"
                               Content="Require password change at next logon" />
                     <!-- Footer pairs the flow: Generate on the left feeds the destructive
                          primary on the right. X / Esc / backdrop close the card. -->
-                    <Grid Grid.Row="5"
+                    <Grid Grid.Row="4"
                           Margin="24,20,24,20">
                         <Button Content="Generate"
                                 Command="{Binding ResetVm.GenerateCommand}"
