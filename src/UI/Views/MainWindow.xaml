@@ -209,9 +209,10 @@
                     Background="{DynamicResource PrimaryBackground}"
                     BorderBrush="{DynamicResource PanelBorder}"
                     BorderThickness="1">
-                <!-- DialogWindow recipe: title over a muted message, identity as one subtle
-                     mono card, then the form - 24px gutters and the modal footer sizes. -->
-                <Grid Margin="24,14,24,20">
+                <!-- DialogWindow recipe: full-bleed close bar (X flush in the card corner),
+                     a muted message naming the target, identity as one subtle mono card,
+                     then the form - 24px gutters on content rows, modal footer sizes. -->
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -220,57 +221,52 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Header: caption + close, mirroring the settings card. -->
-                    <Grid Grid.Row="0">
+                    <!-- Close bar (DialogWindow idiom): full-bleed 36px row, X flush in the
+                         corner - its hover pad rounds the top-right to match the card. -->
+                    <Grid Grid.Row="0"
+                          Height="36">
                         <TextBlock Text="Reset password"
                                    Style="{DynamicResource TextPaneTitle}"
                                    VerticalAlignment="Center"
-                                   HorizontalAlignment="Left" />
-                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
+                                   HorizontalAlignment="Left"
+                                   Margin="24,0,0,0" />
                         <Button HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Height="36"
                                 Command="{Binding CloseResetCommand}"
-                                Style="{DynamicResource controlButton}"
+                                Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
                     </Grid>
+                    <!-- The message names the target (Okta-style "reset for X"); the card
+                         below keeps just the technical identifiers. -->
                     <TextBlock Grid.Row="1"
-                               Margin="0,8,0,0"
-                               Text="Set a temporary password for this account."
+                               Margin="24,6,24,0"
                                Style="{DynamicResource TextBody}"
-                               TextWrapping="Wrap" />
-                    <!-- Target identity: one subtle mono card (the DialogWindow list-item
-                         treatment) - name, then the copy-valuable UPN, then sam @ domain. -->
+                               TextWrapping="Wrap"><Run Text="Set a temporary password for " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay}"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TitleTextSecondary}" /><Run Text="." /></TextBlock>
+                    <!-- Target identifiers: one subtle mono card (the DialogWindow
+                         list-item treatment) - the copy-valuable UPN, then sam @ domain. -->
                     <Border Grid.Row="2"
-                            Margin="0,12,0,0"
+                            Margin="24,12,24,0"
                             Background="{DynamicResource SurfaceMuted}"
                             BorderBrush="{DynamicResource PanelBorder}"
                             BorderThickness="1"
                             CornerRadius="6"
-                            Padding="10,8">
+                            Padding="10,7">
                         <StackPanel>
-                            <TextBlock Text="{Binding ResetVm.DisplayName}"
-                                       FontFamily="{DynamicResource FontSans}"
-                                       FontSize="13"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TitleTextSecondary}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding ResetVm.DisplayName}" />
                             <TextBox Style="{DynamicResource SelectableText}"
                                      Text="{Binding ResetVm.TargetUpn, Mode=OneWay}"
                                      ToolTip="{Binding ResetVm.TargetUpn}"
                                      FontFamily="{DynamicResource FontMono}"
                                      FontSize="12"
-                                     Foreground="{DynamicResource BodyTextPrimary}"
-                                     Margin="0,4,0,0" />
+                                     Foreground="{DynamicResource BodyTextPrimary}" />
                             <TextBlock FontFamily="{DynamicResource FontMono}"
                                        FontSize="12"
                                        Foreground="{DynamicResource BodyTextSecondary}"
-                                       Margin="0,1,0,0">
+                                       Margin="0,2,0,0">
                                 <Run Text="{Binding ResetVm.TargetSam, Mode=OneWay}" /><Run Text="  @  " /><Run Text="{Binding ResetVm.TargetDomain, Mode=OneWay}" />
                             </TextBlock>
                         </StackPanel>
@@ -279,7 +275,7 @@
                          underneath - Generate starts the flow; Copy/QR wake once a password
                          exists (Progressive Disclosure, mirroring the BitLocker reveal). -->
                     <StackPanel Grid.Row="3"
-                                Margin="0,16,0,0">
+                                Margin="24,16,24,0">
                         <TextBlock Text="TEMPORARY PASSWORD"
                                    Style="{DynamicResource MicroLabel}"
                                    Margin="0,0,0,6" />
@@ -366,14 +362,14 @@
                     <CheckBox Grid.Row="4"
                               Style="{DynamicResource ModernCheckBox}"
                               IsChecked="{Binding ResetVm.ChangeAtLogon, Mode=TwoWay}"
-                              Margin="0,16,0,0"
+                              Margin="24,16,24,0"
                               Content="Require password change at next logon" />
                     <!-- Actions bottom-right (secondary then primary, modal footer sizes);
                          destructive tint - the current password is irreversibly discarded. -->
                     <StackPanel Grid.Row="5"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right"
-                                Margin="0,20,0,0">
+                                Margin="24,20,24,20">
                         <Button Content="Close"
                                 Command="{Binding CloseResetCommand}"
                                 Style="{DynamicResource ButtonSecondary}"

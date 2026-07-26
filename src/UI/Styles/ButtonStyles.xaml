@@ -33,6 +33,31 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+    <!-- Card-corner close: the controlButton pad with its top-right rounded (9 = the
+         card's 10 minus the 1px border) so it sits flush in a radius-10 overlay card. -->
+    <Style x:Key="controlButtonCardClose"
+           TargetType="Button">
+        <Setter Property="Width" Value="50" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="0,9,0,0">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource PanelBackgroundActive}" />
+                <Setter Property="Foreground" Value="{Binding Path=Tag, RelativeSource={RelativeSource Self}}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
     <!-- Control button icon -->
     <Style x:Key="controlButtonIcon"
            TargetType="Path">
