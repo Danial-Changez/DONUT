@@ -139,6 +139,23 @@
         <Setter Property="VerticalScrollBarVisibility"
                 Value="Hidden" />
     </Style>
+    <!-- Chrome-less list item (machine list + finder dropdown): strips the default
+         ListBoxItem selection visuals; the row templates draw their own via triggers. -->
+    <Style x:Key="MachineListItem"
+           TargetType="ListBoxItem">
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <ContentPresenter />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- Modern TextBox: Arcane boxed input - white@12% fill, rounded-lg, no border
          until focus paints the primary ring. -->
     <Style x:Key="ModernTextBox"

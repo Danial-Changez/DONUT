@@ -14,25 +14,8 @@
   </Grid.RowDefinitions>
 
   <Grid.Resources>
-    <!-- Converter + machine-list item chrome. The machine list binds to
-         HomeViewModel.Machines; each item is a HostViewModel. -->
+    <!-- Converters must be in-file: they aren't DPs, so DynamicResource can't reach them. -->
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
-    <Style x:Key="MachineListItem" TargetType="ListBoxItem">
-      <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
-      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Margin" Value="0" />
-      <Setter Property="Background" Value="Transparent" />
-      <!-- Strip the default ListBoxItem selection chrome; the row template draws its own
-           selected border via the IsSelected trigger. -->
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="ListBoxItem">
-            <ContentPresenter />
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
   </Grid.Resources>
 
   <!-- ============================ Action bar ============================ -->
@@ -116,7 +99,7 @@
              from the search bar can drive SelectedIndex; selection highlights the row. -->
         <ListBox x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}"
                  Background="Transparent" BorderThickness="0" MaxHeight="340"
-                 ItemContainerStyle="{StaticResource MachineListItem}"
+                 ItemContainerStyle="{DynamicResource MachineListItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto">
           <ListBox.ItemTemplate>
@@ -360,7 +343,7 @@
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
-                 ItemContainerStyle="{StaticResource MachineListItem}">
+                 ItemContainerStyle="{DynamicResource MachineListItem}">
           <ListBox.ItemTemplate>
             <DataTemplate>
               <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"

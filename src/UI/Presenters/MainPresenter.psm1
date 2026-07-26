@@ -9,6 +9,7 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Core\PoolScriptJob.psm1"
+using module "..\..\Core\ViewLoader.psm1"
 using module "..\..\Services\ResourceService.psm1"
 using namespace Donut.Mvvm
 using namespace Donut.Interop
@@ -454,22 +455,14 @@ class MainPresenter {
         if ($logo -and $this.LogoImage) { $logo.Source = $this.LogoImage }
     }
 
+    # Page-level load: missing/broken views log and return null (the shell copes);
+    # region composition inside HomePresenter uses ViewLoader directly and fails loud.
     [object] LoadView([string]$fileName) {
-        $path = Join-Path $this.Config.SourceRoot "UI\Views\$fileName"
-        if (Test-Path $path) {
-            try {
-                # Stream disposed so the view file isn't left locked (see Initialize).
-                $stream = [System.IO.File]::OpenRead($path)
-                try {
-                    return [System.Windows.Markup.XamlReader]::Load($stream)
-                }
-                finally {
-                    $stream.Dispose()
-                }
-            }
-            catch {
-                $this.Logger.LogException("Failed to load view $fileName", $_)
-            }
+        try {
+            return [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\$fileName")
+        }
+        catch {
+            $this.Logger.LogException("Failed to load view $fileName", $_)
         }
         return $null
     }

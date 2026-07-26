@@ -3,6 +3,7 @@ using namespace System.Windows.Controls
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\LogService.psm1"
+using module "..\..\Core\ViewLoader.psm1"
 using module ".\KeybindRecorder.psm1"
 using module ".\ToastService.psm1"
 
@@ -86,9 +87,8 @@ class ConfigPresenter {
 
         if (Test-Path $path) {
             try {
-                $reader = [System.Xml.XmlReader]::Create($path)
-                $this.CurrentOptionView = [Markup.XamlReader]::Load($reader)
-                $reader.Close()
+                $this.CurrentOptionView = [ViewLoader]::Load(
+                    $this.Config.SourceRoot, "UI\Views\Config Options\$fileName")
 
                 $this.ConfigOptionsContent.Content = $this.CurrentOptionView
                 $this.CurrentSection = $viewName
