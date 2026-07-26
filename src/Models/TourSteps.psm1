@@ -35,7 +35,7 @@ class TourSteps {
             }
             [TourStep]@{
                 Title     = 'Pick a mode, then Run'
-                Body      = 'This toggle switches between Scan and Apply. Choose one, then Run a single machine or Run all to act on the whole list.'
+                Body      = 'This button cycles between Scan and Apply. Pick one, then Run a single machine or Run all to act on the whole list.'
                 TargetKey = 'mode'
                 Placement = 'below'
             }
@@ -53,7 +53,7 @@ class TourSteps {
             }
             [TourStep]@{
                 Title     = 'Settings & help'
-                Body      = 'The gear opens Settings - keybinds, startup, and options save as you change them. The book icon opens the full docs, and the ? replays this tour.'
+                Body      = 'The gear opens Settings - keybinds, startup, and options save as you change them. The page icon opens the full docs, and the ? replays this tour.'
                 TargetKey = 'settings'
                 Placement = 'below'
             }

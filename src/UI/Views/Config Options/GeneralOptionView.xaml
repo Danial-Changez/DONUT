@@ -40,18 +40,18 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" CornerRadius="8.4" Height="36" Padding="12,0"
-                        VerticalAlignment="Center" Background="{DynamicResource SurfaceMuted}"
+                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0"
+                        VerticalAlignment="Center" Background="{DynamicResource InputFill}"
                         BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
                     <TextBlock x:Name="recGlobalHotkeyValue" Text="No keybind set" VerticalAlignment="Center"
                                FontFamily="{DynamicResource FontSans}" FontSize="13"
                                Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
                 </Border>
                 <Button x:Name="recGlobalHotkeyClear" Grid.Column="1" Content="Clear"
-                        Style="{DynamicResource ButtonGhost}" FontSize="12" Height="36" Margin="8,0,0,0"
+                        Style="{DynamicResource ButtonGhost}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
-                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="2" Content="Record Keybind"
-                        Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Height="36" Margin="8,0,0,0"
+                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="2" Content="Record keybind"
+                        Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
             <TextBlock Text="Open Settings (while DONUT is focused). Hit Record, then press a combo (e.g. Ctrl+,). Clear to disable."
@@ -64,18 +64,18 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" CornerRadius="8.4" Height="36" Padding="12,0"
-                        VerticalAlignment="Center" Background="{DynamicResource SurfaceMuted}"
+                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0"
+                        VerticalAlignment="Center" Background="{DynamicResource InputFill}"
                         BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
                     <TextBlock x:Name="recOpenSettingsValue" Text="No keybind set" VerticalAlignment="Center"
                                FontFamily="{DynamicResource FontSans}" FontSize="13"
                                Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
                 </Border>
                 <Button x:Name="recOpenSettingsClear" Grid.Column="1" Content="Clear"
-                        Style="{DynamicResource ButtonGhost}" FontSize="12" Height="36" Margin="8,0,0,0"
+                        Style="{DynamicResource ButtonGhost}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
-                <Button x:Name="recOpenSettingsRecord" Grid.Column="2" Content="Record Keybind"
-                        Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Height="36" Margin="8,0,0,0"
+                <Button x:Name="recOpenSettingsRecord" Grid.Column="2" Content="Record keybind"
+                        Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
         </StackPanel>
@@ -121,8 +121,7 @@
         </StackPanel>
     </Border>
     <!-- Diagnostics: verbose logging opt-in (off by default; applies live, incl. workers). -->
-    <Border Style="{DynamicResource Card}"
-            Margin="0,0,0,12">
+    <Border Style="{DynamicResource Card}">
         <StackPanel>
             <TextBlock Text="DIAGNOSTICS"
                        Style="{DynamicResource SettingsSectionLabel}" />

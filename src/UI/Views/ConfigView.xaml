@@ -3,7 +3,7 @@
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Command picker: a segmented pill; the presenter loads the matching view. -->
-    <Border CornerRadius="9"
+    <Border CornerRadius="8.4"
             Background="{DynamicResource Secondary}"
             Padding="3"
             HorizontalAlignment="Center"

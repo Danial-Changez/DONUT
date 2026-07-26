@@ -162,9 +162,12 @@ class TourPresenter {
         $target = if ([string]::IsNullOrWhiteSpace($step.TargetKey)) { $null } else { $this.ResolveTarget($step.TargetKey) }
         if ($null -eq $target -or $target.ActualWidth -le 0 -or $target.ActualHeight -le 0) {
             $this.ShowCentered()
-            return
         }
-        $this.ShowSpotlight($target, $step.Placement)
+        else {
+            $this.ShowSpotlight($target, $step.Placement)
+        }
+        # Focus the callout so the overlay's Esc key binding is in scope (settings idiom).
+        [void]$this.Callout.Focus()
     }
 
     # Welcome / fallback: dim the whole window and centre the card.
@@ -240,7 +243,6 @@ class TourPresenter {
             'list' { return $this.HomeElement('MachinePanel') }
             'detail' { return $this.HomeElement('DetailPane') }
             'settings' { return $this.Window.FindName('btnSettings') }
-            'help' { return $this.Window.FindName('btnHelp') }
             default { return $null }
         }
         return $null

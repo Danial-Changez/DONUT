@@ -23,26 +23,8 @@
     <Color x:Key="LoginBackgroundColor"> #121214</Color>
     <SolidColorBrush x:Key="LoginBackground"
                      Color="{StaticResource LoginBackgroundColor}" />
-    <!-- Window Border Colors (subtle violet -> zinc gradient; Arcane violet ramp) -->
-    <Color x:Key="WindowBorderPrimaryColor"> #8E51FF</Color>
-    <SolidColorBrush x:Key="WindowBorderPrimary"
-                     Color="{StaticResource WindowBorderPrimaryColor}" />
-    <Color x:Key="WindowBorderAccentColor"> #8022FE</Color>
-    <SolidColorBrush x:Key="WindowBorderAccent"
-                     Color="{StaticResource WindowBorderAccentColor}" />
-    <Color x:Key="WindowBorderSecondaryColor"> #3F3F46</Color>
-    <SolidColorBrush x:Key="WindowBorderSecondary"
-                     Color="{StaticResource WindowBorderSecondaryColor}" />
-    <!-- Login Window Border Colors -->
-    <Color x:Key="LoginWindowBorderPrimaryColor"> #8022FE</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderPrimary"
-                     Color="{StaticResource LoginWindowBorderPrimaryColor}" />
-    <Color x:Key="LoginWindowBorderAccentColor"> #8E51FF</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderAccent"
-                     Color="{StaticResource LoginWindowBorderAccentColor}" />
-    <Color x:Key="LoginWindowBorderSecondaryColor"> #3F3F46</Color>
-    <SolidColorBrush x:Key="LoginWindowBorderSecondary"
-                     Color="{StaticResource LoginWindowBorderSecondaryColor}" />
+    <!-- Window borders are the neutral PanelBorder hairline (the violet gradient ramp
+         was removed as ornament - colour stays reserved for status + primary actions). -->
     <!-- Button/Accent Colors. Status accents follow Arcane's dark recipe: the visible
          text/dot shade is the Tailwind 400 step (tints derive from the 500 step below). -->
     <Color x:Key="AccentPurpleColor"> #8E51FF</Color>
@@ -83,6 +65,12 @@
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
+    <!-- QR: INVERTED by choice - violet-300 modules on a transparent background so the
+         code sits directly on the dark card (~10:1 vs #171717). Field-gated on the
+         hardware scanner reading inverted codes; if it fails, revert to dark-on-light
+         (modules #4C1D95, back #F5F3FF opaque) and restore the QrPlate border. -->
+    <Color x:Key="QrModuleColor"> #C4B5FD</Color>
+    <Color x:Key="QrModuleBackColor"> #00000000</Color>
     <!-- Font Colors (Arcane neutral: foreground #FAFAFA, muted-foreground #A1A1A1) -->
     <Color x:Key="TitleTextPrimaryColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="TitleTextPrimary"
@@ -193,6 +181,8 @@
          through per-glyph, so missing fonts degrade without breaking layout. -->
     <FontFamily x:Key="FontSans">Montserrat, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">./Fonts/#Geist Mono, Cascadia Mono, Consolas</FontFamily>
+    <!-- Status glyphs (checkmarks, arrows) pin a symbol font so they never render as tofu. -->
+    <FontFamily x:Key="FontSymbol">Segoe UI Symbol</FontFamily>
     <!-- ============================================================
          Arcane recipe tokens (extracted from getarcaneapp/arcane frontend).
          Tint recipe (dark): fill = status-500 @10% (0x1A), border = @30% (0x4D);
@@ -215,9 +205,6 @@
     <SolidColorBrush x:Key="TerminalBackground"
                      Color="{StaticResource TerminalBackgroundColor}" />
     <!-- QR plate: stays LIGHT for scannability - never dark-theme this -->
-    <Color x:Key="QrPlateColor"> #F5F3FF</Color>
-    <SolidColorBrush x:Key="QrPlate"
-                     Color="{StaticResource QrPlateColor}" />
     <!-- List rows (Arcane table): hover = primary@10%, selected = primary@20%,
          separator = white@4% (border/40 over the 10% hairline) -->
     <Color x:Key="RowHoverColor"> #1A8022FE</Color>

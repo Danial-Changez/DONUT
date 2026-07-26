@@ -46,7 +46,7 @@
                 </WrapPanel>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Device Category"
+                <TextBlock Text="Device category"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,8" />
                 <WrapPanel x:Name="updateDeviceCategory">
@@ -67,28 +67,25 @@
             <TextBlock Text="TEXT OPTIONS"
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Output Log"
+                <TextBlock Text="Output log"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="outputLog"
-                         Style="{DynamicResource ModernTextBox}"
-                         Foreground="{DynamicResource BodyTextPrimary}" />
+                         Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Catalog Location"
+                <TextBlock Text="Catalog location"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="catalogLocation"
-                         Style="{DynamicResource ModernTextBox}"
-                         Foreground="{DynamicResource BodyTextPrimary}" />
+                         Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Report"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="report"
-                         Style="{DynamicResource ModernTextBox}"
-                         Foreground="{DynamicResource BodyTextPrimary}" />
+                         Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
         </StackPanel>
     </Border>
