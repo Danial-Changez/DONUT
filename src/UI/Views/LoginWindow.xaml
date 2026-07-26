@@ -58,14 +58,15 @@
                                   Data="{DynamicResource Minimize}" />
                         </Button>
                     </StackPanel>
-                    <!-- Left-side title -->
-                    <TextBlock Text="Login"
-                               HorizontalAlignment="Left"
-                               VerticalAlignment="Center"
-                               Margin="14,8,0,0"
-                               Foreground="{DynamicResource TitleTextPrimary}"
-                               FontFamily="{DynamicResource FontSans}"
-                               FontSize="12" />
+                    <!-- Left-side wordmark (source set in LoginPresenter.LoadImages),
+                         matching the main window's control bar. -->
+                    <Image x:Name="LoginLogo"
+                           Height="16"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Margin="14,0,0,0"
+                           IsHitTestVisible="False" />
                 </DockPanel>
                 <!-- OAuth Section -->
                 <Grid Grid.Row="1"

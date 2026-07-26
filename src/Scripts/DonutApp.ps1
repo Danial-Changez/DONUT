@@ -18,6 +18,7 @@
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AdSearchResult.psm1"
+using module "..\Models\TempPassword.psm1"
 using module "..\Core\AsyncJob.psm1"
 using module "..\Core\WorkerProcess.psm1"
 using module "..\Core\BuildProvenance.psm1"

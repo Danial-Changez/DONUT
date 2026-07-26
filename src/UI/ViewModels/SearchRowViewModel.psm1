@@ -9,8 +9,9 @@
     (SamAccountName fallback) with a lock glyph when locked out and
     "DisplayName - Domain" underneath; computers show the machine name over
     "Domain - computer" and are pickable. Commands (PickCommand for computers,
-    UnlockCommand for locked users) are attached by the presenter after construction,
-    closing over its handlers - same pattern as HostViewModel's Run/Gather commands.
+    UnlockCommand for locked users, ResetCommand for any user) are attached by the
+    presenter after construction, closing over its handlers - same pattern as
+    HostViewModel's Run/Gather commands.
 
 .NOTES
     Values are computed once per render (the whole collection is swapped), so no
@@ -23,11 +24,13 @@ class SearchRowViewModel {
     [string] $Secondary = ''
     [bool]   $IsComputer = $false
     [bool]   $CanUnlock = $false
+    [bool]   $CanReset = $false   # any user row: password reset is not lock-gated
     [bool]   $IsAction = $false   # the "Add as a machine" row (draws a + and a hint)
     [bool]   $Dim = $false        # action row shown but the text isn't a machine name
     [object] $Result        # the raw worker row, for the presenter's handlers
     [object] $PickCommand   # RelayCommand (computers), assigned by the presenter
     [object] $UnlockCommand # RelayCommand (locked users), assigned by the presenter
+    [object] $ResetCommand  # RelayCommand (users), assigned by the presenter
 
     # A section header row ("COMPUTERS" / "USERS").
     static [SearchRowViewModel] Header([string]$text) {
@@ -63,6 +66,7 @@ class SearchRowViewModel {
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             $vm.Secondary = ($sub -join '  -  ')
             $vm.CanUnlock = [bool]$r.LockedOut
+            $vm.CanReset = $true
         }
         else {
             $vm.Primary = [string]$r.Name

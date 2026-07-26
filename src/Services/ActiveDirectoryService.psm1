@@ -12,9 +12,9 @@ using module "..\Models\AdSearchResult.psm1"
 
 .NOTES
     Mirrors NetworkProbe's seam pattern: the env-coupled directory I/O is isolated
-    in overridable hidden seams (QueryDirectory, InvokeUnlock) so the multi-domain
-    aggregation / mapping / guard logic is unit-testable off a domain by
-    subclassing and faking the seams.
+    in overridable hidden seams (QueryDirectory, InvokeUnlock, InvokeReset) so the
+    multi-domain aggregation / mapping / guard logic is unit-testable off a domain
+    by subclassing and faking the seams.
 #>
 class ActiveDirectoryService {
     [LogService] $Logger
@@ -77,6 +77,28 @@ class ActiveDirectoryService {
         }
         catch {
             $this.Logger.LogException("Failed to unlock $($user.SamAccountName) in $($user.Domain)", $_)
+            return $false
+        }
+    }
+
+    # Resets a user's password to a temporary one against its home domain. Returns
+    # success. The password never reaches the logger - only sam/domain/flag do.
+    [bool] ResetPassword([AdSearchResult]$user, [securestring]$newPassword,
+        [bool]$changeAtLogon) {
+        if ($null -eq $user -or $user.Kind -ne 'User' -or
+            [string]::IsNullOrWhiteSpace($user.SamAccountName) -or
+            $null -eq $newPassword -or $newPassword.Length -eq 0) {
+            return $false
+        }
+        try {
+            $this.InvokeReset($user.SamAccountName, $user.Domain, $newPassword, $changeAtLogon)
+            $this.Logger.LogInfo(("Reset password for {0} in {1} (change at logon: {2})." -f
+                    $user.SamAccountName, $user.Domain, $changeAtLogon))
+            return $true
+        }
+        catch {
+            $this.Logger.LogException(
+                "Failed to reset password for $($user.SamAccountName) in $($user.Domain)", $_)
             return $false
         }
     }
@@ -145,5 +167,14 @@ class ActiveDirectoryService {
     # Unlocks via the AD module against the user's home domain (one-shot).
     hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
         Unlock-ADAccount -Identity $sam -Server $domain -ErrorAction Stop
+    }
+
+    # Resets via the AD module against the user's home domain (one-shot).
+    hidden [void] InvokeReset([string]$sam, [string]$domain,
+        [securestring]$newPassword, [bool]$changeAtLogon) {
+        Set-ADAccountPassword -Identity $sam -Server $domain -Reset `
+            -NewPassword $newPassword -ErrorAction Stop
+        Set-ADUser -Identity $sam -Server $domain -ChangePasswordAtLogon $changeAtLogon `
+            -ErrorAction Stop
     }
 }

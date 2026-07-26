@@ -1,4 +1,5 @@
 using module "..\..\src\Models\AdSearchResult.psm1"
+using module "..\..\src\Models\TempPassword.psm1"
 using module "..\..\src\Services\ActiveDirectoryService.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
@@ -7,7 +8,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 # guard logic runs entirely off a domain.
 #   UserRows/ComputerRows: domain -> hashtable[] of rows the directory "returns"
 #   FailDomains:           domains whose query throws (down/untrusted forest)
-#   Unlocks:               records each InvokeUnlock call
+#   Unlocks/Resets:        record each InvokeUnlock / InvokeReset call
 class FakeAdService : ActiveDirectoryService {
     [hashtable] $UserRows = @{}
     [hashtable] $ComputerRows = @{}
@@ -15,9 +16,12 @@ class FakeAdService : ActiveDirectoryService {
     [int]       $QueryCount = 0
     [System.Collections.Generic.List[hashtable]] $Unlocks
     [bool]      $UnlockThrows = $false
+    [System.Collections.Generic.List[hashtable]] $Resets
+    [bool]      $ResetThrows = $false
 
     FakeAdService([string[]]$domains, [LogService]$logger) : base($domains, $logger) {
         $this.Unlocks = [System.Collections.Generic.List[hashtable]]::new()
+        $this.Resets = [System.Collections.Generic.List[hashtable]]::new()
     }
 
     hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter, [string[]]$props, [int]$max) {
@@ -34,6 +38,16 @@ class FakeAdService : ActiveDirectoryService {
     hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
         $this.Unlocks.Add(@{ sam = $sam; domain = $domain })
         if ($this.UnlockThrows) { throw "access is denied" }
+    }
+
+    # Records HasPassword only - the fake must never hold the plaintext either.
+    hidden [void] InvokeReset([string]$sam, [string]$domain,
+        [securestring]$newPassword, [bool]$changeAtLogon) {
+        $this.Resets.Add(@{
+                sam = $sam; domain = $domain; changeAtLogon = $changeAtLogon
+                HasPassword = ($null -ne $newPassword -and $newPassword.Length -gt 0)
+            })
+        if ($this.ResetThrows) { throw "access is denied" }
     }
 }
 
@@ -136,5 +150,71 @@ Describe "ActiveDirectoryService.UnlockUser" {
         $blank = [AdSearchResult]::new(); $blank.Kind = 'User'; $blank.SamAccountName = ''
         $svc.UnlockUser($blank) | Should -BeFalse
         $svc.Unlocks.Count | Should -Be 0
+    }
+}
+
+Describe "ActiveDirectoryService.ResetPassword" {
+    BeforeAll {
+        function New-User([string]$sam, [string]$domain) {
+            $u = [AdSearchResult]::new()
+            $u.Kind = 'User'; $u.SamAccountName = $sam; $u.Domain = $domain
+            return $u
+        }
+    }
+
+    It "resets against the home domain, records the flag, and logs INFO" {
+        $log = [CapturingLogService]::new()
+        $svc = [FakeAdService]::new(@('d1'), $log)
+        $secure = [TempPassword]::ToSecure('Abcde-Fghjk-23')
+
+        $svc.ResetPassword((New-User 'sarah' 'prod.contoso.com'), $secure, $true) | Should -BeTrue
+        $svc.Resets.Count | Should -Be 1
+        $svc.Resets[0].sam | Should -Be 'sarah'
+        $svc.Resets[0].domain | Should -Be 'prod.contoso.com'
+        $svc.Resets[0].changeAtLogon | Should -BeTrue
+        $svc.Resets[0].HasPassword | Should -BeTrue
+        $log.HasLevel('INFO') | Should -BeTrue
+    }
+
+    It "passes changeAtLogon=false through untouched" {
+        $svc = [FakeAdService]::new(@('d1'), $null)
+        $secure = [TempPassword]::ToSecure('Abcde-Fghjk-23')
+        $svc.ResetPassword((New-User 'bob' 'd1'), $secure, $false) | Should -BeTrue
+        $svc.Resets[0].changeAtLogon | Should -BeFalse
+    }
+
+    It "never logs the password, on success or failure" {
+        $log = [CapturingLogService]::new()
+        $svc = [FakeAdService]::new(@('d1'), $log)
+        $plain = 'Abcde-Fghjk-23'
+        [void]$svc.ResetPassword((New-User 'sarah' 'd1'), [TempPassword]::ToSecure($plain), $true)
+        $svc.ResetThrows = $true
+        [void]$svc.ResetPassword((New-User 'sarah' 'd1'), [TempPassword]::ToSecure($plain), $true)
+        $log.Contains($plain) | Should -BeFalse
+    }
+
+    It "returns false and logs ERROR when the reset throws (e.g. access denied)" {
+        $log = [CapturingLogService]::new()
+        $svc = [FakeAdService]::new(@('d1'), $log)
+        $svc.ResetThrows = $true
+        $secure = [TempPassword]::ToSecure('Abcde-Fghjk-23')
+
+        $svc.ResetPassword((New-User 'sarah' 'd1'), $secure, $true) | Should -BeFalse
+        $log.HasLevel('ERROR') | Should -BeTrue
+    }
+
+    It "guards: null user, non-user, blank sam, and empty password skip the seam" {
+        $svc = [FakeAdService]::new(@('d1'), $null)
+        $secure = [TempPassword]::ToSecure('Abcde-Fghjk-23')
+
+        $svc.ResetPassword($null, $secure, $true) | Should -BeFalse
+        $comp = [AdSearchResult]::new(); $comp.Kind = 'Computer'; $comp.SamAccountName = 'WS-014'
+        $svc.ResetPassword($comp, $secure, $true) | Should -BeFalse
+        $blank = [AdSearchResult]::new(); $blank.Kind = 'User'; $blank.SamAccountName = ''
+        $svc.ResetPassword($blank, $secure, $true) | Should -BeFalse
+        $svc.ResetPassword((New-User 'sarah' 'd1'), [TempPassword]::ToSecure(''), $true) |
+            Should -BeFalse
+        $svc.ResetPassword((New-User 'sarah' 'd1'), $null, $true) | Should -BeFalse
+        $svc.Resets.Count | Should -Be 0
     }
 }
