@@ -11,6 +11,7 @@ using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
+using module "..\..\Core\ViewLoader.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
 using module "..\..\Services\SystemInfoService.psm1"
@@ -75,6 +76,9 @@ class HomePresenter : AsyncJobPresenter {
     [AppConfig] $Config
     [object] $ConfigManager           # duck-typed; used to persist recents
     [System.Windows.FrameworkElement] $ViewContent
+    # Region roots composed into the shell's slots; each XamlReader.Load root owns its
+    # file's namescope, so lookups go to the owning region (see FindHomeElement).
+    hidden [hashtable] $RegionRoots = @{}
     [TextBox] $SearchBar
     [Button] $ClearButton
     [Button] $RunAllButton
@@ -205,7 +209,29 @@ class HomePresenter : AsyncJobPresenter {
         $this.Detail.Initialize($this.ViewContent)
     }
 
+    # Loads the Home region files into the shell's slots. Deliberately uncatched: a
+    # missing or unparsable region must fail the boot loudly, never render half a page.
+    hidden [void] ComposeRegions() {
+        $lens = [ViewLoader]::Load($this.Config.SourceRoot, 'UI\Views\Home\LensPane.xaml')
+        $this.ViewContent.FindName('slotLens').Content = $lens
+        $this.RegionRoots['lens'] = $lens
+    }
+
+    # Tour seam: probes the shell root, then each region root (its own Name first, then
+    # its namescope) - region names are invisible to the shell's FindName by design.
+    [object] FindHomeElement([string]$name) {
+        $roots = @($this.ViewContent) + @($this.RegionRoots.Values)
+        foreach ($root in $roots) {
+            if ($null -eq $root) { continue }
+            if ($root.Name -eq $name) { return $root }
+            $hit = $root.FindName($name)
+            if ($hit) { return $hit }
+        }
+        return $null
+    }
+
     [void] Initialize() {
+        $this.ComposeRegions()
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
         $this.ClearButton = $this.ViewContent.FindName('btnClearTabs')
         $this.RunAllButton = $this.ViewContent.FindName('btnRunAll')
