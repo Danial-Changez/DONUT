@@ -308,6 +308,9 @@
                                          FontFamily="{DynamicResource FontMono}"
                                          Margin="0"
                                          Text="{Binding ResetVm.Password, UpdateSourceTrigger=PropertyChanged}" />
+                                <!-- Watermark clears on focus (not just on text) - it is a
+                                     sibling overlay, so the caret would otherwise sit
+                                     visibly inside the ghost text while typing begins. -->
                                 <TextBlock Text="Type a password, or generate one below"
                                            IsHitTestVisible="False"
                                            VerticalAlignment="Center"
@@ -319,9 +322,13 @@
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Visibility" Value="Collapsed" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Text, ElementName=resetPasswordBox}" Value="">
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding Text, ElementName=resetPasswordBox}" Value="" />
+                                                        <Condition Binding="{Binding IsKeyboardFocused, ElementName=resetPasswordBox}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
                                                     <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
+                                                </MultiDataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
