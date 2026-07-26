@@ -1,5 +1,5 @@
 <!-- General settings form: app-wide options as Arcane sub-cards. Control x:Names are
-     read/written by ConfigPresenter's General-section binder (not dcu-cli args). -->
+     read/written by SettingsPresenter's General-section binder (not dcu-cli args). -->
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Startup & tray -->
@@ -33,7 +33,7 @@
                        Style="{DynamicResource SettingsFieldLabel}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8" />
-            <!-- Keybind recorder: display + Clear + Record, wired by ConfigPresenter. -->
+            <!-- Keybind recorder: display + Clear + Record, wired by SettingsPresenter. -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

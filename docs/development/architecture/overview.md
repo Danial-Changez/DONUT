@@ -117,10 +117,10 @@ suffix). The surfaces that stay deliberately imperative, each the standard MVVM 
 
 - **`DialogPresenter`** is a *dialog service* — showing a modal and returning a result
   is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
-- **`MainPresenter`** keeps lazy Config construction (the Config view builds on first
+- **`MainPresenter`** keeps lazy Settings construction (the settings view builds on first
   settings-overlay open — a startup-cost win) and the Home fade-in; the shell's
   settings-overlay/chrome *inputs* are bound commands on `MainViewModel`.
-- **`ConfigPresenter`** keeps its data-driven form binder: every named control in a
+- **`SettingsPresenter`** keeps its data-driven form binder: every named control in a
   command's option view maps 1:1 to a dcu-cli arg key, so a typed property per field
   would restate the key list for no behaviour gain. Settings persist in real time —
   there is no Save button; toggles and keybind changes write through immediately and

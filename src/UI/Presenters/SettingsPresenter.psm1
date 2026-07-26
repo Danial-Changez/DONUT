@@ -9,20 +9,22 @@ using module ".\ToastService.psm1"
 
 <#
 .SYNOPSIS
-    Drives the Config page: command selection and real-time option persistence.
+    Drives the settings overlay: command selection and real-time persistence.
 
 .DESCRIPTION
-    Loads the active command and its option sub-view, binds the controls to the
-    AppConfig command args, and persists every edit the moment it changes (no Save
-    button) - toggles/chips on change, text fields on lost-focus, keybinds via the
-    recorder. Config lives under %LOCALAPPDATA%\DONUT so it survives reinstalls.
+    Loads the active command and its settings sub-view (Views/Settings/*), binds the
+    controls to the AppConfig command args, and persists every edit the moment it
+    changes (no Save button) - toggles/chips on change, text fields on lost-focus,
+    keybinds via the recorder. Naming rule: Settings* is the UI surface; Config
+    (AppConfig/ConfigManager) is the persisted state it edits, which lives under
+    %LOCALAPPDATA%\DONUT\config.json so it survives reinstalls.
 
 .NOTES
     Side-effects that live outside the JSON (global hotkey, window shortcut, startup
     task) are re-applied per change via the SideEffects callbacks passed in by
     MainPresenter. Event scriptblocks capture $self, since a WPF handler rebinds $this.
 #>
-class ConfigPresenter {
+class SettingsPresenter {
     [AppConfig] $Config
     [ConfigManager] $ConfigManager
     [LogService] $Logger
@@ -30,15 +32,15 @@ class ConfigPresenter {
     [RadioButton] $CmdScan
     [RadioButton] $CmdApplyUpdates
     [RadioButton] $CmdGeneral
-    [ContentControl] $ConfigOptionsContent
-    [FrameworkElement] $CurrentOptionView
+    [ContentControl] $SettingsContent
+    [FrameworkElement] $CurrentSettingsView
     [string] $CurrentSection
     [ToastService] $Toast
     [hashtable] $SideEffects       # @{ Hotkey; WindowShortcut; StartupTask } scriptblocks
     hidden [object] $HotkeyRecorder
     hidden [object] $ShortcutRecorder
 
-    ConfigPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
+    SettingsPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
         [ToastService] $toast, [hashtable] $sideEffects) {
         $this.Config = $config
         $this.ConfigManager = $configManager
@@ -53,19 +55,19 @@ class ConfigPresenter {
         $this.CmdScan = $this.ViewContent.FindName('cmdScan')
         $this.CmdApplyUpdates = $this.ViewContent.FindName('cmdApplyUpdates')
         $this.CmdGeneral = $this.ViewContent.FindName('cmdGeneral')
-        $this.ConfigOptionsContent = $this.ViewContent.FindName('ConfigOptionsContent')
+        $this.SettingsContent = $this.ViewContent.FindName('SettingsContent')
 
         # Picking a segment is view navigation (which option form shows), not data.
         $presenter = $this
         if ($this.CmdScan) {
-            $this.CmdScan.Add_Checked({ $presenter.LoadOptionView('Scan') }.GetNewClosure())
+            $this.CmdScan.Add_Checked({ $presenter.LoadSettingsView('Scan') }.GetNewClosure())
         }
         if ($this.CmdApplyUpdates) {
-            $this.CmdApplyUpdates.Add_Checked({ $presenter.LoadOptionView('ApplyUpdates') }.GetNewClosure())
+            $this.CmdApplyUpdates.Add_Checked({ $presenter.LoadSettingsView('ApplyUpdates') }.GetNewClosure())
         }
         if ($this.CmdGeneral) {
             # The General view holds the app-wide settings (throttle, startup, tray, hotkeys).
-            $this.CmdGeneral.Add_Checked({ $presenter.LoadOptionView('General') }.GetNewClosure())
+            $this.CmdGeneral.Add_Checked({ $presenter.LoadSettingsView('General') }.GetNewClosure())
         }
 
         $this.LoadCurrentConfig()
@@ -81,16 +83,16 @@ class ConfigPresenter {
         }
     }
 
-    [void] LoadOptionView([string] $viewName) {
+    [void] LoadSettingsView([string] $viewName) {
         $fileName = "${viewName}View.xaml"
         $path = Join-Path $this.Config.SourceRoot "UI\Views\Settings\$fileName"
 
         if (Test-Path $path) {
             try {
-                $this.CurrentOptionView = [ViewLoader]::Load(
+                $this.CurrentSettingsView = [ViewLoader]::Load(
                     $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
 
-                $this.ConfigOptionsContent.Content = $this.CurrentOptionView
+                $this.SettingsContent.Content = $this.CurrentSettingsView
                 $this.CurrentSection = $viewName
                 $this.PopulateFields()
             }
@@ -101,7 +103,7 @@ class ConfigPresenter {
     }
 
     [void] PopulateFields() {
-        if (-not $this.CurrentSection -or -not $this.CurrentOptionView) {
+        if (-not $this.CurrentSection -or -not $this.CurrentSettingsView) {
             return
         }
 
@@ -122,7 +124,7 @@ class ConfigPresenter {
 
         if ($null -eq $cmdArgs -or $cmdArgs.Count -eq 0) { return }
 
-        $allControls = $this.GetAllControls($this.CurrentOptionView)
+        $allControls = $this.GetAllControls($this.CurrentSettingsView)
 
         foreach ($ctrl in $allControls) {
             if ([string]::IsNullOrWhiteSpace($ctrl.Name)) { continue }
@@ -225,7 +227,7 @@ class ConfigPresenter {
     # Fills the General controls from config and wires each to persist live.
     hidden [void] PopulateGeneralSettings() {
         $self = $this
-        $view = $this.CurrentOptionView
+        $view = $this.CurrentSettingsView
 
         $throttle = $view.FindName('throttleLimit')
         if ($throttle) {

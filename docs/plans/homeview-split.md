@@ -14,7 +14,7 @@ The seams were already clean: region ↔ presenter ownership was 1:1, the only
 cross-region `ElementName` refs were the finder popup → `SearchBox` pair (same owner),
 and only two `StaticResource` keys were shared. WPF namescopes enforce the boundary:
 each `XamlReader.Load` root owns its file's namescope, so a presenter handed its region
-root physically cannot reach another region's names (the ConfigView → settings-view
+root physically cannot reach another region's names (the settings-view composition
 seam was the in-repo precedent).
 
 ## Shape
@@ -39,7 +39,7 @@ old unreachable option views never had). Cross-region lookups (the tour) go thro
 shell root and inherits through the slots.
 
 Also in this change: `Config Options/` → `Settings/`, `*OptionView.xaml` → `*View.xaml`,
-`ConfigView.xaml` → `SettingsView.xaml` (class names deliberately untouched), and
+`ConfigView.xaml` → `SettingsView.xaml` (SettingsPresenter renamed with it; ConfigManager/AppConfig stay - they persist config.json), and
 `ViewLoader` replacing the three hand-rolled XamlReader blocks.
 
 ## Guard rails

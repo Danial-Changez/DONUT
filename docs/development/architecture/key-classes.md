@@ -93,7 +93,7 @@ All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
 | `MainViewModel` | Shell: OpenSettings/CloseSettings + OpenTour/CloseTour commands, window chrome commands, IsSettingsOpen, IsTourOpen, and the QR (`IsQrOpen`/`QrCaption`/`QrHint`) + reset (`IsResetOpen`/`ResetVm`) overlays |
 
 The settings option forms have no view-model by design — they stay on
-`ConfigPresenter`'s data-driven binder (every named control maps 1:1 to a dcu-cli arg
+`SettingsPresenter`'s data-driven binder (every named control maps 1:1 to a dcu-cli arg
 key), and settings persist in real time, so there is no Save command.
 
 ## Presenters (`src/UI/Presenters/`)
@@ -103,13 +103,13 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 
 | Class | Purpose |
 |-------|---------|
-| `MainPresenter` | Composition root: main window, lazy Config construction, the settings/QR/reset-password overlays (the reset runs `AdResetPasswordWorker` via `RunOnPool`), shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
+| `MainPresenter` | Composition root: main window, lazy Settings construction, the settings/QR/reset-password overlays (the reset runs `AdResetPasswordWorker` via `RunOnPool`), shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
 | `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list (status-grouped sort), and housekeeping. Composes the Home shell's regions (`ComposeRegions` + `FindHomeElement`, the tour's cross-namescope probe). Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |
 | `ResolutionCoordinator` | The `Resolve` job lifecycle and runspace-pool warm: start-early IP resolution via the shared `HostResolver` (fast lane by default — capped direct `ResolveProcessJob` children with a FIFO overflow queue, classic worker path as the per-fault fallback and after the 3-fault latch), verdict caching, and DC discovery/persist. When a verdict lands it re-issues queued runs/gathers through `HomePresenter`'s seam methods |
 | `FinderPresenter` | The search bar's live multi-forest AD finder (debounced in-process search on the pool via `AdSearchWorker`, one job per forest + inline unlock) and the **user Lens** (de-elevated agent lookup, partial streaming, in-memory TTL cache); raw pool jobs polled on `DispatcherTimer`s. Calls back into `HomePresenter`'s machine seams (`PrefetchIp`, `EnsureRow`, `StartInventory`, `MoveRowToTop`, `UpdateEmptyHint`) via the duck-typed back-ref |
-| `ConfigPresenter` | Hosted in the settings overlay: command selection, the data-driven option-form binder, and real-time persistence (args on edit, toggles on change) with side-effect hooks for the hotkey and startup task |
+| `SettingsPresenter` | Hosted in the settings overlay (naming rule: Settings* is the UI surface, Config/`AppConfig`/`ConfigManager` is the persisted state it edits): command selection, the data-driven option-form binder, and real-time persistence (args on edit, toggles on change) with side-effect hooks for the hotkey and startup task |
 | `KeybindRecorder` | Wraps one keybind field (display + Record + Clear): captures modifiers + one key live, commits through `HotkeyGesture.FromKeys`, Esc cancels |
 
 ### Home page regions (`src/UI/Views/Home/`)
