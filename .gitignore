@@ -12,6 +12,9 @@ res/*
 CoverageReport/*
 Screenshots/*
 *Temp*
+# ...but the temp-password generator is real source, not a temp artifact.
+!src/Models/TempPassword.psm1
+!tests/Unit/TempPassword.Tests.ps1
 
 # Configuration (User specific)
 .config

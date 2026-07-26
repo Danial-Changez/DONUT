@@ -28,6 +28,7 @@ consumes the result and exposes it to the bindings.
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |
 | `FolderDeletionPolicy` | Pure safety rule for the storage "Clear selected" action: is a scanned folder safe to clear? Blocks the volume root, the `Users` container, and protected system dirs (Windows/Program Files/ProgramData/…), with an allowlist for known caches (ccmcache, Temp, WU download, …). Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
+| `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99!` — no ambiguous glyphs, trailing special from `!#$%+=`) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
 | `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory + disk usage); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
@@ -63,7 +64,7 @@ the network I/O.
 | `InventoryService` | Prepare + parse the per-machine CIM inventory probe |
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select); builds worker args for both lanes (`PrepareResolve` classic, `PrepareResolveFast` slim child) |
-| `ActiveDirectoryService` | Live multi-forest AD search (computers + users; run on the pool via `AdSearchWorker`, one job per forest) and account unlock (on the pool) |
+| `ActiveDirectoryService` | Live multi-forest AD search (computers + users; run on the pool via `AdSearchWorker`, one job per forest), account unlock, and temp-password reset (`ResetPassword` → `InvokeReset` seam; both on the pool, password never logged) |
 | `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [Implementation notes](./implementation-notes.md#de-elevating-the-user-lens)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the per-user `DONUT-<user>` scheduled task (register / update / unregister) against the toggle |
@@ -82,12 +83,13 @@ All inherit the C# `Donut.Mvvm.ObservableObject` base unless noted; commands are
 | `HomeViewModel` | The Home page: `Machines` (bound to the virtualizing ListBox), `SelectedMachine`, and the AD finder's `SearchResults` |
 | `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress/step text, the status sort-rank, overview-strip facts, probed subtitle, the available-updates list, folders tree, Run/Gather commands |
 | `FolderNodeViewModel` | Display-ready largest-folders tree node (pure, computed per report) |
-| `SearchRowViewModel` | AD finder dropdown row — section header, "Add as a machine" action, or result, with Pick/Unlock commands (pure) |
+| `SearchRowViewModel` | AD finder dropdown row — section header, "Add as a machine" action, or result, with Pick/Unlock/Reset commands (pure) |
 | `PersonLensViewModel` / `LensDeviceViewModel` | The user Lens shown in the detail pane: person fields + a device collection, each device with a Reveal-BitLocker toggle and an Add-to-machine-list command |
 | `ToastViewModel` | One toast card (title/message/accent/IsClosing for the exit animation) |
 | `DialogViewModel` | One modal dialog's content (title/message/list/buttons + verdict commands) |
 | `LoginViewModel` | Login window content (output text + AuthCommand) |
-| `MainViewModel` | Shell: OpenSettings/CloseSettings + OpenTour/CloseTour commands, window chrome commands, IsSettingsOpen, IsTourOpen |
+| `ResetPasswordViewModel` | The temp-password reset overlay: target user, visible password field, change-at-logon flag (default on), Generate/Copy/QR/Apply commands; `SetTarget` re-arms fresh defaults, `ClearSecrets` wipes on close |
+| `MainViewModel` | Shell: OpenSettings/CloseSettings + OpenTour/CloseTour commands, window chrome commands, IsSettingsOpen, IsTourOpen, and the QR (`IsQrOpen`/`QrCaption`/`QrHint`) + reset (`IsResetOpen`/`ResetVm`) overlays |
 
 The settings option forms have no view-model by design — they stay on
 `ConfigPresenter`'s data-driven binder (every named control maps 1:1 to a dcu-cli arg
@@ -100,7 +102,7 @@ Coordinators/services: they own the engine objects and build/wire the view-model
 
 | Class | Purpose |
 |-------|---------|
-| `MainPresenter` | Composition root: main window, lazy Config construction, the settings overlay, shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
+| `MainPresenter` | Composition root: main window, lazy Config construction, the settings/QR/reset-password overlays (the reset runs `AdResetPasswordWorker` via `RunOnPool`), shell command targets, and the tray/hotkey/autostart wiring (`AttachHotkey`, `ApplyHotkey`, `ApplyStartupTask`) |
 | `AsyncJobPresenter` | Base class: pumps queued `AsyncJob`s on a `DispatcherTimer` (poll → settle) |
 | `HomePresenter` | Owns the `AsyncJob` pump, the add/scan/apply run flow, the machine rows/list (status-grouped sort), and housekeeping. Delegates the detail panel to `InventoryPresenter`, resolve/warm to `ResolutionCoordinator`, and the search-bar finder + Lens to `FinderPresenter` |
 | `InventoryPresenter` | The per-machine detail panel: header + overview render, the job log, the CIM inventory probe and WizTree storage scan (execution + completion), and machine selection. Its `Inventory` / `DiskScan` jobs are drained by `HomePresenter`'s pump and forwarded back to it |

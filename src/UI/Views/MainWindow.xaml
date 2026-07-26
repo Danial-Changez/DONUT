@@ -42,89 +42,93 @@
                     </Border.Background>
                     <Grid>
                         <Grid.RowDefinitions>
-                            <!-- Control Bar -->
-                            <RowDefinition Height="30" />
-                            <!-- Branding bar -->
-                            <RowDefinition Height="48" />
+                            <!-- Control Bar: logo + window controls (50x36 buttons) -->
+                            <RowDefinition Height="36" />
                             <!-- Content Section / Child Views -->
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <!-- Control Bar -->
-                        <StackPanel x:Name="panelControlBar"
-                                    Grid.Row="0"
-                                    Orientation="Horizontal"
-                                    FlowDirection="RightToLeft"
-                                    Background="Transparent">
-                            <Button x:Name="btnClose"
-                                    Command="{Binding CloseCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource Destructive}"
-                                    ToolTip="Close">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Data="{DynamicResource xMark}" />
-                            </Button>
-                            <Button x:Name="btnMaximize"
-                                    Command="{Binding MaximizeCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentYellow}"
-                                    ToolTip="Maximize / restore">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Data="{DynamicResource Square}" />
-                            </Button>
-                            <Button x:Name="btnMinimize"
-                                    Command="{Binding MinimizeCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource AccentBlueLight}"
-                                    ToolTip="Minimize">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Width="13"
-                                      Data="{DynamicResource Minimize}" />
-                            </Button>
-                            <!-- Docs opens the online documentation in the default browser. -->
-                            <Button x:Name="btnDocs"
-                                    Command="{Binding OpenDocsCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource Primary}"
-                                    ToolTip="Open the documentation">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Width="14"
-                                      Height="14"
-                                      Data="{DynamicResource File}" />
-                            </Button>
-                            <!-- Help replays the guided tour. -->
-                            <Button x:Name="btnHelp"
-                                    Command="{Binding OpenTourCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource Primary}"
-                                    ToolTip="Take a quick tour">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Width="14"
-                                      Height="14"
-                                      Data="{DynamicResource Help}" />
-                            </Button>
-                            <!-- Gear opens the settings overlay (the only config entry point). -->
-                            <Button x:Name="btnSettings"
-                                    Command="{Binding OpenSettingsCommand}"
-                                    Style="{DynamicResource controlButton}"
-                                    Tag="{DynamicResource Primary}"
-                                    ToolTip="Settings">
-                                <Path Style="{DynamicResource controlButtonIcon}"
-                                      Width="14"
-                                      Height="14"
-                                      Data="{DynamicResource Config}" />
-                            </Button>
-                        </StackPanel>
-                        <!-- Branding bar: the DONUT wordmark (Logo source set in
-                             MainPresenter.LoadImages). -->
-                        <Image x:Name="Logo"
-                               Grid.Row="1"
-                               Height="32"
-                               Stretch="Uniform"
-                               HorizontalAlignment="Left"
-                               VerticalAlignment="Center"
-                               Margin="35,0,0,0" />
+                        <!-- Control Bar: transparent background keeps it the DragMove surface.
+                             Buttons dock right (RTL packs them to the edge); logo fills the rest. -->
+                        <DockPanel x:Name="panelControlBar"
+                                   Grid.Row="0"
+                                   Background="Transparent"
+                                   LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Right"
+                                        Orientation="Horizontal"
+                                        FlowDirection="RightToLeft">
+                                <Button x:Name="btnClose"
+                                        Command="{Binding CloseCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource Destructive}"
+                                        ToolTip="Close">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Data="{DynamicResource xMark}" />
+                                </Button>
+                                <Button x:Name="btnMaximize"
+                                        Command="{Binding MaximizeCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource AccentYellow}"
+                                        ToolTip="Maximize / restore">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Data="{DynamicResource Square}" />
+                                </Button>
+                                <Button x:Name="btnMinimize"
+                                        Command="{Binding MinimizeCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource AccentBlueLight}"
+                                        ToolTip="Minimize">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Width="13"
+                                          Data="{DynamicResource Minimize}" />
+                                </Button>
+                                <!-- Docs opens the online documentation in the default browser. -->
+                                <Button x:Name="btnDocs"
+                                        Command="{Binding OpenDocsCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource Primary}"
+                                        ToolTip="Open the documentation">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Width="14"
+                                          Height="14"
+                                          Data="{DynamicResource File}" />
+                                </Button>
+                                <!-- Help replays the guided tour. -->
+                                <Button x:Name="btnHelp"
+                                        Command="{Binding OpenTourCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource Primary}"
+                                        ToolTip="Take a quick tour">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Width="14"
+                                          Height="14"
+                                          Data="{DynamicResource Help}" />
+                                </Button>
+                                <!-- Gear opens the settings overlay (the only config entry point). -->
+                                <Button x:Name="btnSettings"
+                                        Command="{Binding OpenSettingsCommand}"
+                                        Style="{DynamicResource controlButton}"
+                                        Tag="{DynamicResource Primary}"
+                                        ToolTip="Settings">
+                                    <Path Style="{DynamicResource controlButtonIcon}"
+                                          Width="14"
+                                          Height="14"
+                                          Data="{DynamicResource Config}" />
+                                </Button>
+                            </StackPanel>
+                            <!-- The DONUT wordmark (source set in MainPresenter.LoadImages).
+                                 Left inset matches contentMain's 25 so the logo sits on the
+                                 same column as the search bar; 20px tall so it breathes in
+                                 the 36px bar. Hit-test off for DragMove. -->
+                            <Image x:Name="Logo"
+                                   Height="20"
+                                   Stretch="Uniform"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="25,0,0,0"
+                                   IsHitTestVisible="False" />
+                        </DockPanel>
                         <ContentControl x:Name="contentMain"
-                                        Grid.Row="2"
+                                        Grid.Row="1"
                                         Margin="25" />
                     </Grid>
                 </Border>
@@ -158,18 +162,20 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <!-- Header: the title and close sit on one row, pinned above the scroll. -->
+                    <!-- Header (popup chrome contract): 48px full-bleed row, X flush in the
+                         card corner (rounded-TR pad), title centered beside it with top air. -->
                     <Grid Grid.Row="0"
-                          Margin="20,14,12,0">
+                          Height="48">
                         <TextBlock Text="Settings"
                                    Style="{DynamicResource TextPaneTitle}"
                                    VerticalAlignment="Center"
-                                   HorizontalAlignment="Left" />
-                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
+                                   HorizontalAlignment="Left"
+                                   Margin="24,0,56,0" />
                         <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
                                 Height="36"
                                 Command="{Binding CloseSettingsCommand}"
-                                Style="{DynamicResource controlButton}"
+                                Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
@@ -178,9 +184,237 @@
                     </Grid>
                     <ScrollViewer Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
-                                  Margin="20,12,20,20">
+                                  Margin="24,8,24,20">
                         <ContentControl x:Name="settingsContent" />
                     </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+        <!-- Reset-password overlay: same non-modal dim + centered card idiom. Sits BEFORE
+             qrOverlay so the password QR pops on top of this card, like BitLocker's. -->
+        <Grid x:Name="resetOverlay"
+              Visibility="{Binding IsResetOpen, Converter={StaticResource BoolToVis}}">
+            <Grid.InputBindings>
+                <KeyBinding Key="Escape" Command="{Binding CloseResetCommand}" />
+            </Grid.InputBindings>
+            <!-- Dim backdrop, a sibling BEHIND the card so card clicks don't bubble here. -->
+            <Border Background="{DynamicResource DimBackdrop}">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick" Command="{Binding CloseResetCommand}" />
+                </Border.InputBindings>
+            </Border>
+            <Border x:Name="resetCard"
+                    Width="440"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="10"
+                    Focusable="True"
+                    Background="{DynamicResource PrimaryBackground}"
+                    BorderBrush="{DynamicResource PanelBorder}"
+                    BorderThickness="1">
+                <!-- Modal anatomy on the DialogWindow recipe: full-bleed close bar whose
+                     title names the target, UPN/SAM tiles side by side (the person-fields
+                     MicroLabel idiom), field + icon utilities, checkbox, then a footer
+                     pairing Generate with the destructive primary. 24px content gutters. -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- Header: one 48px row - the X keeps its flush 50x36 corner pad
+                         (pinned Top), while the title centers in the taller row so it
+                         clears the card's top edge instead of hugging it. -->
+                    <Grid Grid.Row="0"
+                          Height="48">
+                        <TextBlock Style="{DynamicResource TextPaneTitle}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="24,0,56,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ResetVm.DisplayName}"><Run Text="Reset password " /><Run Text="{Binding ResetVm.DisplayName, Mode=OneWay, StringFormat='({0})'}"
+                                 FontWeight="Normal"
+                                 Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
+                        <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Height="36"
+                                Command="{Binding CloseResetCommand}"
+                                Style="{DynamicResource controlButtonCardClose}"
+                                Tag="{DynamicResource Destructive}"
+                                ToolTip="Close">
+                            <Path Style="{DynamicResource controlButtonIcon}"
+                                  Data="{DynamicResource xMark}" />
+                        </Button>
+                    </Grid>
+                    <!-- Target identifiers: UPN and SAM side by side on the shared Card
+                         recipe (same scheme as the home stat cards), each the
+                         person-fields pairing - MicroLabel grey over a brighter value. -->
+                    <Grid Grid.Row="1"
+                          Margin="24,6,24,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0"
+                                Margin="0,0,6,0"
+                                Style="{DynamicResource Card}"
+                                Padding="12,8">
+                            <StackPanel>
+                                <TextBlock Text="UPN"
+                                           Style="{DynamicResource MicroLabel}" />
+                                <TextBox Style="{DynamicResource SelectableText}"
+                                         Text="{Binding ResetVm.TargetUpn, Mode=OneWay}"
+                                         ToolTip="{Binding ResetVm.TargetUpn}"
+                                         FontFamily="{DynamicResource FontMono}"
+                                         FontSize="12"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
+                                         Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1"
+                                Margin="6,0,0,0"
+                                Style="{DynamicResource Card}"
+                                Padding="12,8">
+                            <StackPanel>
+                                <TextBlock Text="SAM"
+                                           Style="{DynamicResource MicroLabel}" />
+                                <TextBox Style="{DynamicResource SelectableText}"
+                                         Text="{Binding ResetVm.TargetSam, Mode=OneWay}"
+                                         ToolTip="{Binding ResetVm.TargetSam}"
+                                         FontFamily="{DynamicResource FontMono}"
+                                         FontSize="12"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
+                                         Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <!-- Temp password: the field with Copy/QR icon utilities beside it -
+                         they wake once a password exists (Progressive Disclosure,
+                         mirroring the BitLocker reveal). -->
+                    <StackPanel Grid.Row="2"
+                                Margin="24,16,24,0">
+                        <TextBlock Text="TEMPORARY PASSWORD"
+                                   Style="{DynamicResource MicroLabel}"
+                                   Margin="0,0,0,6" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Grid.Column="0">
+                                <TextBox x:Name="resetPasswordBox"
+                                         Style="{DynamicResource ModernTextBox}"
+                                         FontFamily="{DynamicResource FontMono}"
+                                         Margin="0"
+                                         Text="{Binding ResetVm.Password, UpdateSourceTrigger=PropertyChanged}" />
+                                <!-- Watermark clears on focus (not just on text) - it is a
+                                     sibling overlay, so the caret would otherwise sit
+                                     visibly inside the ghost text while typing begins. -->
+                                <TextBlock Text="Type a password, or generate one below"
+                                           IsHitTestVisible="False"
+                                           VerticalAlignment="Center"
+                                           Margin="11,0,0,0"
+                                           FontFamily="{DynamicResource FontSans}"
+                                           FontSize="12.5"
+                                           Foreground="{DynamicResource BodyTextPrimary}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding Text, ElementName=resetPasswordBox}" Value="" />
+                                                        <Condition Binding="{Binding IsKeyboardFocused, ElementName=resetPasswordBox}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                            <!-- Wrapped so the enable gate doesn't restyle the themed buttons
+                                 (runtime DynamicResource styles can't take BasedOn);
+                                 tooltips stay on while disabled to explain the gate. -->
+                            <ContentControl Grid.Column="1"
+                                            Margin="6,0,0,0"
+                                            ToolTipService.ShowOnDisabled="True">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=resetPasswordBox}" Value="">
+                                                <Setter Property="IsEnabled" Value="False" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                                <Button Command="{Binding ResetVm.CopyCommand}"
+                                        Style="{DynamicResource ButtonSecondary}"
+                                        Width="36"
+                                        Height="32"
+                                        Padding="0"
+                                        ToolTip="Copy the temporary password">
+                                    <Path Data="{DynamicResource Copy}"
+                                          Fill="{DynamicResource SecondaryForeground}"
+                                          Width="13"
+                                          Height="13"
+                                          Stretch="Uniform" />
+                                </Button>
+                            </ContentControl>
+                            <ContentControl Grid.Column="2"
+                                            Margin="6,0,0,0"
+                                            ToolTipService.ShowOnDisabled="True">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=resetPasswordBox}" Value="">
+                                                <Setter Property="IsEnabled" Value="False" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                                <Button Command="{Binding ResetVm.ShowQrCommand}"
+                                        Style="{DynamicResource ButtonSecondary}"
+                                        Width="36"
+                                        Height="32"
+                                        Padding="0"
+                                        ToolTip="Show a QR code of the temporary password">
+                                    <Path Data="{DynamicResource QrCode}"
+                                          Fill="{DynamicResource SecondaryForeground}"
+                                          Width="14"
+                                          Height="14"
+                                          Stretch="Uniform" />
+                                </Button>
+                            </ContentControl>
+                        </Grid>
+                    </StackPanel>
+                    <!-- Good Defaults: a temp password should force a change at next logon. -->
+                    <CheckBox Grid.Row="3"
+                              Style="{DynamicResource ModernCheckBox}"
+                              IsChecked="{Binding ResetVm.ChangeAtLogon, Mode=TwoWay}"
+                              Margin="24,16,24,0"
+                              Content="Require password change at next logon" />
+                    <!-- Footer pairs the flow: Generate on the left feeds the destructive
+                         primary on the right. X / Esc / backdrop close the card. -->
+                    <Grid Grid.Row="4"
+                          Margin="24,20,24,20">
+                        <Button Content="Generate"
+                                Command="{Binding ResetVm.GenerateCommand}"
+                                Style="{DynamicResource ButtonSecondary}"
+                                HorizontalAlignment="Left"
+                                Height="36"
+                                MinWidth="96"
+                                ToolTip="Generate a strong phone-readable password" />
+                        <Button Content="Reset password"
+                                Command="{Binding ResetVm.ApplyCommand}"
+                                Style="{DynamicResource ButtonTintDestructive}"
+                                HorizontalAlignment="Right"
+                                Height="36"
+                                MinWidth="120" />
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>
@@ -206,26 +440,28 @@
                     Background="{DynamicResource PrimaryBackground}"
                     BorderBrush="{DynamicResource PanelBorder}"
                     BorderThickness="1">
-                <Grid Margin="20,14,20,20">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Header: caption + close, mirroring the settings card. -->
-                    <Grid Grid.Row="0">
+                    <!-- Header (popup chrome contract): X flush in the corner; MinHeight so
+                         a long wrapped caption can grow the row without moving the X. -->
+                    <Grid Grid.Row="0"
+                          MinHeight="48">
                         <TextBlock Text="{Binding QrCaption}"
+                                   ToolTip="{Binding QrCaption}"
                                    Style="{DynamicResource TextSubtitle}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
-                                   Margin="0,0,40,0" />
-                        <!-- Same footprint as the title-bar close (50x36) so hover reads alike. -->
+                                   Margin="24,10,56,10" />
                         <Button HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 Height="36"
                                 Command="{Binding CloseQrCommand}"
-                                Style="{DynamicResource controlButton}"
+                                Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
                                 ToolTip="Close">
                             <Path Style="{DynamicResource controlButtonIcon}"
@@ -235,7 +471,7 @@
                     <!-- Inverted themed QR (violet-300 modules, transparent back) blending
                          straight into the card - no plate. The 12px inset is the quiet zone. -->
                     <Border Grid.Row="1"
-                            Margin="0,14,0,0"
+                            Margin="24,4,24,0"
                             Padding="12"
                             HorizontalAlignment="Center">
                         <Image Source="{Binding QrImage}"
@@ -244,9 +480,11 @@
                                Stretch="Uniform"
                                SnapsToDevicePixels="True" />
                     </Border>
+                    <!-- Hint varies with the payload (recovery key vs temp password);
+                         MainPresenter.ShowQr sets it alongside the caption. -->
                     <TextBlock Grid.Row="2"
-                               Margin="0,12,0,0"
-                               Text="Scan to read the recovery key, then close this."
+                               Margin="24,12,24,20"
+                               Text="{Binding QrHint}"
                                FontFamily="{DynamicResource FontSans}"
                                FontSize="11"
                                TextAlignment="Center"

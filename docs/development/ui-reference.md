@@ -14,6 +14,17 @@ neutral + violet-600 palette and shadcn button variants defined in `src/UI/Style
 (`UIColors.xaml`, `ButtonStyles.xaml`, `ModernControls.xaml`, `Tokens.xaml`). Patterns decide
 *behaviour and structure*; the Arcane tokens decide *look*.
 
+**Reference stack, in priority order:**
+
+1. **ui-patterns.com** — behaviour and structure (which pattern, when).
+2. **Arcane / shadcn tokens** (`src/UI/Styles`) — look: palette, radii, type tiers, button
+   variants. The primary styling authority; the rest of the UI follows it.
+3. **Fluent 2** (<https://fluent2.microsoft.design>) — *secondary*, for what the first two
+   are silent on: spacing rhythm, label/value hierarchy, dialog anatomy, window-chrome
+   conventions, hit-target sizes. When composing any new surface, sanity-check it against
+   Fluent's metrics *before* review — breathing room and hierarchy misses should be caught
+   here, not by a human looking at a screenshot.
+
 ## Patterns applied so far
 
 | Area | Pattern | Notes |
@@ -29,6 +40,8 @@ neutral + violet-600 palette and shadcn button variants defined in `src/UI/Style
 | Debug-logging toggle (Settings → General → DIAGNOSTICS) | **Good Defaults** | Verbose `[DEBUG]` logging defaults **off** — the pattern's "pre-select what most users would choose" (daily use wants a readable log; failures still log at WARN/ERROR). The override is as effortless as the default (the pattern's other half): one `ModernToggleSwitch` flip applies live — no restart, workers included — or `Start-Donut -DebugLog` for a session-only force-on that never touches the saved setting. The catalogue has **no** settings-organization pattern (interaction-focused), so the row follows the app's own settings convention: its own `SettingsSectionLabel` card ("DIAGNOSTICS"), toggle + label row identical to STARTUP & TRAY. |
 | Confirmation / alert modal (`DialogWindow`) | **Modal Windows** | One shared modal serves confirm / alert / update-prompt. Minimal chrome per the pattern's escape guidance: an X top-right **and** Esc, **no minimize** (you don't minimise a modal). Left-aligned title (`TextPaneTitle`) over a muted message; list items render as subtle mono cards, not centred plain text. Actions sit bottom-right (secondary then primary). The primary label is **action-specific** ("Clear" / "Apply" / "Unlock", never a generic "Confirm") — the pattern's "match the button text to the title" — and every call site passes the 5-arg `ShowConfirmation` overload. Buttons use the app's **tint** variants, not the heavier solid fills, to match the arcane action buttons (Run/Add): the primary is `ButtonTintPrimary`, or `ButtonTintDestructive` (red tint) for irreversible actions — folder clears **and both apply-updates confirms** (BIOS/firmware installs don't roll back). MVVM (matching the app): the presenter *builds* the VM, resolving the primary button's Style onto `DialogViewModel.PrimaryStyle` (the same presenter-resolves / VM-holds / view-binds pattern as `HostViewModel.ChipBackground`), and the view **binds** `Button.Style="{Binding PrimaryStyle}"` — no `FindName` style-poking. The presenter still does the imperative shell work (load window, `ShowDialog`, wire X/Esc/drag), which the architecture assigns to presenters even under MVVM. |
 | Truncatable text (hostnames, paths, names, versions) | **Progressive Disclosure** (hover reveals the rest) | Single-line variable-length text either trims with `TextTrimming="CharacterEllipsis"` (TextBlocks) or clips (the `SelectableText` TextBoxes — WPF TextBoxes have no trimming), and in both cases carries a `ToolTip` bound to the same value so the full text is one hover away. Copy-valuable values (hostname, service tag, person fields) stay `SelectableText` — selectability is why they are TextBoxes at all. |
+| Title bar (logo + window controls) | **Reduction** | The 48px branding row is gone: the wordmark sits left in a single 36px control bar (LoginWindow's DockPanel idiom - buttons dock right in an RTL StackPanel, the logo is the LTR fill child). The logo's left inset matches the content margin (25; Login's matches its 16) so it sits on the same column as the search bar instead of hugging the corner, and at 20px tall it keeps visible air above and below in the 36px bar. The logo is passive chrome (`IsHitTestVisible="False"`), so the whole bar stays the DragMove surface. At 36px the title-bar close is literally 50x36 - the footprint the overlay/dialog closes already mirror. |
+| Temp-password reset overlay | **Modal Windows** chrome + **Input Prompt** + **Input Feedback** + **Good Defaults** + **Progressive Disclosure** | A finder user row's grey `Reset…` (`ButtonSecondary` - one tint per row; Unlock keeps it) opens a settings/QR-idiom overlay card on the standard modal anatomy (fixed header / body / two-CTA footer): a **48px header row** where the X keeps its flush 50x36 corner pad pinned Top (`controlButtonCardClose` - the controlButton pad with its top-right rounded to the card radius, so overlay closes match the title-bar/dialog treatment instead of floating inside the gutter) and the **title centers beside it** with clear top air, **naming the target** ("Reset password *(Name)*", name in the tertiary tone, ellipsis + tooltip). Body: the UPN and SAM as **two side-by-side tiles on the shared `Card` recipe** (they hold data, so they wear the same scheme as the home stat cards - `SurfaceMuted` is reserved for the dialog's transient list rows), each the person-fields pairing (MicroLabel grey over a brighter `TitleTextPrimary` selectable mono value; label and value differ in colour, not just size; the home domain stays off the card - the worker still targets it, the UPN already implies it), then the watermarked password field (mono; ModernTextBox `Tag='error'` red border + warning toast under 8 chars; the watermark clears on **focus**, not just on text - as a sibling overlay it can't share the caret's layout path, so the caret would otherwise sit inside the ghost text) with **Copy/QR icon buttons** (Font Awesome free `Copy`/`QrCode` geometries in Icons.xaml) attached beside it - **disabled until a password exists** (Progressive Disclosure; the gate wraps them in a `ContentControl` DataTrigger because the runtime DynamicResource button styles can't take `BasedOn`; `ToolTipService.ShowOnDisabled` keeps the hint alive), then the pre-checked change-at-logon checkbox (Good Defaults). Footer pairs the flow: **Generate left**, the action-specific `ButtonTintDestructive` "Reset password" right (discarding the current password is irreversible); no Close button - X/Esc/backdrop already close, per the modal chrome rule. QR pops the shared `qrOverlay`, which sits after `resetOverlay` in z-order and hands focus back on close per the Esc discipline. 24px content gutters, footer sizes 36px/MinWidth 96. Success toasts and keeps the card open (the operator still hands the password over); closing wipes the secret. |
 | QR overlay (BitLocker recovery key) | *(no ui-patterns entry — hardware constraint decides)* | The QR renders **inverted by choice**: violet-300 modules (`QrModuleColor`) on a transparent background, blending straight into the dark card (~10:1 contrast) with the 12px inset as the quiet zone — no light plate. **Field-gated on the hardware scanner**: the BitLocker workflow uses a dedicated laser/imager scanner, and older 2D imagers often can't decode inverse QR — if it fails the scan test, revert to dark-on-light (recipe in `UIColors.xaml` at the `QrModule*` keys) rather than tweaking colours. Phone cameras read either. |
 | Type/spacing tokens (`Tokens.xaml`, `StatusStyles.xaml`) | *(visual language, not a ui-patterns entry)* | Text scale: `TextPaneTitle` (18/Bold — pane, overlay, and dialog titles) > `TextTitle` (16) > `TextSubtitle` (14) > `TextBody` (13) > `TextBodyMuted` (12.5) > `TextMono` (12); stat tiles use `StatValue` + `MicroLabel`. Status badges are the 5-colour `Badge*` family (one recipe: rounded 8.4, tinted fill, 11px semibold text) — the reboot warning uses `BadgeAmber`, never a hand-rolled amber row. Radii: 10 = cards (incl. terminal + device cards), 8.4 = controls/chips/badges, 7 = dropdown rows, 6 = small chips. Glyphs pin `FontSymbol` so they never render as tofu. New UI adopts these tokens instead of restating font/radius values inline. |
 
@@ -54,8 +67,28 @@ shadcn button variants in `src/UI/Styles/ButtonStyles.xaml`. The rule we follow:
   card: `Add` (the row's action) is the one tint; `Reveal key`/`QR` are grey utilities.
 - **Chrome is neutral.** Window and popup borders are the `PanelBorder` hairline — the old
   violet gradient ramp was ornament (Reduction: it competed with status colour and marked
-  nothing). Overlay/dialog close buttons share the title-bar close's 50x36 footprint so the
-  hover pad reads identically everywhere.
+  nothing). Popup close buttons follow the *Popup chrome contract* below.
+
+## Popup chrome contract
+
+Every popup — the modal `DialogWindow` (apply-updates / disk-clear confirms, alerts, the
+update prompt) and the shell overlay cards (settings, QR, reset) — shares one chrome:
+
+- **X, always, flush in the top-right corner** with the title-bar close's 50x36 pad:
+  `controlButton` (square pad) on square windows, `controlButtonCardClose` (top-right
+  corner rounded to the card radius) on radius-10 cards. Never inset into the gutter.
+- **Corner radius has two tiers:** top-level windows are `CornerRadius="0"` (Win11's DWM
+  rounds the outer frame); in-window overlay cards are `RadiusCard` (10).
+- **Header is one 48px row** (`MinHeight` where a dynamic caption may wrap, e.g. the QR
+  card): the title sits beside the X, vertically centered with clear top air, `TextPaneTitle`
+  at a 24px left inset, single-line with ellipsis + tooltip when the text is dynamic; the X
+  pins `Top`. On `DialogWindow` this row doubles as the drag region.
+- **Content gutters are 24px** inside every popup.
+- **Footers hold decisions only** — an action-named primary and a verdict secondary
+  (`Cancel` / `Later`; `OK` alone on alerts). A dismiss-only "Close" button is banned:
+  X + Esc (+ backdrop click on overlays) already dismiss.
+- Esc/backdrop behaviour per the *Overlay Esc discipline* note; the guided tour is the
+  documented exception (no X, inert backdrop, Skip/Esc exit).
 - **One tint per row, and it marks the row's primary action.** `Run` = `ButtonTintSuccess`,
   `Add` = `ButtonTintPrimary`, `Unlock` (a locked search row's one action) =
   `ButtonTintPrimary`, `Clear selected` = `ButtonTintDestructive`. `ButtonOutline` is
@@ -70,5 +103,15 @@ shadcn button variants in `src/UI/Styles/ButtonStyles.xaml`. The rule we follow:
   also suggests highlighting the matched substring; not implemented — revisit if rows get
   hard to scan at real fleet sizes.)
 - Match the treatment to the task; don't over-design utilitarian surfaces.
+- **Spacing & hierarchy defaults** (apply automatically, per the Fluent 2 layer):
+  a surface's title never hugs its top edge — on overlay cards make the header row
+  taller than the close pad (48px row, X pinned Top with its flush 50x36 corner pad,
+  title vertically centered) so title and X share a row *and* the title gets top air;
+  a label and its value must differ in **colour, not just size** (MicroLabel grey over
+  a `TitleTextPrimary` value — the person-fields recipe); data-holding tiles wear the
+  shared `Card` recipe, `SurfaceMuted` is only for a dialog's transient list rows;
+  brand/chrome elements align to the content column (the logo shares contentMain's
+  25px inset), and anything inside a fixed-height bar keeps visible air above and
+  below (the 20px wordmark in the 36px bar).
 - **Overlay Esc discipline**: an overlay's Esc `KeyBinding` only fires if focus is inside it —
   every overlay (settings, QR, tour) focuses its card/callout on show.

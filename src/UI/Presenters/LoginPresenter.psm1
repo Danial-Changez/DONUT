@@ -100,6 +100,15 @@ class LoginPresenter {
             }
         }
 
+        $logoPath = Join-Path $assetsPath "logo yellow arrow.png"
+        if (Test-Path $logoPath) {
+            $logo = $this.LoginWindow.FindName("LoginLogo")
+            if ($logo) {
+                $uri = [Uri]::new($logoPath)
+                $logo.Source = [System.Windows.Media.Imaging.BitmapImage]::new($uri)
+            }
+        }
+
         $ghPath = Join-Path $assetsPath "GitHub.png"
         if (Test-Path $ghPath) {
             $btn = $this.LoginWindow.FindName("btnGitHubAuth")

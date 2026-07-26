@@ -48,6 +48,9 @@ class FinderPresenter {
     # Scriptblock ($payload, $caption) set by MainPresenter to pop the shell's QR overlay;
     # null until wired, so the QR button no-ops on the dev graph before the shell exists.
     [object] $OnShowQr
+    # Scriptblock ($result) set by MainPresenter to open the reset-password overlay;
+    # same null-until-wired discipline as OnShowQr.
+    [object] $OnShowReset
     [TextBox] $SearchBar               # the dual-use GoogleSearchBar (finder wiring only)
 
     # AD live-search (search-bar dropdown: computers + locked-out users)
@@ -418,6 +421,10 @@ class FinderPresenter {
                     $unlock = { param($p) $presenter.OnUnlockUser($u) }.GetNewClosure()
                     $vm.UnlockCommand = [RelayCommand]::new([System.Action[object]]$unlock)
                 }
+                if ($vm.CanReset) {
+                    $reset = { param($p) $presenter.OnResetPassword($u) }.GetNewClosure()
+                    $vm.ResetCommand = [RelayCommand]::new([System.Action[object]]$reset)
+                }
                 $items.Add($vm)
             }
         }
@@ -445,6 +452,13 @@ class FinderPresenter {
         $this.SuppressSearch = $false
         # Start-early: a picked computer is about to be run - warm its IP now.
         $this.Home.Resolution.PrefetchIp($name)
+    }
+
+    # User row's Reset action: hand the row to the shell's reset-password overlay
+    # (MainPresenter owns the card, the pool job, and the toasts).
+    [void] OnResetPassword([object]$r) {
+        $this.CloseSearchPopup()
+        if ($null -ne $r -and $this.OnShowReset) { & $this.OnShowReset $r }
     }
 
     # Locked user chosen: confirm, unlock against its home domain, toast the result.

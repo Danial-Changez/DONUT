@@ -2,6 +2,7 @@ using namespace System.Windows
 using namespace System.Windows.Threading
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\HotkeyGesture.psm1"
+using module "..\..\Models\TempPassword.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
@@ -17,6 +18,7 @@ using module ".\TourPresenter.psm1"
 using module ".\TrayPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\MainViewModel.psm1"
+using module "..\ViewModels\ResetPasswordViewModel.psm1"
 
 <#
 .SYNOPSIS
@@ -25,7 +27,8 @@ using module "..\ViewModels\MainViewModel.psm1"
 .DESCRIPTION
     Builds and shows MainWindow, hosts the Home page, opens the Config view in the
     settings overlay on demand, and constructs the Home / Config presenters plus the
-    shared ToastService. Applies the merged XAML resources to the window.
+    shared ToastService. Applies the merged XAML resources to the window. Also owns
+    the shell overlays: QR (BitLocker keys + temp passwords) and reset-password.
 #>
 class MainPresenter {
     [AppConfig] $Config
@@ -43,6 +46,7 @@ class MainPresenter {
     [ResourceService] $Resources
     [ToastService] $ToastService
     [MainViewModel] $MainVm
+    [ResetPasswordViewModel] $ResetVm
 
     # Set true before a real exit (tray "Exit") so the close-to-tray Closing hook
     # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
@@ -172,6 +176,25 @@ class MainPresenter {
         }.GetNewClosure()
         if ($this.HomePresenter -and $this.HomePresenter.Finder) {
             $this.HomePresenter.Finder.OnShowQr = $showQr
+        }
+        # Reset-password overlay: built once; the finder's Reset action arms + opens it.
+        $this.ResetVm = [ResetPasswordViewModel]::new()
+        $this.MainVm.ResetVm = $this.ResetVm
+        $closeReset = { param($p) $presenter.CloseReset() }.GetNewClosure()
+        $this.MainVm.CloseResetCommand = [RelayCommand]::new([System.Action[object]]$closeReset)
+        $generate = { param($p) $presenter.OnGeneratePassword() }.GetNewClosure()
+        $this.ResetVm.GenerateCommand = [RelayCommand]::new([System.Action[object]]$generate)
+        $copyPw = { param($p) $presenter.OnCopyPassword() }.GetNewClosure()
+        $this.ResetVm.CopyCommand = [RelayCommand]::new([System.Action[object]]$copyPw)
+        $pwQr = { param($p) $presenter.OnShowPasswordQr() }.GetNewClosure()
+        $this.ResetVm.ShowQrCommand = [RelayCommand]::new([System.Action[object]]$pwQr)
+        $applyReset = { param($p) $presenter.OnApplyReset() }.GetNewClosure()
+        $canApply = { param($p) -not $presenter.ResetVm.IsBusy }.GetNewClosure()
+        $this.ResetVm.ApplyCommand = [RelayCommand]::new(
+            [System.Action[object]]$applyReset, [System.Func[object, bool]]$canApply)
+        $showReset = { param($r) $presenter.ShowReset($r) }.GetNewClosure()
+        if ($this.HomePresenter -and $this.HomePresenter.Finder) {
+            $this.HomePresenter.Finder.OnShowReset = $showReset
         }
         # Guided tour: the ? button replays it; Esc closes it.
         $this.Tour = [TourPresenter]::new(
@@ -507,9 +530,16 @@ class MainPresenter {
         else { $this.OpenSettings() }
     }
 
-    # Pops the QR overlay for a BitLocker recovery key, rendered to an in-memory image only
-    # (never written to disk). A render failure toasts instead of opening an empty card.
+    # Pops the QR overlay for a BitLocker recovery key (the Lens path keeps this
+    # 2-arg shape; the caption prefix and hint stay its own).
     [void] ShowQr([string]$payload, [string]$caption) {
+        $this.ShowQr($payload, "BitLocker recovery key - $caption",
+            'Scan to read the recovery key, then close this.')
+    }
+
+    # Pops the QR overlay for any secret, rendered to an in-memory image only (never
+    # written to disk). A render failure toasts instead of opening an empty card.
+    [void] ShowQr([string]$payload, [string]$caption, [string]$hint) {
         if ([string]::IsNullOrWhiteSpace($payload)) { return }
         $img = $this.BuildQrImage($payload)
         if ($null -eq $img) {
@@ -519,7 +549,8 @@ class MainPresenter {
             return
         }
         $this.MainVm.Set('QrImage', $img)
-        $this.MainVm.Set('QrCaption', "BitLocker recovery key - $caption")
+        $this.MainVm.Set('QrCaption', $caption)
+        $this.MainVm.Set('QrHint', $hint)
         $this.MainVm.Set('IsQrOpen', $true)
         # Focus the card so the overlay's Esc key binding is in scope (settings idiom).
         $qrCard = $this.Window.FindName('qrCard')
@@ -528,6 +559,109 @@ class MainPresenter {
 
     [void] CloseQr() {
         if ($this.MainVm) { $this.MainVm.Set('IsQrOpen', $false) }
+        # Hand Esc scope back to the reset card when the QR was popped over it.
+        if ($this.MainVm -and $this.MainVm.IsResetOpen) {
+            $card = $this.Window.FindName('resetCard')
+            if ($card) { [void]$card.Focus() }
+        }
+    }
+
+    # Arms and opens the reset overlay for a finder user row (the Reset action).
+    [void] ShowReset([object]$target) {
+        if ($null -eq $target -or $null -eq $this.ResetVm) { return }
+        $this.ResetVm.SetTarget($target)
+        $this.ClearResetError()
+        $this.MainVm.Set('IsResetOpen', $true)
+        # Focus the card so the overlay's Esc key binding is in scope (settings idiom).
+        $card = $this.Window.FindName('resetCard')
+        if ($card) { [void]$card.Focus() }
+    }
+
+    # Closing wipes the secret - the temp password lives only while the card is up.
+    [void] CloseReset() {
+        if ($this.ResetVm) { $this.ResetVm.ClearSecrets() }
+        $this.ClearResetError()
+        if ($this.MainVm) { $this.MainVm.Set('IsResetOpen', $false) }
+    }
+
+    hidden [void] ClearResetError() {
+        $box = $this.Window.FindName('resetPasswordBox')
+        if ($box) { $box.Tag = $null }
+    }
+
+    hidden [void] OnGeneratePassword() {
+        $this.ResetVm.Set('Password', [TempPassword]::Generate())
+        $this.ClearResetError()
+    }
+
+    hidden [void] OnCopyPassword() {
+        $vm = $this.ResetVm
+        if ([string]::IsNullOrWhiteSpace($vm.Password)) { return }
+        try {
+            Set-Clipboard -Value $vm.Password
+            if ($this.ToastService) {
+                $this.ToastService.ShowInfo('Reset password', 'Temporary password copied.')
+            }
+        }
+        catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
+    }
+
+    hidden [void] OnShowPasswordQr() {
+        $vm = $this.ResetVm
+        if ([string]::IsNullOrWhiteSpace($vm.Password)) { return }
+        $this.ShowQr($vm.Password, "Temporary password - $($vm.DisplayName)",
+            'Scan to read the temporary password, then close this.')
+    }
+
+    # Validates, then runs the reset worker on the pool. The password crosses the
+    # boundary as a SecureString and is never logged or written anywhere.
+    hidden [void] OnApplyReset() {
+        $vm = $this.ResetVm
+        if ($null -eq $vm -or $vm.IsBusy) { return }
+        $plain = ([string]$vm.Password).Trim()
+        if ($plain.Length -lt 8) {
+            $box = $this.Window.FindName('resetPasswordBox')
+            if ($box) { $box.Tag = 'error' }
+            if ($this.ToastService) {
+                $this.ToastService.ShowWarning('Reset password',
+                    'Use at least 8 characters (or Generate one).')
+            }
+            return
+        }
+        $this.ClearResetError()
+        $vm.Set('IsBusy', $true)
+        if ($vm.ApplyCommand) { $vm.ApplyCommand.RaiseCanExecuteChanged() }
+
+        $workerPath = Join-Path $this.Config.SourceRoot 'Scripts\AdResetPasswordWorker.ps1'
+        $presenter = $this
+        $onDone = { param($result) $presenter.OnResetDone($result) }.GetNewClosure()
+        $this.RunOnPool($workerPath, @{
+                Sam           = $vm.TargetSam
+                Domain        = $vm.TargetDomain
+                Password      = [TempPassword]::ToSecure($plain)
+                ChangeAtLogon = [bool]$vm.ChangeAtLogon
+            }, $onDone)
+        if ($this.ToastService) {
+            $this.ToastService.ShowInfo('Reset password', "Resetting $($vm.TargetSam)...")
+        }
+    }
+
+    # Success keeps the overlay open - the operator still has to hand the password
+    # over (copy / QR / read out); closing it is what wipes the secret.
+    hidden [void] OnResetDone([object]$result) {
+        $vm = $this.ResetVm
+        $vm.Set('IsBusy', $false)
+        if ($vm.ApplyCommand) { $vm.ApplyCommand.RaiseCanExecuteChanged() }
+        $last = @($result)[-1]
+        if ($null -ne $last -and [bool]$last) {
+            $flag = $(if ($vm.ChangeAtLogon) { ' Change required at next logon.' } else { '' })
+            $this.ToastService.ShowSuccess('Reset password',
+                "Password reset for $($vm.TargetSam).$flag")
+        }
+        else {
+            $this.ToastService.ShowError('Reset password',
+                "Could not reset $($vm.TargetSam) - see the log for details.")
+        }
     }
 
     # Resolves a UIColors Color key to RGBA bytes for the QR encoder ($fallback when absent).

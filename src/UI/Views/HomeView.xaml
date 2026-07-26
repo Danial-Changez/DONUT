@@ -174,6 +174,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
                       <!-- "+" badge for the Add-as-a-machine action row only -->
                       <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6" Margin="0,0,10,0"
@@ -191,9 +192,16 @@
                                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                       </StackPanel>
+                      <!-- Grey utility (one tint per row - Unlock keeps it when shown):
+                           opens the shell's temp-password reset overlay. -->
+                      <Button Grid.Column="2" Content="Reset..." Command="{Binding ResetCommand}"
+                              Style="{DynamicResource ButtonSecondary}" Height="32" FontSize="11"
+                              VerticalAlignment="Center" Margin="0,0,6,0"
+                              ToolTip="Reset this account's password to a temporary one"
+                              Visibility="{Binding CanReset, Converter={StaticResource BoolToVis}}" />
                       <!-- The row's one action earns the tint (colour hierarchy); Outline is
                            reserved for low-emphasis navigation (tour Back). -->
-                      <Button Grid.Column="2" Content="Unlock" Command="{Binding UnlockCommand}"
+                      <Button Grid.Column="3" Content="Unlock" Command="{Binding UnlockCommand}"
                               Style="{DynamicResource ButtonTintPrimary}" Height="32" FontSize="11"
                               VerticalAlignment="Center"
                               ToolTip="Unlock this locked-out account"
