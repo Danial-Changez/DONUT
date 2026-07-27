@@ -12,6 +12,11 @@ Drop `psexec.exe` (or `PsExec64.exe`) into this folder to bundle it. Used two wa
   resolves the SYSTEM-lane task action from this folder **first**, then `PATH`, and
   bakes the absolute path into the task (SYSTEM's logon `PATH` may not have it).
 
+Like `wiztree64.exe`, it embeds into `Donut.Launcher.exe` only if it is present here
+**at build time**, and extracts to `%ProgramData%\DONUT\app\src\Tools\`. Absent that,
+`FindPsExec` falls back to `PATH` (the installation guide puts PsTools in
+`System32`).
+
 ## wiztree64.exe (required for "Find big folders")
 
 The **Find big folders** action on a machine's detail panel deploys this binary to
