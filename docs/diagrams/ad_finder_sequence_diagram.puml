@@ -1,12 +1,14 @@
 @startuml ad_finder_sequence_diagram
-title Home Search Bar — Live AD Finder + Unlock
+title Home Search Bar — Live AD Finder + Unlock + Password Reset
 
 actor User
 participant "FinderPresenter" as Presenter
+participant "MainPresenter\n(reset overlay)" as Shell
 participant "DispatcherTimer\n(debounce / poll)" as Timer
 participant "AdSearchWorker.ps1\n(one per forest, on pool)" as Worker
 participant "ActiveDirectoryService" as AD
 participant "AdUnlockWorker.ps1" as Unlock
+participant "AdResetPasswordWorker.ps1" as Reset
 
 User -> Presenter: Type prefix (>= MinPrefix chars)
 activate Presenter
@@ -35,7 +37,7 @@ loop poll until every forest lands
     Timer -> Presenter: PollSearch()
     activate Presenter
     note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nrender the growing union.
-    Presenter -> User: Dropdown — COMPUTERS + USERS\n(locked users show "Unlock")
+    Presenter -> User: Dropdown — COMPUTERS + USERS\n(every user shows "Reset...";\nlocked users add "Unlock")
     deactivate Presenter
 end
 
@@ -51,5 +53,18 @@ else Unlock a locked user
     Unlock --> Presenter: (async) result
     deactivate Unlock
     Presenter -> User: Toast "Account unlocked"
+else Reset a user's password
+    User -> Presenter: Click "Reset..."
+    Presenter -> Shell: OnShowReset seam -> ShowReset(user)
+    Shell -> User: Reset overlay (type or Generate;\nCopy / QR; change-at-logon pre-checked)
+    User -> Shell: "Reset password"
+    Shell -> Reset: RunOnPool(sam, domain,\nSecureString, changeAtLogon)
+    activate Reset
+    Reset -> AD: ResetPassword(user, pwd, flag)
+    note right of AD: Set-ADAccountPassword -Reset\n+ Set-ADUser -ChangePasswordAtLogon.\nThe password is never logged.
+    AD --> Reset: success
+    Reset --> Shell: (async) result
+    deactivate Reset
+    Shell -> User: Toast; overlay stays open\n(closing wipes the secret)
 end
 @enduml

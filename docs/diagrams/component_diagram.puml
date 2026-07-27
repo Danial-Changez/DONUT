@@ -22,6 +22,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [ResolveWorker.ps1]
     [AdSearchWorker.ps1]
     [AdUnlockWorker.ps1]
+    [AdResetPasswordWorker.ps1]
     [LensLookupWorker.ps1]
     [LensAgent.ps1]
     [InstallWorker.ps1]
@@ -35,7 +36,7 @@ component "PowerShell Classes (src)" {
         [InventoryPresenter]
         [ResolutionCoordinator]
         [FinderPresenter]
-        [ConfigPresenter]
+        [SettingsPresenter]
         [KeybindRecorder]
         [LoginPresenter]
         [UpdatePresenter]
@@ -106,7 +107,8 @@ database "%LOCALAPPDATA%\\DONUT" {
 [DonutApp.ps1] ..> [MainPresenter] : initializes
 [MainPresenter] ..> [MainWindow.xaml] : manages
 [MainPresenter] ..> [HomePresenter] : creates
-[MainPresenter] ..> [ConfigPresenter] : settings overlay (lazy)
+[MainPresenter] ..> [SettingsPresenter] : settings overlay (lazy)
+[MainPresenter] ..> [AdResetPasswordWorker.ps1] : temp-password reset (pool)
 [MainPresenter] ..> [TrayPresenter] : tray icon + show/hide
 [MainPresenter] ..> [TourPresenter] : first-run guided tour
 [MainPresenter] ..> [Donut.Interop\n(HotkeyManager)] : global hotkey
@@ -122,7 +124,7 @@ database "%LOCALAPPDATA%\\DONUT" {
 [ToastService] ..> [ToastViewModel] : enqueues
 [DialogPresenter] ..> [DialogViewModel] : per-dialog content
 [DialogPresenter] ..> [DialogWindow.xaml] : shows modal
-[ConfigPresenter] ..> [KeybindRecorder] : records shortcut fields
+[SettingsPresenter] ..> [KeybindRecorder] : records shortcut fields
 [LoginPresenter] ..> [LoginViewModel] : device-flow output
 [LoginViewModel] ..> [LoginWindow.xaml] : DataContext (bindings)
 [Donut.Mvvm\n(ObservableObject + RelayCommand)] ..> [HostViewModel] : base types (all VMs)
@@ -154,11 +156,12 @@ database "%LOCALAPPDATA%\\DONUT" {
 
 [RemoteWorker.ps1] ..> [ExecutionService] : dispatches job phases (PsExec to target)
 [ActiveDirectoryService] ..> [AdUnlockWorker.ps1] : unlock account
+[ActiveDirectoryService] ..> [AdResetPasswordWorker.ps1] : reset password
 [AsyncJob] ..> [RunspaceManager] : uses pool
 [AsyncJob] ..> [WorkerProcess] : spawns child pwsh (isolation)
 [WorkerProcess] ..> [RemoteWorker.ps1] : runs as a separate process
 
-[ConfigPresenter] ..> [ConfigManager]
+[SettingsPresenter] ..> [ConfigManager]
 [ConfigManager] ..> [AppConfig]
 [ConfigManager] ..> [config/]
 
