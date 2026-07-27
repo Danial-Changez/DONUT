@@ -250,6 +250,13 @@ model.
   form coalesces to `NullLogService`, which made every job failure — start errors,
   error-stream lines, completion exceptions — invisible in `Donut.log`; a wedged scan
   took days to triage because of that silence. The 2-arg form remains for tests only.
+- **Class methods are statically checked for unassigned variables:** PowerShell only
+  raises *"Variable is not assigned in the method."* when the method actually runs, so
+  a rename that misses one interpolation loads clean and fails in the field —
+  `RegisterTask` kept saying `"$user"` after the parameter became `$triggerUser`, and
+  the startup toggle returned a `MethodInvocationException` instead of a task. The unit
+  fakes override that method, so nothing local could hit it.
+  `ClassVariableCoverage.Tests.ps1` walks every class method's AST instead.
 - **Every `AsyncJob` has a stall heartbeat:** `Poll()` logs a WARN once a job has run
   90 s without completing, then every 5 min, including the pool's free/max runspace
   count. That count is the discriminator this app's silent regressions always lacked:

@@ -40,6 +40,11 @@ class MockNetworkProbe : NetworkProbe {
   the presenter coordinators (e.g. `InventoryPresenter.Tests.ps1`,
   `ResolutionCoordinator.Tests.ps1`) with faked services and a duck-typed `$Home`
   back-ref.
+- **Static guards (`tests/Unit`, AST/text-level so they run everywhere):** whole-`src`
+  sweeps for mistakes that only surface at runtime on Windows — a class method reading
+  a variable it never assigns (`ClassVariableCoverage`), an `AsyncJob` built without a
+  logger (`AsyncJobLoggerCoverage`), a `[ProjectClass]::` used without importing its
+  module (`TypeImportCoverage`).
 - **Integration (`tests/Integration`):** remote paths (DNS failure, reverse-DNS
   mismatch, RPC 1722) against a mock/loopback target with temp UNC folders to verify
   log/report copy; the ApplyUpdates flow (confirmation/skip, clipboard list); the
