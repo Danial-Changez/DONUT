@@ -93,6 +93,22 @@ login window, settings overlay, and shell chrome all bind their own view-models.
    background jobs and timers, build the view-models, wire commands, and run the
    imperative shell work.
 
+### The launcher embeds `src\` — installed builds need a rebuild
+
+`Donut.Launcher.csproj` embeds every `.psm1`/`.ps1`/`.xaml` under `src\` (plus images,
+fonts, and the `src\Tools` binaries) as resources, and `Program.ExtractEmbeddedApp`
+self-extracts them to `%ProgramData%\DONUT\app` (SHA-256 verified per file) before
+hosting PowerShell **in-process**. So `[Environment]::ProcessPath` is
+`Donut.Launcher.exe`, and `SourceRoot` is the extracted tree — *not* your clone.
+
+:::caution
+**Editing a `.psm1` and pulling does nothing to an installed build.** The running code
+comes from the exe's embedded copy; it changes only when `Donut.Launcher.exe` is
+rebuilt and reinstalled. To test a PowerShell-side change without rebuilding, run the
+dev path (`pwsh -File src\Start-Donut.ps1`), which loads the clone directly.
+`tools\Diagnose-StartupTask.ps1` reports which build is actually extracted.
+:::
+
 ### The MVVM bases
 
 PowerShell classes cannot declare CLR events, so `INotifyPropertyChanged` cannot be
