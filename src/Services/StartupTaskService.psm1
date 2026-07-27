@@ -237,7 +237,7 @@ class StartupTaskService {
         Register-ScheduledTask -TaskName $name -Action $action `
             -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
         $lane = if ($asSystem) { ' (SYSTEM + psexec relaunch)' } else { '' }
-        $this.Logger.LogInfo("Registered startup task $name for $user$lane.")
+        $this.Logger.LogInfo("Registered startup task $name, triggered by $triggerUser's logon$lane.")
     }
 
     hidden [void] UnregisterTask([string]$name) {
