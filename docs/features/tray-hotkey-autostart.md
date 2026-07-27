@@ -33,6 +33,11 @@ launches DONUT hidden in the tray at logon, already elevated — no UAC prompt e
 morning. Turning the toggle off unregisters the task. A second launch of DONUT (from
 the Start Menu, say) just surfaces the running instance.
 
+The task is registered for the account DONUT runs as. When DONUT itself runs as
+SYSTEM (started via `psexec -s` or an RMM shell), it registers the task for the
+signed-in console user instead — SYSTEM has no logon to trigger on. If the toggle
+fails, the error toast states the actual reason.
+
 These three behaviours map to the `closeToTray`, `globalHotkey`, and
 `startWithWindows` keys in the
 [config reference](../configuration/config-reference.md), and their design rationale
