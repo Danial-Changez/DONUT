@@ -30,6 +30,23 @@ required reboot) rise to the top, then running, online, offline, and not-yet-kno
 alphabetical within its group. Acting on a machine also floats its row to the top so current
 work stays visible. **Clear** removes settled (completed) rows in one click.
 
+## Status stays live
+
+A row's online/offline state is a **verdict with a shelf life**, not a snapshot:
+
+- Any failed job whose cause is offline-class (host offline, unresolvable, connection
+  lost, timed out) — including inventory and storage probes — flips the row's verdict
+  immediately, then a background re-probe confirms it (or restores Online if the
+  failure was transient).
+- Verdicts older than the resolve TTL re-probe automatically in the background, so a
+  machine that goes offline while sitting idle in the list flips on its own — no
+  re-add or re-select needed.
+- If a re-probe itself fails (e.g. the DC is unreachable), the row shows the neutral
+  not-yet-known state rather than a stale green.
+
+The status dot follows one precedence everywhere — attention → offline → online →
+last-run colour — the same rule that orders the list.
+
 ## Empty list?
 
 The blank slate lists the three first steps (add machines, or search a person, then

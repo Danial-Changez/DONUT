@@ -228,13 +228,18 @@ alt UpdateApply Completed
   end note
 end
 alt job Failed
-  P -> R : InvalidateResolved (drop IP + PrefetchIp) — ready to reconnect/retry
+  P -> P : ReflectFailure — offline-class reasons (Offline /\nUnresolvable / ConnectionLost / TimedOut) flip the host's\nverdict + repaint the row BEFORE the retry
+  P -> R : InvalidateResolved (drop IP + PrefetchIp) — the re-probe\nconfirms the offline or self-corrects a transient
   P -> P : ShowError toast
 end
 P -> P : SettleHost -> Store.Upsert(status, updateCount, reboot)
 note over P #1F1F26
   Card state: Completed(green) / RebootRequired(yellow) /
-  ConnectionLost(amber "Unconfirmed") / Offline(grey) / Failed(red)
+  ConnectionLost(amber "Unconfirmed") / Offline(grey) / Failed(red).
+  The dot renders through ONE precedence (attention > offline >
+  online > idle, same mapper as the sort), verdicts older than the
+  resolve TTL re-probe on the 30s idle tick, and a failed re-resolve
+  paints Unknown - reachability never silently rots.
 end note
 P -> P : AfterPump -> FlushSave (coalesced 1 write/batch)
 note right of P #13291D

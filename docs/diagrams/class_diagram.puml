@@ -174,6 +174,11 @@ package "Donut.Models" #15233B {
         +{static} IsDisabledFromUac(uac): bool
     }
 
+    class TempPassword {
+        +{static} Generate(): string
+        +{static} ToSecure(value): SecureString
+    }
+
     class PersonLens {
         +Upn / Sam / DisplayName / Email: string
         +Manager / Office: string
@@ -346,6 +351,10 @@ package "Donut.Core" #102A20 {
     }
     class NullLogService extends LogService
 
+    class ViewLoader {
+        +{static} Load(sourceRoot, relativePath): object
+    }
+
     class DispatcherWatchdog {
         +Start(): void
         +Reset(): void
@@ -416,8 +425,10 @@ package "Donut.Services" #221634 {
         +Domains: string[]
         +Search(prefix): AdSearchResult[]
         +UnlockUser(user): bool
+        +ResetPassword(user, newPassword, changeAtLogon): bool
         #QueryDirectory(domain, filter, props, max): Hashtable[]
         #InvokeUnlock(sam, domain): void
+        #InvokeReset(sam, domain, newPassword, changeAtLogon): void
     }
 
     class PersonLensService {
@@ -501,7 +512,8 @@ package "Donut.UI.Presenters" #2B1A12 {
     class MainPresenter {
         -ConfigManager: ConfigManager
         -HomePresenter: HomePresenter
-        -ConfigPresenter: ConfigPresenter
+        -SettingsPresenter: SettingsPresenter
+        -ResetVm: ResetPasswordViewModel
         -Resources: ResourceService
         -TrayPresenter: TrayPresenter
         -Tour: TourPresenter
@@ -511,6 +523,8 @@ package "Donut.UI.Presenters" #2B1A12 {
         +ShowHome(): void
         +OpenSettings(): void
         +CloseSettings(): void
+        +ShowQr(payload, caption, hint): void
+        +ShowReset(target) / CloseReset(): void
         +AttachHotkey(hwnd) / ApplyHotkey(): void
         +ApplyStartupTask(): void
     }
@@ -533,6 +547,8 @@ package "Donut.UI.Presenters" #2B1A12 {
         +StartInventory(host, force): void
         +ReissueAfterResolve(host, online): void
         +MoveRowToTop(host): void
+        +FindHomeElement(name): object
+        -ComposeRegions(): void
     }
 
     class InventoryPresenter {
@@ -546,6 +562,7 @@ package "Donut.UI.Presenters" #2B1A12 {
         +RefreshInventory(host): void
         +FindBigFolders(host): void
         +CompleteDiskScan(job): void
+        -ReflectFailure(host, message): void
     }
 
     class ResolutionCoordinator {
@@ -569,16 +586,18 @@ package "Donut.UI.Presenters" #2B1A12 {
         +RunAdSearch() / PollSearch(): void
         +OnPickComputer(name): void
         +OnUnlockUser(r) / PollUnlock(): void
+        +OnResetPassword(r): void
+        +OnShowQr / OnShowReset: scriptblock
         +OnPickUser(r) / PollLens(): void
         +OnAddDeviceToList(wsid): void
         +OnAppClosing(): void
     }
 
-    class ConfigPresenter {
+    class SettingsPresenter {
         +SideEffects: hashtable
         +Initialize(): void
         +LoadCurrentConfig(): void
-        +LoadOptionView(viewName): void
+        +LoadSettingsView(viewName): void
         +PopulateFields(): void
         -WireDcuPersistence(controls): void
         -PersistToggle(key, value, sideEffect): void
@@ -683,7 +702,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
         +ApplyInventory(inv) / ApplyFolders(report): void
         +SetPercent(pct) / SetScanStep(text, pct): void
-        +SetReachability(state) / SetProbed(ip, iso): void
+        +SetReachability(state) / SetResolvedIp(ip): void
         +{static} SetPalette(palette): void
     }
 
@@ -696,9 +715,9 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
 
     class SearchRowViewModel {
-        +IsHeader / IsComputer / CanUnlock: bool
+        +IsHeader / IsComputer / CanUnlock / CanReset: bool
         +Primary / Secondary / HeaderText: string
-        +PickCommand / UnlockCommand: RelayCommand
+        +PickCommand / UnlockCommand / ResetCommand: RelayCommand
         +{static} Header(text) / FromResult(r): SearchRowViewModel
     }
 
@@ -733,11 +752,22 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +SetOutput(text): void
     }
     class MainViewModel {
-        +IsSettingsOpen: bool
-        +IsTourOpen: bool
+        +IsSettingsOpen / IsTourOpen: bool
+        +IsQrOpen / IsResetOpen: bool
+        +QrCaption / QrHint: string
+        +ResetVm: ResetPasswordViewModel
         +OpenSettingsCommand / CloseSettingsCommand: RelayCommand
         +OpenTourCommand / CloseTourCommand: RelayCommand
+        +CloseQrCommand / CloseResetCommand: RelayCommand
         +Minimize/Maximize/CloseCommand: RelayCommand
+    }
+
+    class ResetPasswordViewModel {
+        +TargetSam / TargetDomain / TargetUpn / DisplayName: string
+        +Password: string
+        +ChangeAtLogon / IsBusy: bool
+        +Generate/Copy/ShowQr/ApplyCommand: RelayCommand
+        +SetTarget(user) / ClearSecrets(): void
     }
 }
 
@@ -748,6 +778,7 @@ ObservableObject <|-- ToastViewModel
 ObservableObject <|-- DialogViewModel
 ObservableObject <|-- LoginViewModel
 ObservableObject <|-- MainViewModel
+ObservableObject <|-- ResetPasswordViewModel
 ObservableObject <|-- PersonLensViewModel
 ObservableObject <|-- LensDeviceViewModel
 
@@ -759,7 +790,11 @@ RemoteJobService <|-- DiskUsageService
 
 ' --- composition / navigation -------------------------------------------
 MainPresenter --> HomePresenter
-MainPresenter --> ConfigPresenter
+MainPresenter --> SettingsPresenter
+MainPresenter --> ResetPasswordViewModel
+MainPresenter ..> ViewLoader
+MainPresenter ..> TempPassword
+HomePresenter ..> ViewLoader
 MainPresenter --> ResourceService
 MainPresenter --> ToastService
 MainPresenter --> TrayPresenter
@@ -770,7 +805,7 @@ MainPresenter ..> StartupTaskService : via Apply-StartupTask.ps1
 TrayPresenter ..> MainPresenter : duck-typed back-ref
 TourPresenter ..> TourSteps
 TourPresenter --> ConfigManager : persists hasSeenTour
-ConfigPresenter --> KeybindRecorder
+SettingsPresenter --> KeybindRecorder
 KeybindRecorder ..> HotkeyGesture
 
 HomePresenter --> ScanService
@@ -821,7 +856,7 @@ AsyncJob ..> JobStatus
 AsyncJob ..> JobKind
 
 ConfigManager ..> AppConfig
-ConfigPresenter --> ConfigManager
+SettingsPresenter --> ConfigManager
 
 ' --- pure mappers consumed by the presenter -----------------------------
 HomePresenter ..> FleetCardStatus

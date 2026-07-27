@@ -23,7 +23,7 @@ class FakeRow {
     [MachineInventory] $AppliedInventory
     [string] $ProbedIp = $null
     [void] ApplyInventory([MachineInventory]$inv) { $this.AppliedInventory = $inv }
-    [void] SetProbed([string]$ip, [string]$iso) { $this.ProbedIp = $ip }
+    [void] SetResolvedIp([string]$ip) { $this.ProbedIp = $ip }
     [void] ApplyFolders([object]$report) {}
 }
 

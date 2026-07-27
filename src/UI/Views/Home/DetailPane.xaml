@@ -63,8 +63,9 @@
           <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
                    ToolTip="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18"
                    FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
-          <TextBox x:Name="txtDetailProbed" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.ProbedText}"
-                   ToolTip="{Binding SelectedMachine.ProbedText}" FontFamily="{DynamicResource FontSans}" FontSize="11"
+          <!-- IP only - probe freshness already shows on the machine card (Reduction). -->
+          <TextBox x:Name="txtDetailIp" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailIp}"
+                   ToolTip="{Binding SelectedMachine.DetailIp}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
         </StackPanel>
         <!-- Neutral secondary variant (not a coloured tint): these are utility actions
