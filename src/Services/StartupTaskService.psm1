@@ -14,14 +14,15 @@ using module "..\Core\LogService.psm1"
     and security IDs"):
     - DONUT already runs as the console user: a per-user task, RunLevel Highest,
       Interactive - it runs inside that user's own logon session.
-    - Anything else (SYSTEM token, or a separate admin account that never signs in
-      at the console): the task runs AS SYSTEM and relaunches DONUT into the console
-      session via psexec -s -i, reproducing the manual SYSTEM launch. A per-user task
-      cannot work here - an Interactive principal needs a session that account does
-      not have, and RunLevel Highest on a non-admin console user degrades to a
-      standard token that CreateProcess refuses against the launcher's
-      requireAdministrator manifest (ERROR_ELEVATION_REQUIRED). AD access is
-      unchanged: SYSTEM authenticates as the machine account either way.
+    - Anything else - a SYSTEM token, OR over-the-shoulder UAC (sign in as a standard
+      user, elevate DONUT with a separate admin account, both in the same session):
+      the task runs AS SYSTEM and relaunches DONUT into the console session via
+      psexec -s -i, reproducing the manual launch. A per-user task cannot work here -
+      an Interactive principal needs a logon session the admin account does not have,
+      and RunLevel Highest on a non-admin console user degrades to a standard token
+      that CreateProcess refuses against the launcher's requireAdministrator manifest
+      (ERROR_ELEVATION_REQUIRED). AD access is unchanged: SYSTEM authenticates as the
+      machine account either way.
 
 .NOTES
     The pure helpers (BuildLaunchSpec, BuildSystemSpec, ReconcileDecision,
@@ -116,6 +117,11 @@ class StartupTaskService {
         $this.LastFailure = ''
         try {
             $owner = $this.ResolveOwner()
+            # The whole feature turns on these three values; log them so a task that
+            # never fires is diagnosable from Donut.log alone.
+            $this.Logger.LogInfo(("Startup task: runs-as '{0}', signed-in console user '{1}', lane {2}." -f
+                $this.GetProcessIdentity().Name, $owner.User,
+                $(if ($owner.IsSystem) { 'SYSTEM+psexec' } else { 'per-user' })))
             if (-not $owner.User) {
                 return $this.Fail('no signed-in console user was found, so there is no logon to start DONUT at.')
             }
@@ -162,19 +168,35 @@ class StartupTaskService {
         return @{ Name = $identity.Name; IsSystem = $identity.IsSystem }
     }
 
-    # The console session's user (works from a SYSTEM token, where WindowsIdentity and
-    # $env: yield no mappable account). Win32_ComputerSystem.UserName names the CONSOLE
-    # user specifically; the explorer fallback's "first process" can be another
-    # session's when an admin account also has a desktop, which is how the trigger
-    # once got bound to an account that never logs on.
+    # WHO IS SIGNED IN to the desktop DONUT is showing on - never who DONUT runs as.
+    # Over-the-shoulder UAC (sign in as a standard user, elevate DONUT with a separate
+    # admin account) puts both in the SAME session, so the session's own explorer.exe
+    # owner is the authoritative answer; Win32_ComputerSystem.UserName is the fallback
+    # for a session-0 (SYSTEM) host, where there is no explorer to ask.
     hidden [string] GetInteractiveUser() {
+        $session = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+        $owner = $this.GetSessionOwner($session)
+        if ($owner) { return $owner }
+        $reported = $this.GetComputerSystemUser()
+        if ($reported) { return $reported }
+        return $this.GetSessionOwner($null)
+    }
+
+    hidden [string] GetComputerSystemUser() {
         $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
         if ($cs -and $cs.UserName) { return [string]$cs.UserName }
-        $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+        return $null
+    }
+
+    # explorer.exe's owner in $sessionId (any session when $null) = that desktop's user.
+    hidden [string] GetSessionOwner([object]$sessionId) {
+        $filter = "Name='explorer.exe'"
+        if ($null -ne $sessionId) { $filter += " AND SessionId=$sessionId" }
+        $explorer = Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if (-not $explorer) { return $null }
-        $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner
-        if (-not $owner.User) { return $null }
+        $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+        if (-not $owner -or -not $owner.User) { return $null }
         return "$($owner.Domain)\$($owner.User)"
     }
 

@@ -105,7 +105,14 @@ Write-Host "runs as   : $($principal.UserId)   LogonType=$($principal.LogonType)
 Write-Host "execute   : $($action.Execute)"
 Write-Host "arguments : $($action.Arguments)"
 $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
-Write-Host "console user (who actually logs on): $consoleUser"
+Write-Host "signed-in user (who actually logs on): $consoleUser"
+# Desktop owners per session: under over-the-shoulder UAC the elevated DONUT shares the
+# signed-in user's session, so this is what the trigger must match.
+Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction SilentlyContinue
+        if ($o) { Write-Host "  desktop in session $($_.SessionId) belongs to $($o.Domain)\$($o.User)" }
+    }
 $script:triggerMismatch = $false
 foreach ($t in $task.Triggers) {
     Write-Host "trigger   : $($t.CimClass.CimClassName) user=$($t.UserId) delay=$($t.Delay) enabled=$($t.Enabled)"

@@ -36,6 +36,26 @@ class FakeStartupTaskService : StartupTaskService {
     hidden [void] RemoveStaleTasks([string]$keepName) { $this.StaleSweeps++ }
 }
 
+# Exercises the REAL GetInteractiveUser against faked session probes: OwnerBySession
+# maps a session id (or 'any') to that desktop's owner, AskedSessions records the order.
+class SessionProbeService : StartupTaskService {
+    [hashtable] $OwnerBySession = @{}
+    [string] $ComputerSystemUser
+    [System.Collections.Generic.List[object]] $AskedSessions
+
+    SessionProbeService([LogService]$logger) : base($logger, $null, 'C:\App\src') {
+        $this.AskedSessions = [System.Collections.Generic.List[object]]::new()
+    }
+
+    hidden [string] GetSessionOwner([object]$sessionId) {
+        $this.AskedSessions.Add($sessionId)
+        $key = if ($null -eq $sessionId) { 'any' } else { [string]$sessionId }
+        if ($this.OwnerBySession.ContainsKey($key)) { return $this.OwnerBySession[$key] }
+        return $null
+    }
+    hidden [string] GetComputerSystemUser() { return $this.ComputerSystemUser }
+}
+
 # Its register seam throws (simulates a non-elevated Register-ScheduledTask) so the
 # test can assert Apply swallows it and logs instead of propagating.
 class ThrowingStartupTaskService : StartupTaskService {
@@ -85,15 +105,16 @@ Describe "StartupTaskService" {
         }
 
         It "Triggers on the CONSOLE user, not the admin account DONUT runs as" {
-            # The regression: a trigger bound to an account that never signs in at the
-            # console leaves the task Ready forever.
+            # The regression: over-the-shoulder UAC (signed in as jdoe, DONUT elevated
+            # as jdoe-admin in the SAME session) bound the trigger to jdoe-admin, an
+            # account that never signs in - so the task sat Ready forever.
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
             $fake.ConsoleUser = 'PROD\jdoe'
             $owner = $fake.ResolveOwner()
             $owner.User | Should -Be 'PROD\jdoe'
             $owner.IsSystem | Should -BeTrue -Because (
-                'a separate admin account has no console session to host an interactive task')
+                'a separate admin account has no logon session of its own to host an interactive task')
         }
 
         It "Matches the console user case-insensitively" {
@@ -117,6 +138,32 @@ Describe "StartupTaskService" {
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = $null
             $fake.ResolveOwner().User | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "GetInteractiveUser (session-scoped resolution)" {
+        BeforeAll {
+            $script:ownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+        }
+
+        It "Prefers the owner of DONUT's OWN session (the UAC case)" {
+            $probe = [SessionProbeService]::new([CapturingLogService]::new())
+            $probe.OwnerBySession = @{ ([string]$script:ownSession) = 'PROD\jdoe' }
+            $probe.ComputerSystemUser = 'PROD\wrong'
+            $probe.GetInteractiveUser() | Should -Be 'PROD\jdoe'
+            $probe.AskedSessions[0] | Should -Be $script:ownSession
+        }
+
+        It "Falls back to Win32_ComputerSystem when its own session has no desktop" {
+            $probe = [SessionProbeService]::new([CapturingLogService]::new())
+            $probe.ComputerSystemUser = 'PROD\jdoe'
+            $probe.GetInteractiveUser() | Should -Be 'PROD\jdoe'
+        }
+
+        It "Falls back to any desktop owner when nothing else answers (session 0)" {
+            $probe = [SessionProbeService]::new([CapturingLogService]::new())
+            $probe.OwnerBySession = @{ 'any' = 'PROD\jdoe' }
+            $probe.GetInteractiveUser() | Should -Be 'PROD\jdoe'
         }
     }
 
