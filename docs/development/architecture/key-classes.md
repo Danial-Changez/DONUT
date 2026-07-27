@@ -68,7 +68,7 @@ the network I/O.
 | `ActiveDirectoryService` | Live multi-forest AD search (computers + users; run on the pool via `AdSearchWorker`, one job per forest), account unlock, and temp-password reset (`ResetPassword` → `InvokeReset` seam; both on the pool, password never logged) |
 | `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [Implementation notes](./implementation-notes.md#de-elevating-the-user-lens)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
-| `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the per-user `DONUT-<user>` scheduled task (register / update / unregister) against the toggle; the task owner comes from the process token (console user when the token is SYSTEM), and failures surface their real reason via `LastFailure` |
+| `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the `DONUT-<user>` scheduled task (register / update / unregister) against the toggle; lane picked by the process token — named admin gets a per-user RunLevel-Highest task, SYSTEM gets a SYSTEM-principal task that relaunches DONUT into the console session via bundled psexec `-s -i`; failures surface their real reason via `LastFailure` |
 | `RecentConnectionsStore` | Persists the "recent machines" entries in `AppConfig.Settings['recentHosts']`: upsert/seed/cap/sort + coalesced saves through the config manager |
 | `SystemInfoService` | Local machine facts (identity, domain, battery) for the title bar |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |

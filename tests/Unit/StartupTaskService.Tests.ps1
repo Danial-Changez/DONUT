@@ -3,18 +3,20 @@ using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 # Captures which CIM seam Apply dispatched to, without touching Task Scheduler.
-#   Identity/ConsoleUser: what the identity seams should report
+#   Identity/ConsoleUser/PsExec: what the identity/psexec seams should report
 #   Existing: the task GetExistingTask() should return (null = not installed)
 #   Registered/Unregistered: how many times each seam ran
-#   LastName/LastUser/LastSpec: what RegisterTask received
+#   LastName/LastUser/LastAsSystem/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
     [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
     [string] $ConsoleUser = $null
+    [string] $PsExec = 'C:\App\src\Tools\psexec.exe'
     [object] $Existing = $null
     [int] $Registered = 0
     [int] $Unregistered = 0
     [string] $LastName
     [string] $LastUser
+    [bool] $LastAsSystem
     [hashtable] $LastSpec
 
     FakeStartupTaskService([LogService]$logger, [string]$sourceRoot)
@@ -22,9 +24,11 @@ class FakeStartupTaskService : StartupTaskService {
 
     hidden [hashtable] GetProcessIdentity() { return $this.Identity }
     hidden [string] GetInteractiveUser() { return $this.ConsoleUser }
+    hidden [string] FindPsExec() { return $this.PsExec }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] RegisterTask([string]$name, [string]$user, [hashtable]$spec) {
-        $this.Registered++; $this.LastName = $name; $this.LastUser = $user; $this.LastSpec = $spec
+    hidden [void] RegisterTask([string]$name, [string]$user, [bool]$asSystem, [hashtable]$spec) {
+        $this.Registered++; $this.LastName = $name; $this.LastUser = $user
+        $this.LastAsSystem = $asSystem; $this.LastSpec = $spec
     }
     hidden [void] UnregisterTask([string]$name) { $this.Unregistered++; $this.LastName = $name }
 }
@@ -37,7 +41,7 @@ class ThrowingStartupTaskService : StartupTaskService {
     : base($logger, $null, $sourceRoot) { }
     hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false } }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] RegisterTask([string]$name, [string]$user, [hashtable]$spec) { throw "access denied (not elevated)" }
+    hidden [void] RegisterTask([string]$name, [string]$user, [bool]$asSystem, [hashtable]$spec) { throw "access denied (not elevated)" }
 }
 
 BeforeAll {
@@ -65,26 +69,39 @@ Describe "StartupTaskService" {
         }
     }
 
-    Context "ResolveTargetUser" {
+    Context "ResolveOwner" {
         It "Uses the process token's account for a normal (non-SYSTEM) run" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
             $fake.ConsoleUser = 'PROD\other'
-            $fake.ResolveTargetUser() | Should -Be 'PROD\jdoe'
+            $owner = $fake.ResolveOwner()
+            $owner.User | Should -Be 'PROD\jdoe'
+            $owner.IsSystem | Should -BeFalse
         }
 
         It "Falls back to the console user when the token is SYSTEM" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = 'PROD\jdoe'
-            $fake.ResolveTargetUser() | Should -Be 'PROD\jdoe'
+            $owner = $fake.ResolveOwner()
+            $owner.User | Should -Be 'PROD\jdoe'
+            $owner.IsSystem | Should -BeTrue
         }
 
-        It "Returns null when SYSTEM and no one is signed in" {
+        It "Reports no user when SYSTEM and no one is signed in" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = $null
-            $fake.ResolveTargetUser() | Should -BeNullOrEmpty
+            $fake.ResolveOwner().User | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "BuildSystemSpec" {
+        It "Wraps the host spec in a psexec -s -i -d console relaunch, exe quoted" {
+            $spec = [StartupTaskService]::BuildSystemSpec('C:\App\src\Tools\psexec.exe',
+                @{ Execute = 'C:\Program Files\DONUT\Donut.Launcher.exe'; Argument = '--tray' })
+            $spec.Execute | Should -Be 'C:\App\src\Tools\psexec.exe'
+            $spec.Argument | Should -Be '-accepteula -nobanner -s -i -d "C:\Program Files\DONUT\Donut.Launcher.exe" --tray'
         }
     }
 
@@ -155,15 +172,29 @@ Describe "StartupTaskService" {
             $fake.Apply($true) | Should -BeTrue
             $fake.LastUser | Should -Be 'PROD\jdoe'
             $fake.LastName | Should -Be 'DONUT-jdoe'
+            $fake.LastAsSystem | Should -BeFalse
         }
 
-        It "Registers for the console user when running as SYSTEM" {
+        It "Registers the SYSTEM psexec lane when the token is SYSTEM" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = 'PROD\jdoe'
             $fake.Apply($true) | Should -BeTrue
             $fake.LastUser | Should -Be 'PROD\jdoe'
             $fake.LastName | Should -Be 'DONUT-jdoe'
+            $fake.LastAsSystem | Should -BeTrue
+            $fake.LastSpec.Execute | Should -Be 'C:\App\src\Tools\psexec.exe'
+            $fake.LastSpec.Argument | Should -BeLike '-accepteula -nobanner -s -i -d *'
+        }
+
+        It "Fails with a psexec reason when SYSTEM and psexec is missing" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $fake.PsExec = $null
+            $fake.Apply($true) | Should -BeFalse
+            $fake.Registered | Should -Be 0
+            $fake.LastFailure | Should -BeLike '*psexec*'
         }
 
         It "Fails with a reason (no throw) when SYSTEM and no one is signed in" {
