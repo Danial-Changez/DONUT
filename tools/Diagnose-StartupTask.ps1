@@ -72,6 +72,7 @@ function Get-ResultMeaning([int]$code) {
 
 Write-Section "1. Installed build (is your fix even running?)"
 $svcPath = Join-Path $srcRoot 'Services\StartupTaskService.psm1'
+$script:codeSplitsTrigger = $false
 if (-not (Test-Path -LiteralPath $svcPath)) {
     Write-Host "No extracted app tree at $srcRoot - DONUT may run from the dev path (Start-Donut.ps1)." -ForegroundColor Yellow
 }
@@ -79,12 +80,15 @@ else {
     $svc = Get-Content -LiteralPath $svcPath -Raw
     $hasLane = $svc -match 'BuildSystemSpec'
     $hasToken = $svc -match 'GetProcessIdentity'
+    # The console-user trigger fix: RegisterTask takes $triggerUser, separate from the principal.
+    $script:codeSplitsTrigger = $svc -match 'triggerUser'
     Write-Host "extracted : $svcPath"
     Write-Host "modified  : $((Get-Item -LiteralPath $svcPath).LastWriteTime)"
-    Write-Host ("token-owner fix : " + $(if ($hasToken) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasToken) { 'Green' } else { 'Red' })
-    Write-Host ("SYSTEM psexec lane: " + $(if ($hasLane) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasLane) { 'Green' } else { 'Red' })
-    if (-not $hasLane) {
-        Write-Host "STOP HERE: the installed launcher predates the psexec lane. Rebuild Donut.Launcher.exe and reinstall - a git pull does not update an installed build." -ForegroundColor Red
+    Write-Host ("token-owner fix         : " + $(if ($hasToken) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasToken) { 'Green' } else { 'Red' })
+    Write-Host ("SYSTEM psexec lane      : " + $(if ($hasLane) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasLane) { 'Green' } else { 'Red' })
+    Write-Host ("console-user trigger fix: " + $(if ($script:codeSplitsTrigger) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeSplitsTrigger) { 'Green' } else { 'Red' })
+    if (-not ($hasLane -and $script:codeSplitsTrigger)) {
+        Write-Host "The installed launcher predates the current fixes. Rebuild Donut.Launcher.exe and reinstall - a git pull does not update an installed build." -ForegroundColor Red
     }
 }
 
@@ -102,21 +106,29 @@ Write-Host "execute   : $($action.Execute)"
 Write-Host "arguments : $($action.Arguments)"
 $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
 Write-Host "console user (who actually logs on): $consoleUser"
+$script:triggerMismatch = $false
 foreach ($t in $task.Triggers) {
     Write-Host "trigger   : $($t.CimClass.CimClassName) user=$($t.UserId) delay=$($t.Delay) enabled=$($t.Enabled)"
     if ($t.UserId -and $consoleUser -and $t.UserId -ine $consoleUser) {
+        $script:triggerMismatch = $true
         Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
     }
 }
-if ($principal.UserId -notmatch 'SYSTEM' -and $principal.RunLevel -eq 'Highest') {
-    $isAdmin = $false
+$script:perUserLane = $principal.UserId -notmatch 'SYSTEM'
+if ($script:perUserLane -and $principal.RunLevel -eq 'Highest') {
+    # Direct members only - a domain account is usually admin via a nested group
+    # (Domain Admins), which this cannot see, so absence is NOT proof of non-admin.
+    $direct = $false
     try {
         $grp = Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop
-        $isAdmin = @($grp | Where-Object { $_.Name -ieq $principal.UserId }).Count -gt 0
+        $direct = @($grp | Where-Object { $_.Name -ieq $principal.UserId }).Count -gt 0
     }
     catch { Write-Host "(could not enumerate local Administrators: $($_.Exception.Message))" -ForegroundColor DarkGray }
-    if (-not $isAdmin) {
-        Write-Host "PROBLEM: per-user principal on an account that is not a local admin - RunLevel Highest yields a STANDARD token, and the launcher's requireAdministrator manifest then refuses to start (0x800702E4)." -ForegroundColor Red
+    if ($direct) {
+        Write-Host "principal '$($principal.UserId)' is a direct local admin - RunLevel Highest will yield an elevated token."
+    }
+    else {
+        Write-Host "NOTE: '$($principal.UserId)' is not a DIRECT member of local Administrators. It may still be admin via a domain group (Domain Admins), which this check cannot see. IF it is not, RunLevel Highest degrades to a standard token and the requireAdministrator launcher refuses to start (0x800702E4)." -ForegroundColor Yellow
     }
 }
 
@@ -158,3 +170,21 @@ Write-Section "Manual reproduction (run this to see psexec's own error)"
 Write-Host "The task's action, run by hand from THIS elevated shell:"
 Write-Host "  & `"$($action.Execute)`" $($action.Arguments)" -ForegroundColor Gray
 Write-Host "If that surfaces DONUT here but the logon task does not, the failure is session-0 injection, not the command."
+
+Write-Section "VERDICT"
+# The registered task is a snapshot of whichever build last applied it - so new code
+# plus an old-shaped task means the fix simply has not run yet.
+$oldShape = $script:triggerMismatch -or $script:perUserLane
+if ($oldShape -and $script:codeSplitsTrigger) {
+    Write-Host "The installed code HAS the console-user trigger fix, but this task still has the OLD shape (per-user principal and/or a trigger bound to a non-console account)." -ForegroundColor Yellow
+    Write-Host "The task is a snapshot from whichever build last applied it - the fix has not re-registered yet." -ForegroundColor Yellow
+    Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> as SYSTEM and sweep this stale task. Then re-run this script." -ForegroundColor Green
+}
+elseif ($oldShape) {
+    Write-Host "This task has the OLD shape AND the installed build lacks the fix." -ForegroundColor Red
+    Write-Host "DO THIS: rebuild Donut.Launcher.exe from the current source and reinstall - an installed build runs src\ from INSIDE the exe, so pulling alone changes nothing. Then launch DONUT and re-run this script." -ForegroundColor Green
+}
+else {
+    Write-Host "Task shape looks correct: SYSTEM principal, triggered by the console user." -ForegroundColor Green
+    Write-Host "If DONUT still does not appear at logon, the remaining suspect is psexec's session-0 injection - run the manual reproduction above and capture its output." -ForegroundColor Green
+}
