@@ -9,7 +9,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 #   LastName/LastUser/LastAsSystem/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
     [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
-    [string] $ConsoleUser = $null
+    [string] $ConsoleUser = 'PROD\jdoe'
     [string] $PsExec = 'C:\App\src\Tools\psexec.exe'
     [object] $Existing = $null
     [int] $Registered = 0
@@ -22,15 +22,18 @@ class FakeStartupTaskService : StartupTaskService {
     FakeStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
 
+    [int] $StaleSweeps = 0
+
     hidden [hashtable] GetProcessIdentity() { return $this.Identity }
     hidden [string] GetInteractiveUser() { return $this.ConsoleUser }
     hidden [string] FindPsExec() { return $this.PsExec }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] RegisterTask([string]$name, [string]$user, [bool]$asSystem, [hashtable]$spec) {
-        $this.Registered++; $this.LastName = $name; $this.LastUser = $user
+    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) {
+        $this.Registered++; $this.LastName = $name; $this.LastUser = $triggerUser
         $this.LastAsSystem = $asSystem; $this.LastSpec = $spec
     }
     hidden [void] UnregisterTask([string]$name) { $this.Unregistered++; $this.LastName = $name }
+    hidden [void] RemoveStaleTasks([string]$keepName) { $this.StaleSweeps++ }
 }
 
 # Its register seam throws (simulates a non-elevated Register-ScheduledTask) so the
@@ -40,8 +43,10 @@ class ThrowingStartupTaskService : StartupTaskService {
     ThrowingStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
     hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false } }
+    hidden [string] GetInteractiveUser() { return 'PROD\jdoe' }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] RegisterTask([string]$name, [string]$user, [bool]$asSystem, [hashtable]$spec) { throw "access denied (not elevated)" }
+    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) { throw "access denied (not elevated)" }
+    hidden [void] RemoveStaleTasks([string]$keepName) { }
 }
 
 BeforeAll {
@@ -69,17 +74,36 @@ Describe "StartupTaskService" {
         }
     }
 
-    Context "ResolveOwner" {
-        It "Uses the process token's account for a normal (non-SYSTEM) run" {
+    Context "ResolveOwner (trigger user vs run-as lane)" {
+        It "Uses the per-user lane when DONUT already runs as the console user" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
-            $fake.ConsoleUser = 'PROD\other'
+            $fake.ConsoleUser = 'PROD\jdoe'
             $owner = $fake.ResolveOwner()
             $owner.User | Should -Be 'PROD\jdoe'
             $owner.IsSystem | Should -BeFalse
         }
 
-        It "Falls back to the console user when the token is SYSTEM" {
+        It "Triggers on the CONSOLE user, not the admin account DONUT runs as" {
+            # The regression: a trigger bound to an account that never signs in at the
+            # console leaves the task Ready forever.
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $owner = $fake.ResolveOwner()
+            $owner.User | Should -Be 'PROD\jdoe'
+            $owner.IsSystem | Should -BeTrue -Because (
+                'a separate admin account has no console session to host an interactive task')
+        }
+
+        It "Matches the console user case-insensitively" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'PROD\JDoe'; IsSystem = $false }
+            $fake.ConsoleUser = 'prod\jdoe'
+            $fake.ResolveOwner().IsSystem | Should -BeFalse
+        }
+
+        It "Uses the SYSTEM lane, triggered by the console user, under a SYSTEM token" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = 'PROD\jdoe'
@@ -88,7 +112,7 @@ Describe "StartupTaskService" {
             $owner.IsSystem | Should -BeTrue
         }
 
-        It "Reports no user when SYSTEM and no one is signed in" {
+        It "Reports no user when no one is signed in at the console" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = $null
@@ -166,13 +190,31 @@ Describe "StartupTaskService" {
             $fake.Unregistered | Should -Be 0
         }
 
-        It "Registers with the token account and its per-user task name" {
+        It "Registers with the console account and its per-user task name" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+            $fake.ConsoleUser = 'PROD\jdoe'
             $fake.Apply($true) | Should -BeTrue
             $fake.LastUser | Should -Be 'PROD\jdoe'
             $fake.LastName | Should -Be 'DONUT-jdoe'
             $fake.LastAsSystem | Should -BeFalse
+        }
+
+        It "Names and triggers the task for the console user when DONUT runs as a separate admin" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $fake.Apply($true) | Should -BeTrue
+            $fake.LastName | Should -Be 'DONUT-jdoe' -Because 'DONUT-jdoe-admin would never fire'
+            $fake.LastUser | Should -Be 'PROD\jdoe'
+            $fake.LastAsSystem | Should -BeTrue
+        }
+
+        It "Sweeps stale differently-named tasks after applying" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $fake.Apply($true) | Should -BeTrue
+            $fake.StaleSweeps | Should -Be 1
         }
 
         It "Registers the SYSTEM psexec lane when the token is SYSTEM" {
@@ -197,14 +239,14 @@ Describe "StartupTaskService" {
             $fake.LastFailure | Should -BeLike '*psexec*'
         }
 
-        It "Fails with a reason (no throw) when SYSTEM and no one is signed in" {
+        It "Fails with a reason (no throw) when no one is signed in at the console" {
             $logger = [CapturingLogService]::new()
             $fake = [FakeStartupTaskService]::new($logger, 'C:\App\src')
             $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
             $fake.ConsoleUser = $null
             $fake.Apply($true) | Should -BeFalse
             $fake.Registered | Should -Be 0
-            $fake.LastFailure | Should -BeLike '*SYSTEM*'
+            $fake.LastFailure | Should -BeLike '*console user*'
             $logger.HasLevel('ERROR') | Should -BeTrue
         }
 

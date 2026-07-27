@@ -22,7 +22,9 @@
          the task will resolve them, from SYSTEM's environment.
 
 .PARAMETER TaskName
-    Task to inspect. Defaults to DONUT-<current user>.
+    Task to inspect. Defaults to the installed DONUT-* startup task (NOT
+    "DONUT-$env:USERNAME" - in a SYSTEM shell that resolves to DONUT-SYSTEM and
+    finds nothing, which is the same $env: trap the service itself had).
 
 .EXAMPLE
     pwsh -File tools\Diagnose-StartupTask.ps1
@@ -30,11 +32,23 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $TaskName = "DONUT-$env:USERNAME"
+    [string] $TaskName
 )
 
 $appRoot = Join-Path $env:ProgramData 'DONUT\app'
 $srcRoot = Join-Path $appRoot 'src'
+
+# DONUT-LensAgent is PersonLensService's, not a startup task.
+if (-not $TaskName) {
+    $found = @(Get-ScheduledTask -TaskName 'DONUT-*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.TaskName -ne 'DONUT-LensAgent' })
+    if ($found.Count -eq 1) { $TaskName = $found[0].TaskName }
+    elseif ($found.Count -gt 1) {
+        Write-Host "Multiple DONUT startup tasks installed - inspecting each in turn:" -ForegroundColor Yellow
+        $found.TaskName | ForEach-Object { Write-Host "  $_" }
+        $TaskName = $found[0].TaskName
+    }
+}
 
 function Write-Section([string]$title) {
     Write-Host "`n=== $title ===" -ForegroundColor Cyan
@@ -86,8 +100,13 @@ $action = @($task.Actions)[0]
 Write-Host "runs as   : $($principal.UserId)   LogonType=$($principal.LogonType)  RunLevel=$($principal.RunLevel)"
 Write-Host "execute   : $($action.Execute)"
 Write-Host "arguments : $($action.Arguments)"
+$consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+Write-Host "console user (who actually logs on): $consoleUser"
 foreach ($t in $task.Triggers) {
     Write-Host "trigger   : $($t.CimClass.CimClassName) user=$($t.UserId) delay=$($t.Delay) enabled=$($t.Enabled)"
+    if ($t.UserId -and $consoleUser -and $t.UserId -ine $consoleUser) {
+        Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
+    }
 }
 if ($principal.UserId -notmatch 'SYSTEM' -and $principal.RunLevel -eq 'Highest') {
     $isAdmin = $false
@@ -106,6 +125,9 @@ $info = $task | Get-ScheduledTaskInfo
 Write-Host "last run   : $($info.LastRunTime)"
 Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning ([int]$info.LastTaskResult))"
 Write-Host "next run   : $($info.NextRunTime)"
+if ([int]$info.LastTaskResult -eq 267011) {
+    Write-Host "DIAGNOSIS: registered but NEVER RUN. The task itself is fine - its trigger never fired. Check the trigger user above against the console user." -ForegroundColor Red
+}
 
 Write-Section "TaskScheduler/Operational events for this task"
 $filter = @{ LogName = 'Microsoft-Windows-TaskScheduler/Operational'; StartTime = (Get-Date).AddDays(-2) }

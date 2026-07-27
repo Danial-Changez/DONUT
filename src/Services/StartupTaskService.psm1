@@ -6,19 +6,22 @@ using module "..\Core\LogService.psm1"
 
 .DESCRIPTION
     A Task Scheduler task starts DONUT minimized to the tray at logon with no UAC
-    prompt. Registering requires elevation, which DONUT already has. Two lanes,
-    picked by the process token (never $env: - under SYSTEM it names a nonexistent
-    account that Task Scheduler rejects with "No mapping between account names and
-    security IDs"):
-    - Named admin token: a per-user task (RunLevel Highest, Interactive logon
-      trigger) running as that account.
-    - SYSTEM token (psexec -s, RMM shells): the console user may not be an admin,
-      so a per-user task cannot relaunch elevated (CreateProcess fails with
-      ERROR_ELEVATION_REQUIRED against the launcher's requireAdministrator
-      manifest). Instead the task runs as SYSTEM, triggered at the console user's
-      logon, and relaunches DONUT into their session via psexec -s -i -
-      reproducing the manual SYSTEM launch. AD access is unchanged: SYSTEM
-      authenticates as the machine account either way.
+    prompt. Registering requires elevation, which DONUT already has. TWO DIFFERENT
+    ACCOUNTS are involved and must not be conflated: the task is always TRIGGERED by
+    the console user's logon (the only account that actually signs in), while what it
+    RUNS AS depends on the process token (never $env: - under SYSTEM that names a
+    nonexistent account Task Scheduler rejects with "No mapping between account names
+    and security IDs"):
+    - DONUT already runs as the console user: a per-user task, RunLevel Highest,
+      Interactive - it runs inside that user's own logon session.
+    - Anything else (SYSTEM token, or a separate admin account that never signs in
+      at the console): the task runs AS SYSTEM and relaunches DONUT into the console
+      session via psexec -s -i, reproducing the manual SYSTEM launch. A per-user task
+      cannot work here - an Interactive principal needs a session that account does
+      not have, and RunLevel Highest on a non-admin console user degrades to a
+      standard token that CreateProcess refuses against the launcher's
+      requireAdministrator manifest (ERROR_ELEVATION_REQUIRED). AD access is
+      unchanged: SYSTEM authenticates as the machine account either way.
 
 .NOTES
     The pure helpers (BuildLaunchSpec, BuildSystemSpec, ReconcileDecision,
@@ -47,12 +50,18 @@ class StartupTaskService {
         return "DONUT-$(($user -split '\\')[-1])"
     }
 
-    # Whose logon starts DONUT and which lane applies: the token's user, or - when
-    # the token is SYSTEM - the signed-in console user (User = '' when none).
+    # Who TRIGGERS the task (the console user - the only account that actually logs
+    # on) and whether it must RUN AS SYSTEM. These are different people whenever
+    # DONUT runs under a separate admin account: a task triggered by an account that
+    # never logs on stays Ready forever, and an Interactive principal for an account
+    # with no session cannot run at all. User = '' when nobody is signed in.
     [hashtable] ResolveOwner() {
         $identity = $this.GetProcessIdentity()
-        if (-not $identity.IsSystem) { return @{ User = $identity.Name; IsSystem = $false } }
-        return @{ User = $this.GetInteractiveUser(); IsSystem = $true }
+        $console = $this.GetInteractiveUser()
+        if (-not $console) { return @{ User = ''; IsSystem = $true } }
+        # Only the console user's own logon can host a per-user interactive task.
+        $sameUser = (-not $identity.IsSystem) -and ($identity.Name -ieq $console)
+        return @{ User = $console; IsSystem = (-not $sameUser) }
     }
 
     # Pure: wraps a host spec in a psexec relaunch for the SYSTEM lane. -s -i puts
@@ -108,7 +117,7 @@ class StartupTaskService {
         try {
             $owner = $this.ResolveOwner()
             if (-not $owner.User) {
-                return $this.Fail('DONUT is running as SYSTEM and no signed-in user was found to own the startup task.')
+                return $this.Fail('no signed-in console user was found, so there is no logon to start DONUT at.')
             }
             $spec = $this.BuildLaunchSpec([Environment]::ProcessPath, $this.SourceRoot)
             if ($owner.IsSystem) {
@@ -126,6 +135,8 @@ class StartupTaskService {
                 'Unregister' { $this.UnregisterTask($name) }
                 default { }
             }
+            # A task named for a previous owner would linger (and never fire) forever.
+            $this.RemoveStaleTasks($name)
             return $true
         }
         catch {
@@ -151,9 +162,14 @@ class StartupTaskService {
         return @{ Name = $identity.Name; IsSystem = $identity.IsSystem }
     }
 
-    # The console session's user via explorer's owner (works from a SYSTEM token,
-    # where WindowsIdentity and $env: yield no mappable account).
+    # The console session's user (works from a SYSTEM token, where WindowsIdentity and
+    # $env: yield no mappable account). Win32_ComputerSystem.UserName names the CONSOLE
+    # user specifically; the explorer fallback's "first process" can be another
+    # session's when an admin account also has a desktop, which is how the trigger
+    # once got bound to an account that never logs on.
     hidden [string] GetInteractiveUser() {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs -and $cs.UserName) { return [string]$cs.UserName }
         $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if (-not $explorer) { return $null }
@@ -178,16 +194,19 @@ class StartupTaskService {
         return Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     }
 
-    hidden [void] RegisterTask([string]$name, [string]$user, [bool]$asSystem, [hashtable]$spec) {
+    # $triggerUser is whose LOGON fires the task (always the console user); $asSystem
+    # decides what it RUNS AS. Conflating the two bound the trigger to an account that
+    # never logs on, leaving the task Ready forever.
+    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) {
         $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument
-        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
         if ($asSystem) {
             # psexec -i needs the logon session's desktop up before the task fires.
             $trigger.Delay = 'PT15S'
             $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         }
         else {
-            $principal = New-ScheduledTaskPrincipal -UserId $user -RunLevel Highest -LogonType Interactive
+            $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
         }
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
             -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -202,5 +221,25 @@ class StartupTaskService {
     hidden [void] UnregisterTask([string]$name) {
         Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop
         $this.Logger.LogInfo("Unregistered startup task $name.")
+    }
+
+    # Drops DONUT-* startup tasks left under a previous owner's name. Scoped hard:
+    # never DONUT-LensAgent (PersonLensService owns it), and only tasks whose action
+    # actually launches THIS install - best-effort, a failure here is not a toggle failure.
+    hidden [void] RemoveStaleTasks([string]$keepName) {
+        $exe = [Environment]::ProcessPath
+        foreach ($task in @(Get-ScheduledTask -TaskName 'DONUT-*' -ErrorAction SilentlyContinue)) {
+            if ($task.TaskName -ieq $keepName -or $task.TaskName -ieq 'DONUT-LensAgent') { continue }
+            $action = @($task.Actions)[0]
+            if ($null -eq $action) { continue }
+            $launchesUs = ($action.Execute -ieq $exe) -or ([string]$action.Arguments -like "*$exe*") -or
+                          ([string]$action.Arguments -like '*Start-Donut.ps1*')
+            if (-not $launchesUs) { continue }
+            try {
+                Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                $this.Logger.LogInfo("Removed stale startup task $($task.TaskName).")
+            }
+            catch { $this.Logger.LogWarning("Could not remove stale startup task $($task.TaskName): $($_.Exception.Message)") }
+        }
     }
 }
