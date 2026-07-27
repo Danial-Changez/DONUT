@@ -196,11 +196,14 @@ runspace-pool warm) — following a consistent seam:
   `DONUT-<user>` task (logon trigger) so DONUT starts elevated with no per-logon UAC
   prompt (an HKCU Run key or `highestAvailable` manifest cannot). **Two accounts are
   involved, and conflating them is the bug this feature keeps re-learning:**
-  - **Who TRIGGERS it** is always the *console* user — the only account that actually
-    signs in — resolved via `Win32_ComputerSystem.UserName` (explorer's owner is the
-    fallback; the "first explorer" can be another session's admin desktop). A trigger
-    bound to an account that never logs on leaves the task `Ready` **forever**: no
-    run, no error, nothing in any log.
+  - **Who TRIGGERS it** is always the *signed-in* user — the only account that
+    actually logs on. Resolved from the owner of `explorer.exe` **in DONUT's own
+    session**, because over-the-shoulder UAC (sign in as a standard user, elevate
+    DONUT with a separate admin account) leaves both in the *same* session: the token
+    says `jdoe-admin` while the desktop belongs to `jdoe`.
+    `Win32_ComputerSystem.UserName` is the fallback for a session-0 SYSTEM host, and
+    any-session explorer the last resort. A trigger bound to an account that never
+    logs on leaves the task `Ready` **forever**: no run, no error, nothing in any log.
   - **What it RUNS AS** comes from the process token, never `$env:` (under SYSTEM that
     names a nonexistent `DOMAIN\SYSTEM`, which Task Scheduler rejects with "No mapping
     between account names and security IDs"). Only when DONUT already runs *as the

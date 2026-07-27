@@ -37,11 +37,11 @@ The task always triggers on **your** logon — the account signed in at the cons
 What it runs as depends on how DONUT itself is running:
 
 - **DONUT runs as you:** a normal per-user task, elevated, in your own session.
-- **DONUT runs as SYSTEM or a separate admin account** (the usual setup when your
-  everyday account isn't an admin): the task runs as SYSTEM and relaunches DONUT onto
-  your desktop via the bundled PsExec, reproducing the manual launch. DONUT then
-  authenticates on the network as the machine account, exactly as those manual runs
-  do.
+- **DONUT runs as SYSTEM or a separate admin account** — including the common setup
+  where you sign in with a standard account and elevate DONUT through UAC with your
+  admin account: the task runs as SYSTEM and relaunches DONUT onto your desktop via
+  the bundled PsExec, reproducing the manual launch. DONUT then authenticates on the
+  network as the machine account, exactly as those manual runs do.
 
 An RDP logon won't surface the tray — PsExec targets the console session. If the
 toggle fails, the error toast states the actual reason.
