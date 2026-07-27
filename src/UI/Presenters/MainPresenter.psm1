@@ -382,8 +382,8 @@ class MainPresenter {
             param($result)
             $r = @($result)[-1]
             if ($r -is [hashtable] -and -not $r.Ok -and $presenter.ToastService) {
-                $presenter.ToastService.ShowError('Startup task',
-                    'Could not update the startup task - is DONUT running as administrator?')
+                $why = if ($r.Reason) { [string]$r.Reason } else { 'is DONUT running as administrator?' }
+                $presenter.ToastService.ShowError('Startup task', "Could not update the startup task - $why")
             }
         }.GetNewClosure()
 

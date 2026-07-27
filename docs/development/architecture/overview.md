@@ -179,8 +179,14 @@ runspace-pool warm) — following a consistent seam:
 - **Autostart is a scheduled task, not a Run key.** `StartupTaskService` registers a
   per-user `DONUT-<user>` task (RunLevel Highest, logon trigger) so DONUT starts
   elevated with no per-logon UAC prompt (an HKCU Run key or `highestAvailable` manifest
-  cannot). Registering needs elevation, which DONUT already has (PsExec). The CIM calls
-  run off the UI thread on the pool (`Apply-StartupTask.ps1`, reaped by a
+  cannot). Registering needs elevation, which DONUT already has (PsExec). The task's
+  owner comes from the process token, not `$env:` — under a SYSTEM token (psexec `-s`,
+  RMM shells) `$env:USERDOMAIN\$env:USERNAME` names a nonexistent account
+  (`DOMAIN\SYSTEM`) that Task Scheduler rejects with "No mapping between account names
+  and security IDs"; there the task is registered for the signed-in console user
+  (explorer's owner, the `PersonLensService.EnsureAgent` pattern). Failures toast the
+  real reason (`Apply` records it in `LastFailure`, the worker returns it as `Reason`).
+  The CIM calls run off the UI thread on the pool (`Apply-StartupTask.ps1`, reaped by a
   `DispatcherTimer`).
 - **Single instance via named handles.** A `Local\DONUT.SingleInstance` mutex plus a
   `Local\DONUT.ShowRequest` auto-reset event: the launcher owns them in prod,

@@ -3,21 +3,30 @@ using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 # Captures which CIM seam Apply dispatched to, without touching Task Scheduler.
+#   Identity/ConsoleUser: what the identity seams should report
 #   Existing: the task GetExistingTask() should return (null = not installed)
 #   Registered/Unregistered: how many times each seam ran
-#   LastSpec: the spec RegisterTask received
+#   LastName/LastUser/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
+    [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+    [string] $ConsoleUser = $null
     [object] $Existing = $null
     [int] $Registered = 0
     [int] $Unregistered = 0
+    [string] $LastName
+    [string] $LastUser
     [hashtable] $LastSpec
 
     FakeStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
 
-    hidden [object] GetExistingTask() { return $this.Existing }
-    hidden [void] RegisterTask([hashtable]$spec) { $this.Registered++; $this.LastSpec = $spec }
-    hidden [void] UnregisterTask() { $this.Unregistered++ }
+    hidden [hashtable] GetProcessIdentity() { return $this.Identity }
+    hidden [string] GetInteractiveUser() { return $this.ConsoleUser }
+    hidden [object] GetExistingTask([string]$name) { return $this.Existing }
+    hidden [void] RegisterTask([string]$name, [string]$user, [hashtable]$spec) {
+        $this.Registered++; $this.LastName = $name; $this.LastUser = $user; $this.LastSpec = $spec
+    }
+    hidden [void] UnregisterTask([string]$name) { $this.Unregistered++; $this.LastName = $name }
 }
 
 # Its register seam throws (simulates a non-elevated Register-ScheduledTask) so the
@@ -26,8 +35,9 @@ class ThrowingStartupTaskService : StartupTaskService {
     [object] $Existing = $null
     ThrowingStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
-    hidden [object] GetExistingTask() { return $this.Existing }
-    hidden [void] RegisterTask([hashtable]$spec) { throw "access denied (not elevated)" }
+    hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false } }
+    hidden [object] GetExistingTask([string]$name) { return $this.Existing }
+    hidden [void] RegisterTask([string]$name, [string]$user, [hashtable]$spec) { throw "access denied (not elevated)" }
 }
 
 BeforeAll {
@@ -46,9 +56,35 @@ Describe "StartupTaskService" {
         $script:svc = [StartupTaskService]::new($script:logger, $null, 'C:\App\src')
     }
 
-    Context "TaskName" {
-        It "Is per-user (DONUT-<username>)" {
-            [StartupTaskService]::TaskName() | Should -Be "DONUT-$env:USERNAME"
+    Context "TaskNameFor" {
+        It "Is per-user from the account leaf (DONUT-<username>)" {
+            [StartupTaskService]::TaskNameFor('PROD\jdoe') | Should -Be 'DONUT-jdoe'
+        }
+        It "Passes a domainless account through unchanged" {
+            [StartupTaskService]::TaskNameFor('jdoe') | Should -Be 'DONUT-jdoe'
+        }
+    }
+
+    Context "ResolveTargetUser" {
+        It "Uses the process token's account for a normal (non-SYSTEM) run" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+            $fake.ConsoleUser = 'PROD\other'
+            $fake.ResolveTargetUser() | Should -Be 'PROD\jdoe'
+        }
+
+        It "Falls back to the console user when the token is SYSTEM" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $fake.ResolveTargetUser() | Should -Be 'PROD\jdoe'
+        }
+
+        It "Returns null when SYSTEM and no one is signed in" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.ConsoleUser = $null
+            $fake.ResolveTargetUser() | Should -BeNullOrEmpty
         }
     }
 
@@ -113,6 +149,34 @@ Describe "StartupTaskService" {
             $fake.Unregistered | Should -Be 0
         }
 
+        It "Registers with the token account and its per-user task name" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+            $fake.Apply($true) | Should -BeTrue
+            $fake.LastUser | Should -Be 'PROD\jdoe'
+            $fake.LastName | Should -Be 'DONUT-jdoe'
+        }
+
+        It "Registers for the console user when running as SYSTEM" {
+            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
+            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.ConsoleUser = 'PROD\jdoe'
+            $fake.Apply($true) | Should -BeTrue
+            $fake.LastUser | Should -Be 'PROD\jdoe'
+            $fake.LastName | Should -Be 'DONUT-jdoe'
+        }
+
+        It "Fails with a reason (no throw) when SYSTEM and no one is signed in" {
+            $logger = [CapturingLogService]::new()
+            $fake = [FakeStartupTaskService]::new($logger, 'C:\App\src')
+            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.ConsoleUser = $null
+            $fake.Apply($true) | Should -BeFalse
+            $fake.Registered | Should -Be 0
+            $fake.LastFailure | Should -BeLike '*SYSTEM*'
+            $logger.HasLevel('ERROR') | Should -BeTrue
+        }
+
         It "Unregisters when disabled and a task exists" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Existing = New-FakeTask 'C:\any.exe' '--tray'
@@ -129,11 +193,12 @@ Describe "StartupTaskService" {
             $fake.Unregistered | Should -Be 0
         }
 
-        It "Never throws to the caller when a seam fails" {
+        It "Never throws to the caller when a seam fails, and keeps the reason" {
             $logger = [CapturingLogService]::new()
             $throwing = [ThrowingStartupTaskService]::new($logger, 'C:\App\src')
             $throwing.Existing = $null
             { $throwing.Apply($true) } | Should -Not -Throw
+            $throwing.LastFailure | Should -BeLike '*access denied*'
             $logger.HasLevel('ERROR') | Should -BeTrue
         }
     }
