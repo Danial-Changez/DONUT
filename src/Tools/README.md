@@ -1,6 +1,16 @@
 # src/Tools
 
-Third-party binaries DONUT deploys to remote machines.
+Third-party binaries DONUT bundles (deployed to remote machines or used locally).
+
+## psexec.exe (Sysinternals PsTools)
+
+Drop `psexec.exe` (or `PsExec64.exe`) into this folder to bundle it. Used two ways:
+
+- **Remote execution** (scans, applies, WizTree deploys) — workers currently invoke
+  `psexec.exe` from `PATH`.
+- **Start-with-Windows under a SYSTEM token** — `StartupTaskService.FindPsExec`
+  resolves the SYSTEM-lane task action from this folder **first**, then `PATH`, and
+  bakes the absolute path into the task (SYSTEM's logon `PATH` may not have it).
 
 ## wiztree64.exe (required for "Find big folders")
 

@@ -34,9 +34,13 @@ morning. Turning the toggle off unregisters the task. A second launch of DONUT (
 the Start Menu, say) just surfaces the running instance.
 
 The task is registered for the account DONUT runs as. When DONUT itself runs as
-SYSTEM (started via `psexec -s` or an RMM shell), it registers the task for the
-signed-in console user instead — SYSTEM has no logon to trigger on. If the toggle
-fails, the error toast states the actual reason.
+SYSTEM (started via `psexec -s` or an RMM shell), the task instead runs as SYSTEM —
+triggered at the signed-in console user's logon — and relaunches DONUT onto that
+desktop via the bundled PsExec (`-s -i`), reproducing the manual SYSTEM launch
+without requiring the console account to be an admin. Note that DONUT then
+authenticates on the network as the machine account, same as those manual runs, and
+that an RDP logon won't surface the tray (PsExec `-i` targets the console session).
+If the toggle fails, the error toast states the actual reason.
 
 These three behaviours map to the `closeToTray`, `globalHotkey`, and
 `startWithWindows` keys in the
