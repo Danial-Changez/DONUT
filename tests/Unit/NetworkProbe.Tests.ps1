@@ -7,11 +7,17 @@ using namespace System.Net
 # logic can be exercised off a domain.
 class FakeNetworkProbe : NetworkProbe {
     [string[]] $DCs = @()
+    [string[]] $LdapDCs = @()
+    [string[]] $DnsDCs = @()
     [hashtable] $OnlineMap = @{}     # server -> bool
     [hashtable] $ForwardMap = @{}    # hostname -> ip string
     [hashtable] $PtrMap = @{}        # ip string -> ptr name
     [int] $QueryCount = 0
+    [int] $LdapQueryCount = 0
+    [int] $DnsQueryCount = 0
     [bool] $ThrowOnQuery = $false
+    [bool] $ThrowOnLdap = $false
+    [bool] $ThrowOnDns = $false
 
     FakeNetworkProbe() : base() {}
     FakeNetworkProbe([LogService]$logger) : base($logger) {}
@@ -20,6 +26,18 @@ class FakeNetworkProbe : NetworkProbe {
         $this.QueryCount++
         if ($this.ThrowOnQuery) { throw "ActiveDirectory module not available" }
         return $this.DCs
+    }
+
+    hidden [string[]] QueryDomainControllersViaLdap() {
+        $this.LdapQueryCount++
+        if ($this.ThrowOnLdap) { throw "LDAP bind failed" }
+        return $this.LdapDCs
+    }
+
+    hidden [string[]] QueryDomainControllersViaDns() {
+        $this.DnsQueryCount++
+        if ($this.ThrowOnDns) { throw "SRV lookup failed" }
+        return $this.DnsDCs
     }
 
     hidden [bool] TestServerOnline([string]$server) {
@@ -63,7 +81,7 @@ Describe "NetworkProbe" {
             $probe.QueryCount | Should -Be 1
         }
 
-        It "Should log a warning and cache empty when no controllers are found" {
+        It "Should log an error and cache empty when every discovery stage comes back empty" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
             $probe.DCs = @()
@@ -71,18 +89,55 @@ Describe "NetworkProbe" {
             $result = $probe.GetDomainControllers()
 
             $result.Count | Should -Be 0
-            $logger.HasLevel("WARN") | Should -Be $true
+            $probe.LdapQueryCount | Should -Be 1
+            $probe.DnsQueryCount | Should -Be 1
+            $logger.HasLevel("ERROR") | Should -Be $true
         }
 
-        It "Should log an exception and cache empty when the AD query throws" {
+        It "Should log an error and cache empty when every discovery stage throws" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
             $probe.ThrowOnQuery = $true
+            $probe.ThrowOnLdap = $true
+            $probe.ThrowOnDns = $true
 
             $result = $probe.GetDomainControllers()
 
             $result.Count | Should -Be 0
             $logger.HasLevel("ERROR") | Should -Be $true
+        }
+
+        It "Should not touch the fallbacks when ADWS answers" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.DCs = @("DC1.contoso.local")
+
+            $probe.GetDomainControllers().Count | Should -Be 1
+            $probe.LdapQueryCount | Should -Be 0
+            $probe.DnsQueryCount | Should -Be 0
+        }
+
+        # The autostarted SYSTEM instance's machine account: ADWS refuses it, but the
+        # LDAP stack user search runs on works - discovery must survive on that stack.
+        It "Should fall back to LDAP when the ADWS query throws" {
+            $logger = [CapturingLogService]::new()
+            $probe = [FakeNetworkProbe]::new($logger)
+            $probe.ThrowOnQuery = $true
+            $probe.LdapDCs = @("DC1.contoso.local", "DC2.contoso.local")
+
+            $result = $probe.GetDomainControllers()
+
+            $result.Count | Should -Be 2
+            $probe.DnsQueryCount | Should -Be 0
+            $logger.HasLevel("WARN") | Should -Be $true
+        }
+
+        It "Should fall back to DNS SRV when ADWS and LDAP both fail" {
+            $probe = [FakeNetworkProbe]::new()
+            $probe.ThrowOnQuery = $true
+            $probe.ThrowOnLdap = $true
+            $probe.DnsDCs = @("DC2.contoso.local")
+
+            $probe.GetDomainControllers() | Should -Be @("DC2.contoso.local")
         }
     }
 

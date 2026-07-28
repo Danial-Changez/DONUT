@@ -40,29 +40,49 @@ class NetworkProbe {
 
     # --- Domain controller discovery ---
 
-    # Returns the cached list of domain controllers, querying AD once on first use.
+    # Returns the cached list of domain controllers, discovering once on first use.
+    # Three stages, most- to least-capable: RSAT/ADWS, then .NET DirectoryServices
+    # (plain LDAP - works under tokens ADWS refuses, e.g. the autostarted SYSTEM
+    # instance's machine account), then DNS SRV records (no auth at all).
     [string[]] GetDomainControllers() {
         if ($null -ne $this.DomainControllers) {
             return $this.DomainControllers
         }
 
+        $found = @()
         try {
             $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
-            $found = $this.QueryDomainControllers()
-            $this.DomainControllers = @($found | Where-Object { $_ })
-
-            if ($this.DomainControllers.Count -eq 0) {
-                $this.Logger.LogWarning("Domain controller discovery returned no controllers.")
-            }
-            else {
-                $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): $($this.DomainControllers -join ', ')")
-            }
+            $found = @($this.QueryDomainControllers() | Where-Object { $_ })
         }
         catch {
-            $this.Logger.LogException("Failed to query domain controllers (is the ActiveDirectory module installed and the host domain-joined?)", $_)
-            $this.DomainControllers = @()
+            $this.Logger.LogWarning("DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
         }
+        if ($found.Count -eq 0) {
+            try {
+                $found = @($this.QueryDomainControllersViaLdap() | Where-Object { $_ })
+                if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).") }
+            }
+            catch {
+                $this.Logger.LogWarning("DC discovery via .NET DirectoryServices failed: $($_.Exception.Message)")
+            }
+        }
+        if ($found.Count -eq 0) {
+            try {
+                $found = @($this.QueryDomainControllersViaDns() | Where-Object { $_ })
+                if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to DNS SRV records.") }
+            }
+            catch {
+                $this.Logger.LogWarning("DC discovery via DNS SRV failed: $($_.Exception.Message)")
+            }
+        }
+        $this.DomainControllers = $found
 
+        if ($this.DomainControllers.Count -eq 0) {
+            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - is the host domain-joined with working DNS?")
+        }
+        else {
+            $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): $($this.DomainControllers -join ', ')")
+        }
         return $this.DomainControllers
     }
 
@@ -257,6 +277,20 @@ class NetworkProbe {
     # Queries Active Directory for all domain controllers and returns their host names.
     hidden [string[]] QueryDomainControllers() {
         return @(Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName)
+    }
+
+    # Same LDAP stack as user search (DirectorySearcher), which is proven to work as
+    # the machine account; GetComputerDomain reads domain membership, not the token.
+    hidden [string[]] QueryDomainControllersViaLdap() {
+        $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()
+        return @($domain.DomainControllers | Select-Object -ExpandProperty Name)
+    }
+
+    # Last resort: the DC locator SRV records every domain publishes in DNS.
+    hidden [string[]] QueryDomainControllersViaDns() {
+        $fqdn = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).Domain
+        return @(Resolve-DnsName -Type SRV -Name "_ldap._tcp.dc._msdcs.$fqdn" -ErrorAction Stop |
+                Where-Object NameTarget | Select-Object -ExpandProperty NameTarget -Unique)
     }
 
     # Reads Win32_ComputerSystem.Name from the host at $ip over a DCOM CIM session

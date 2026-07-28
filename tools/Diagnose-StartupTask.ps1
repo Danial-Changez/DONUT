@@ -204,6 +204,16 @@ foreach ($proc in $running) {
     }
 }
 
+# Where the SYSTEM instance gets its settings/token/logs from: the pointer pinned by
+# whoever toggled autostart on. Missing = it guesses the console user's profile.
+$pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
+if (Test-Path -LiteralPath $pointerFile) {
+    Write-Host "settings home pointer: $((Get-Content -LiteralPath $pointerFile -First 1))"
+}
+else {
+    Write-Host "settings home pointer: $pointerFile - not present (SYSTEM instance falls back to the console user's profile, which may be empty)" -ForegroundColor Yellow
+}
+
 # The shim narrates every firing here: resolved session id, the psexec line, the PID.
 $autostartLog = Join-Path $env:ProgramData 'DONUT\logs\autostart.log'
 if (Test-Path -LiteralPath $autostartLog) {
