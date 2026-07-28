@@ -23,7 +23,15 @@ model.
   by the pool's `throttleLimit`; isolation comes free from the process boundary.
   `WorkerProcess` owns this one concern (args → temp file, launcher scriptblock,
   result-file → verdict); `AsyncJob` just orchestrates the lifecycle; `RemoteWorker.ps1`
-  reads `-ArgsFile` and writes `-ResultFile`. Validated at 8-way concurrency with zero
+  reads `-ArgsFile` and writes `-ResultFile`. **The child executable is
+  `WorkerProcess.FindPwsh()`, never `[Environment]::ProcessPath`:** in a
+  launcher-hosted run `ProcessPath` is `Donut.Launcher.exe` (PowerShell is hosted
+  in-process), and spawning it forked a *second DONUT* that bowed out via the
+  single-instance guard — exit 0, no result file, which `Interpret` read as a silent
+  "success" with a null result. Every launcher-hosted worker then wedged its caller
+  (the autostart "Verifying … is reachable" hang; the "resolver not ready" round
+  before it was the same null poisoning the DC warm). `Interpret` now fails exit-0
+  with no result, and `CompleteResolveCore` drops payloadless verdicts loudly. Validated at 8-way concurrency with zero
   deadlock. **Live progress** survives the process boundary: `RemoteWorker.ps1` sets
   `$InformationPreference='Continue'` so its dcu-tail `Write-Information` lines hit the
   child's stdout, and the launcher reads that stdout *line-by-line* (not `ReadToEnd`),

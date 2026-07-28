@@ -58,5 +58,32 @@ Describe "WorkerProcess" {
             $v.Succeeded | Should -BeFalse
             $v.FailureMessage | Should -Not -BeNullOrEmpty
         }
+
+        # A second launcher bowing out via the single-instance guard exits 0 with no
+        # result - the silent "success" that wedged every launcher-hosted worker.
+        It "reads exit 0 with no result as a FAILURE, not a silent success" {
+            $v = [WorkerProcess]::Interpret([pscustomobject]@{
+                    Result = $null; ExitCode = 0; StdErr = ''; StdOut = '' })
+            $v.Succeeded | Should -BeFalse
+            $v.FailureMessage | Should -BeLike '*no result*'
+        }
+    }
+
+    Context "FindPwsh" {
+        It "returns a real pwsh path, never another executable's" {
+            $path = [WorkerProcess]::FindPwsh()
+            $path | Should -Not -BeNullOrEmpty
+            (Split-Path $path -Leaf) | Should -BeIn @('pwsh.exe', 'pwsh')
+        }
+
+        It "is what Prepare hands to the pool launcher" {
+            $prep = [WorkerProcess]::Prepare('w.ps1', @{ HostName = 'PC3' }, '')
+            try {
+                $prep.PwshPath | Should -Be ([WorkerProcess]::FindPwsh())
+            }
+            finally {
+                Remove-Item $prep.ArgsFile, $prep.ResultFile -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 }

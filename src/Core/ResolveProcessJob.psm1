@@ -1,5 +1,6 @@
 using module '.\AsyncJob.psm1'
 using module '.\LogService.psm1'
+using module '.\WorkerProcess.psm1'
 using module '..\Models\JobEnums.psm1'
 
 <#
@@ -33,8 +34,12 @@ class ResolveProcessJob : AsyncJob {
     [void] Start([string]$scriptPath, [hashtable]$arguments, [string]$tempConfigPath) {
         try {
             $this.FastResultFile = [System.IO.Path]::GetTempFileName()
-            $pwsh = [System.Environment]::ProcessPath
-            if ([string]::IsNullOrWhiteSpace($pwsh)) { $pwsh = 'pwsh' }
+            # Never ProcessPath directly: launcher-hosted runs would fork a second
+            # DONUT that exits 0 with no verdict (see WorkerProcess.FindPwsh).
+            $pwsh = [WorkerProcess]::FindPwsh()
+            if ([string]::IsNullOrWhiteSpace($pwsh)) {
+                throw 'pwsh.exe was not found on PATH - the fast resolve child cannot run.'
+            }
 
             $psi = [System.Diagnostics.ProcessStartInfo]::new($pwsh)
             foreach ($a in @('-NoProfile', '-NoLogo', '-NonInteractive', '-File', $scriptPath,
