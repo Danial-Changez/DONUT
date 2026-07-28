@@ -297,6 +297,13 @@ SMB (port 445), avoids WinRM/TrustedHosts configuration, and natively supports
   admin, `6` another DCU instance, `7`/`8` unsupported).
 - **PsExec arguments:** `-s` (SYSTEM), `-h` (elevated), `-accepteula`, with
   `pwsh -NoProfile -NonInteractive -c` for clean remote execution.
+- **`-i` defaults to the caller's session, not the console.** The docs say "if no
+  session is specified the process runs in the console session"; field-verified
+  otherwise (2026-07-27): called from a SYSTEM scheduled task, `psexec -s -i -d`
+  landed DONUT in session 0. Always pass the session id explicitly — the autostart
+  shim resolves `WTSGetActiveConsoleSessionId()` at fire time for exactly this
+  reason. Related: with `-d`, psexec's exit code is the launched **PID**, so a
+  "failed" task result like `10176` is actually success.
 - **Headless launch:** psexec is started through `ProcessStartInfo` with
   `CreateNoWindow` (a *hidden* console), not `Start-Process -NoNewWindow`. DONUT is a
   window-subsystem GUI with no console of its own, so `-NoNewWindow` makes the OS spawn

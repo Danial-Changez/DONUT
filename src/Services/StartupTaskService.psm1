@@ -16,13 +16,15 @@ using module "..\Core\LogService.psm1"
       Interactive - it runs inside that user's own logon session.
     - Anything else - a SYSTEM token, OR over-the-shoulder UAC (sign in as a standard
       user, elevate DONUT with a separate admin account, both in the same session):
-      the task runs AS SYSTEM and relaunches DONUT into the console session via
-      psexec -s -i, reproducing the manual launch. A per-user task cannot work here -
+      the task runs AS SYSTEM and relaunches DONUT into the console session
+      (powershell shim -> psexec -s -i <id>), reproducing the manual launch. A
+      per-user task cannot work here -
       an Interactive principal needs a logon session the admin account does not have,
       and RunLevel Highest on a non-admin console user degrades to a standard token
       that CreateProcess refuses against the launcher's requireAdministrator manifest
-      (ERROR_ELEVATION_REQUIRED). AD access is unchanged: SYSTEM authenticates as the
-      machine account either way.
+      (ERROR_ELEVATION_REQUIRED). Known trade-off: the SYSTEM instance authenticates
+      on the network as the MACHINE account, not the admin account a manual
+      over-the-shoulder launch uses - AD rights may differ.
 
 .NOTES
     The pure helpers (BuildLaunchSpec, BuildSystemSpec, ReconcileDecision,
@@ -31,8 +33,11 @@ using module "..\Core\LogService.psm1"
     reason in LastFailure). The CIM/identity seams (GetExistingTask/RegisterTask/
     UnregisterTask, GetProcessIdentity/GetInteractiveUser/FindPsExec) are
     overridable so a fake subclass can capture which ran without touching Task
-    Scheduler or WindowsIdentity. psexec -i with no session id targets the
-    CONSOLE session - an RDP logon will not surface the tray (known limit).
+    Scheduler or WindowsIdentity. The shim (Start-DonutInConsoleSession.ps1)
+    exists because psexec -i with no session id targets the CALLER's session,
+    NOT the console session its docs claim (field-verified: a SYSTEM task put
+    DONUT in session 0). Injection targets the physical console - an RDP-only
+    logon will not surface the tray (known limit).
 #>
 class StartupTaskService {
     [LogService] $Logger
@@ -65,12 +70,17 @@ class StartupTaskService {
         return @{ User = $console; IsSystem = (-not $sameUser) }
     }
 
-    # Pure: wraps a host spec in a psexec relaunch for the SYSTEM lane. -s -i puts
-    # DONUT (as SYSTEM) on the console session's desktop; -d frees the task slot.
-    static [hashtable] BuildSystemSpec([string]$psexecPath, [hashtable]$hostSpec) {
+    # Pure: the SYSTEM-lane action - powershell.exe (5.1, always present) runs the shim,
+    # which resolves the console session id AT FIRE TIME and hands psexec -i that id.
+    # Without an explicit id psexec targets the CALLER's session - 0 for a SYSTEM task,
+    # a desktop nobody can see. Host args go base64: they carry nested quotes (dev pwsh).
+    static [hashtable] BuildSystemSpec([string]$psexecPath, [string]$shimPath, [hashtable]$hostSpec) {
+        $argB64 = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes([string]$hostSpec.Argument))
         return @{
-            Execute  = $psexecPath
-            Argument = "-accepteula -nobanner -s -i -d `"$($hostSpec.Execute)`" $($hostSpec.Argument)"
+            Execute  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            Argument = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden ' +
+                "-File `"$shimPath`" -PsExec `"$psexecPath`" -Execute `"$($hostSpec.Execute)`" -ArgB64 $argB64"
         }
     }
 
@@ -131,7 +141,8 @@ class StartupTaskService {
                 if (-not $psexec) {
                     return $this.Fail('psexec.exe was not found (src\Tools or PATH) - the SYSTEM-hosted startup task needs it to reach your desktop.')
                 }
-                $spec = [StartupTaskService]::BuildSystemSpec($psexec, $spec)
+                $shim = Join-Path $this.SourceRoot 'Scripts\Start-DonutInConsoleSession.ps1'
+                $spec = [StartupTaskService]::BuildSystemSpec($psexec, $shim, $spec)
             }
             $name = [StartupTaskService]::TaskNameFor($owner.User)
             $existing = $this.GetExistingTask($name)

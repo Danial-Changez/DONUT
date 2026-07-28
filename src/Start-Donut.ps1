@@ -19,6 +19,32 @@
 # -DebugLog forces verbose [DEBUG] logging this session without touching settings.
 param([switch]$Tray, [switch]$DebugLog)
 
+# Under a SYSTEM token %LOCALAPPDATA% is the system profile, so config/logs/token/
+# WSID would split from the operator's - the autostarted ghost then read a default
+# config (startWithWindows off) and UNREGISTERED its own task. Re-point the env var
+# at the console user's profile before anything reads it.
+if ([System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
+    $ownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+    # Prefer the desktop this process is on; fall back to any signed-in desktop.
+    $explorer = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+            Sort-Object { $_.SessionId -ne $ownSession }) | Select-Object -First 1
+    $explorerOwner = if ($explorer) {
+        Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+    }
+    if ($explorerOwner -and $explorerOwner.User) {
+        try {
+            $ownerSid = ([System.Security.Principal.NTAccount]"$($explorerOwner.Domain)\$($explorerOwner.User)").Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            $profilePath = (Get-ItemProperty -ErrorAction Stop `
+                    -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$ownerSid").ProfileImagePath
+            if ($profilePath) { $env:LOCALAPPDATA = Join-Path $profilePath 'AppData\Local' }
+        }
+        catch {
+            Write-Warning "Could not resolve the console user's profile ($($explorerOwner.Domain)\$($explorerOwner.User)): $($_.Exception.Message)"
+        }
+    }
+}
+
 # WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
 # instead of failing later in the XAML load.
 if ($PSVersionTable.PSVersion.Major -lt 7 -or

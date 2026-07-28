@@ -210,15 +210,28 @@ runspace-pool warm) — following a consistent seam:
     console user* is a per-user task viable (RunLevel Highest, Interactive).
     Otherwise — a SYSTEM token, or a separate admin account that never signs in — the
     task runs **as SYSTEM**, triggered at the console user's logon (PT15S delay so the
-    desktop is up), and relaunches DONUT into that session via
-    `psexec -accepteula -nobanner -s -i -d`, reproducing the manual SYSTEM launch. A
-    per-user task cannot substitute: an Interactive principal needs a session that
-    account doesn't have, and RunLevel Highest on a non-admin degrades to a standard
-    token that CreateProcess refuses against the `requireAdministrator` launcher
-    (`ERROR_ELEVATION_REQUIRED`, 0x800702E4 — no process, no UAC prompt). psexec
-    resolves from `src/Tools` first, then PATH, absolute path baked into the action
-    (SYSTEM's logon PATH may lack it). `-i` targets the **console** session; an RDP
-    logon won't surface the tray (known limit).
+    desktop is up). Its action is `powershell.exe` running
+    `Scripts/Start-DonutInConsoleSession.ps1`, which resolves the console session id
+    **at fire time** and relaunches DONUT via `psexec -s -i <id> -d`. The shim exists
+    because `psexec -i` *without* an id targets the **caller's** session — not the
+    console session its docs claim (field-verified: a SYSTEM task put DONUT in
+    session 0) — and the id can't be baked in at register time since it changes every
+    logon. Host arguments travel base64-encoded (nested quotes don't survive Task
+    Scheduler → `powershell -File`); each firing appends to
+    `%ProgramData%\DONUT\logs\autostart.log`. A per-user task cannot substitute: an
+    Interactive principal needs a session that account doesn't have, and RunLevel
+    Highest on a non-admin degrades to a standard token that CreateProcess refuses
+    against the `requireAdministrator` launcher (`ERROR_ELEVATION_REQUIRED`,
+    0x800702E4 — no process, no UAC prompt). psexec resolves from `src/Tools` first,
+    then PATH, absolute path baked into the action (SYSTEM's logon PATH may lack it).
+    An RDP-only logon won't surface the tray (known limit).
+  - **The SYSTEM instance re-points `%LOCALAPPDATA%` at the console user** (top of
+    `Start-Donut.ps1`: explorer owner → SID → ProfileList → profile path). Without
+    this the ghost read a *default* config from the system profile — startWithWindows
+    off — and its 120 s heal **unregistered its own task** two minutes after every
+    successful autostart. It also shares your settings, token, WSID list and logs.
+    Trade-off that remains by design: as SYSTEM it authenticates on the network as
+    the machine account, not the admin account a manual launch uses.
 
   The task *name* derives from the console user, so an owner change would strand the
   old task — `RemoveStaleTasks` sweeps `DONUT-*` tasks that launch this install, never
