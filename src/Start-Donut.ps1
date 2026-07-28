@@ -22,25 +22,38 @@ param([switch]$Tray, [switch]$DebugLog)
 # Under a SYSTEM token %LOCALAPPDATA% is the system profile, so config/logs/token/
 # WSID would split from the operator's - the autostarted ghost then read a default
 # config (startWithWindows off) and UNREGISTERED its own task. Re-point the env var
-# at the console user's profile before anything reads it.
+# before anything reads it: the settings ACTUALLY live under the profile of whoever
+# toggled autostart on (over-the-shoulder UAC = the ADMIN account, not the console
+# user), so prefer the pointer StartupTaskService pinned at register time.
 if ([System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
-    $ownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-    # Prefer the desktop this process is on; fall back to any signed-in desktop.
-    $explorer = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-            Sort-Object { $_.SessionId -ne $ownSession }) | Select-Object -First 1
-    $explorerOwner = if ($explorer) {
-        Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
-    }
-    if ($explorerOwner -and $explorerOwner.User) {
-        try {
-            $ownerSid = ([System.Security.Principal.NTAccount]"$($explorerOwner.Domain)\$($explorerOwner.User)").Translate(
-                [System.Security.Principal.SecurityIdentifier]).Value
-            $profilePath = (Get-ItemProperty -ErrorAction Stop `
-                    -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$ownerSid").ProfileImagePath
-            if ($profilePath) { $env:LOCALAPPDATA = Join-Path $profilePath 'AppData\Local' }
+    $redirected = $false
+    $pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
+    if (Test-Path -LiteralPath $pointerFile) {
+        $pinned = [string](Get-Content -LiteralPath $pointerFile -First 1 -ErrorAction SilentlyContinue)
+        if ($pinned -and (Test-Path -LiteralPath $pinned.Trim())) {
+            $env:LOCALAPPDATA = $pinned.Trim()
+            $redirected = $true
         }
-        catch {
-            Write-Warning "Could not resolve the console user's profile ($($explorerOwner.Domain)\$($explorerOwner.User)): $($_.Exception.Message)"
+    }
+    if (-not $redirected) {
+        $ownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+        # No pointer: fall back to the desktop this process is on, then any desktop.
+        $explorer = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+                Sort-Object { $_.SessionId -ne $ownSession }) | Select-Object -First 1
+        $explorerOwner = if ($explorer) {
+            Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+        }
+        if ($explorerOwner -and $explorerOwner.User) {
+            try {
+                $ownerSid = ([System.Security.Principal.NTAccount]"$($explorerOwner.Domain)\$($explorerOwner.User)").Translate(
+                    [System.Security.Principal.SecurityIdentifier]).Value
+                $profilePath = (Get-ItemProperty -ErrorAction Stop `
+                        -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$ownerSid").ProfileImagePath
+                if ($profilePath) { $env:LOCALAPPDATA = Join-Path $profilePath 'AppData\Local' }
+            }
+            catch {
+                Write-Warning "Could not resolve the console user's profile ($($explorerOwner.Domain)\$($explorerOwner.User)): $($_.Exception.Message)"
+            }
         }
     }
 }

@@ -152,6 +152,11 @@ class StartupTaskService {
                 'Unregister' { $this.UnregisterTask($name) }
                 default { }
             }
+            # The admin-elevated instance owns the real settings profile; pin it so the
+            # SYSTEM instance boots into the same config/token/logs instead of an empty one.
+            if ($enabled -and $owner.IsSystem -and -not $this.GetProcessIdentity().IsSystem) {
+                $this.SaveDataRootPointer()
+            }
             # A task named for a previous owner would linger (and never fire) forever.
             $this.RemoveStaleTasks($name)
             return $true
@@ -225,6 +230,20 @@ class StartupTaskService {
 
     hidden [object] GetExistingTask([string]$name) {
         return Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    }
+
+    # Machine-wide pointer read by Start-Donut's SYSTEM redirect: which LOCALAPPDATA
+    # the operator's DONUT data lives under (best-effort - never fails the toggle).
+    hidden [void] SaveDataRootPointer() {
+        try {
+            $dir = Join-Path $env:ProgramData 'DONUT'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            Set-Content -Path (Join-Path $dir 'dataroot.txt') -Value $env:LOCALAPPDATA -Encoding UTF8
+            $this.Logger.LogInfo("Startup task: settings home pinned to $env:LOCALAPPDATA for the SYSTEM instance.")
+        }
+        catch {
+            $this.Logger.LogWarning("Could not pin the settings home for the SYSTEM instance: $($_.Exception.Message)")
+        }
     }
 
     # $triggerUser is whose LOGON fires the task (always the console user); $asSystem

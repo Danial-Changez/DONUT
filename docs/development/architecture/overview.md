@@ -225,13 +225,20 @@ runspace-pool warm) — following a consistent seam:
     0x800702E4 — no process, no UAC prompt). psexec resolves from `src/Tools` first,
     then PATH, absolute path baked into the action (SYSTEM's logon PATH may lack it).
     An RDP-only logon won't surface the tray (known limit).
-  - **The SYSTEM instance re-points `%LOCALAPPDATA%` at the console user** (top of
-    `Start-Donut.ps1`: explorer owner → SID → ProfileList → profile path). Without
-    this the ghost read a *default* config from the system profile — startWithWindows
-    off — and its 120 s heal **unregistered its own task** two minutes after every
-    successful autostart. It also shares your settings, token, WSID list and logs.
-    Trade-off that remains by design: as SYSTEM it authenticates on the network as
-    the machine account, not the admin account a manual launch uses.
+  - **The SYSTEM instance re-points `%LOCALAPPDATA%` at the operator's settings**
+    (top of `Start-Donut.ps1`). Without this the ghost read a *default* config from
+    the system profile — startWithWindows off — and its 120 s heal **unregistered its
+    own task** two minutes after every successful autostart. The settings live under
+    the profile of *whoever toggled autostart on* — under over-the-shoulder UAC that
+    is the **admin** account, not the console user — so `Apply` pins that instance's
+    `%LOCALAPPDATA%` to `%ProgramData%\DONUT\dataroot.txt` at register time (only
+    from a non-SYSTEM instance; a SYSTEM heal's redirected env is not the source of
+    truth), and the redirect follows the pointer, falling back to the console user's
+    profile (explorer owner → SID → ProfileList) when no pointer exists. Trade-off
+    that remains by design: as SYSTEM it authenticates on the network as the machine
+    account, not the admin account a manual launch uses — `NetworkProbe` therefore
+    discovers DCs via RSAT/ADWS, then .NET DirectoryServices (the LDAP stack user
+    search already runs on), then DNS SRV.
 
   The task *name* derives from the console user, so an owner change would strand the
   old task — `RemoveStaleTasks` sweeps `DONUT-*` tasks that launch this install, never

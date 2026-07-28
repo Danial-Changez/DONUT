@@ -51,13 +51,15 @@ session. If the toggle fails, the error toast states the actual reason. Each
 firing of the helper is narrated in `%ProgramData%\DONUT\logs\autostart.log`.
 
 :::caution
-The autostarted instance runs as `SYSTEM`, but it still uses **your** DONUT data:
-at boot it re-points `%LOCALAPPDATA%` at the console user's profile, so settings,
-logs, GitHub token and WSID list are shared with your manual runs. (Without this,
-the instance read a default config where the toggle is off — and unregistered its
-own startup task two minutes in.) One trade-off remains: on the network it
-authenticates as the **machine account**, not your admin account, so AD rights can
-differ from a manual launch.
+The autostarted instance runs as `SYSTEM`, but it still uses **your** DONUT data.
+When you toggle autostart on, DONUT pins the current settings location (the profile
+of the account you elevated with) to `%ProgramData%\DONUT\dataroot.txt`; the SYSTEM
+instance follows that pointer at boot, so settings, logs, GitHub token and WSID list
+are shared with your manual runs. (Without this, the instance read a default config
+where the toggle is off — and unregistered its own startup task two minutes in.)
+One trade-off remains: on the network it authenticates as the **machine account**,
+not your admin account, so AD rights can differ from a manual launch — DC discovery
+falls back from RSAT/ADWS to plain LDAP and DNS SRV for exactly this reason.
 :::
 
 These three behaviours map to the `closeToTray`, `globalHotkey`, and
