@@ -82,8 +82,16 @@ class RpcUnavailableException : RemoteOperationException {
 class RemoteExecutionException : RemoteOperationException {
     [int] $ExitCode
 
+    # Decodes the Win32 transport codes operators actually hit (psexec surfaces them
+    # as its exit code); anything else keeps the bare-number form.
     RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode) : base(
-        "$what failed on '$hostName' (exit code $exitCode).",
+        $(switch ($exitCode) {
+                5 { "$what failed on '$hostName' (exit code 5 - access denied: the account DONUT runs as is not an admin on the target)." }
+                53 { "$what failed on '$hostName' (exit code 53 - the network path to the target was not found)." }
+                1219 { "$what failed on '$hostName' (exit code 1219 - an existing connection to the target uses different credentials)." }
+                1326 { "$what failed on '$hostName' (exit code 1326 - the user name or password is incorrect)." }
+                default { "$what failed on '$hostName' (exit code $exitCode)." }
+            }),
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ExecutionFailed) {
         $this.ExitCode = $exitCode
     }
