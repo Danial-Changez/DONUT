@@ -173,10 +173,45 @@ Write-Host "this shell session: $((Get-Process -Id $PID).SessionId)   running as
 $donut = Get-Process -Name 'Donut.Launcher' -ErrorAction SilentlyContinue
 Write-Host ("DONUT running now: " + $(if ($donut) { "yes (pid $($donut.Id), session $($donut.SessionId))" } else { 'no' }))
 
+Write-Section "5. The autostarted instance (running, but no tray?)"
+$consoleSession = (Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1).SessionId
+$running = @(Get-Process -Name 'Donut.Launcher' -ErrorAction SilentlyContinue)
+if (-not $running) { Write-Host "No Donut.Launcher process is running." -ForegroundColor Yellow }
+foreach ($proc in $running) {
+    $cim = Get-CimInstance Win32_Process -Filter "ProcessId=$($proc.Id)" -ErrorAction SilentlyContinue
+    $owner = if ($cim) { Invoke-CimMethod -InputObject $cim -MethodName GetOwner -ErrorAction SilentlyContinue } else { $null }
+    $who = if ($owner -and $owner.User) { "$($owner.Domain)\$($owner.User)" } else { 'unknown' }
+    Write-Host "pid $($proc.Id)  session $($proc.SessionId)  as $who  started $($cim.CreationDate)"
+    if ($null -ne $consoleSession -and $proc.SessionId -ne $consoleSession) {
+        Write-Host "  PROBLEM: not in the console session ($consoleSession) - it has no desktop, so no tray icon or window can ever appear." -ForegroundColor Red
+    }
+    if ($who -like '*\SYSTEM') {
+        Write-Host "  NOTE: as SYSTEM, %LOCALAPPDATA% is the system profile - this instance has none of your settings, logs, token, or WSID list." -ForegroundColor Yellow
+    }
+}
+
+# A SYSTEM-hosted DONUT logs under the system profile, not yours - that is where the
+# autostart run's evidence lands, and why your own Donut.log looks untouched.
+Write-Host ""
+foreach ($profileRoot in @("$env:SystemRoot\System32\config\systemprofile", "$env:SystemRoot\SysWOW64\config\systemprofile")) {
+    $systemLog = Join-Path $profileRoot 'AppData\Local\DONUT\logs\Donut.log'
+    if (Test-Path -LiteralPath $systemLog) {
+        Write-Host "SYSTEM-profile log: $systemLog" -ForegroundColor Green
+        Get-Content -LiteralPath $systemLog -Tail 25
+    }
+    else {
+        Write-Host "SYSTEM-profile log: $systemLog - not present" -ForegroundColor Yellow
+    }
+}
+
 Write-Section "Manual reproduction (run this to see psexec's own error)"
 Write-Host "The task's action, run by hand from THIS elevated shell:"
 Write-Host "  & `"$($action.Execute)`" $($action.Arguments)" -ForegroundColor Gray
 Write-Host "If that surfaces DONUT here but the logon task does not, the failure is session-0 injection, not the command."
+Write-Host ""
+Write-Host "Then the same thing WITHOUT --tray, which proves whether that instance can draw on your desktop at all:"
+Write-Host "  & `"$($action.Execute)`" $(($action.Arguments -replace '\s--tray\b', ''))" -ForegroundColor Gray
+Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
 
 Write-Section "VERDICT"
 # The registered task is a snapshot of whichever build last applied it - so new code
@@ -193,5 +228,5 @@ elseif ($oldShape) {
 }
 else {
     Write-Host "Task shape looks correct: SYSTEM principal, triggered by the console user." -ForegroundColor Green
-    Write-Host "If DONUT still does not appear at logon, the remaining suspect is psexec's session-0 injection - run the manual reproduction above and capture its output." -ForegroundColor Green
+    Write-Host "If DONUT is running but invisible, section 5 says why: a session other than the console one means psexec never reached your desktop; the console session means the process is there but its UI is not." -ForegroundColor Green
 }

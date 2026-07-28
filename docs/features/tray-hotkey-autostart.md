@@ -46,6 +46,14 @@ What it runs as depends on how DONUT itself is running:
 An RDP logon won't surface the tray — PsExec targets the console session. If the
 toggle fails, the error toast states the actual reason.
 
+:::caution
+On the SYSTEM lane that instance really does run as `SYSTEM`, so `%LOCALAPPDATA%`
+resolves to `C:\Windows\System32\config\systemprofile\...` — its settings, logs,
+reports, GitHub token and WSID list are **not** the ones under your own profile.
+That is also where to look for the autostart run's `Donut.log`; your own copy will
+show nothing.
+:::
+
 These three behaviours map to the `closeToTray`, `globalHotkey`, and
 `startWithWindows` keys in the
 [config reference](../configuration/config-reference.md), and their design rationale
