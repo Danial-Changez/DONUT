@@ -39,19 +39,25 @@ What it runs as depends on how DONUT itself is running:
 - **DONUT runs as you:** a normal per-user task, elevated, in your own session.
 - **DONUT runs as SYSTEM or a separate admin account** — including the common setup
   where you sign in with a standard account and elevate DONUT through UAC with your
-  admin account: the task runs as SYSTEM and relaunches DONUT onto your desktop via
-  the bundled PsExec, reproducing the manual launch. DONUT then authenticates on the
-  network as the machine account, exactly as those manual runs do.
+  admin account: the task runs as SYSTEM. At logon a small helper
+  (`Start-DonutInConsoleSession.ps1`) resolves your console session id *at that
+  moment* and hands it to the bundled PsExec, which places DONUT on your desktop.
+  The id can't be baked into the task — session ids change every logon, and PsExec's
+  `-i` without an id targets the *caller's* session (an invisible session 0), not
+  the console.
 
-An RDP logon won't surface the tray — PsExec targets the console session. If the
-toggle fails, the error toast states the actual reason.
+An RDP-only logon won't surface the tray — injection targets the physical console
+session. If the toggle fails, the error toast states the actual reason. Each
+firing of the helper is narrated in `%ProgramData%\DONUT\logs\autostart.log`.
 
 :::caution
-On the SYSTEM lane that instance really does run as `SYSTEM`, so `%LOCALAPPDATA%`
-resolves to `C:\Windows\System32\config\systemprofile\...` — its settings, logs,
-reports, GitHub token and WSID list are **not** the ones under your own profile.
-That is also where to look for the autostart run's `Donut.log`; your own copy will
-show nothing.
+The autostarted instance runs as `SYSTEM`, but it still uses **your** DONUT data:
+at boot it re-points `%LOCALAPPDATA%` at the console user's profile, so settings,
+logs, GitHub token and WSID list are shared with your manual runs. (Without this,
+the instance read a default config where the toggle is off — and unregistered its
+own startup task two minutes in.) One trade-off remains: on the network it
+authenticates as the **machine account**, not your admin account, so AD rights can
+differ from a manual launch.
 :::
 
 These three behaviours map to the `closeToTray`, `globalHotkey`, and

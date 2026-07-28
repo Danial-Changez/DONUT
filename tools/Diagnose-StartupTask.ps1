@@ -82,11 +82,15 @@ else {
     $hasToken = $svc -match 'GetProcessIdentity'
     # The console-user trigger fix: RegisterTask takes $triggerUser, separate from the principal.
     $script:codeSplitsTrigger = $svc -match 'triggerUser'
+    # The fire-time session fix: psexec -i defaults to the CALLER's session (0 under a
+    # SYSTEM task), so the shim resolves the console session id when the trigger fires.
+    $script:codeHasShim = $svc -match 'Start-DonutInConsoleSession'
     Write-Host "extracted : $svcPath"
     Write-Host "modified  : $((Get-Item -LiteralPath $svcPath).LastWriteTime)"
     Write-Host ("token-owner fix         : " + $(if ($hasToken) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasToken) { 'Green' } else { 'Red' })
     Write-Host ("SYSTEM psexec lane      : " + $(if ($hasLane) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasLane) { 'Green' } else { 'Red' })
     Write-Host ("console-user trigger fix: " + $(if ($script:codeSplitsTrigger) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeSplitsTrigger) { 'Green' } else { 'Red' })
+    Write-Host ("fire-time session shim  : " + $(if ($script:codeHasShim) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeHasShim) { 'Green' } else { 'Red' })
     if (-not ($hasLane -and $script:codeSplitsTrigger)) {
         Write-Host "The installed launcher predates the current fixes. Rebuild Donut.Launcher.exe and reinstall - a git pull does not update an installed build." -ForegroundColor Red
     }
@@ -121,6 +125,13 @@ foreach ($t in $task.Triggers) {
         Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
     }
 }
+# Direct psexec action = pre-shim shape: -i without a session id lands in the
+# CALLER's session (0 for a SYSTEM task), an invisible desktop.
+$script:actionLacksShim = ($action.Execute -like '*PsExec*') -or
+    ($action.Arguments -notlike '*Start-DonutInConsoleSession*' -and $action.Execute -like '*powershell*' -and $action.Arguments -like '*-accepteula*')
+if ($action.Execute -like '*PsExec*') {
+    Write-Host "PROBLEM: the action calls psexec DIRECTLY with -i and no session id - psexec then targets the caller's session (0), so DONUT starts on a desktop nobody can see. Current builds route through the Start-DonutInConsoleSession shim instead." -ForegroundColor Red
+}
 $script:perUserLane = $principal.UserId -notmatch 'SYSTEM'
 if ($script:perUserLane -and $principal.RunLevel -eq 'Highest') {
     # Direct members only - a domain account is usually admin via a nested group
@@ -146,6 +157,9 @@ Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning ([int]$in
 Write-Host "next run   : $($info.NextRunTime)"
 if ([int]$info.LastTaskResult -eq 267011) {
     Write-Host "DIAGNOSIS: registered but NEVER RUN. The task itself is fine - its trigger never fired. Check the trigger user above against the console user." -ForegroundColor Red
+}
+if ($action.Execute -like '*PsExec*' -and [int]$info.LastTaskResult -gt 4) {
+    Write-Host "NOTE: this old-shape action calls psexec -d directly, whose exit code is the launched PID - a result like this usually means psexec SUCCEEDED. The shim-shaped action exits 0 instead." -ForegroundColor Yellow
 }
 
 Write-Section "TaskScheduler/Operational events for this task"
@@ -190,8 +204,18 @@ foreach ($proc in $running) {
     }
 }
 
-# A SYSTEM-hosted DONUT logs under the system profile, not yours - that is where the
-# autostart run's evidence lands, and why your own Donut.log looks untouched.
+# The shim narrates every firing here: resolved session id, the psexec line, the PID.
+$autostartLog = Join-Path $env:ProgramData 'DONUT\logs\autostart.log'
+if (Test-Path -LiteralPath $autostartLog) {
+    Write-Host "shim log: $autostartLog" -ForegroundColor Green
+    Get-Content -LiteralPath $autostartLog -Tail 10
+}
+else {
+    Write-Host "shim log: $autostartLog - not present (the shim-shaped task has not fired yet)" -ForegroundColor Yellow
+}
+
+# A SYSTEM-hosted DONUT on an old build logs under the system profile; current builds
+# re-point %LOCALAPPDATA% at the console user, so check your own Donut.log first.
 Write-Host ""
 foreach ($profileRoot in @("$env:SystemRoot\System32\config\systemprofile", "$env:SystemRoot\SysWOW64\config\systemprofile")) {
     $systemLog = Join-Path $profileRoot 'AppData\Local\DONUT\logs\Donut.log'
@@ -208,17 +232,19 @@ Write-Section "Manual reproduction (run this to see psexec's own error)"
 Write-Host "The task's action, run by hand from THIS elevated shell:"
 Write-Host "  & `"$($action.Execute)`" $($action.Arguments)" -ForegroundColor Gray
 Write-Host "If that surfaces DONUT here but the logon task does not, the failure is session-0 injection, not the command."
-Write-Host ""
-Write-Host "Then the same thing WITHOUT --tray, which proves whether that instance can draw on your desktop at all:"
-Write-Host "  & `"$($action.Execute)`" $(($action.Arguments -replace '\s--tray\b', ''))" -ForegroundColor Gray
-Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
+if ($action.Arguments -like '*--tray*') {
+    Write-Host ""
+    Write-Host "Then the same thing WITHOUT --tray, which proves whether that instance can draw on your desktop at all:"
+    Write-Host "  & `"$($action.Execute)`" $(($action.Arguments -replace '\s--tray\b', ''))" -ForegroundColor Gray
+    Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
+}
 
 Write-Section "VERDICT"
 # The registered task is a snapshot of whichever build last applied it - so new code
 # plus an old-shaped task means the fix simply has not run yet.
-$oldShape = $script:triggerMismatch -or $script:perUserLane
-if ($oldShape -and $script:codeSplitsTrigger) {
-    Write-Host "The installed code HAS the console-user trigger fix, but this task still has the OLD shape (per-user principal and/or a trigger bound to a non-console account)." -ForegroundColor Yellow
+$oldShape = $script:triggerMismatch -or $script:perUserLane -or $script:actionLacksShim
+if ($oldShape -and $script:codeSplitsTrigger -and $script:codeHasShim) {
+    Write-Host "The installed code HAS the current fixes, but this task still has an OLD shape (per-user principal, a trigger bound to a non-console account, and/or a direct-psexec action with no session id)." -ForegroundColor Yellow
     Write-Host "The task is a snapshot from whichever build last applied it - the fix has not re-registered yet." -ForegroundColor Yellow
     Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> as SYSTEM and sweep this stale task. Then re-run this script." -ForegroundColor Green
 }

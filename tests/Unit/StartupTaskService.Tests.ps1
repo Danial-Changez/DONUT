@@ -168,11 +168,33 @@ Describe "StartupTaskService" {
     }
 
     Context "BuildSystemSpec" {
-        It "Wraps the host spec in a psexec -s -i -d console relaunch, exe quoted" {
+        It "Runs the shim under Windows PowerShell, quoting shim/psexec/host paths" {
             $spec = [StartupTaskService]::BuildSystemSpec('C:\App\src\Tools\psexec.exe',
+                'C:\App\src\Scripts\Start-DonutInConsoleSession.ps1',
                 @{ Execute = 'C:\Program Files\DONUT\Donut.Launcher.exe'; Argument = '--tray' })
-            $spec.Execute | Should -Be 'C:\App\src\Tools\psexec.exe'
-            $spec.Argument | Should -Be '-accepteula -nobanner -s -i -d "C:\Program Files\DONUT\Donut.Launcher.exe" --tray'
+            $spec.Execute | Should -BeLike '*\WindowsPowerShell\v1.0\powershell.exe'
+            $spec.Argument | Should -BeLike '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden *'
+            $spec.Argument | Should -BeLike '*-File "C:\App\src\Scripts\Start-DonutInConsoleSession.ps1"*'
+            $spec.Argument | Should -BeLike '*-PsExec "C:\App\src\Tools\psexec.exe"*'
+            $spec.Argument | Should -BeLike '*-Execute "C:\Program Files\DONUT\Donut.Launcher.exe"*'
+        }
+
+        # psexec -i without a session id targets the CALLER's session (0 under a SYSTEM
+        # task) - the shim exists to resolve the console session at fire time instead.
+        It "Never bakes psexec -i into the action itself" {
+            $spec = [StartupTaskService]::BuildSystemSpec('C:\pe.exe', 'C:\shim.ps1',
+                @{ Execute = 'C:\d.exe'; Argument = '--tray' })
+            $spec.Execute | Should -Not -Be 'C:\pe.exe'
+            $spec.Argument | Should -Not -BeLike '*-accepteula*'
+        }
+
+        It "Base64-encodes the host arguments so nested quotes survive the task action" {
+            $hostArgs = '-Sta -ExecutionPolicy Bypass -File "C:\My App\src\Start-Donut.ps1" -Tray'
+            $spec = [StartupTaskService]::BuildSystemSpec('C:\pe.exe', 'C:\shim.ps1',
+                @{ Execute = 'C:\pwsh.exe'; Argument = $hostArgs })
+            $spec.Argument -match '-ArgB64 (\S+)$' | Should -BeTrue
+            [System.Text.Encoding]::UTF8.GetString(
+                [Convert]::FromBase64String($Matches[1])) | Should -Be $hostArgs
         }
     }
 
@@ -272,8 +294,9 @@ Describe "StartupTaskService" {
             $fake.LastUser | Should -Be 'PROD\jdoe'
             $fake.LastName | Should -Be 'DONUT-jdoe'
             $fake.LastAsSystem | Should -BeTrue
-            $fake.LastSpec.Execute | Should -Be 'C:\App\src\Tools\psexec.exe'
-            $fake.LastSpec.Argument | Should -BeLike '-accepteula -nobanner -s -i -d *'
+            $fake.LastSpec.Execute | Should -BeLike '*\powershell.exe'
+            $fake.LastSpec.Argument | Should -BeLike '*Start-DonutInConsoleSession.ps1*'
+            $fake.LastSpec.Argument | Should -BeLike '*-PsExec "C:\App\src\Tools\psexec.exe"*'
         }
 
         It "Fails with a psexec reason when SYSTEM and psexec is missing" {
