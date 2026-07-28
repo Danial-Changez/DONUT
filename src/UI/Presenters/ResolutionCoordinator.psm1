@@ -381,8 +381,20 @@ class ResolutionCoordinator {
             return
         }
         if ($isFast) { $this.FastFaultStreak = 0 }
-        foreach ($item in @($job.Result)) {
-            if ($null -eq $item) { continue }
+        $items = @(@($job.Result) | Where-Object { $null -ne $_ })
+        if ($items.Count -eq 0) {
+            # A "completed" resolve with no payload must still release the latch and
+            # the queue, or the host wedges on "Verifying..." forever.
+            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
+            $this.Logger.LogWarning("$who completed with no verdict payload - treating it as failed.")
+            $this.Resolver.ClearInFlight($job.HostName)
+            $this.Home.DropPendingRunOnResolveFailure($job.HostName)
+            if ([string]::IsNullOrWhiteSpace($job.HostName)) {
+                $this.Home.StartDeferredWarms('DC warm-up returned empty')
+            }
+            return
+        }
+        foreach ($item in $items) {
             $mode = [string]$item.Mode
             if ($mode -eq 'Warm') {
                 $dc = [string]$item.ActiveDc

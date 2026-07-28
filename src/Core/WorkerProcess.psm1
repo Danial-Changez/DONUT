@@ -17,18 +17,40 @@
 #>
 class WorkerProcess {
 
+    static hidden [string] $CachedPwsh
+
+    # ProcessPath is only pwsh on the dev path - launcher-hosted runs report
+    # Donut.Launcher.exe, and spawning THAT forks a second DONUT that exits 0 via the
+    # single-instance guard: no result file, which read as a silent "success" and
+    # wedged every launcher-hosted worker (the autostart "Verifying..." hang).
+    static [string] FindPwsh() {
+        if (-not [string]::IsNullOrWhiteSpace([WorkerProcess]::CachedPwsh)) {
+            return [WorkerProcess]::CachedPwsh
+        }
+        $path = [System.Environment]::ProcessPath
+        if ([string]::IsNullOrWhiteSpace($path) -or
+            (Split-Path $path -Leaf) -notin @('pwsh.exe', 'pwsh')) {
+            $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
+            $path = if ($cmd) { [string]$cmd.Source } else { '' }
+        }
+        [WorkerProcess]::CachedPwsh = $path
+        return $path
+    }
+
     # Serializes the worker args to a temp file (Options/Settings hashtables can't ride
     # a command line) and returns everything the pool runspace needs to launch the child.
     static [hashtable] Prepare([string]$scriptPath, [hashtable]$arguments, [string]$configPath) {
+        $pwsh = [WorkerProcess]::FindPwsh()
+        if ([string]::IsNullOrWhiteSpace($pwsh)) {
+            throw "pwsh.exe was not found on PATH - worker processes cannot run without PowerShell 7."
+        }
+
         $payload = @{} + $arguments
         if ($configPath) { $payload['ConfigPath'] = $configPath }
 
         $argsFile = [System.IO.Path]::GetTempFileName()
         $resultFile = [System.IO.Path]::GetTempFileName()
         ($payload | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $argsFile -Encoding UTF8
-
-        $pwsh = [System.Environment]::ProcessPath
-        if ([string]::IsNullOrWhiteSpace($pwsh)) { $pwsh = 'pwsh' }
 
         return @{
             ArgsFile   = $argsFile
@@ -81,6 +103,13 @@ class WorkerProcess {
         $exit = [int]$launch.ExitCode
         $stderr = "$($launch.StdErr)".Trim()
         if ($exit -eq 0) {
+            # Exit 0 with NO result is not success - it is the signature of the wrong
+            # child (a second launcher bowing out via the single-instance guard).
+            if ($null -eq $launch.Result) {
+                return @{ Result = $null; Succeeded = $false; ExitCode = 0
+                    FailureMessage = 'Worker exited 0 but produced no result (was the wrong executable spawned as the worker?).'
+                }
+            }
             return @{ Result = $launch.Result; Succeeded = $true; ExitCode = 0; FailureMessage = '' }
         }
         $message = if ($stderr) { $stderr } else { "Worker exited with code $exit" }
