@@ -27,6 +27,13 @@ Describe "RemoteError" {
             $ex.ExitCode       | Should -Be 500
             $ex.Message        | Should -BeLike '*exit code 500*'
         }
+        # psexec surfaces Win32 transport errors as its exit code; 5 is the machine-
+        # account-not-admin-on-target signature the autostarted SYSTEM instance hits.
+        It "RemoteExecutionException decodes access denied (exit 5) into the message" {
+            $ex = [RemoteExecutionException]::new('PC-4', 'Remote probe', 5)
+            $ex.ExitCode | Should -Be 5
+            $ex.Message  | Should -BeLike '*access denied*not an admin on the target*'
+        }
         It "RemoteExecutionException appends a decoded detail when given one" {
             $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 3, 'the system manufacturer is not Dell')
             $ex.ExitCode | Should -Be 3
