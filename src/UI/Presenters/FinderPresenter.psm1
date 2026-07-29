@@ -87,6 +87,9 @@ class FinderPresenter {
     # BitLocker keys, so it must never be written to disk.
     hidden [hashtable] $LensCache = @{}
     [timespan] $LensCacheTtl = [timespan]::FromMinutes(15)
+    # Backstop for a lookup that never lands. Longer than every in-worker timeout
+    # (PersonLensService 60s, the agent's 45s Wait-Job) so those report the real reason.
+    [timespan] $LensDeadline = [timespan]::FromSeconds(90)
 
     FinderPresenter(
         [AppConfig]$config,
@@ -136,9 +139,8 @@ class FinderPresenter {
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
     }
 
-    # Adopts the ActionBar region root (its namescope holds the finder's controls) and
-    # wires the search-bar events. Called by HomePresenter.Initialize, which composes
-    # the regions first - the InventoryPresenter adopt-in-Initialize pattern.
+    # Adopts the ActionBar region root (its namescope holds the finder's controls) and wires
+    # the search-bar events; HomePresenter.Initialize composes the regions before calling it.
     [void] Initialize([System.Windows.FrameworkElement]$view) {
         $this.ViewContent = $view
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
@@ -570,6 +572,7 @@ class FinderPresenter {
             $job.Key = $cacheKey
             $job.InfoSeen = 0
             $job.StartedAt = [datetime]::UtcNow
+            $job.Who = $who   # Apply() blanks DisplayName on an error lens without it
             $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()
         }
@@ -600,7 +603,10 @@ class FinderPresenter {
                     }
                 }
             }
-            if (-not $job.Handle.IsCompleted) { continue }
+            if (-not $job.Handle.IsCompleted) {
+                $this.RetireExpiredLens($job)
+                continue
+            }
             $json = ''
             try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
             catch { $this.Logger.LogException("Lens lookup failed", $_) }
@@ -608,18 +614,45 @@ class FinderPresenter {
             [void]$this.LensJobs.Remove($job)
             if ($job.Token -ne $this.LensToken) { continue }   # a newer pick supersedes this
 
-            $lens = [PersonLens]::FromJson($json)
-            $this.LensVm.Apply($lens)
-            $this.WireLensDeviceCommands()
-            $lensMs = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
-            $this.Logger.LogInfo("Lens lookup for '$($job.Key)' completed in ${lensMs}ms ($($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)).")
+            # The job is already out of LensJobs, so nothing here gets a second chance:
+            # a throw past this point would strand the pane on its loading placeholder.
+            try {
+                $lens = [PersonLens]::FromJson($json)
+                $this.LensVm.Apply($lens)
+                $this.WireLensDeviceCommands()
+                $lensMs = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+                $this.Logger.LogInfo("Lens lookup for '$($job.Key)' completed in ${lensMs}ms ($($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)).")
 
-            # Cache clean results (memory only; see LensCache) for instant TTL re-picks.
-            if ($lens.Errors.Count -eq 0 -and $job.Key) {
-                $this.LensCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
+                # Cache clean results (memory only; see LensCache) for instant TTL re-picks.
+                if ($lens.Errors.Count -eq 0 -and $job.Key) {
+                    $this.LensCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
+                }
+            }
+            catch {
+                $this.Logger.LogException("Lens result could not be applied", $_)
+                $failed = [PersonLens]::FromError(
+                    "The lookup finished but its result could not be displayed: $($_.Exception.Message)")
+                $failed.DisplayName = [string]$job.Who
+                $this.LensVm.Apply($failed)
             }
         }
         if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
+    }
+
+    # A lookup that outlives LensDeadline is never coming back (a starved pool or a wedged
+    # agent), so retire it with a reason rather than leaving the pane loading forever.
+    hidden [void] RetireExpiredLens([hashtable]$job) {
+        $waited = [datetime]::UtcNow - [datetime]$job.StartedAt
+        if ($waited -lt $this.LensDeadline) { return }
+        $secs = [int]$waited.TotalSeconds
+        $this.Logger.LogWarning("Lens lookup for '$($job.Key)' gave up after ${secs}s with no result.")
+        $this.DisposeJob($job.Ps)
+        [void]$this.LensJobs.Remove($job)
+        if ($job.Token -ne $this.LensToken) { return }   # a newer pick already owns the pane
+        $lens = [PersonLens]::FromError(
+            "The lookup did not return within ${secs}s. Try again once running jobs finish.")
+        $lens.DisplayName = [string]$job.Who
+        $this.LensVm.Apply($lens)
     }
 
     # Wires each Lens device's Add command (drop its WSID into the machine list) and its

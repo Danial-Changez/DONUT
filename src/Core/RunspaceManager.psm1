@@ -5,15 +5,27 @@ using module '.\LogService.psm1'
     Static manager for the shared RunspacePool that runs remote jobs in parallel.
 
 .DESCRIPTION
-    Owns a single process-wide RunspacePool (sized to the configured throttle
-    limit) that AsyncJob borrows runspaces from, and exposes Initialize / GetPool /
-    Close. Pre-warming every runspace at startup keeps the CLR module-loader lock
-    off the hot path so concurrent jobs never block the UI. Optionally logs
-    lifecycle events.
+    Owns two process-wide RunspacePools and exposes Initialize / GetPool /
+    GetInteractivePool / Close. The worker pool (sized to the configured throttle
+    limit) is what AsyncJob borrows from; the interactive pool is a small fixed
+    lane for in-process scripts that a user is waiting on. Pre-warming every
+    runspace at startup keeps the CLR module-loader lock off the hot path so
+    concurrent jobs never block the UI. Optionally logs lifecycle events.
+
+.NOTES
+    The pools are separate because they starve each other otherwise: every worker
+    job holds its runspace for the whole child-process lifetime, so a fleet-wide
+    scan pins all of them for minutes and a Lens or AD lookup submitted meanwhile
+    queues behind it and never dispatches.
 #>
 class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $RunspacePool
+    static [System.Management.Automation.Runspaces.RunspacePool] $InteractivePool
     static [LogService] $Logger = $null
+
+    # Fixed, not throttle-derived: this lane only ever runs one user-initiated
+    # lookup at a time plus the deferred Lens/AD warms that back it.
+    static [int] $InteractiveSize = 3
 
     # Optionally attach a logger (the pool is managed statically, so logging is
     # too). When unset, logging is silently skipped.
@@ -32,11 +44,12 @@ class RunspaceManager {
     }
 
     static [void] Initialize([int]$MinRunspaces, [int]$MaxRunspaces) {
+        $interactive = [RunspaceManager]::InteractiveSize
         if (-not [RunspaceManager]::RunspacePool) {
             try {
                 # Pool dispatch/completion run on .NET ThreadPool threads (floor = CPU
                 # count); concurrent warm opens starve it, so raise the floor FIRST.
-                $floor = [Math]::Max(16, $MaxRunspaces * 2)
+                $floor = [Math]::Max(16, ($MaxRunspaces + $interactive) * 2)
                 [void][System.Threading.ThreadPool]::SetMinThreads($floor, $floor)
                 [RunspaceManager]::Log("INFO", "ThreadPool min threads raised to $floor (worker+IOCP) so pool dispatch never starves.")
                 [RunspaceManager]::RunspacePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($MinRunspaces, $MaxRunspaces)
@@ -48,6 +61,20 @@ class RunspaceManager {
                 throw
             }
         }
+        if (-not [RunspaceManager]::InteractivePool) {
+            try {
+                # min = max here too: idle cleanup only disposes above the minimum, so a
+                # smaller floor would let warmed interactive runspaces die and cold-load.
+                [RunspaceManager]::InteractivePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($interactive, $interactive)
+                [RunspaceManager]::InteractivePool.Open()
+                [RunspaceManager]::Log("INFO", "Interactive runspace pool opened (min=max=$interactive).")
+            }
+            catch {
+                # Non-fatal: GetInteractivePool falls back to the worker pool, which is
+                # how this ran before the split - degraded, but the app still starts.
+                [RunspaceManager]::Log("ERROR", "Failed to open the interactive runspace pool; interactive lookups will share the worker pool: $($_.Exception.Message)")
+            }
+        }
     }
 
     static [System.Management.Automation.Runspaces.RunspacePool] GetPool() {
@@ -57,7 +84,32 @@ class RunspaceManager {
         return [RunspaceManager]::RunspacePool
     }
 
+    # The lane for in-process scripts a user is waiting on (AD search, Lens, unlock).
+    # Falls back to the worker pool rather than throwing if the split pool never opened.
+    static [System.Management.Automation.Runspaces.RunspacePool] GetInteractivePool() {
+        if (-not [RunspaceManager]::InteractivePool) {
+            [RunspaceManager]::Initialize()
+        }
+        if (-not [RunspaceManager]::InteractivePool) {
+            return [RunspaceManager]::GetPool()
+        }
+        return [RunspaceManager]::InteractivePool
+    }
+
     static [void] Close() {
+        if ([RunspaceManager]::InteractivePool) {
+            try {
+                [RunspaceManager]::InteractivePool.Close()
+                [RunspaceManager]::InteractivePool.Dispose()
+                [RunspaceManager]::Log("INFO", "Interactive runspace pool closed.")
+            }
+            catch {
+                [RunspaceManager]::Log("WARN", "Error while closing the interactive runspace pool: $($_.Exception.Message)")
+            }
+            finally {
+                [RunspaceManager]::InteractivePool = $null
+            }
+        }
         if ([RunspaceManager]::RunspacePool) {
             try {
                 [RunspaceManager]::RunspacePool.Close()

@@ -87,6 +87,14 @@ class PersonLens {
         return $p
     }
 
+    # An empty lens carrying one failure, so a caller that never got a bundle can still
+    # show a reason. The UI treats any lens with Errors as the error state.
+    static [PersonLens] FromError([string]$message) {
+        $p = [PersonLens]::new()
+        $p.Errors = @([string]$message)
+        return $p
+    }
+
     # Parses the worker's JSON bundle. -AsHashtable gives nested hashtables/arrays that
     # FromHashtable walks; a malformed bundle returns an empty lens carrying the error.
     static [PersonLens] FromJson([string]$json) {

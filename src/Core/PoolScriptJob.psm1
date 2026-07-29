@@ -16,7 +16,9 @@ using module ".\LogService.psm1"
     Worker JobKind operations do NOT come through here - they are AsyncJobs
     running in isolated child processes (WorkerProcess). This path is only for
     scripts that must run in-process on the pool (AD search, Lens broker,
-    unlock, startup task).
+    unlock, startup task). That separation is enforced by pool identity, not
+    convention: these run on the interactive pool so they can never queue behind
+    a fleet of worker jobs holding every runspace (see RunspaceManager).
 #>
 class PoolScriptJob {
 
@@ -24,7 +26,7 @@ class PoolScriptJob {
     # keeps its own catch/log/toast behavior. Returns the @{ Ps; Handle } envelope.
     static [hashtable] Start([string]$scriptPath, [hashtable]$parameters) {
         $ps = [System.Management.Automation.PowerShell]::Create()
-        $ps.RunspacePool = [RunspaceManager]::GetPool()
+        $ps.RunspacePool = [RunspaceManager]::GetInteractivePool()
         $ps.AddCommand($scriptPath) | Out-Null
         foreach ($k in $parameters.Keys) { $ps.AddParameter($k, $parameters[$k]) | Out-Null }
         return @{ Ps = $ps; Handle = $ps.BeginInvoke() }

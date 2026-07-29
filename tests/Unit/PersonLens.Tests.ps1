@@ -93,6 +93,23 @@ Describe "PersonLens" {
         }
     }
 
+    Context "FromError" {
+        It "carries the message as the single error so the pane can show a reason" {
+            $p = [PersonLens]::FromError('the lookup did not return within 90s')
+            $p.Errors.Count | Should -Be 1
+            $p.Errors[0] | Should -BeExactly 'the lookup did not return within 90s'
+            $p.Devices.Count | Should -Be 0
+            $p.Upn | Should -BeNullOrEmpty
+        }
+
+        It "leaves DisplayName settable so a caller can keep the picked name on screen" {
+            $p = [PersonLens]::FromError('timed out')
+            $p.DisplayName = 'Jane Doe'
+            $p.DisplayName | Should -BeExactly 'Jane Doe'
+            $p.Errors.Count | Should -Be 1
+        }
+    }
+
     Context "LensFormat.LogonLabel" {
         It "reads blank as 'no logon recorded'" {
             [LensFormat]::LogonLabel('') | Should -Be 'no logon recorded'

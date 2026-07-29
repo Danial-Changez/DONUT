@@ -19,6 +19,10 @@ Results stream progressively: person facts first, then device names, then the fi
 detail — so the pane paints while the lookup completes. Lens results are cached in
 memory for 15 minutes per person.
 
+A lookup runs on its own runspace lane, so picking a person while a fleet-wide scan is
+running works normally. If one still can't complete, the pane reports the reason after
+90 seconds rather than sitting on its loading message.
+
 ## Why it runs de-elevated
 
 DONUT itself runs **elevated as an admin account** (needed for remote execution),

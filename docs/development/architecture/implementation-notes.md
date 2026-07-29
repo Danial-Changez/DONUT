@@ -47,6 +47,28 @@ model.
 - **Classes in runspaces:** PowerShell classes are not automatically available in new
   runspaces, so the required class modules (`Models`, `Services`) are explicitly
   loaded into each runspace before execution.
+- **Two pools: worker and interactive.** `RunspaceManager` opens a worker pool sized to
+  `throttleLimit` (what `AsyncJob` borrows from) *and* a small fixed `InteractiveSize = 3`
+  pool that `PoolScriptJob` uses for the in-process scripts a user is waiting on — AD
+  search, the Lens broker, unlock, the startup task. They are separate because they
+  starved each other: every worker job holds its runspace for the whole child-process
+  lifetime, `RunAll` starts one per host with no cap, and with `min = max` a fleet-wide
+  scan pinned every runspace for minutes. A Lens lookup submitted meanwhile had its
+  `BeginInvoke` queued and never dispatched, and the detail pane sat on
+  `Looking up directory + SCCM…` forever. The distinction was already documented in
+  `PoolScriptJob` before it was enforced; it is now pool identity, not convention. The
+  interactive pool is also `min = max` (idle cleanup only disposes above the minimum, so
+  a lower floor would let warmed runspaces die and cold-load), the ThreadPool floor
+  covers both pools, and it warms organically through the deferred finder warms exactly
+  as before. If it fails to open, `GetInteractivePool` degrades to the worker pool rather
+  than failing the app — the pre-split behaviour.
+- **Interactive lookups carry their own deadline.** Pool separation stops the starvation,
+  but no poll loop should be able to wait forever: `FinderPresenter.LensDeadline` (90 s,
+  deliberately longer than `PersonLensService.TimeoutSec` and the agent's 45 s `Wait-Job`
+  so in-worker timeouts still report the *real* reason) retires a lookup that never lands
+  and applies a `PersonLens.FromError` bundle. The completion branch is guarded too: it
+  removes the job from `LensJobs` before touching the view-model, so an exception past
+  that point would otherwise leave the pane loading with nothing left to retry.
 - **`ExecutionService` split (deferred):** the worker-side god-class carries ~6 concerns;
   the agreed target decomposition is PsExecTransport / DcuPhases / InventoryProbe /
   DiskPhases / ResolvePhase / ArtifactCopy. Deferred because its transport rules are

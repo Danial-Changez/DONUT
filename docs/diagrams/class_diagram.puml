@@ -185,6 +185,7 @@ package "Donut.Models" #15233B {
         +Devices: LensDevice[]
         +Errors: string[]
         +{static} FromHashtable(h) / FromJson(json): PersonLens
+        +{static} FromError(message): PersonLens
     }
     class LensDevice {
         +Name / Os / LastLogon / Domain / Note: string
@@ -314,9 +315,11 @@ package "Donut.Core" #102A20 {
     }
 
     class RunspaceManager {
+        +{static} InteractiveSize: int
         +{static} Initialize(min, max): void
         +{static} SetLogger(logger): void
         +{static} GetPool(): RunspacePool
+        +{static} GetInteractivePool(): RunspacePool
         +{static} Close(): void
     }
 
