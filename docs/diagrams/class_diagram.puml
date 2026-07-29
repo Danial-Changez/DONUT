@@ -239,6 +239,7 @@ package "Donut.Models" #15233B {
 
     class FolderDeletionPolicy {
         +{static} $Protected: string[]
+        +{static} Canonicalize(path): string
         +{static} IsDeletable(path): bool
     }
 

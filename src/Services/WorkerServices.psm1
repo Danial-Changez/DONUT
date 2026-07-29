@@ -617,7 +617,10 @@ class ExecutionService {
     [hashtable] RunDeleteFoldersPhase([DeviceContext] $device, [hashtable] $options) {
         $paths = @()
         if ($null -ne $options -and $options.Paths) { $paths = @($options.Paths) }
-        $paths = @($paths | Where-Object { [FolderDeletionPolicy]::IsDeletable($_) })
+        # Canonical form only past this point, so what the remote script re-checks is what it deletes.
+        $paths = @($paths |
+                Where-Object { [FolderDeletionPolicy]::IsDeletable($_) } |
+                ForEach-Object { [FolderDeletionPolicy]::Canonicalize($_) })
         if ($paths.Count -eq 0) {
             $this.Logger.LogWarning("[$($device.HostName)] ClearFolders: no deletable paths after the safety filter.")
             return @{ Deleted = 0 }
@@ -648,9 +651,31 @@ try {
     `$profiles = @(Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue |
         Where-Object { `$_.Loaded -and -not `$_.Special -and `$_.LocalPath } |
         ForEach-Object { `$_.LocalPath.ToLowerInvariant().TrimEnd('\') })
-} catch { }
+} catch {
+    Write-Output "profile enumeration failed, no logged-on profile is protected: `$(`$_.Exception.Message)"
+    return
+}
+# Empties `$dir without ever descending through a junction: Remove-Item -Recurse follows directory
+# reparse points on 5.1, so a link planted under an allowed root would clear the system dir it names.
+function Clear-Tree([string]`$dir) {
+    foreach (`$c in @(Get-ChildItem -LiteralPath `$dir -Force -ErrorAction SilentlyContinue)) {
+        if (`$c.PSIsContainer -and (`$c.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            try { [IO.Directory]::Delete(`$c.FullName, `$false) }
+            catch { Write-Output "left link `$(`$c.FullName): `$(`$_.Exception.Message)" }
+            continue
+        }
+        if (`$c.PSIsContainer) { Clear-Tree `$c.FullName }
+        Remove-Item -LiteralPath `$c.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
 foreach (`$t in `$targets) {
     `$p = "`$t".Trim().TrimEnd('\')
+    if (`$p -notmatch '^[A-Za-z]:\\.+') { continue }
+    # Mirrors FolderDeletionPolicy.Canonicalize: the checks below are string compares, so ".."
+    # and 8.3 aliases have to be resolved out before they are applied.
+    if (`$p -match '~\d') { continue }
+    try { `$p = [IO.Path]::GetFullPath(`$p).TrimEnd('\') }
+    catch { Write-Output "skipped unresolvable path `$p"; continue }
     if (`$p -notmatch '^[A-Za-z]:\\.+') { continue }
     `$pl = `$p.ToLowerInvariant()
     `$inUse = `$false
@@ -663,10 +688,14 @@ foreach (`$t in `$targets) {
         if (`$rest -eq 'users') { continue }
         if (`$blocked -contains `$rest.Split('\')[0]) { continue }
     }
-    if (Test-Path -LiteralPath `$p) {
-        Get-ChildItem -LiteralPath `$p -Force -ErrorAction SilentlyContinue |
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    `$item = Get-Item -LiteralPath `$p -Force -ErrorAction SilentlyContinue
+    if (-not `$item) { continue }
+    # The selected folder being a junction means the name that passed the checks is not the target.
+    if (`$item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        Write-Output "skipped reparse point `$p"
+        continue
     }
+    Clear-Tree `$p
 }
 "@
     }
