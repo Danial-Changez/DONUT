@@ -383,11 +383,62 @@
             </ProgressBar.Foreground>
           </ProgressBar>
           <!-- Wrap + no horizontal scrollbar: the themed ScrollBar template is
-               vertical-only, so a horizontal bar renders as a stray white box. -->
-          <TextBox x:Name="txtDetailLog" Grid.Row="1" IsReadOnly="True" IsTabStop="False" Background="Transparent"
-                   BorderThickness="0" Foreground="{DynamicResource TerminalText}" FontFamily="{DynamicResource FontMono}"
-                   FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                   HorizontalScrollBarVisibility="Disabled" Margin="6" />
+               vertical-only, so a horizontal bar renders as a stray white box.
+               A virtualized ListBox of LogLine items (chromeless, so it reads as the
+               same terminal): per-line severity color without realizing 2000 visuals. -->
+          <ListBox x:Name="lstDetailLog" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                   FontFamily="{DynamicResource FontMono}" FontSize="12" Margin="6" IsTabStop="False"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                   VirtualizingPanel.ScrollUnit="Pixel">
+            <ListBox.ItemContainerStyle>
+              <Style TargetType="ListBoxItem">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <!-- No hover/selected chrome: the row is plain text, not a pickable item -->
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                      <ContentPresenter />
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock TextWrapping="Wrap">
+                  <Run Text="{Binding StampText, Mode=OneTime}" Foreground="{DynamicResource BodyTextTertiary}" /><Run Text="{Binding DisplayText, Mode=OneTime}">
+                    <Run.Style>
+                      <Style TargetType="Run">
+                        <Setter Property="Foreground" Value="{DynamicResource TerminalText}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding Severity, Mode=OneTime}" Value="Error">
+                            <Setter Property="Foreground" Value="{DynamicResource AccentRed}" />
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding Severity, Mode=OneTime}" Value="Warn">
+                            <Setter Property="Foreground" Value="{DynamicResource AccentYellow}" />
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding Severity, Mode=OneTime}" Value="Success">
+                            <Setter Property="Foreground" Value="{DynamicResource AccentGreen}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Run.Style>
+                  </Run>
+                </TextBlock>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <!-- Per-line rendering costs cross-line drag-selection; Copy replaces it -->
+          <Button x:Name="btnCopyLog" Grid.Row="1" Content="Copy" Panel.ZIndex="1"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,12,0"
+                  Style="{DynamicResource ButtonSecondary}" FontSize="10.5" Height="24" Padding="10,2"
+                  Opacity="0.85" ToolTip="Copy this machine's log to the clipboard" />
         </Grid>
       </Border>
     </Grid>

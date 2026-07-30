@@ -24,6 +24,11 @@ download size. Selecting a machine with a recent scan shows its results without 
 While a run is active, the pane tails the remote DCU output log line by line — the
 same content that lands in `%LOCALAPPDATA%\DONUT\logs\<hostname>.log`.
 
+Every line carries a dim `HH:mm:ss` stamp and is colour-coded by severity: errors
+red with an `[Error]` tag, warnings yellow with `[Warn]`, completed-run lines
+green, everything else the plain terminal tone. The **Copy** button in the
+terminal's corner copies the whole visible log for a ticket or a teammate.
+
 ## Storage scan (biggest folders)
 
 **Storage scan** runs WizTree headlessly on the target and shows the largest
