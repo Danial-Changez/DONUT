@@ -27,11 +27,14 @@ running works normally. If one still can't complete, the pane reports the reason
 
 ## Why it runs de-elevated
 
-DONUT itself runs **elevated as an admin account** (needed for remote execution),
-but SCCM's AdminService is RBAC-scoped to your **regular account**, and that goes
-for BitLocker keys in AD too. DONUT therefore keeps a small agent running
-**de-elevated as your logged-on account** and asks it for the Lens data over an
-encrypted, ACL-locked exchange. Details in the
+When DONUT is running **elevated as an admin account** (which every remote operation
+needs), SCCM's AdminService is RBAC-scoped to your **regular account**, and that goes for
+BitLocker keys in AD too. DONUT therefore keeps a small agent running **de-elevated as your
+logged-on account** and asks it for the Lens data over an encrypted, ACL-locked exchange.
+
+Running DONUT without administrator rights skips all of that: it is already your account,
+so the lookup runs in process. The pane then fills in one step instead of painting
+progressively. Details in the
 [User Lens architecture page](../development/architecture/user-lens.md).
 
 ## Under the hood

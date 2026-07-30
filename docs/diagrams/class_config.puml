@@ -33,6 +33,13 @@ package "Donut.Core" #102A20 {
         RelaunchRequired
     }
 
+    class DonutPaths {
+        +{static} DataRoot(): string
+        +{static} ConfigDir() / LogsDir() / ReportsDir(): string
+        +{static} LegacyRoot(): string
+        +{static} Secure(dir): string
+    }
+
     class ElevationContext {
         +{static} IsElevated(): bool
         +{static} IsSystem(): bool
@@ -40,6 +47,28 @@ package "Donut.Core" #102A20 {
         +{static} Classify(actionNeedsAdmin, isElevated): ElevationState
     }
     ElevationContext ..> ElevationState
+    DonutPaths ..> ElevationContext
+
+    enum GatedAction {
+        RunAll
+        Run
+        Inventory
+        DiskScan
+        DeleteFolders
+        StartupTask
+    }
+
+    class PendingIntent {
+        +Action: GatedAction
+        +Hosts: string[]
+        +CreatedUtc: string
+        +{static} Create(action, hosts, nowUtc): PendingIntent
+        +{static} FromJson(json): PendingIntent
+        +IsResumable(): bool
+        +IsFresh(nowUtc, ttl): bool
+        +ToJson(): string
+    }
+    PendingIntent ..> GatedAction
 
     class BuildProvenance {
         +{static} Stamp(sourceRoot): string

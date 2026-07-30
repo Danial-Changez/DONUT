@@ -11,7 +11,9 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
   machine.
 - **PsExec (Sysinternals PsTools)** — for remote command execution (setup below).
 - **.NET Desktop Runtime 10.0+** — needed for WPF in the packaged version.
-- **Windows admin access** — remote execution runs elevated.
+- **Windows admin access** — every remote operation authenticates as the DONUT process,
+  so it needs an account with administrative rights on your fleet targets. DONUT opens
+  without elevation and asks for it when you run something remote.
 - **GitHub App access** — so your team can sign in via Device Flow and receive
   updates from your org's GitHub Releases.
 

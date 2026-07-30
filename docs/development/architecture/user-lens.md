@@ -13,7 +13,7 @@ the feature itself is described in [User Lens](../../features/user-lens.md).
 
 ## Why de-elevated
 
-DONUT runs elevated as an admin account (required for the psexec/CIM remote
+When elevated, DONUT runs as an admin account (required for the psexec/CIM remote
 work), but the Lens data is only readable by the operator's regular account:
 
 - The person-to-device mapping and hardware inventory come from SCCM, whose
@@ -22,6 +22,14 @@ work), but the Lens data is only readable by the operator's regular account:
   scoping.
 - Elevating does not grant the regular account's rights - a separate identity
   means a separate process.
+
+**The agent is only needed when DONUT is elevated.** De-elevated, DONUT already *is* the
+interactive user whose rights this data needs, so `PersonLensService.RunLookupJson` calls
+the same `Resolve-Lens` in process and skips the agent, its scheduled task, the encrypted
+exchange and the heartbeat. `Resolve-Lens` returns the bundle and only writes
+`result-<id>.bin` when it has a request id and an exchange directory. The trade-off is that
+the in-process path emits no partials, so the pane fills in one step rather than
+progressively. See [Elevation and autostart](./elevation.md).
 
 ## The persistent agent
 

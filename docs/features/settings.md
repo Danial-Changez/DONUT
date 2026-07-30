@@ -19,8 +19,8 @@ lets the target machine's DCU defaults apply.
 
 ## General section
 
-- **Start with Windows (as admin)** — registers/unregisters the logon scheduled
-  task. See [Tray, hotkey & autostart](./tray-hotkey-autostart.md).
+- **Start with Windows** — registers/unregisters the logon scheduled task, which starts
+  DONUT as you at your normal rights. See [Tray, hotkey & autostart](./tray-hotkey-autostart.md).
 - **Close to tray** — the window's X hides to the tray instead of exiting.
 - **Run as administrator** — on by default. Every remote operation (scan, apply,
   inventory, storage scan, clear) authenticates as the DONUT process, so without
@@ -53,6 +53,6 @@ swallow normal typing).
 
 ## Where settings live
 
-Everything writes to `config.json` under `%LOCALAPPDATA%\DONUT\config`, which
+Everything writes to `config.json` under `%ProgramData%\DONUT\data\config`, which
 survives updates and reinstalls. The full key list is in the
 [config reference](../configuration/config-reference.md).

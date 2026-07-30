@@ -111,6 +111,7 @@ export default defineConfig({
                 'development/architecture/user-lens',
                 'development/architecture/ui-and-threading',
                 'development/architecture/configuration-and-persistence',
+                'development/architecture/elevation',
                 'development/architecture/powershell-constraints',
                 'development/architecture/key-classes',
                 'development/architecture/runtime-flows',

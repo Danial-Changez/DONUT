@@ -24,7 +24,7 @@ the [`throttleLimit`](../configuration/config-reference.md) setting).
   recorded.
 - The detail pane lists each available update with its urgency, category, version
   transition, and size.
-- The report XML and output log are copied back under `%LOCALAPPDATA%\DONUT`.
+- The report XML and output log are copied back under `%ProgramData%\DONUT\data`.
 
 ## Scan results are reused for 24 hours
 

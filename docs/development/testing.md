@@ -105,7 +105,7 @@ script-block/module events for the run window (enabled per-process via
 live runspace stacks captured by the wedge probe while the stuck shells are
 still running.
 
-Run it from an **elevated** pwsh (the app runs elevated; the pool's Kerberos /
+Run it from an **elevated** pwsh (remote work needs an admin token; the pool's Kerberos /
 DCOM / AMSI context differs under an admin token):
 
 ```powershell
@@ -145,12 +145,12 @@ when a regression has no obvious first-bad commit:
    (`git bisect skip`, for mid-refactor commits that cannot run standalone).
    Bisect the warm symptom with no target host (warm+DC phases only) and the
    resolve symptom with `-TargetHost`.
-3. **Full-app checkout runs stay hermetic.** The harness never touches
-   `%LOCALAPPDATA%`, but *launching the app* from an old checkout re-saves the
-   shared config. Back it up first and restore after:
+3. **Full-app checkout runs stay hermetic.** The harness never touches the data
+   root, but *launching the app* from an old checkout re-saves the shared config.
+   Back it up first and restore after:
    ```powershell
-   Copy-Item $env:LOCALAPPDATA\DONUT\config\config.json .diag\config.bak.json
-   Copy-Item .diag\config.bak.json $env:LOCALAPPDATA\DONUT\config\config.json
+   Copy-Item $env:ProgramData\DONUT\data\config\config.json .diag\config.bak.json
+   Copy-Item .diag\config.bak.json $env:ProgramData\DONUT\data\config\config.json
    ```
 
 ## Code coverage

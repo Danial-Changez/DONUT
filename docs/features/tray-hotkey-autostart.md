@@ -28,42 +28,28 @@ observes the global keystroke stream.
 
 ## Start with Windows
 
-Enabling **Start with Windows (as admin)** registers a per-user scheduled task that
-launches DONUT hidden in the tray at logon, already elevated — no UAC prompt each
-morning. Turning the toggle off unregisters the task. A second launch of DONUT (from
-the Start Menu, say) just surfaces the running instance.
+Enabling **Start with Windows** registers a scheduled task that launches DONUT hidden in
+the tray when you sign in. Turning the toggle off unregisters it. A second launch of DONUT
+(from the Start Menu, say) just surfaces the running instance.
 
-The task always triggers on **your** logon — the account signed in at the console.
-What it runs as depends on how DONUT itself is running:
-
-- **DONUT runs as you:** a normal per-user task, elevated, in your own session.
-- **DONUT runs as SYSTEM or a separate admin account** — including the common setup
-  where you sign in with a standard account and elevate DONUT through UAC with your
-  admin account: the task runs as SYSTEM. At logon a small helper
-  (`Start-DonutInConsoleSession.ps1`) resolves your console session id *at that
-  moment* and hands it to the bundled PsExec, which places DONUT on your desktop.
-  The id can't be baked into the task — session ids change every logon, and PsExec's
-  `-i` without an id targets the *caller's* session (an invisible session 0), not
-  the console.
-
-An RDP-only logon won't surface the tray — injection targets the physical console
-session. If the toggle fails, the error toast states the actual reason. Each
-firing of the helper is narrated in `%ProgramData%\DONUT\logs\autostart.log`.
+- The task triggers on **your** logon and runs as **you**, at your normal rights.
+- It does not start DONUT elevated. DONUT asks for administrator rights when you do
+  something that needs them, which is every remote operation. See
+  [Settings](./settings.md#general-section) for the **Run as administrator** toggle.
+- Registering the task itself needs administrator rights, so flipping this switch while
+  DONUT is de-elevated prompts to restart elevated first.
+- An RDP-only logon won't surface the tray. If the toggle fails, the error toast states
+  the actual reason.
 
 :::caution
-The autostarted instance runs as `SYSTEM`, but it still uses **your** DONUT data.
-When you toggle autostart on, DONUT pins the current settings location (the profile
-of the account you elevated with) to `%ProgramData%\DONUT\dataroot.txt`; the SYSTEM
-instance follows that pointer at boot, so settings, logs, GitHub token and WSID list
-are shared with your manual runs. (Without this, the instance read a default config
-where the toggle is off — and unregistered its own startup task two minutes in.)
-One trade-off remains: on the network it authenticates as the **machine account**,
-not your admin account, so AD rights can differ from a manual launch — DC discovery
-falls back from RSAT/ADWS to plain LDAP and DNS SRV for exactly this reason.
+Older builds started the autostarted instance as `SYSTEM` so it would come up already
+elevated. That instance authenticated on the network as the **machine account**, which has
+no rights on fleet targets, so it painted a working UI and then failed every scan on access
+denied. If you are upgrading, toggle Start with Windows off and on once to replace the old
+task; `tools\Diagnose-StartupTask.ps1` reports whether a stale one is still installed.
 :::
 
-These three behaviours map to the `closeToTray`, `globalHotkey`, and
-`startWithWindows` keys in the
-[config reference](../configuration/config-reference.md), and their design rationale
-is covered in the
-[architecture overview](../development/architecture/overview.md#tray-autostart-and-global-hotkey).
+These behaviours map to the `closeToTray`, `globalHotkey`, `startWithWindows` and
+`runAsAdmin` keys in the [config reference](../configuration/config-reference.md), and the
+design rationale is in
+[Elevation and autostart](../development/architecture/elevation.md).

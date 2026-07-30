@@ -11,10 +11,15 @@ Where DONUT keeps its state and how settings flow through the app.
 
 ## Configuration
 
-- **JSON config:** `config.json` (migrated from the old `config.txt`); `wsid.txt`
-  and `config.json` live under `%LOCALAPPDATA%\DONUT\` so they persist across
-  updates and reinstalls. `ConfigManager` reads/writes both, prioritizing the
-  `%LOCALAPPDATA%` copy.
+- **One machine-wide data root:** `DonutPaths` resolves `%ProgramData%\DONUT\data`, and
+  `config.json`, `WSID.txt`, the GitHub token, logs and reports all hang off it, so they
+  persist across updates and reinstalls. It is deliberately not `%LOCALAPPDATA%`: that is
+  per-account, and a de-elevated UI with privileged work under a different account would
+  otherwise keep two of everything. `ConfigManager` reads/writes through that root and
+  secures it on the run that creates it (SYSTEM, Administrators, the interactive user).
+- **Note:** `config.json` is therefore writable by the standard user while supplying DCU
+  arguments to elevated remote runs - an accepted widening, and the price of one store.
+  See [Elevation and autostart](./elevation.md).
 - **Structure:** `AppConfig` merges user settings with `[AppConfig]::Defaults` so
   all expected keys exist. The full key list is documented in the
   [config.json reference](../../configuration/config-reference.md).
@@ -31,7 +36,7 @@ Where DONUT keeps its state and how settings flow through the app.
 - The recents store (`RecentConnectionsStore` over `RecentConnection`) persists
   per-host outcomes (last status, job type, update count, reboot flag, cached
   inventory and disk usage) into `config.json`, capped and de-duplicated.
-- Logs land in `%LOCALAPPDATA%\DONUT\logs\` - `Donut.log` for the app plus one
+- Logs land in `%ProgramData%\DONUT\data\logs\` - `Donut.log` for the app plus one
   `<hostname>.log` copied back per remote run. The logging rules themselves
   (lock-free appends, debug gate, provenance stamp) are on
   [Runspaces and workers](./runspaces-and-workers.md#logging-and-diagnostics).
@@ -42,7 +47,7 @@ Where DONUT keeps its state and how settings flow through the app.
   verification, and MSI apply; `LoginPresenter`/`UpdatePresenter` drive it.
   Device Flow tokens are DPAPI-protected (CurrentUser).
 - `InstallWorker.ps1` stays a standalone script (not a class) in `src/Scripts/`
-  so `SelfUpdateService` can copy it to `%LOCALAPPDATA%\DONUT` and run it
+  so `SelfUpdateService` can copy it to the data root and run it
   independently for updates/rollbacks; the copy is hash-gated (SHA-256).
 - `StartupTaskService` reconciles the start-with-Windows scheduled task from the
   same config seam (`Apply-StartupTask.ps1` applies it out of process).

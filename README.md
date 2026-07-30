@@ -96,7 +96,7 @@ DONUT is a fleet management app for Dell workstations. It searches Active Direct
 
 5. **Review Logs:**
    - Live run progress shows in each machine's row and detail panel; there is no in-app Logs page.
-   - Logs are written to `%LOCALAPPDATA%\DONUT\logs` — a central `Donut.log` plus a per-host copy of each run's output log (`<hostname>.log`). Open that folder to review past runs.
+   - Logs are written to `%ProgramData%\DONUT\data\logs` — a central `Donut.log` plus a per-host copy of each run's output log (`<hostname>.log`). Open that folder to review past runs.
 
 ---
 

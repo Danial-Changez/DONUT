@@ -31,7 +31,7 @@ Settings. One idea per step:
 
 ## Where DONUT keeps its data
 
-Everything user-specific lives under `%LOCALAPPDATA%\DONUT`, so updates and
+Everything user-specific lives under `%ProgramData%\DONUT\data`, so updates and
 reinstalls never touch it:
 
 | Folder | Contents |

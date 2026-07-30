@@ -3,8 +3,8 @@ title: config.json reference
 description: Every key in DONUT's config.json - types, defaults, and what each one controls.
 ---
 
-DONUT's configuration lives at `%LOCALAPPDATA%\DONUT\config\config.json`. It
-persists across updates and reinstalls (the MSI never touches `%LOCALAPPDATA%`).
+DONUT's configuration lives at `%ProgramData%\DONUT\data\config\config.json`. It
+persists across updates and reinstalls (the MSI never touches the data root).
 User settings are merged over `[AppConfig]::Defaults`, so every expected key always
 exists — you only ever see (and edit) real keys.
 
@@ -22,7 +22,7 @@ up).
 | `recoveryWindowMinutes` | int, `30` | After a network drop mid-run, how long DONUT keeps trying to reconnect and resume the log tail before settling the row as *Unconfirmed* |
 | `domains` | string[], org forests | The AD forests the [finder](../features/ad-finder.md) searches; each is queried independently |
 | `adminServiceHost` | string, org SMS Provider | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup |
-| `startWithWindows` | bool, `false` | Register the elevated logon scheduled task ([details](../features/tray-hotkey-autostart.md)) |
+| `startWithWindows` | bool, `false` | Register the logon scheduled task, which starts DONUT as you at your normal rights ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
 | `runAsAdmin` | bool, **`true`** | Run DONUT elevated. On by default, and the only key here that falls back to `true` on a missing or corrupt value: remote work authenticates as the process, so a de-elevated DONUT is the console user, who has no rights on fleet targets. Turning it off applies at the next launch; turning it on relaunches through UAC now |
 | `globalHotkey` | string, `"Ctrl+Alt+D"` | Global show/restore hotkey; blank disables it |
