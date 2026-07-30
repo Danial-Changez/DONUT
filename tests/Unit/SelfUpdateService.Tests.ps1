@@ -192,7 +192,7 @@ Describe "SelfUpdateService" {
                 }
                 
                 # Fallback version file doesn't exist
-                $versionFile = Join-Path $env:LOCALAPPDATA "DONUT\version.txt"
+                $versionFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
                 Mock Test-Path { return $false } -ParameterFilter { $Path -eq $versionFile }
 
                 $version = $service.GetLocalVersion()
