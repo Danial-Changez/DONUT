@@ -77,7 +77,7 @@ try {
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     # RunspaceManager.Initialize raises the ThreadPool floor before it opens the pool
-    # (dispatch starvation guard - see implementation-notes: ThreadPool floor).
+    # (dispatch starvation guard - architecture/runspaces-and-workers: ThreadPool floor).
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     # min = max pins every runspace: idle cleanup only disposes above the minimum, so
     # min=1 let warmed runspaces die and later jobs cold-load under the loader lock.
@@ -117,7 +117,7 @@ try {
 
     if ($null -ne $mainPresenter) {
         # Heal the startup task DEFERRED past the startup crunch - as a boot-time
-        # pool job it raced the warm shells (implementation-notes: startup staging).
+        # pool job it raced the warm shells (architecture/runspaces-and-workers: startup staging).
         $startupTaskTimer = [System.Windows.Threading.DispatcherTimer]::new()
         $startupTaskTimer.Interval = [TimeSpan]::FromSeconds(120)
         $startupTaskTimer.Add_Tick({

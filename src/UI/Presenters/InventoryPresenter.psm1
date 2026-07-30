@@ -199,9 +199,8 @@ class InventoryPresenter {
         if ($vm) { $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName)) }
     }
 
-    # A failed probe used to vanish: the exception type dies at the runspace boundary,
-    # so re-derive the reason and flip the row's verdict for offline-class failures.
-    # The re-probe then self-corrects a transient (or confirms the offline).
+    # A failed probe used to vanish: the exception type dies at the runspace boundary, so
+    # re-derive the reason and flip offline-class rows; the next re-probe self-corrects.
     hidden [void] ReflectFailure([string]$hostName, [string]$failureMessage) {
         $reason = [RemoteFailure]::ReasonFromMessage($failureMessage)
         if ($reason -in @([RemoteFailureReason]::Offline, [RemoteFailureReason]::Unresolvable,

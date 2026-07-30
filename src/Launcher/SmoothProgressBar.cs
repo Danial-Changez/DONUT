@@ -8,7 +8,7 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Owner-drawn progress bar with a rounded, brand-yellow fill — the stock WinForms
+/// Owner-drawn progress bar with a rounded, brand-yellow fill - the stock WinForms
 /// <see cref="ProgressBar"/> locks its fill to the theme green. Eases toward the target
 /// value, and offers an indeterminate sweep for the pre-progress module-parse phase.
 /// </summary>
@@ -39,7 +39,7 @@ public sealed class SmoothProgressBar : Control
     }
 
     /// <summary>
-    /// When true, shows a looping sweep instead of a value — for the module-parse phase, which
+    /// When true, shows a looping sweep instead of a value - for the module-parse phase, which
     /// cannot report a percentage. Assigning <see cref="Value"/> clears it.
     /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

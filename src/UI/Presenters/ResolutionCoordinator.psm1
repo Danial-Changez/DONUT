@@ -20,7 +20,7 @@ using module "..\..\Models\JobEnums.psm1"
     back to HomePresenter to re-issue). HomePresenter keeps the AsyncJob pump and the
     PendingRuns / PendingGathers queue and forwards the Resolve kind here.
 
-    Per-host resolves ride the FAST LANE (implementation-notes: fast resolve lane): a
+    Per-host resolves ride the fast lane (architecture/runspaces-and-workers): a
     slim class-free ResolveWorker child spawned directly (ResolveProcessJob), capped at
     FastResolveCap with a FIFO overflow queue - so resolves never wait behind scans in
     the pool. ProcessFaults retry once on the classic worker path; three consecutive
@@ -41,8 +41,8 @@ class ResolutionCoordinator {
     [HostResolver] $Resolver        # shared with HomePresenter (not owned here)
     [object]       $Home            # duck-typed back-ref to HomePresenter's pump + seams
     [bool]         $PoolWarmed = $false   # single-shot guard for WarmPool
-    # Barrier-lapsed warm shells, parked STILL RUNNING as @{ Shell; Handle; Started }
-    # until ReapWarmShells harvests them (implementation-notes: pool warm).
+    # Barrier-lapsed warm shells, parked still running as @{ Shell; Handle; Started }
+    # until ReapWarmShells harvests them (architecture/runspaces-and-workers: pool warm).
     hidden [object[]] $AbandonedWarmShells = @()
     # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
     hidden [int] $WarmTimeoutSeconds = 30
@@ -93,8 +93,8 @@ class ResolutionCoordinator {
         }
     }
 
-    # Warms the pool ONE runspace at a time (serial is mandatory - concurrent
-    # using-module compiles deadlock; implementation-notes: warm compile serialization).
+    # Warms the pool one runspace at a time (serial is mandatory - concurrent
+    # using-module compiles deadlock; architecture/runspaces-and-workers).
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
@@ -111,7 +111,7 @@ class ResolutionCoordinator {
             $handle = $null
             $started = [datetime]::UtcNow
             try {
-                # One real worker pass; NOTHING more (the 64dbec8 recipe).
+                # One real worker pass and nothing more (the 64dbec8 recipe).
                 $prep = $this.Resolver.PrepareWarmRunspace($tag)
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
@@ -119,7 +119,7 @@ class ResolutionCoordinator {
                 foreach ($k in $prep.Arguments.Keys) {
                     $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
                 }
-                # Wait for THIS shell before submitting the next - never two graph
+                # Wait for this shell before submitting the next - never two graph
                 # compiles in flight, or the pool deadlocks.
                 $handle = $ps.BeginInvoke()
                 if ($handle.AsyncWaitHandle.WaitOne($this.WarmTimeoutSeconds * 1000)) {
@@ -139,7 +139,7 @@ class ResolutionCoordinator {
                 }
                 else {
                     # A warm that never returns = the load lock is likely wedged; park
-                    # it (never Dispose a running pipeline) and STOP piling on.
+                    # it (never Dispose a running pipeline) and stop piling on.
                     $this.Logger.LogWarning("Warm shell parked at barrier lapse: " +
                         $this.DescribeShell($ps, $tag, $started))
                     $this.AbandonedWarmShells += @{
@@ -196,7 +196,7 @@ class ResolutionCoordinator {
                 $line += " reason=$($info.Reason.GetType().Name): $($info.Reason.Message)"
             }
             # Indexed reads only: enumerating a live stream while the worker appends
-            # is the "Collection was modified" race (implementation-notes).
+            # is the "Collection was modified" race (architecture/runspaces-and-workers).
             $take = [Math]::Min(3, $shell.Streams.Error.Count)
             if ($take -gt 0) {
                 $errs = for ($j = 0; $j -lt $take; $j++) { "$($shell.Streams.Error[$j])" }
@@ -366,9 +366,8 @@ class ResolutionCoordinator {
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
-            # A dead resolve can't confirm the old verdict: drop it and paint Unknown
-            # (grey) rather than leaving a possibly-wrong dot. No auto re-probe here -
-            # that would churn while the DC is down; the next select/add/run re-resolves.
+            # A dead resolve can't confirm the old verdict: drop it and paint Unknown. No
+            # auto re-probe (it churns while the DC is down); the next action re-resolves.
             if (-not [string]::IsNullOrWhiteSpace($job.HostName)) {
                 $this.Resolver.Invalidate($job.HostName)
                 $this.Home.RenderReachability($job.HostName)

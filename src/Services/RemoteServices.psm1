@@ -15,7 +15,7 @@ using module ".\DriverMatchingService.psm1"
     remote failures (Fail). ScanService prepares a DCU scan; RemoteUpdateService
     prepares an update scan/apply and parses the resulting update report into
     typed DcuUpdate rows (driver-matched, urgency-sorted) for the detail pane.
-    The subclasses only PREPARE and PARSE off the UI thread — the worker
+    The subclasses only prepare and parse off the UI thread - the worker
     does the network I/O, gating each phase's transport itself (bounded RPC/SMB
     port probes).
 
@@ -78,7 +78,7 @@ class RemoteJobService {
                 # UI-thread deep clone of the live config: a worker enumerating a
                 # table the UI mutates can spin forever on a corrupted bucket chain.
                 Settings   = [AppConfig]::DeepClone($this.Config.Settings)
-                # The EFFECTIVE debug state (setting OR -DebugLog session override).
+                # The effective debug state (the setting or the -DebugLog session override).
                 DebugLog   = $this.Logger.DebugEnabled
             }
         }

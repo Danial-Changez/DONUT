@@ -7,7 +7,7 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Borderless startup splash — spinning-donut GIF, the current init milestone, and an
+/// Borderless startup splash - spinning-donut GIF, the current init milestone, and an
 /// owner-drawn progress bar. Lives on the main thread while the app graph parses on the
 /// worker thread, so it stays responsive through the parse.
 /// </summary>

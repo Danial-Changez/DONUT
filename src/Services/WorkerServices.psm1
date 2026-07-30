@@ -16,7 +16,7 @@ using module "..\Models\DcuProgress.psm1"
 
 .DESCRIPTION
     Entry point (StartWorker) for the RemoteWorker.ps1 script. Dispatches by job
-    kind to a phase — resolve, scan, apply, inventory, or disk — invoking dcu-cli /
+    kind to a phase (resolve, scan, apply, inventory, or disk), invoking dcu-cli /
     CIM probes / WizTree via PsExec as SYSTEM and copying the resulting artifacts
     back to the local logs/reports folders for the services to parse. Each phase
     gates its own transport first (bounded RPC-135 / SMB-445 probes), so an
@@ -30,7 +30,7 @@ using module "..\Models\DcuProgress.psm1"
     - UNC and CIM operations have no usable timeout, so every share/WMI touch is
       gated by a bounded port probe first (RPC 135 for psexec/CIM, SMB 445 for
       admin-share I/O) - otherwise an offline or firewalled host hangs the pool
-      thread forever. An OPEN 445 still doesn't guarantee the C$ share responds, so
+      thread forever. An open 445 still doesn't guarantee the C$ share responds, so
       the psexec path does NO controller-side UNC before launch: dcu-cli discovery
       and the pre-run log clear both run ON the target (BuildRemoteDcuScript), and a
       missing dcu-cli comes back as the $DcuNotFoundExit sentinel, not a hung path.
@@ -39,8 +39,8 @@ using module "..\Models\DcuProgress.psm1"
       (DonutDcu / DonutDisk / DonutProbe).
     - psexec exit codes are classified: negative = Windows process-launch fault
       (NTSTATUS); Win32 transport codes = the connection dropped mid-command, at
-      EITHER end - the target's NIC reset (a NETWORK driver install), or the operator's
-      own laptop lost Wi-Fi (59/1232/...). On a drop the run does NOT fail: dcu-cli keeps
+      either end - the target's NIC reset (a network driver install), or the operator's
+      own laptop lost Wi-Fi (59/1232/...). On a drop the run does not fail: dcu-cli keeps
       going on the target, so RecoverByResumeTail reconnects (waiting out a local outage
       too), resumes the outputLog tail from the last-seen offset, and recovers dcu-cli's
       authoritative code - bounded by AppConfig.GetRecoveryWindowMinutes, after which the
@@ -205,9 +205,9 @@ class ExecutionService {
     }
 
     # Exercises the heavy stacks (DNS/TCP/CIM/LDAP) against localhost so a live job's
-    # first such call is never a runspace's first (implementation-notes: pool warm).
+    # first such call is never a runspace's first (architecture/runspaces-and-workers: pool warm).
     [void] WarmRuntimeAssemblies() {
-        # Each exercise logs BEFORE it runs: a warm that wedges leaves the name of
+        # Each exercise logs before it runs: a warm that wedges leaves the name of
         # the exact stack it wedged in as the runspace's last log line.
         $t = $this.WarmTag
         $this.Logger.LogDebug("[$t] Warm: exercising DNS (localhost lookup)...")
@@ -247,7 +247,7 @@ class ExecutionService {
     }
 
     # Pre-executes the CPU-only half of the DCU launch path so a live scan's first
-    # InvokePsExec is never a first compile. PURE CPU only (see implementation-notes).
+    # InvokePsExec is never a first compile. Pure CPU only (architecture/runspaces-and-workers).
     [void] WarmScanLaunchPath() {
         try {
             $overrides = @{
@@ -622,7 +622,7 @@ class ExecutionService {
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
     }
 
-    # Clears the CONTENTS of the operator-selected folders on the target as SYSTEM (psexec),
+    # Clears the contents of the operator-selected folders on the target as SYSTEM (psexec),
     # keeping the folders. Each path is re-validated here and again in the remote script.
     [hashtable] RunDeleteFoldersPhase([DeviceContext] $device, [hashtable] $options) {
         $paths = @()
@@ -644,7 +644,7 @@ class ExecutionService {
     }
 
     # The remote clear script: each path is a single-quoted literal (quotes doubled to block
-    # injection), re-checked against the safety rules, then its CONTENTS removed (folder kept).
+    # injection), re-checked against the safety rules, then its contents removed (folder kept).
     static [string] BuildDeleteCommand([string[]]$paths) {
         $literals = @($paths | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" })
         $arr = $literals -join ', '
@@ -899,7 +899,7 @@ foreach (`$t in `$targets) {
         return @{ Found = $false; Code = 0 }
     }
 
-    # Builds the on-TARGET launcher for one dcu-cli command; resolving dcu-cli on the
+    # Builds the on-target launcher for one dcu-cli command; resolving dcu-cli on the
     # target keeps hung admin shares out of the launch. Pure + static (unit-tested).
     static [string] BuildRemoteDcuScript([string]$command, [string]$argsString, [string]$outputLog) {
         $clearLine = if (-not [string]::IsNullOrWhiteSpace($outputLog)) {
@@ -967,7 +967,7 @@ exit `$LASTEXITCODE
 
         # Headless launch; progress is tailed from the outputLog (see StartPsExecHidden).
         $remoteLogUnc = [ExecutionService]::ToAdminShare($ip, $outputLog)
-        # Clear the PREVIOUS run's log over the share before tailing: psexec takes seconds
+        # Clear the previous run's log over the share before tailing: psexec takes seconds
         # to connect, so the tail would otherwise replay the last scan (bar jumps to 5/5).
         try { Remove-Item -LiteralPath $remoteLogUnc -Force -ErrorAction Stop }
         catch { $this.Logger.LogDebug("[$ip] Could not pre-clear $remoteLogUnc (may not exist yet): $($_.Exception.Message)") }
@@ -980,7 +980,7 @@ exit `$LASTEXITCODE
         $onTick = {
             $tickState.Seen = $svc.EmitNewDcuLogLines($ip, $remoteLogUnc, [int]$tickState.Seen)
             $tickState.Ticks++
-            # Every ~30 s say whether the remote log GREW: no growth while SMB is
+            # Every ~30 s say whether the remote log grew: no growth while SMB is
             # reachable = dcu-cli is running but producing nothing (the wedge to chase).
             if ($tickState.Ticks % 20 -eq 0) {
                 $delta = [int]$tickState.Seen - [int]$tickState.LastReportedSeen

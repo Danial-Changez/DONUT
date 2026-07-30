@@ -14,8 +14,8 @@ using module "..\Models\PersonLens.psm1"
     under %ProgramData%\DONUT\lens-agent. This class is the agent's supervisor +
     client: start/heartbeat/restart, drive one lookup, stream partials, teardown.
 
-    See docs/development/architecture/implementation-notes.md ("De-elevating the
-    user Lens") for the full exchange protocol, security model, and rationale.
+    See docs/development/architecture/user-lens.md for the full exchange protocol,
+    security model, and rationale.
 
 .NOTES
     Mirrors ActiveDirectoryService's seam pattern: the agent/task I/O is isolated in
@@ -98,7 +98,7 @@ class PersonLensService {
     static [string] AgentDir() { return (Join-Path $env:ProgramData 'DONUT\lens-agent') }
     static [string] $AgentTaskName = 'DONUT-LensAgent'
 
-    # Deletes per-lookup lens-* dirs older than $minutes left by PREVIOUS builds or
+    # Deletes per-lookup lens-* dirs older than $minutes left by previous builds or
     # crashes - never the live agent's own dir, which EnsureAgent manages itself.
     static [void] SweepStaleExchanges([int]$minutes) {
         $root = Join-Path $env:ProgramData 'DONUT'

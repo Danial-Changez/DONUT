@@ -5,8 +5,8 @@
 .DESCRIPTION
     The delete runs as SYSTEM on the target, so the removable set is gated twice - here (which
     drives the UI checkbox) and again inside the remote script (defence in depth). A folder is
-    deletable only when it is a real absolute path that is NOT the volume root, NOT the Users
-    container itself, and NOT a protected system directory (or anything under one).
+    deletable only when it is a real absolute path that is not the volume root, not the Users
+    container itself, and not a protected system directory (or anything under one).
 
 .NOTES
     WPF-free and pure so it is unit-tested headless. Keep this list in sync with the server-side

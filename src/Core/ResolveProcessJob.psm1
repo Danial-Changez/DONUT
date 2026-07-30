@@ -48,7 +48,7 @@ class ResolveProcessJob : AsyncJob {
                 $psi.ArgumentList.Add($a)
             }
             if ([bool]$arguments.DebugLog) { $psi.ArgumentList.Add('-DebugLog') }
-            # NO stream redirection: undrained pipes wedge children; the verdict rides
+            # No stream redirection: undrained pipes wedge children; the verdict rides
             # the result file and diagnostics ride Donut.log.
             $psi.UseShellExecute = $false
             $psi.CreateNoWindow = $true

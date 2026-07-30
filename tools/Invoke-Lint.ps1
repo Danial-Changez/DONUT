@@ -3,11 +3,11 @@
     Run PSScriptAnalyzer over DONUT's source with the repo settings, cleanly.
 
 .DESCRIPTION
-    Encodes the two gotchas a bare `Invoke-ScriptAnalyzer -Path .\src -Recurse` trips
-    over:
+    Encodes the two corrections a bare `Invoke-ScriptAnalyzer -Path .\src -Recurse`
+    needs:
       1. Build output under src\Launcher\bin (bundled PowerShell runtime modules) is
          excluded - those aren't our code.
-      2. TypeNotFound is a PARSER diagnostic that ExcludeRules can't suppress; the only
+      2. TypeNotFound is a parser diagnostic that ExcludeRules can't suppress; the only
          hits are the runtime-compiled C# types (ObservableObject / RelayCommand /
          WindowChromeHelper / Donut.Qr.QrCode / Donut.Interop.HotkeyManager), so
          they're filtered here by name.

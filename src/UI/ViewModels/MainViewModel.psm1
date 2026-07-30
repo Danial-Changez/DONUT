@@ -19,7 +19,7 @@ class MainViewModel : ObservableObject {
     [bool]   $IsSettingsOpen = $false
     [object] $OpenSettingsCommand
     [object] $CloseSettingsCommand
-    [object] $ToggleSettingsCommand   # the configurable shortcut opens AND closes the overlay
+    [object] $ToggleSettingsCommand   # the configurable shortcut opens and closes the overlay
     [object] $MinimizeCommand
     [object] $MaximizeCommand     # toggles Maximized <-> Normal
     [object] $CloseCommand

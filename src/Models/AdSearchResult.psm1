@@ -73,7 +73,7 @@ class AdFilter {
         return "(&(objectCategory=computer)(|(name=$p*)(sAMAccountName=$p*)))"
     }
 
-    # Computers OR users in one filter, so a forest is bound + queried ONCE per search
+    # Computers or users in one filter, so a forest is bound + queried once per search
     # instead of twice. Each row's kind is recovered from objectCategory by the caller.
     static [string] CombinedFilter([string]$prefix) {
         return "(|$([AdFilter]::ComputerFilter($prefix))$([AdFilter]::UserFilter($prefix)))"

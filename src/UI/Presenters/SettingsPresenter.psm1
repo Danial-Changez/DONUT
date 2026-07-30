@@ -151,7 +151,7 @@ class SettingsPresenter {
             }
         }
 
-        # Wire live-persist AFTER populating, so setting initial values doesn't fire it.
+        # Wire live-persist only after populating, so setting initial values doesn't fire it.
         $this.WireDcuPersistence($allControls)
     }
 
@@ -205,7 +205,7 @@ class SettingsPresenter {
         }
     }
 
-    # Writes one DCU control's value into its command args and flushes. Does NOT change the
+    # Writes one DCU control's value into its command args and flushes. Does not change the
     # active command - editing a command's options is separate from selecting it to run.
     hidden [void] PersistDcuArg([object]$ctrl) {
         if ($this.CurrentSection -eq 'General' -or [string]::IsNullOrWhiteSpace($this.CurrentSection)) { return }

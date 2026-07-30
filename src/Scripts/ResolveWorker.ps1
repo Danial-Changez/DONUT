@@ -55,7 +55,7 @@ function Resolve-TargetIp {
 }
 
 # NetworkProbe.IsPortOpen port for RPC 135: bounded 2 s TCP connect. The breadcrumb
-# logs BEFORE BeginConnect - a security-stack-hooked connect never returns.
+# logs before BeginConnect - a security-stack-hooked connect never returns.
 function Test-RpcPort {
     param([string]$Ip, [object]$Log, [int]$Port = 135)
     try {

@@ -13,7 +13,7 @@ using module '..\ViewModels\LoginViewModel.psm1'
 
 .DESCRIPTION
     Shows the login window, starts the device flow (SelfUpdateService), displays
-    the user code, and polls for the token on a DispatcherTimer — applying the
+    the user code, and polls for the token on a DispatcherTimer - applying the
     pure DeviceFlowDecision (authorize / keep polling / slow down / fail) to the
     real UI and timer.
 #>

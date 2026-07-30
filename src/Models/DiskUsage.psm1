@@ -129,7 +129,7 @@ class WizTreeCsv {
 
                 $path = $cols[$nameIdx].Trim()
                 if ([string]::IsNullOrWhiteSpace($path)) { continue }
-                # Skip the volume root (e.g. "C:\" / "C:") — that's the whole-drive total.
+                # Skip the volume root (e.g. "C:\" / "C:") - that's the whole-drive total.
                 if ($path -match '^[A-Za-z]:\\?$') { continue }
 
                 $f = [FolderUsage]::new()

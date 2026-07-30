@@ -71,9 +71,8 @@ $script:AffinityScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# Per-device hardware from SCCM inventory, keyed by the affinity ResourceID.
-# ResourceID eq is the primary filter shape; the keyed segment is the fallback
-# (the string-function filters that 404 on this AdminService are avoided entirely).
+# Per-device hardware from SCCM inventory, keyed by the affinity ResourceID. Filters
+# ResourceID eq N with a keyed-segment fallback; string filters 404 on this AdminService.
 $script:HardwareScript = {
     param($server, $pairs)
     function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
