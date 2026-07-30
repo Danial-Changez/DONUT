@@ -164,6 +164,14 @@
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">
+                <!-- Opt-in "remember this" (HasRemember is false for every other caller),
+                     left of the buttons so the choice reads before the commit. -->
+                <CheckBox x:Name="chkRemember"
+                          Content="{Binding RememberText}"
+                          IsChecked="{Binding Remember, Mode=TwoWay}"
+                          Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,16,0" />
                 <Button x:Name="btnSecondary"
                         Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"

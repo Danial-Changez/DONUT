@@ -78,6 +78,19 @@ class DialogPresenter {
         return $this.ShowModal()
     }
 
+    # Confirmation that also asks whether to make the answer permanent. Returns
+    # @{ Confirmed; Remember } so a declined prompt never changes the setting.
+    [hashtable] ShowRememberableConfirmation([string]$title, [string]$message,
+        [string]$primaryText, [string]$rememberText) {
+        $this.Initialize()
+        $vm = $this.NewVm($title, $message, @(), $primaryText, 'Cancel')
+        $vm.RememberText = $rememberText
+        $vm.HasRemember = $true
+        $this.Window.DataContext = $vm
+        $confirmed = $this.ShowModal()
+        return @{ Confirmed = $confirmed; Remember = ($confirmed -and $vm.Remember) }
+    }
+
     [void] ShowAlert([string]$title, [string]$message, [object[]]$listItems) {
         $this.Initialize()
         # No secondary button: the primary just acknowledges (result is ignored).

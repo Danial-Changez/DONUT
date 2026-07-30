@@ -8,6 +8,7 @@ using module "..\..\Models\FleetCardStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
 using module "..\..\Models\LogLine.psm1"
 using module "..\..\Models\RecentConnection.psm1"
+using module "..\..\Models\PendingIntent.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\DonutPaths.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
@@ -92,6 +93,9 @@ class HomePresenter : AsyncJobPresenter {
     [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
+    # Duck-typed MainPresenter back-ref for the elevation gate (a typed import would be a
+    # using-module cycle). Null in tests, which then run ungated.
+    [object] $Elevation
     [ToastService] $Toasts
     [NetworkProbe] $NetworkProbe
     [LogService] $Logger
@@ -448,6 +452,10 @@ class HomePresenter : AsyncJobPresenter {
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $this.IsRunning($_) })
         if ($idleHosts.Count -eq 0) { return }
 
+        # Gated before the apply confirmation: elevating restarts the app, so asking to
+        # confirm a destructive batch first would throw the answer away.
+        if (-not $this.RequireElevation([GatedAction]::RunAll, $idleHosts, 'Running updates')) { return }
+
         $command = $this.Config.GetActiveCommand()
         if ($command -eq 'applyUpdates') {
             # Applies are irreversible (BIOS/firmware installs): destructive tint + the
@@ -467,6 +475,27 @@ class HomePresenter : AsyncJobPresenter {
         $this.TotalJobsInBatch = $idleHosts.Count
         foreach ($hostName in $idleHosts) {
             $this.StartProcess($hostName)
+        }
+    }
+
+    # True when the caller may run now. Otherwise the click is recorded and DONUT
+    # relaunches elevated, so nothing further should happen on this instance.
+    [bool] RequireElevation([GatedAction]$action, [string[]]$hosts, [string]$what) {
+        if (-not $this.Elevation) { return $true }
+        return $this.Elevation.EnsureElevated($action, $hosts, $what)
+    }
+
+    # Re-runs the click that asked for elevation, now that this instance has it.
+    [void] ResumeGatedAction([PendingIntent]$intent) {
+        if ($null -eq $intent) { return }
+        switch ($intent.Action) {
+            ([GatedAction]::RunAll) { $this.RunAll() }
+            ([GatedAction]::Run) { foreach ($h in $intent.Hosts) { $this.StartProcess($h) } }
+            ([GatedAction]::Inventory) { foreach ($h in $intent.Hosts) { $this.StartInventory($h) } }
+            ([GatedAction]::DiskScan) { $this.Detail.ResumeDiskScan($intent.Hosts) }
+            default {
+                $this.Logger.LogInfo("No resume path for $($intent.Action); the user re-runs it.")
+            }
         }
     }
 

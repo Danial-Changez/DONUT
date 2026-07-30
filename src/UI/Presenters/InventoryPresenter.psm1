@@ -10,6 +10,7 @@ using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
+using module "..\..\Models\PendingIntent.psm1"
 using module "..\..\Models\RemoteError.psm1"
 using module "..\..\Models\LogLine.psm1"
 using module "..\..\Core\TimeFormat.psm1"
@@ -397,10 +398,16 @@ class InventoryPresenter {
         $this.PopulateDetailCards($hostName, $cached, $rc)
     }
 
+    # Re-runs a storage scan that asked for elevation, once the restart has provided it.
+    [void] ResumeDiskScan([string[]]$hosts) {
+        foreach ($h in $hosts) { $this.FindBigFolders($h) }
+    }
+
     # Queues the on-demand "biggest folders on C:" scan (single-flight). Heavy - it
     # deploys and runs WizTree - so it only runs from the button.
     [void] FindBigFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        if (-not $this.Home.RequireElevation([GatedAction]::DiskScan, @($hostName), 'A storage scan')) { return }
         foreach ($j in $this.Home.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
                 # A silently ignored click reads as a dead button - say so instead.
@@ -459,6 +466,9 @@ class InventoryPresenter {
     # deletable rows carry a checkbox and the worker re-checks each path; re-scans on completion.
     [void] DeleteSelectedFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
+        # Not resumed after elevating (PendingIntent.IsResumable): the folder selection
+        # lives in this window and would have to be guessed, so the user re-picks.
+        if (-not $this.Home.RequireElevation([GatedAction]::DeleteFolders, @($hostName), 'Clearing folders')) { return }
         $row = $this.Home.GetRow($hostName)
         if ($null -eq $row) { return }
         $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))

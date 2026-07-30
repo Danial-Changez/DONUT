@@ -126,6 +126,16 @@ try {
             }.GetNewClosure())
         $startupTaskTimer.Start()
 
+        # Re-run whatever click asked for elevation, once the window exists so the resume
+        # can log and toast into it. Short delay: this is a user-visible action, not a heal.
+        $resumeTimer = [System.Windows.Threading.DispatcherTimer]::new()
+        $resumeTimer.Interval = [TimeSpan]::FromSeconds(3)
+        $resumeTimer.Add_Tick({
+                $resumeTimer.Stop()
+                $mainPresenter.ResumePendingIntent()
+            }.GetNewClosure())
+        $resumeTimer.Start()
+
         if ($hidden) {
             $logger.LogInfo("Starting hidden in the system tray.")
             # Defer sign-in/update to the first time the user surfaces the window.

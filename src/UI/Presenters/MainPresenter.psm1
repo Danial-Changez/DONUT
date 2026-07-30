@@ -2,6 +2,8 @@ using namespace System.Windows
 using namespace System.Windows.Threading
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\HotkeyGesture.psm1"
+using module "..\..\Models\PendingIntent.psm1"
+using module "..\..\Services\PendingIntentStore.psm1"
 using module "..\..\Models\TempPassword.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\ElevationContext.psm1"
@@ -49,6 +51,7 @@ class MainPresenter {
     [ToastService] $ToastService
     [MainViewModel] $MainVm
     [ResetPasswordViewModel] $ResetVm
+    [PendingIntentStore] $IntentStore   # carries a gated click across the elevation restart
 
     # Set true before a real exit (tray "Exit") so the close-to-tray Closing hook
     # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
@@ -147,7 +150,9 @@ class MainPresenter {
         if ($homeView) {
             $this.HomePresenter = [HomePresenter]::new($this.Config, $homeView,
                 $this.NetworkProbe, $this.Resources, $this.ToastService, $this.ConfigManager)
+            $this.HomePresenter.Elevation = $this
         }
+        $this.IntentStore = [PendingIntentStore]::new($this.Logger)
 
         # Shell view-model: settings overlay + window chrome are bound commands that
         # call back into the presenter for the imperative shell work.
@@ -383,7 +388,9 @@ class MainPresenter {
             param($result)
             $r = @($result)[-1]
             if ($r -is [hashtable] -and -not $r.Ok -and $presenter.ToastService) {
-                $why = if ($r.Reason) { [string]$r.Reason } else { 'is DONUT running as administrator?' }
+                $why = if ($r.Reason) { [string]$r.Reason }
+                elseif (-not [ElevationContext]::IsElevated()) { 'DONUT is not running as administrator.' }
+                else { 'the task could not be registered.' }
                 $presenter.ToastService.ShowError('Startup task', "Could not update the startup task - $why")
             }
         }.GetNewClosure()
@@ -411,6 +418,41 @@ class MainPresenter {
             return
         }
 
+        if ($this.SpawnElevated()) { return }
+        $this.RevertRunAsAdmin()
+    }
+
+    # A gated action clicked without rights: confirm, record it, elevate, and let the new
+    # instance re-run it. Returns $true only when the caller may proceed right now.
+    [bool] EnsureElevated([GatedAction]$action, [string[]]$hosts, [string]$what) {
+        if ([ElevationContext]::IsElevated()) { return $true }
+        $dialogs = if ($this.HomePresenter) { $this.HomePresenter.DialogPresenter } else { $null }
+        if (-not $dialogs) { return $false }
+
+        $answer = $dialogs.ShowRememberableConfirmation(
+            'Administrator rights needed',
+            "$what needs administrator rights, because remote work runs as the DONUT process." +
+            "`n`nDONUT will restart, ask for elevation, and carry on where you left off.",
+            'Restart as administrator',
+            'Always run DONUT as administrator')
+        if (-not $answer.Confirmed) { return $false }
+
+        # Both writes land BEFORE the spawn: a successful one closes this window, and the
+        # Closed handler hard-exits, so nothing queued after it would run.
+        $this.IntentStore.Save([PendingIntent]::Create($action, $hosts, [datetime]::UtcNow))
+        if ($answer.Remember) { $this.PersistRunAsAdmin($true) }
+
+        if (-not $this.SpawnElevated()) {
+            $this.IntentStore.Discard()
+            # Undo the remembered choice too, or a declined UAC prompt reappears every launch.
+            if ($answer.Remember) { $this.PersistRunAsAdmin($false) }
+        }
+        return $false
+    }
+
+    # Spawns the elevated replacement and, on success, closes this instance so the new one
+    # can take the mutex. $false means we are still running and still de-elevated.
+    hidden [bool] SpawnElevated() {
         $spec = $this.BuildRelaunchSpec()
         try {
             Start-Process -FilePath $spec.FilePath -ArgumentList $spec.Arguments -Verb RunAs -ErrorAction Stop
@@ -419,13 +461,25 @@ class MainPresenter {
             # 1223 is ERROR_CANCELLED: the user declined the consent/credential prompt.
             $declined = ($_.Exception -is [System.ComponentModel.Win32Exception]) -and
                 ($_.Exception.NativeErrorCode -eq 1223)
-            $this.RevertRunAsAdmin($declined, $_)
-            return
+            $this.ReportElevationFailure($declined, $_)
+            return $false
         }
-
         $this.ExitRequested = $true
         $this.Logger.LogInfo('Relaunched elevated; this instance is exiting so the new one can take the single-instance mutex.')
         $this.Window.Close()
+        return $true
+    }
+
+    # Claims a note left by a de-elevated instance and re-runs what was clicked.
+    [void] ResumePendingIntent() {
+        if (-not [ElevationContext]::IsElevated()) { return }
+        $intent = $this.IntentStore.Take([datetime]::UtcNow)
+        if ($null -eq $intent) { return }
+
+        if (-not $this.HomePresenter) { return }
+        $this.Logger.LogInfo("Resuming the $($intent.Action) action that asked for elevation.")
+        try { $this.HomePresenter.ResumeGatedAction($intent) }
+        catch { $this.Logger.LogException("Could not resume the $($intent.Action) action", $_) }
     }
 
     # Which executable to relaunch: the prod launcher hosts src\, the dev path runs
@@ -447,11 +501,19 @@ class MainPresenter {
     }
 
     # Puts the setting back after a failed elevation so the switch matches reality.
-    hidden [void] RevertRunAsAdmin([bool]$declined, [object]$errorRecord) {
-        $this.Config.SetSetting('runAsAdmin', $false)
-        try { $this.ConfigManager.SaveConfig($this.Config) }
-        catch { $this.Logger.LogException('Could not persist the reverted run-as-administrator setting', $_) }
+    hidden [void] RevertRunAsAdmin() {
+        $this.PersistRunAsAdmin($false)
+    }
 
+    hidden [void] PersistRunAsAdmin([bool]$value) {
+        $this.Config.SetSetting('runAsAdmin', $value)
+        try { $this.ConfigManager.SaveConfig($this.Config) }
+        catch { $this.Logger.LogException('Could not persist the run-as-administrator setting', $_) }
+    }
+
+    # Says why the relaunch did not happen. Never changes the setting: the caller decides
+    # that, because a declined toggle and a declined gated action revert differently.
+    hidden [void] ReportElevationFailure([bool]$declined, [object]$errorRecord) {
         if ($declined) {
             $this.Logger.LogInfo('Elevation declined at the UAC prompt; staying de-elevated.')
             if ($this.ToastService) {

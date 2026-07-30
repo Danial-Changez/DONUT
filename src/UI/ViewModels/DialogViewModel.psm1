@@ -24,4 +24,7 @@ class DialogViewModel : ObservableObject {
     [string] $SecondaryText = ''
     [bool]   $HasSecondary = $false
     [object] $SecondaryCommand    # RelayCommand: Result = false, close
+    [string] $RememberText = ''
+    [bool]   $HasRemember = $false  # opt-in checkbox; off for every existing caller
+    [bool]   $Remember = $false     # two-way bound; read by the caller after the modal
 }
