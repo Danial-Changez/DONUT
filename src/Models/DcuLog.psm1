@@ -20,6 +20,16 @@
     Return-code reference:
     https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
 #>
+
+# Per-command verdict for a dcu-cli return code (a scan's 500 is a clean no-updates
+# result, not a failure; every other command keeps the plain success/fail split).
+enum DcuCommandOutcome {
+    Success
+    RebootRequired
+    NoUpdates
+    Failed
+}
+
 class DcuLog {
     # Extracts dcu-cli's final return code from its activity-log text as @{ Found; Code };
     # Found is $false when no "return code: N" line is present (dcu-cli never finished).
@@ -33,26 +43,52 @@ class DcuLog {
         return @{ Found = $true; Code = [int]$last.Groups[1].Value }
     }
 
-    # dcu-cli's documented return codes: only 0 is success, 1/5 mean reboot needed,
-    # and everything else is an error - 2/3/4 are not benign (reference in .NOTES).
+    # dcu-cli's documented return codes: 0/1/5 pass for any command, a scan's 500 is
+    # a clean no-updates result (see Classify), everything else is a real error.
     static [hashtable] $Meanings = @{
-        0 = 'success'
-        1 = 'reboot required'
-        2 = 'unknown application error'
-        3 = 'the system manufacturer is not Dell'
-        4 = 'dcu-cli was not run with administrative privilege'
-        5 = 'a reboot was pending from a previous operation'
-        6 = 'another instance of Dell Command Update is already running'
-        7 = 'the application does not support this system model'
-        8 = 'no update filters are configured'
+        0    = 'success'
+        1    = 'reboot required'
+        2    = 'unknown application error'
+        3    = 'the system manufacturer is not Dell'
+        4    = 'dcu-cli was not run with administrative privilege'
+        5    = 'a reboot was pending from a previous operation'
+        6    = 'another instance of Dell Command Update is already running'
+        7    = 'the application does not support this system model'
+        8    = 'no update filters are configured'
+        112  = 'an invalid catalog was provided'
+        500  = 'no updates were found for the system'
+        501  = 'an error occurred while determining the available updates'
+        502  = 'the scan was canceled'
+        503  = 'a download error occurred during the scan'
+        1000 = 'an error occurred while retrieving the apply-updates result'
+        1001 = 'the apply-updates operation was canceled'
+        1002 = 'a download error occurred while applying updates'
+        3000 = 'the Dell Client Management Service is not running - retry after the service settles'
+        3001 = 'the Dell Client Management Service is not installed - install it from Dell support'
+        3002 = 'the Dell Client Management Service is disabled - enable the service'
+        3003 = 'the Dell Client Management Service is busy - retry after the service settles'
+        3004 = 'the Dell Client Management Service is installing a self-update - retry after the service settles'
+        3005 = 'the Dell Client Management Service is installing pending updates - retry after the service settles'
     }
 
     # The codes that are not failures: 0 (done) plus 1 and 5 (done, but reboot to finish).
     static [int[]] $SuccessCodes = @(0, 1, 5)
     static [int[]] $RebootCodes  = @(1, 5)
+    # scan-only: dcu-cli exits 500 when the scan ran clean and found nothing to install.
+    static [int[]] $ScanNoUpdateCodes = @(500)
 
     static [bool] IsSuccess([int]$code) { return [DcuLog]::SuccessCodes -contains $code }
     static [bool] NeedsReboot([int]$code) { return [DcuLog]::RebootCodes -contains $code }
+
+    # The per-command verdict InvokePsExec gates on; only Failed should throw.
+    static [DcuCommandOutcome] Classify([string]$command, [int]$code) {
+        if ($command -eq 'scan' -and [DcuLog]::ScanNoUpdateCodes -contains $code) {
+            return [DcuCommandOutcome]::NoUpdates
+        }
+        if ([DcuLog]::RebootCodes -contains $code) { return [DcuCommandOutcome]::RebootRequired }
+        if ([DcuLog]::SuccessCodes -contains $code) { return [DcuCommandOutcome]::Success }
+        return [DcuCommandOutcome]::Failed
+    }
 
     # Human meaning for a return code, with a category hint for the documented ranges.
     static [string] DescribeReturnCode([int]$code) {
@@ -63,6 +99,8 @@ class DcuLog {
             { $_ -ge 1000 -and $_ -le 1002 } { 'apply-updates error'; break }
             { $_ -ge 1505 -and $_ -le 1506 } { 'configure error'; break }
             { $_ -ge 2000 -and $_ -le 2007 } { 'driver-install error'; break }
+            { $_ -ge 2500 -and $_ -le 2502 } { 'password-encryption error'; break }
+            { $_ -ge 3000 -and $_ -le 3005 } { 'Dell Client Management Service error'; break }
             default { 'error' }
         }
         return $range

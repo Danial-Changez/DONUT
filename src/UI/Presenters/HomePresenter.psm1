@@ -722,17 +722,31 @@ class HomePresenter : AsyncJobPresenter {
 
         $transitioned = $false
         if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
-            $transitioned = $this.ProceedWithApply($job.HostName)
+            if ($this.ScanFoundNoUpdates($job)) {
+                $this.Detail.AppendLog($job.HostName, "No updates found.")
+                if ($this.Toasts) { $this.Toasts.ShowInfo($job.HostName, "No updates found.") }
+            }
+            else {
+                $transitioned = $this.ProceedWithApply($job.HostName)
+            }
         }
 
         # A plain scan fills the same Available Updates card as an apply scan, minus the
         # apply prompt: the operator sees what's pending before deciding to apply.
         if ($job.Status -eq 'Completed' -and $job.JobType -eq 'Scan') {
-            $scanRows = $this.RenderUpdatesFromReport($job.HostName)
-            $summary = if ($null -eq $scanRows) { 'no report generated' }
-            elseif ($scanRows.Count -eq 0) { 'no updates found' }
-            else { "$($scanRows.Count) update(s) available" }
-            $this.Detail.AppendLog($job.HostName, "Scan complete: $summary.")
+            if ($this.ScanFoundNoUpdates($job)) {
+                # DCU 500 leaves no report on the target; the flag is the verdict.
+                $row = $this.GetRow($job.HostName)
+                if ($null -ne $row) { $row.Set('HasUpdates', $false) }
+                $this.Detail.AppendLog($job.HostName, "Scan complete: no updates found.")
+            }
+            else {
+                $scanRows = $this.RenderUpdatesFromReport($job.HostName)
+                $summary = if ($null -eq $scanRows) { 'no report generated' }
+                elseif ($scanRows.Count -eq 0) { 'no updates found' }
+                else { "$($scanRows.Count) update(s) available" }
+                $this.Detail.AppendLog($job.HostName, "Scan complete: $summary.")
+            }
         }
 
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
@@ -1104,6 +1118,15 @@ class HomePresenter : AsyncJobPresenter {
             $this.Logger.LogWarning("Row palette keys missing from UIColors.xaml: $($missing -join ', ')")
         }
         [HostViewModel]::SetPalette($palette)
+    }
+
+    # The scan worker flags dcu-cli 500 as NoUpdatesFound; $job.Result is its
+    # hashtable wrapped in the invoke collection - unwrap it.
+    hidden [bool] ScanFoundNoUpdates([AsyncJob]$job) {
+        foreach ($item in @($job.Result)) {
+            if ($null -ne $item -and $item.NoUpdatesFound) { return $true }
+        }
+        return $false
     }
 
     [void] CheckForManualReboot([AsyncJob]$job) {

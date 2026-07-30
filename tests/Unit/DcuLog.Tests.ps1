@@ -50,7 +50,7 @@ Describe "DcuLog return-code classification" {
     It "treats ONLY 0, 1, 5 as success (2/3/4 are real errors, not benign)" {
         foreach ($ok in 0, 1, 5) { [DcuLog]::IsSuccess($ok) | Should -BeTrue -Because "code $ok is success/reboot" }
         foreach ($bad in 2, 3, 4, 6, 7, 8, 105, 500, 1000) {
-            [DcuLog]::IsSuccess($bad) | Should -BeFalse -Because "code $bad is a DCU error"
+            [DcuLog]::IsSuccess($bad) | Should -BeFalse -Because "code $bad is only benign per-command (500 is scan-only - see Classify)"
         }
     }
 
@@ -67,10 +67,46 @@ Describe "DcuLog return-code classification" {
         [DcuLog]::DescribeReturnCode(4) | Should -Be 'dcu-cli was not run with administrative privilege'
     }
 
+    It "names the documented scan, apply, and catalog codes individually" {
+        [DcuLog]::DescribeReturnCode(112) | Should -Be 'an invalid catalog was provided'
+        [DcuLog]::DescribeReturnCode(500) | Should -Be 'no updates were found for the system'
+        [DcuLog]::DescribeReturnCode(501) | Should -Be 'an error occurred while determining the available updates'
+        [DcuLog]::DescribeReturnCode(502) | Should -Be 'the scan was canceled'
+        [DcuLog]::DescribeReturnCode(503) | Should -Be 'a download error occurred during the scan'
+        [DcuLog]::DescribeReturnCode(1001) | Should -Be 'the apply-updates operation was canceled'
+    }
+
+    It "names the Dell Client Management Service states with a next step" {
+        [DcuLog]::DescribeReturnCode(3000) | Should -BeLike 'the Dell Client Management Service is not running*retry*'
+        [DcuLog]::DescribeReturnCode(3002) | Should -BeLike 'the Dell Client Management Service is disabled*enable*'
+    }
+
     It "categorises the documented error ranges" {
         [DcuLog]::DescribeReturnCode(105)  | Should -Be 'input-validation error'
-        [DcuLog]::DescribeReturnCode(500)  | Should -Be 'scan error'
-        [DcuLog]::DescribeReturnCode(1000) | Should -Be 'apply-updates error'
+        [DcuLog]::DescribeReturnCode(1505) | Should -Be 'configure error'
+        [DcuLog]::DescribeReturnCode(2500) | Should -Be 'password-encryption error'
         [DcuLog]::DescribeReturnCode(99999) | Should -Be 'error'
+    }
+}
+
+Describe "DcuLog.Classify (per-command)" {
+    It "treats a scan 500 as a clean no-updates result, not a failure" {
+        [DcuLog]::Classify('scan', 500) | Should -Be ([DcuCommandOutcome]::NoUpdates)
+    }
+
+    It "keeps 500 a failure for every other command" {
+        [DcuLog]::Classify('applyUpdates', 500) | Should -Be ([DcuCommandOutcome]::Failed)
+    }
+
+    It "classifies 0 as success and 1/5 as reboot-required for any command" {
+        [DcuLog]::Classify('scan', 0) | Should -Be ([DcuCommandOutcome]::Success)
+        [DcuLog]::Classify('scan', 1) | Should -Be ([DcuCommandOutcome]::RebootRequired)
+        [DcuLog]::Classify('applyUpdates', 1) | Should -Be ([DcuCommandOutcome]::RebootRequired)
+        [DcuLog]::Classify('scan', 5) | Should -Be ([DcuCommandOutcome]::RebootRequired)
+    }
+
+    It "keeps real errors failures on both commands" {
+        [DcuLog]::Classify('scan', 501) | Should -Be ([DcuCommandOutcome]::Failed)
+        [DcuLog]::Classify('applyUpdates', 3000) | Should -Be ([DcuCommandOutcome]::Failed)
     }
 }

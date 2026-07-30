@@ -46,8 +46,9 @@ using module "..\Models\DcuProgress.psm1"
       authoritative code - bounded by AppConfig.GetRecoveryWindowMinutes, after which the
       run settles Unconfirmed. The target-side clear runs before dcu-cli, so a recovered
       code is always this run's.
-    - dcu-cli return codes: only 0 is success, 1/5 mean done-but-reboot, and the
-      other small codes are real failures (see DcuLog). Reference:
+    - dcu-cli return codes are classified per command (DcuLog.Classify): 0/1/5 pass
+      for any command, a scan's 500 is a clean no-updates result (carried on the
+      artifact as NoUpdatesFound), and everything else is a real failure. Reference:
       https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
     - Live progress rides dcu-cli's -outputLog, tailed over the admin share into
       the Information stream while psexec runs.
@@ -315,12 +316,21 @@ class ExecutionService {
         $exit = $this.InvokePsExec($params)
         $this.Logger.LogInfo(
             "[$($device.HostName)] Scan: psexec launch done in $($sw.ElapsedMilliseconds) ms (exit $exit).")
-        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog)
+
+        # DCU 500 = clean no-updates: skip the report copy so a stale previous-run
+        # XML cannot masquerade as this scan's result (the local copy is dropped too).
+        $noUpdates = ([DcuLog]::Classify('scan', $exit) -eq [DcuCommandOutcome]::NoUpdates)
+        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog, (-not $noUpdates))
+        if ($noUpdates) {
+            $this.Logger.LogInfo("[$($device.HostName)] Scan clean (DCU $exit): no updates found.")
+        }
 
         return @{
-            ReportPath = $artifact.Report
-            LogPath    = $artifact.Log
-            Updates    = @()
+            ReportPath     = $artifact.Report
+            LogPath        = $artifact.Log
+            Updates        = @()
+            DcuCode        = [int]$exit
+            NoUpdatesFound = $noUpdates
         }
     }
 
@@ -729,6 +739,10 @@ foreach (`$t in `$targets) {
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {
+        return $this.CopyRemoteArtifacts($hostName, $outputLog, $true)
+    }
+
+    [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog, [bool] $copyReport) {
         $ip = $this.ResolvedIpFor($hostName)
         $remoteDir = "\\$ip\C$\temp\DONUT"
         # Copy the command's own outputLog so the local <host>.log holds the last run.
@@ -740,6 +754,12 @@ foreach (`$t in `$targets) {
         # Must match RemoteUpdateService.ParseUpdateReport's "<host>-Updates.xml", or
         # the report is never read and the pending-updates count stays 0.
         $localReport = Join-Path $this.LocalReportsDir "$hostName-Updates.xml"
+
+        # A no-updates scan produced no fresh report: drop the previous run's local
+        # copy so the UI cannot re-render stale updates for this host.
+        if (-not $copyReport) {
+            Remove-Item -LiteralPath $localReport -Force -ErrorAction SilentlyContinue
+        }
 
         # An applied NIC driver may have just reset the adapter: wait briefly for the
         # share. Non-fatal - a completed apply must not fail over a lost log copy.
@@ -755,6 +775,10 @@ foreach (`$t in `$targets) {
 
         if (Test-Path $remoteLog) {
             Copy-Item -Path $remoteLog -Destination $localLog -Force
+        }
+
+        if (-not $copyReport) {
+            return @{ Log = $localLog; Report = $localReport }
         }
 
         # DCU names its report inconsistently across versions: copy the newest
@@ -982,7 +1006,7 @@ exit `$LASTEXITCODE
             $dcu = $this.RecoverByResumeTail($ip, $computer, $remoteLogUnc, [int]$tickState.Seen)
             if ($dcu.Found) {
                 # dcu-cli recorded its verdict: trust that, not the dropped pipe.
-                if ([DcuLog]::IsSuccess($dcu.Code)) {
+                if ([DcuLog]::Classify($command, $dcu.Code) -ne [DcuCommandOutcome]::Failed) {
                     $this.Logger.LogWarning("[$computer] Connection dropped ($([RemoteConnectionLostException]::Describe($exitCode))); reconnected and dcu-cli's log confirms return code $($dcu.Code) - treating DCU /$command as completed.")
                     if ([DcuLog]::NeedsReboot($dcu.Code)) { $this.Logger.LogInfo("[$computer] Reboot required to complete updates (dcu-cli code $($dcu.Code)).") }
                     return $dcu.Code
@@ -995,9 +1019,9 @@ exit `$LASTEXITCODE
             throw [RemoteConnectionLostException]::new($computer, "DCU /$command", $exitCode)
         }
 
-        # Only 0 is success; 1/5 mean done-but-reboot. The other small codes are real
-        # failures (see the reference in .NOTES).
-        if (-not [DcuLog]::IsSuccess($exitCode)) {
+        # Per-command verdict: 0/1/5 pass for any command, a scan's 500 is a clean
+        # no-updates result; everything else is a real failure (reference in .NOTES).
+        if ([DcuLog]::Classify($command, $exitCode) -eq [DcuCommandOutcome]::Failed) {
             # Carry the full argument string + decoded meaning so the error reads as
             # its actual cause (a syntax error like DCU 105 needs the exact command).
             throw [RemoteExecutionException]::new($computer, "DCU /$command $argsString", $exitCode, [DcuLog]::DescribeReturnCode($exitCode))
