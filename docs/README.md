@@ -9,11 +9,11 @@ from this folder by Astro Starlight (`web/`) and deployed on every push to
 
 | Path | What it holds |
 |------|---------------|
-| [index.md](index.md) | The site's landing page |
+| [index.mdx](index.mdx) | The site's landing page |
 | [get-started/](get-started/) | What DONUT is, installation, first launch |
 | [features/](features/) | One page per feature: scanning, applying updates, the machine list, details/storage, AD finder, User Lens, tray/hotkey/autostart, self-update, settings |
 | [configuration/](configuration/) | The full `config.json` reference and the DCU command/args reference |
-| [development/](development/) | Architecture (overview, key classes, runtime flows, implementation notes), coding style, testing, UI reference, site maintenance |
+| [development/](development/) | Architecture (overview plus one page per subsystem: runspaces and workers, remote execution, User Lens, UI and threading, configuration and persistence, PowerShell constraints; key classes; runtime flows), coding style, testing, UI reference, site maintenance |
 | [diagrams/](diagrams/README.md) | PlantUML sources for all diagrams (rendered to SVG at site build; indexed with a mermaid self-update flow that GitHub renders) |
 | [plans/](plans/) | Archived implementation plans (historical, not reference) |
 

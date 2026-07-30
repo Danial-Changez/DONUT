@@ -3,12 +3,33 @@ title: Architecture overview
 description: How DONUT is built - the directory structure, the MVVM layering, and the design decisions behind the presenter seams.
 ---
 
-How DONUT is built: a WPF/PowerShell tool that runs the Dell Command Update (DCU)
-CLI remotely across many Dell machines in parallel, with a per-machine detail panel,
-a live Active Directory finder, and a de-elevated user Lens. This is the standing
-architecture reference; the visual counterpart is the diagram set on
-[Runtime flows](./runtime-flows.md) and [Key classes](./key-classes.md).
-Comment/layout conventions live in [Coding style](../coding-style.md).
+How DONUT is built: a WPF/PowerShell fleet management app for Dell workstations.
+Its subsystems are remote driver updates (Dell Command Update over PsExec), a live
+Active Directory finder, the User Lens (a de-elevated user-to-device lookup),
+per-machine inventory and storage, and the tray, hotkey, and self-update plumbing.
+This page is the high-level view; each subsystem has its own page:
+
+- [Runspaces and workers](./runspaces-and-workers.md) - the job pool, process
+  isolation, and the warm/staging rules.
+- [Remote execution](./remote-execution.md) - the PsExec transport and dcu-cli
+  return-code handling.
+- [User Lens](./user-lens.md) - the de-elevated agent and its exchange.
+- [UI and threading](./ui-and-threading.md) - presenters, view-models, and the
+  polling rules.
+- [Configuration and persistence](./configuration-and-persistence.md) - config,
+  logging, recents, and self-update.
+- [PowerShell constraints](./powershell-constraints.md) - language and packaging
+  constraints the code must keep honoring.
+
+The visual counterparts are [Runtime flows](./runtime-flows.md) and
+[Key classes](./key-classes.md). Comment/layout conventions live in
+[Coding style](../coding-style.md).
+
+## Component view
+
+![Component diagram](/diagrams/component_diagram.svg)
+
+*Source: [`component_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/component_diagram.puml)*
 
 :::note
 The project began as a script-based tool and was refactored to an OOP structure,

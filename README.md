@@ -1,6 +1,6 @@
 <h1> DONUT </h1>
 
-This PowerShell project automates remote execution of the Dell Command Update (DCU) CLI tool across multiple Dell computers in a network. It uses parallel processing and configuration-driven commands for remote updates. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [architecture overview](docs/development/architecture/overview.md) describes how it is built.
+DONUT is a fleet management app for Dell workstations. It searches Active Directory for machines and people, runs remote driver scans and updates through Dell Command Update, inspects hardware and storage, and looks up a user's devices and BitLocker recovery keys. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [architecture overview](docs/development/architecture/overview.md) describes how it is built.
 
 **Full documentation lives at <https://danial-changez.github.io/DONUT/>** — feature guides, the `config.json` reference, and the architecture pages, built from [`docs/`](docs/README.md).
 
@@ -23,7 +23,7 @@ This PowerShell project automates remote execution of the Dell Command Update (D
 
 ## Features
 
-- **Remote DCU Execution:** Runs Dell Command Update CLI remotely on networked Dell computers.
+- **Fleet Updates (Dell Command Update):** Scans and applies driver and BIOS updates remotely over PsExec. One subsystem alongside the AD finder, the User Lens (user-to-device lookup), inventory and storage, and the tray and self-update features.
 - **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI). Cards are kept newest-action-first: adding a machine or running a scan/gather/storage scan moves its card to the top.
 - **Status-grouped list:** Rows group worst-first — attention (failed or reboot-needed) first, then running / online / offline — with one-click Clear completed.
 - **Guided First-Run Tour:** A spotlight tour introduces the search bar, mode toggle, machine list, detail pane, and settings on first launch; replay it anytime with the `?` button.

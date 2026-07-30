@@ -1,0 +1,85 @@
+@startuml class_lens
+title DONUT — Directory services & the User Lens
+skinparam classAttributeIconSize 0
+
+' Subsystem cut of the retired all-in-one class diagram: AD search/account
+' actions and the de-elevated User Lens (DONUT's user-to-device lookup).
+' Cross-subsystem wiring lives in component_diagram.
+package "Donut.Services" #221634 {
+    class ActiveDirectoryService {
+        +Domains: string[]
+        +Search(prefix): AdSearchResult[]
+        +UnlockUser(user): bool
+        +ResetPassword(user, newPassword, changeAtLogon): bool
+        #QueryDirectory(domain, filter, props, max): Hashtable[]
+        #InvokeUnlock(sam, domain): void
+        #InvokeReset(sam, domain, newPassword, changeAtLogon): void
+    }
+
+    class PersonLensService {
+        +SiteServer / SourceRoot: string
+        +Lookup(identity): PersonLens
+        +RunLookupJson(identity): string
+    }
+}
+
+package "Donut.Models" #15233B {
+    class AdSearchResult {
+        +Kind: string
+        +Name: string
+        +SamAccountName: string
+        +UserPrincipalName: string
+        +Domain: string
+        +Enabled: bool
+        +LockedOut: bool
+        +Key(): string
+        +Label(): string
+    }
+
+    class AdFilter {
+        +{static} EscapeLdap(text): string
+        +{static} UserFilter(prefix): string
+        +{static} ComputerFilter(prefix): string
+        +{static} IsLockedFromComputed(uacComputed): bool
+        +{static} IsDisabledFromUac(uac): bool
+    }
+
+    class TempPassword {
+        +{static} Generate(): string
+        +{static} ToSecure(value): SecureString
+    }
+
+    class MachineNameMatcher {
+        +{static} DefaultPatterns: string[]
+        +{static} LooksLikeMachine(text, patterns): bool
+        +{static} AnyExactMatch(names, text): bool
+    }
+
+    class PersonLens {
+        +Upn / Sam / DisplayName / Email: string
+        +Manager / Office: string
+        +Devices: LensDevice[]
+        +Errors: string[]
+        +{static} FromHashtable(h) / FromJson(json): PersonLens
+    }
+    class LensDevice {
+        +Name / Os / LastLogon / Domain / Note: string
+        +Model / Serial / Manufacturer: string
+        +BitLockerKeys: LensBitLockerKey[]
+        +HasBitLocker(): bool
+    }
+    class LensBitLockerKey {
+        +Password / Created: string
+    }
+    class LensFormat {
+        +{static} LogonLabel(iso): string
+    }
+}
+
+ActiveDirectoryService --> AdSearchResult
+ActiveDirectoryService ..> AdFilter
+PersonLensService ..> PersonLens
+PersonLens --> LensDevice
+LensDevice --> LensBitLockerKey
+
+@enduml

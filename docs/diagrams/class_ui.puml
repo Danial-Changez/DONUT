@@ -1,0 +1,389 @@
+@startuml class_ui
+title DONUT — UI: presenters & view-models
+skinparam classAttributeIconSize 0
+
+' Subsystem cut of the retired all-in-one class diagram: presenters, view-models,
+' the C# MVVM/interop bases, and the pure UI mapper models they consume.
+' Cross-subsystem wiring (presenters -> services) lives in component_diagram.
+package "Donut.UI.Presenters" #2B1A12 {
+    class AsyncJobPresenter {
+        #ActiveJobs: List<AsyncJob>
+        +PumpJobs(): void
+        #OnJobPolled(job): void
+        #OnJobCompleted(job): void
+        #AfterPump(): void
+    }
+
+    class MainPresenter {
+        -ConfigManager: ConfigManager
+        -HomePresenter: HomePresenter
+        -SettingsPresenter: SettingsPresenter
+        -ResetVm: ResetPasswordViewModel
+        -Resources: ResourceService
+        -TrayPresenter: TrayPresenter
+        -Tour: TourPresenter
+        -Hotkey: HotkeyManager
+        +Initialize(): void
+        +Show(): void
+        +ShowHome(): void
+        +OpenSettings(): void
+        +CloseSettings(): void
+        +ShowQr(payload, caption, hint): void
+        +ShowReset(target) / CloseReset(): void
+        +AttachHotkey(hwnd) / ApplyHotkey(): void
+        +ApplyStartupTask(): void
+    }
+
+    class HomePresenter extends AsyncJobPresenter {
+        -ScanService: ScanService
+        -UpdateService: RemoteUpdateService
+        -Resolver: HostResolver
+        -Store: RecentConnectionsStore
+        -Detail: InventoryPresenter
+        -Resolution: ResolutionCoordinator
+        -Finder: FinderPresenter
+        -ScanCacheTtl: timespan
+        +OnSearch(): void
+        +RunAll(): void
+        +RunHost(host): void
+        +StartProcess(host): void
+        +RecentScanIsFresh(host): bool
+        +ProceedWithApply(host): bool
+        +StartInventory(host, force): void
+        +ReissueAfterResolve(host, online): void
+        +MoveRowToTop(host): void
+        +FindHomeElement(name): object
+        -ComposeRegions(): void
+    }
+
+    class InventoryPresenter {
+        -InventoryService: InventoryService
+        -DiskUsageService: DiskUsageService
+        -Home: object
+        +SelectHost(host): void
+        +RunInventoryProbe(host, force): void
+        +CompleteInventory(job): void
+        +InventoryIsStale(host): bool
+        +RefreshInventory(host): void
+        +FindBigFolders(host): void
+        +CompleteDiskScan(job): void
+        +CopyHostLog(host): void
+        -ReflectFailure(host, message): void
+    }
+
+    class ResolutionCoordinator {
+        -Resolver: HostResolver
+        -ConfigManager: object
+        -Home: object
+        +StartWarm() / WarmPool(): void
+        +PrefetchIp(host): void
+        +InvalidateResolved(host): void
+        +StartVerifyName(host): void
+        +CompleteResolve(job): void
+    }
+
+    class FinderPresenter {
+        -AdService: ActiveDirectoryService
+        -LensVm: PersonLensViewModel
+        -LensCache: hashtable
+        -Home: object
+        +Initialize(): void
+        +WarmAdSearch() / WarmLens(): void
+        +RunAdSearch() / PollSearch(): void
+        +OnPickComputer(name): void
+        +OnUnlockUser(r) / PollUnlock(): void
+        +OnResetPassword(r): void
+        +OnShowQr / OnShowReset: scriptblock
+        +OnPickUser(r) / PollLens(): void
+        +OnAddDeviceToList(wsid): void
+        +OnAppClosing(): void
+    }
+
+    class SettingsPresenter {
+        +SideEffects: hashtable
+        +Initialize(): void
+        +LoadCurrentConfig(): void
+        +LoadSettingsView(viewName): void
+        +PopulateFields(): void
+        -WireDcuPersistence(controls): void
+        -PersistToggle(key, value, sideEffect): void
+        -PersistGesture(key, value, sideEffect): void
+        -SaveConfigSafely(): void
+    }
+
+    class KeybindRecorder {
+        -Display / RecordButton / ClearButton: object
+        -OnCommit: scriptblock
+        -Recording: bool
+        +{static} IsModifierKey(key): bool
+        -StartRecording() / CancelRecording(): void
+        -OnKeyDown(e) / OnKeyUp(e): void
+        -Commit(value): void
+    }
+
+    class TrayPresenter {
+        -Icon: NotifyIcon
+        -Menu: ContextMenuStrip
+        +ShowMainWindow(): void
+        +ToggleMainWindow(): void
+        +ExitApp(): void
+        +ShowCloseToTrayHint(): void
+        +Dispose(): void
+    }
+
+    class TourPresenter {
+        -Steps: TourStep[]
+        -Index: int
+        +Start(): void
+        +MaybeStartFirstRun(): void
+        +Next() / Back(): void
+        +Finish(): void
+        -ShowStep(index): void
+        -ShowSpotlight(target, placement): void
+    }
+
+    class DialogPresenter {
+        +ShowConfirmation(title, message, listItems): bool
+        +ShowAlert(title, message, listItems): void
+        +ShowUpdatePrompt(currentVer, newVer, isRollback): bool
+    }
+
+    class LoginPresenter {
+        +ShowLogin(): bool
+        -StartAuthFlow(): void
+        -PollToken(): void
+    }
+
+    class UpdatePresenter {
+        +CheckAndPrompt(): void
+        -ShowUpdateWindow(release, localVer, remoteVer): void
+    }
+
+    class ToastService {
+        +ShowSuccess(title, message): void
+        +ShowInfo(title, message): void
+        +ShowWarning(title, message): void
+        +ShowError(title, message): void
+    }
+}
+
+package "Donut.Mvvm (C#, src/Launcher)" #1F2A12 {
+    abstract class ObservableObject {
+        +Set(name, value): void
+        +Raise(name): void
+    }
+    class RelayCommand {
+        +Execute(parameter): void
+        +CanExecute(parameter): bool
+    }
+}
+
+package "Donut.Interop (C#, src/Launcher)" #1F2A12 {
+    class HotkeyManager {
+        +Pressed: event
+        +LastError: int
+        +Attach(hwnd, modifiers, vk): bool
+        +Detach(): void
+    }
+}
+
+package "Donut.UI.ViewModels" #3A2A12 {
+    class HomeViewModel {
+        +Machines: ObservableCollection<HostViewModel>
+        +SelectedMachine: HostViewModel
+        +SearchResults: ObservableCollection<object>
+        +SetSelected(vm): void
+    }
+
+    class HostViewModel {
+        +HostName / Subtitle / ChipText / StepText: string
+        +StatusCategory: string
+        +Updates: DcuUpdate[]
+        +Percent: double
+        +ProgressVisible / ProgressIndeterminate: bool
+        +DotBrush / ChipForeground / ProgressBrush: Brush
+        +Ov* (overview facts): string
+        +Folders: FolderNodeViewModel[]
+        +RunCommand / GatherCommand: RelayCommand
+        +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
+        +ApplyInventory(inv) / ApplyFolders(report): void
+        +SetPercent(pct) / SetScanStep(text, pct): void
+        +SetReachability(state) / SetResolvedIp(ip): void
+        +{static} SetPalette(palette): void
+    }
+
+    class FolderNodeViewModel {
+        +Label / SizeText / Path: string
+        +Depth: int
+        +IsRoot: bool
+        +Children: FolderNodeViewModel[]
+        +{static} FromReport(report): FolderNodeViewModel[]
+    }
+
+    class SearchRowViewModel {
+        +IsHeader / IsComputer / CanUnlock / CanReset: bool
+        +Primary / Secondary / HeaderText: string
+        +PickCommand / UnlockCommand / ResetCommand: RelayCommand
+        +{static} Header(text) / FromResult(r): SearchRowViewModel
+    }
+
+    class PersonLensViewModel {
+        +Upn / Sam / Email / Manager / Office: string
+        +IsLoading / HasError / HasDevices: bool
+        +Devices: ObservableCollection<LensDeviceViewModel>
+        +SetLoading(who) / Apply(lens): void
+    }
+    class LensDeviceViewModel {
+        +Name / Os / LastSeenText / HardwareText / BitLockerText: string
+        +HasBitLocker / IsBitLockerRevealed: bool
+        +RevealCommand / AddCommand: RelayCommand
+    }
+
+    class ToastViewModel {
+        +Title / Message: string
+        +Accent: Brush
+        +IsClosing: bool
+        +DismissCommand: RelayCommand
+    }
+
+    class DialogViewModel {
+        +Title / Message / ListItems
+        +PrimaryText / SecondaryText: string
+        +PrimaryCommand / SecondaryCommand: RelayCommand
+    }
+
+    class LoginViewModel {
+        +OutputText: string
+        +AuthCommand: RelayCommand
+        +SetOutput(text): void
+    }
+    class MainViewModel {
+        +IsSettingsOpen / IsTourOpen: bool
+        +IsQrOpen / IsResetOpen: bool
+        +QrCaption / QrHint: string
+        +ResetVm: ResetPasswordViewModel
+        +OpenSettingsCommand / CloseSettingsCommand: RelayCommand
+        +OpenTourCommand / CloseTourCommand: RelayCommand
+        +CloseQrCommand / CloseResetCommand: RelayCommand
+        +Minimize/Maximize/CloseCommand: RelayCommand
+    }
+
+    class ResetPasswordViewModel {
+        +TargetSam / TargetDomain / TargetUpn / DisplayName: string
+        +Password: string
+        +ChangeAtLogon / IsBusy: bool
+        +Generate/Copy/ShowQr/ApplyCommand: RelayCommand
+        +SetTarget(user) / ClearSecrets(): void
+    }
+}
+
+package "Donut.Models (UI mappers)" #15233B {
+    enum FleetCardState {
+        Queued
+        Scanning
+        Updating
+        Completed
+        RebootRequired
+        Failed
+    }
+
+    class FleetCardStatus {
+        +State: FleetCardState
+        +Label: string
+        +ColorKey: string
+        +IsBusy: bool
+        +{static} FromJob(jobType, status, rebootRequired): FleetCardStatus
+    }
+
+    class MachineListShaper {
+        +{static} Categorize(running, reachability, idleStatus): string
+        +{static} StatusRank(category): int
+    }
+
+    class HotkeyGesture {
+        +Valid: bool
+        +Reason / Normalized: string
+        +Modifiers / VirtualKey: uint32
+        +WpfKey: Key
+        +{static} Parse(text): HotkeyGesture
+        +{static} FromKeys(mods, key): HotkeyGesture
+    }
+
+    class TourStep {
+        +Title / Body: string
+        +TargetKey / Placement: string
+    }
+
+    class TourSteps {
+        +{static} Build(): TourStep[]
+    }
+
+    class SystemInfo {
+        +Hostname: string
+        +IPv4: string
+        +Domain: string
+        +DomainController: string
+        +HasBattery: bool
+        +BatteryPercent: int
+    }
+
+    class SystemInfoService {
+        +Gather(): SystemInfo
+        +{static} BatteryLabel(hasBattery, percent, charging): string
+    }
+}
+
+ObservableObject <|-- HomeViewModel
+ObservableObject <|-- HostViewModel
+ObservableObject <|-- ToastViewModel
+ObservableObject <|-- DialogViewModel
+ObservableObject <|-- LoginViewModel
+ObservableObject <|-- MainViewModel
+ObservableObject <|-- ResetPasswordViewModel
+ObservableObject <|-- PersonLensViewModel
+ObservableObject <|-- LensDeviceViewModel
+
+MainPresenter --> HomePresenter
+MainPresenter --> SettingsPresenter
+MainPresenter --> ResetPasswordViewModel
+MainPresenter --> ToastService
+MainPresenter --> TrayPresenter
+MainPresenter --> TourPresenter
+MainPresenter ..> HotkeyManager : RegisterHotKey interop
+MainPresenter ..> HotkeyGesture
+MainPresenter --> MainViewModel
+TrayPresenter ..> MainPresenter : duck-typed back-ref
+TourPresenter ..> TourSteps
+TourSteps ..> TourStep
+SettingsPresenter --> KeybindRecorder
+KeybindRecorder ..> HotkeyGesture
+
+HomePresenter --> DialogPresenter
+HomePresenter --> HomeViewModel
+HomePresenter --> FinderPresenter
+HomePresenter --> InventoryPresenter
+HomePresenter --> ResolutionCoordinator
+HomePresenter --> ToastService
+HomePresenter ..> FleetCardStatus
+HomePresenter ..> MachineListShaper
+HomePresenter ..> SystemInfoService
+FinderPresenter ..> HomePresenter : duck-typed back-ref
+InventoryPresenter ..> HomePresenter : duck-typed back-ref
+ResolutionCoordinator ..> HomePresenter : duck-typed back-ref
+FinderPresenter --> PersonLensViewModel
+FinderPresenter --> HomeViewModel
+FinderPresenter --> DialogPresenter
+FinderPresenter --> ToastService
+FinderPresenter ..> SearchRowViewModel
+
+FleetCardStatus ..> FleetCardState
+HomeViewModel --> HostViewModel
+HostViewModel ..> FleetCardStatus
+HostViewModel --> FolderNodeViewModel
+PersonLensViewModel --> LensDeviceViewModel
+ToastService --> ToastViewModel
+DialogPresenter --> DialogViewModel
+LoginPresenter --> LoginViewModel
+SystemInfoService ..> SystemInfo
+
+@enduml

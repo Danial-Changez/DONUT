@@ -38,7 +38,7 @@ export default defineConfig({
     starlight({
       title: 'DONUT',
       description:
-        'Remote Dell Command Update runner - scan and update fleets of Dell machines in parallel from one app.',
+        'A fleet management app for Dell workstations - AD search, remote driver updates through Dell Command Update, hardware inventory, and user-to-device lookup.',
       // The wordmark already spells DONUT, so it replaces the text title.
       logo: { src: './src/assets/logo.png', alt: 'DONUT', replacesTitle: true },
       favicon: '/favicon.ico',
@@ -106,9 +106,14 @@ export default defineConfig({
               label: 'Architecture',
               items: [
                 'development/architecture/overview',
+                'development/architecture/runspaces-and-workers',
+                'development/architecture/remote-execution',
+                'development/architecture/user-lens',
+                'development/architecture/ui-and-threading',
+                'development/architecture/configuration-and-persistence',
+                'development/architecture/powershell-constraints',
                 'development/architecture/key-classes',
                 'development/architecture/runtime-flows',
-                'development/architecture/implementation-notes',
               ],
             },
             'development/coding-style',

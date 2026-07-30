@@ -1,0 +1,127 @@
+@startuml class_config
+title DONUT — Configuration, persistence & self-update
+skinparam classAttributeIconSize 0
+
+' Subsystem cut of the retired all-in-one class diagram: config/persistence,
+' logging/provenance, the recents store, startup-task plumbing, and self-update.
+' Cross-subsystem wiring lives in component_diagram.
+package "Donut.Core" #102A20 {
+    class ConfigManager {
+        +SourceRoot: string
+        +LoadConfig(): AppConfig
+        +SaveConfig(config): void
+        +EnsureDirectories(): void
+    }
+
+    class LogService {
+        +LogInfo(message): void
+        +LogError(message): void
+        +LogWarning(message): void
+        +LogException(message, errorRecord): void
+        +{static} Coalesce(logger): LogService
+    }
+    class NullLogService extends LogService
+
+    class TimeFormat {
+        +{static} Relative(when): string
+        +{static} ParseIso(value): datetime
+    }
+
+    class BuildProvenance {
+        +{static} Stamp(sourceRoot): string
+    }
+
+    class ViewLoader {
+        +{static} Load(sourceRoot, relativePath): object
+    }
+}
+
+package "Donut.Services" #221634 {
+    class RecentConnectionsStore {
+        +{static} Cap: int
+        +Upsert(host, status, jobType, count, reboot): void
+        +Touch(host): void
+        +UpsertInventory(host, inv): void
+        +UpsertDiskUsage(host, report): void
+        +Remove(host): void
+        +SeedFrom(hosts): void
+        +GetAll(): RecentConnection[]
+    }
+
+    class ResourceService {
+        +LoadGlobalResources(): ResourceDictionary
+        +ApplyResourcesToWindow(window): void
+    }
+
+    class SelfUpdateService {
+        +GetStoredToken(): string
+        +SaveToken(tokenData): void
+        +InitiateDeviceFlow(): PSCustomObject
+        +PollForToken(deviceCode): PSCustomObject
+        +GetLatestRelease(token): PSCustomObject
+        +DownloadAsset(token, asset, destDir): string
+        +VerifyFileHash(path, expectedHash): bool
+        +ApplyUpdate(msiPath, isRollback, sourceRoot): void
+    }
+
+    class StartupTaskService {
+        +Logger: LogService
+        +SourceRoot: string
+        +{static} TaskName(): string
+        +BuildLaunchSpec(processPath, sourceRoot): Hashtable
+        +ReconcileDecision(enabled, existingTask, spec): string
+        +Apply(enabled): bool
+    }
+}
+
+package "Donut.Models" #15233B {
+    class AppConfig {
+        +SourceRoot: string
+        +LogsPath: string
+        +ReportsPath: string
+        +Settings: Hashtable
+        +{static} Defaults: Hashtable
+        --
+        +GetSetting(key, default): object
+        +SetSetting(key, value): void
+        +GetActiveCommand(): string
+        +GetCommandArgs(command): Hashtable
+        +GetThrottleLimit(): int
+        +BuildDcuArgs(command, overrides): string
+        -MergeWithDefaults(userSettings): Hashtable
+    }
+
+    class RecentConnection {
+        +Hostname: string
+        +LastSeen: string
+        +LastTouched: string
+        +LastStatus: string
+        +LastJobType: string
+        +UpdateCount: int
+        +RebootRequired: bool
+        +Inventory: MachineInventory
+        +DiskUsage: DiskUsageReport
+        +{static} FromHashtable(h): RecentConnection
+    }
+
+    enum PollOutcome {
+        Authorized
+        KeepPolling
+        SlowDown
+        Failed
+    }
+
+    class DeviceFlowDecision {
+        +Outcome: PollOutcome
+        +TokenData: object
+        +Message: string
+        +{static} FromPollResult(result): DeviceFlowDecision
+    }
+}
+
+ConfigManager ..> AppConfig
+RecentConnectionsStore --> RecentConnection
+DeviceFlowDecision ..> PollOutcome
+StartupTaskService --> LogService
+
+@enduml
