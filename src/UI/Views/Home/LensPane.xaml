@@ -114,6 +114,33 @@
                         </MultiBinding>
                       </TextBox.Text>
                     </TextBox>
+                    <!-- Model + serial from SCCM hardware inventory; collapses when unavailable -->
+                    <TextBox Text="{Binding HardwareText}" ToolTip="{Binding Manufacturer}"
+                             FontFamily="{DynamicResource FontMono}" FontSize="10.5"
+                             Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
+                      <TextBox.Style>
+                        <!-- Selectable (mirrors SelectableText); collapses when empty. -->
+                        <Style TargetType="TextBox">
+                          <Setter Property="IsReadOnly" Value="True" />
+                          <Setter Property="IsReadOnlyCaretVisible" Value="False" />
+                          <Setter Property="IsTabStop" Value="False" />
+                          <Setter Property="AcceptsReturn" Value="False" />
+                          <Setter Property="Background" Value="Transparent" />
+                          <Setter Property="BorderThickness" Value="0" />
+                          <Setter Property="Padding" Value="0" />
+                          <Setter Property="Cursor" Value="IBeam" />
+                          <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                          <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
+                          <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
+                          <Setter Property="Visibility" Value="Visible" />
+                          <Style.Triggers>
+                            <Trigger Property="Text" Value="">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBox.Style>
+                    </TextBox>
                     <!-- BitLocker key: hidden until revealed (a recovery secret); selectable to copy -->
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
                              Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"

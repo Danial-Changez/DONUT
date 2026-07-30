@@ -393,13 +393,18 @@ what it consumed; the agent sweeps anything older than 10 minutes.
   (`FinderPresenter.LensCache`, 15-min TTL), so it dies with the process.
 
 **Keeping it fast:** the agent is already warm (no task/`pwsh`/library cold start per
-pick); one SCCM call total (the affinity query, person → WSIDs) with everything
-per-device read from the computer's AD object; the affinity query runs on a thread job
-in parallel with the AD user read; and the agent streams **sequential partial bundles**
-(directory facts, then name-only device rows, then the filled detail) so the UI paints
-progressively. The AdminService `/wmi` route's OData translator rejects richer filters
-(`or`, backslashes) with **404**, so per-device SCCM detail queries were dropped rather
-than fought.
+pick); the affinity query (person → WSIDs) runs on a thread job in parallel with the AD
+user read; a hardware-inventory pass (model/serial/manufacturer via
+`SMS_G_System_COMPUTER_SYSTEM` / `SMS_G_System_PC_BIOS`, keyed by the affinity row's
+`ResourceID`) runs on a second thread job in parallel with the per-device AD loop;
+everything else per-device is read from the computer's AD object; and the agent streams
+**sequential partial bundles** (directory facts, then name-only device rows, then the
+filled detail) so the UI paints progressively. The AdminService `/wmi` route's OData
+translator rejects richer *string* filters (`or`, backslashes) with **404** - the
+hardware pass therefore filters on `ResourceID eq N`, falls back once to the keyed
+segment `Class(N)` if the filter shape is rejected, and never uses a string filter. A
+failed hardware query degrades to blank fields plus an `errors` entry; the lens still
+renders.
 
 ## UI & threading
 
