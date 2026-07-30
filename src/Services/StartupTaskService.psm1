@@ -3,42 +3,39 @@ using module "..\Core\LogService.psm1"
 
 <#
 .SYNOPSIS
-    Registers/unregisters the elevated "start DONUT with Windows" scheduled task.
+    Registers/unregisters the "start DONUT with Windows" scheduled task.
 
 .DESCRIPTION
-    A Task Scheduler task starts DONUT minimized to the tray at logon with no UAC
-    prompt; registering requires elevation, which DONUT already has. Two accounts
-    are involved and must not be conflated: the console user's logon always
-    triggers the task (it is the only account that actually signs in), while what
-    the task runs as depends on the process token. When DONUT already runs as the
-    console user, the task is per-user (RunLevel Highest, Interactive). Any other
-    token - SYSTEM, or a separate admin account elevating over the shoulder in the
-    same session - registers a SYSTEM task that relaunches DONUT into the console
-    session (powershell shim -> psexec -s -i <id>).
+    A Task Scheduler task starts DONUT minimized to the tray at the console user's
+    logon, running as that user at their own level. DONUT elevates on demand from
+    there, so the task never needs to start it elevated.
 
 .NOTES
-    Why the SYSTEM lane exists: an Interactive principal needs a logon session the
-    admin account does not have, and RunLevel Highest on a non-admin console user
-    degrades to a standard token that CreateProcess refuses against the launcher's
-    requireAdministrator manifest (ERROR_ELEVATION_REQUIRED). A task triggered by
-    an account that never logs on stays Ready forever, which is why the trigger is
-    always the console user. Never derive the run-as account from $env: - under
-    SYSTEM that names a nonexistent account Task Scheduler rejects ("No mapping
-    between account names and security IDs"). Known trade-off: the SYSTEM instance
-    authenticates on the network as the machine account, so its AD rights may
-    differ from a manual over-the-shoulder launch.
+    There used to be a second lane: when DONUT ran as a separate admin account, a
+    task could not start it elevated (an Interactive principal needs a logon session
+    that account does not have, and RunLevel Highest on a non-admin console user
+    degrades to a standard token), so a SYSTEM task relaunched DONUT into the console
+    session through psexec. That lane is gone, and deleting it fixed a bug rather
+    than only simplifying: running as SYSTEM meant authenticating on the network as
+    the MACHINE account, which has no rights on fleet targets, so the autostarted
+    instance painted a working UI and then failed every remote job on access denied.
+    A de-elevated instance that elevates on demand gets a real admin token instead.
+    Do not reintroduce it.
 
-    The pure helpers (BuildLaunchSpec, BuildSystemSpec, ReconcileDecision,
-    TaskNameFor) are unit-tested; Apply is the thin CIM shell that dispatches on
-    the decision and never throws to the caller (failure logs + toasts, real
-    reason in LastFailure). The CIM/identity seams (GetExistingTask/RegisterTask/
-    UnregisterTask, GetProcessIdentity/GetInteractiveUser/FindPsExec) are
-    overridable so a fake subclass can capture which ran without touching Task
-    Scheduler or WindowsIdentity. The shim (Start-DonutInConsoleSession.ps1)
-    exists because psexec -i with no session id targets the caller's session, not
-    the console session its docs claim (field-verified: a SYSTEM task put DONUT in
-    session 0). Injection targets the physical console, so an RDP-only logon will
-    not surface the tray (known limit).
+    A task triggered by an account that never logs on stays Ready forever, which is
+    why the trigger is always the console user. Never derive the run-as account from
+    $env: - under SYSTEM that names a nonexistent account Task Scheduler rejects
+    ("No mapping between account names and security IDs").
+
+    Registering a task for a principal still needs elevation, so the setting toggle
+    is gated behind MainPresenter's elevation prompt like any other admin action.
+
+    The pure helpers (BuildLaunchSpec, ReconcileDecision, TaskNameFor) are
+    unit-tested; Apply is the thin CIM shell that dispatches on the decision and
+    never throws to the caller (failure logs + toasts, real reason in LastFailure).
+    The CIM/identity seams (GetExistingTask/RegisterTask/UnregisterTask,
+    GetProcessIdentity/GetInteractiveUser) are overridable so a fake subclass can
+    capture which ran without touching Task Scheduler or WindowsIdentity.
 #>
 class StartupTaskService {
     [LogService] $Logger
@@ -57,28 +54,9 @@ class StartupTaskService {
         return "DONUT-$(($user -split '\\')[-1])"
     }
 
-    # Who triggers the task (always the console user; '' when nobody is signed in) and
-    # whether it must run as SYSTEM - they differ under a separate admin (see .NOTES).
+    # Whose logon fires the task: always the signed-in console user, '' when nobody is.
     [hashtable] ResolveOwner() {
-        $identity = $this.GetProcessIdentity()
-        $console = $this.GetInteractiveUser()
-        if (-not $console) { return @{ User = ''; IsSystem = $true } }
-        # Only the console user's own logon can host a per-user interactive task.
-        $sameUser = (-not $identity.IsSystem) -and ($identity.Name -ieq $console)
-        return @{ User = $console; IsSystem = (-not $sameUser) }
-    }
-
-    # Pure: the SYSTEM-lane action - powershell.exe (always present) runs the shim,
-    # which resolves the console session id at fire time for psexec -i (see .NOTES).
-    static [hashtable] BuildSystemSpec([string]$psexecPath, [string]$shimPath, [hashtable]$hostSpec) {
-        # Host args ride base64 so their nested quotes survive the task action string.
-        $argB64 = [Convert]::ToBase64String(
-            [System.Text.Encoding]::UTF8.GetBytes([string]$hostSpec.Argument))
-        return @{
-            Execute  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-            Argument = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden ' +
-            "-File `"$shimPath`" -PsExec `"$psexecPath`" -Execute `"$($hostSpec.Execute)`" -ArgB64 $argB64"
-        }
+        return @{ User = $this.GetInteractiveUser() }
     }
 
     # Pure: the task action for the current host - a pwsh.exe host (dev) re-launches the
@@ -124,28 +102,19 @@ class StartupTaskService {
         $this.LastFailure = ''
         try {
             $owner = $this.ResolveOwner()
-            # The whole feature turns on these three values; log them so a task that
-            # never fires is diagnosable from Donut.log alone.
-            $this.Logger.LogInfo(("Startup task: runs-as '{0}', signed-in console user '{1}', lane {2}." -f
-                    $this.GetProcessIdentity().Name, $owner.User,
-                    $(if ($owner.IsSystem) { 'SYSTEM+psexec' } else { 'per-user' })))
+            # Both values decide whether the task fires at all; log them so one that never
+            # does is diagnosable from Donut.log alone.
+            $this.Logger.LogInfo(("Startup task: runs-as '{0}', signed-in console user '{1}'." -f
+                    $this.GetProcessIdentity().Name, $owner.User))
             if (-not $owner.User) {
                 return $this.Fail('no signed-in console user was found, so there is no logon to start DONUT at.')
             }
             $spec = $this.BuildLaunchSpec([Environment]::ProcessPath, $this.SourceRoot)
-            if ($owner.IsSystem) {
-                $psexec = $this.FindPsExec()
-                if (-not $psexec) {
-                    return $this.Fail('psexec.exe was not found (src\Tools or PATH) - the SYSTEM-hosted startup task needs it to reach your desktop.')
-                }
-                $shim = Join-Path $this.SourceRoot 'Scripts\Start-DonutInConsoleSession.ps1'
-                $spec = [StartupTaskService]::BuildSystemSpec($psexec, $shim, $spec)
-            }
             $name = [StartupTaskService]::TaskNameFor($owner.User)
             $existing = $this.GetExistingTask($name)
             switch ($this.ReconcileDecision($enabled, $existing, $spec)) {
-                'Register' { $this.RegisterTask($name, $owner.User, $owner.IsSystem, $spec) }
-                'Reregister' { $this.RegisterTask($name, $owner.User, $owner.IsSystem, $spec) }
+                'Register' { $this.RegisterTask($name, $owner.User, $spec) }
+                'Reregister' { $this.RegisterTask($name, $owner.User, $spec) }
                 'Unregister' { $this.UnregisterTask($name) }
                 default { }
             }
@@ -210,43 +179,23 @@ class StartupTaskService {
         return "$($owner.Domain)\$($owner.User)"
     }
 
-    # psexec for the SYSTEM lane's task action: bundled Tools copy first, then PATH.
-    # The absolute path is baked in at register time - SYSTEM's logon PATH may differ.
-    hidden [string] FindPsExec() {
-        foreach ($exe in @('psexec.exe', 'PsExec64.exe')) {
-            $bundled = Join-Path (Join-Path $this.SourceRoot 'Tools') $exe
-            if (Test-Path -LiteralPath $bundled) { return $bundled }
-        }
-        $cmd = Get-Command psexec.exe -ErrorAction SilentlyContinue
-        if ($cmd) { return [string]$cmd.Source }
-        return $null
-    }
-
     hidden [object] GetExistingTask([string]$name) {
         return Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     }
 
-    # $triggerUser is whose logon fires the task (always the console user); $asSystem
-    # decides the run-as. Conflating them left the task Ready forever (see .NOTES).
-    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) {
+    # One lane: the console user's own logon, running as that user at their own level.
+    # RunLevel Limited, not Highest - DONUT elevates on demand, it does not start elevated.
+    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
         $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
-        if ($asSystem) {
-            # psexec -i needs the logon session's desktop up before the task fires.
-            $trigger.Delay = 'PT15S'
-            $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-        }
-        else {
-            $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
-        }
+        $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Limited -LogonType Interactive
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
             -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
         # -ErrorAction Stop: an access-denied register is non-terminating by default and
         # would slip past Apply's try/catch (false success, no toast).
         Register-ScheduledTask -TaskName $name -Action $action `
             -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
-        $lane = if ($asSystem) { ' (SYSTEM + psexec relaunch)' } else { '' }
-        $this.Logger.LogInfo("Registered startup task $name, triggered by $triggerUser's logon$lane.")
+        $this.Logger.LogInfo("Registered startup task $name, triggered by $triggerUser's logon.")
     }
 
     hidden [void] UnregisterTask([string]$name) {

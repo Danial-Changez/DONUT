@@ -11,15 +11,15 @@
       1. Which build is installed. The launcher embeds src\ and self-extracts it to
          %ProgramData%\DONUT\app - so `git pull` alone changes nothing until
          Donut.Launcher.exe is rebuilt. Reports whether the extracted
-         StartupTaskService.psm1 has the SYSTEM/psexec lane.
+         StartupTaskService.psm1 still carries the deleted SYSTEM/psexec lane.
       2. What actually got registered. Principal (who it runs as), action, and
-         trigger - a per-user principal on a non-admin account is the known dead
-         end (its RunLevel Highest degrades to a standard token).
+         trigger - it should run as the console user at RunLevel Limited, since
+         DONUT elevates on demand rather than starting elevated.
       3. Whether it fired and what Windows said. LastTaskResult decoded, plus the
          TaskScheduler/Operational events for this task. 0x800702E4 = elevation
          required (CreateProcess refused the requireAdministrator launcher).
-      4. Whether the action could even run. psexec/launcher paths resolved the way
-         the task will resolve them, from SYSTEM's environment.
+      4. Whether the action could even run, with the launcher path resolved the
+         way the task will resolve it.
 
 .PARAMETER TaskName
     Task to inspect. Defaults to the installed DONUT-* startup task (not
@@ -78,20 +78,18 @@ if (-not (Test-Path -LiteralPath $svcPath)) {
 }
 else {
     $svc = Get-Content -LiteralPath $svcPath -Raw
-    $hasLane = $svc -match 'BuildSystemSpec'
     $hasToken = $svc -match 'GetProcessIdentity'
     # The console-user trigger fix: RegisterTask takes $triggerUser, separate from the principal.
     $script:codeSplitsTrigger = $svc -match 'triggerUser'
-    # The fire-time session fix: psexec -i defaults to the CALLER's session (0 under a
-    # SYSTEM task), so the shim resolves the console session id when the trigger fires.
-    $script:codeHasShim = $svc -match 'Start-DonutInConsoleSession'
+    # The SYSTEM+psexec lane was deleted: as SYSTEM the instance authenticated as the
+    # machine account and every remote job failed on access denied.
+    $script:codeHasOldLane = $svc -match 'BuildSystemSpec'
     Write-Host "extracted : $svcPath"
     Write-Host "modified  : $((Get-Item -LiteralPath $svcPath).LastWriteTime)"
     Write-Host ("token-owner fix         : " + $(if ($hasToken) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasToken) { 'Green' } else { 'Red' })
-    Write-Host ("SYSTEM psexec lane      : " + $(if ($hasLane) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasLane) { 'Green' } else { 'Red' })
     Write-Host ("console-user trigger fix: " + $(if ($script:codeSplitsTrigger) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeSplitsTrigger) { 'Green' } else { 'Red' })
-    Write-Host ("fire-time session shim  : " + $(if ($script:codeHasShim) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeHasShim) { 'Green' } else { 'Red' })
-    if (-not ($hasLane -and $script:codeSplitsTrigger)) {
+    Write-Host ("de-elevated autostart   : " + $(if ($script:codeHasOldLane) { 'NO (old SYSTEM lane)' } else { 'YES' })) -ForegroundColor $(if ($script:codeHasOldLane) { 'Red' } else { 'Green' })
+    if ($script:codeHasOldLane -or -not $script:codeSplitsTrigger) {
         Write-Host "The installed launcher predates the current fixes. Rebuild Donut.Launcher.exe and reinstall - a git pull does not update an installed build." -ForegroundColor Red
     }
 }
@@ -125,15 +123,14 @@ foreach ($t in $task.Triggers) {
         Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
     }
 }
-# Direct psexec action = pre-shim shape: -i without a session id lands in the
-# CALLER's session (0 for a SYSTEM task), an invisible desktop.
-$script:actionLacksShim = ($action.Execute -like '*PsExec*') -or
-    ($action.Arguments -notlike '*Start-DonutInConsoleSession*' -and $action.Execute -like '*powershell*' -and $action.Arguments -like '*-accepteula*')
-if ($action.Execute -like '*PsExec*') {
-    Write-Host "PROBLEM: the action calls psexec DIRECTLY with -i and no session id - psexec then targets the caller's session (0), so DONUT starts on a desktop nobody can see. Current builds route through the Start-DonutInConsoleSession shim instead." -ForegroundColor Red
+# Any psexec or SYSTEM shape here is a task from before the lane was deleted.
+if ($action.Execute -like '*PsExec*' -or $action.Arguments -like '*Start-DonutInConsoleSession*') {
+    Write-Host "PROBLEM: this task is from an older build that started DONUT as SYSTEM via psexec. As SYSTEM it authenticates on the network as the machine account, which has no rights on fleet targets, so every remote job fails on access denied. Toggle Start with Windows off and on to re-register it." -ForegroundColor Red
 }
-$script:perUserLane = $principal.UserId -notmatch 'SYSTEM'
-if ($script:perUserLane -and $principal.RunLevel -eq 'Highest') {
+if ($principal.UserId -match 'SYSTEM') {
+    Write-Host "PROBLEM: the task runs as SYSTEM. Current builds run it as the console user at their own level and elevate on demand." -ForegroundColor Red
+}
+if ($principal.RunLevel -eq 'Highest') {
     # Direct members only - a domain account is usually admin via a nested group
     # (Domain Admins), which this cannot see, so absence is NOT proof of non-admin.
     $direct = $false
@@ -252,11 +249,12 @@ if ($action.Arguments -like '*--tray*') {
 Write-Section "VERDICT"
 # The registered task is a snapshot of whichever build last applied it - so new code
 # plus an old-shaped task means the fix simply has not run yet.
-$oldShape = $script:triggerMismatch -or $script:perUserLane -or $script:actionLacksShim
-if ($oldShape -and $script:codeSplitsTrigger -and $script:codeHasShim) {
-    Write-Host "The installed code HAS the current fixes, but this task still has an OLD shape (per-user principal, a trigger bound to a non-console account, and/or a direct-psexec action with no session id)." -ForegroundColor Yellow
-    Write-Host "The task is a snapshot from whichever build last applied it - the fix has not re-registered yet." -ForegroundColor Yellow
-    Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> as SYSTEM and sweep this stale task. Then re-run this script." -ForegroundColor Green
+$oldShape = $script:triggerMismatch -or ($principal.UserId -match 'SYSTEM') -or
+    ($action.Execute -like '*PsExec*') -or ($action.Arguments -like '*Start-DonutInConsoleSession*')
+if ($oldShape -and $script:codeSplitsTrigger -and -not $script:codeHasOldLane) {
+    Write-Host "The installed code is current, but this task still has an OLD shape (a SYSTEM principal, a psexec action, and/or a trigger bound to a non-console account)." -ForegroundColor Yellow
+    Write-Host "The task is a snapshot from whichever build last applied it - the current code has not re-registered yet." -ForegroundColor Yellow
+    Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> to run as that user, and sweep this stale task. Then re-run this script." -ForegroundColor Green
 }
 elseif ($oldShape) {
     Write-Host "This task has the OLD shape AND the installed build lacks the fix." -ForegroundColor Red
