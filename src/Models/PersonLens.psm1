@@ -8,9 +8,10 @@ using module "..\Core\TimeFormat.psm1"
     The bundle the de-elevated Lens agent returns (LensAgent -> JSON): the AD user
     fields (UPN, SAM, email, manager, office) and one LensDevice per SCCM primary-device,
     each carrying its OS, last domain logon, home domain, and BitLocker recovery keys
-    (all read from the computer's AD object - SCCM only supplies the person->WSID
-    affinity). WPF-free so the JSON->model parsing is unit-tested off a domain;
-    PersonLensViewModel renders it. Mirrors the MachineInventory pure-DTO pattern.
+    (read from the computer's AD object) plus model/serial/manufacturer (read from
+    SCCM hardware inventory over the AdminService; SCCM also supplies the
+    person->WSID affinity). WPF-free so the JSON->model parsing is unit-tested off
+    a domain; PersonLensViewModel renders it. Mirrors the MachineInventory pattern.
 
 .NOTES
     Transient (never cached in the recents store), so there is no ToHashtable round-trip -
@@ -34,6 +35,9 @@ class LensDevice {
     [string] $Os = ''           # AD operatingSystem, e.g. "Windows 11 Enterprise"
     [string] $LastLogon = ''    # ISO8601 AD lastLogonTimestamp (coarse, ~14-day lag), or ''
     [string] $Domain = ''       # the computer's home AD domain (GC-located)
+    [string] $Model = ''        # SCCM SMS_G_System_COMPUTER_SYSTEM.Model, or ''
+    [string] $Serial = ''       # SCCM SMS_G_System_PC_BIOS.SerialNumber (Dell service tag), or ''
+    [string] $Manufacturer = ''
     [LensBitLockerKey[]] $BitLockerKeys = @()
     [string] $Note = ''         # e.g. "not found in AD" / "BitLocker not escrowed"
 
@@ -44,6 +48,9 @@ class LensDevice {
         $d.Os = [string]$h['os']
         $d.LastLogon = [string]$h['lastLogon']
         $d.Domain = [string]$h['domain']
+        $d.Model = [string]$h['model']
+        $d.Serial = [string]$h['serial']
+        $d.Manufacturer = [string]$h['manufacturer']
         $d.Note = [string]$h['note']
         $keys = [System.Collections.Generic.List[LensBitLockerKey]]::new()
         foreach ($bk in @($h['bitLockerKeys'])) {

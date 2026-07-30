@@ -13,6 +13,7 @@ Describe "PersonLens" {
   "office": "100 MAIN STREET, SPRINGFIELD, ON, N0A 1A0",
   "devices": [
     { "name": "WS-1", "os": "Windows 11 Enterprise", "lastLogon": "2026-07-03T10:00:00Z", "domain": "prod.contoso.com",
+      "model": "Latitude 5440", "serial": "ABC1234", "manufacturer": "Dell Inc.",
       "bitLockerKeys": [ { "password": "111-222", "created": "2026-05-01T00:00:00Z" }, { "password": "333-444", "created": "" } ] },
     { "name": "WS-2", "os": "", "lastLogon": "", "domain": "forest-b.contoso.com", "note": "BitLocker not escrowed to AD",
       "bitLockerKeys": [] }
@@ -51,6 +52,22 @@ Describe "PersonLens" {
             $d0.BitLockerKeys[1].Created  | Should -BeNullOrEmpty
         }
 
+        It "maps model, serial and manufacturer from the hardware inventory" {
+            $p = [PersonLens]::FromJson($script:bundleJson)
+            $d0 = $p.Devices[0]
+            $d0.Model        | Should -Be 'Latitude 5440'
+            $d0.Serial       | Should -Be 'ABC1234'
+            $d0.Manufacturer | Should -Be 'Dell Inc.'
+        }
+
+        It "leaves the hardware fields empty when the bundle omits them" {
+            $p = [PersonLens]::FromJson($script:bundleJson)
+            $d1 = $p.Devices[1]
+            $d1.Model        | Should -BeNullOrEmpty
+            $d1.Serial       | Should -BeNullOrEmpty
+            $d1.Manufacturer | Should -BeNullOrEmpty
+        }
+
         It "flags a device with no BitLocker and carries its note" {
             $p = [PersonLens]::FromJson($script:bundleJson)
             $d1 = $p.Devices[1]
@@ -72,6 +89,7 @@ Describe "PersonLens" {
             $p.Devices.Count | Should -Be 1
             $p.Devices[0].Name | Should -Be 'X'
             $p.Devices[0].BitLockerKeys.Count | Should -Be 0
+            $p.Devices[0].Serial | Should -BeNullOrEmpty
         }
 
         It "carries the worker's error list" {

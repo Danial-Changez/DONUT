@@ -10,8 +10,10 @@ detail pane: who they are and what machines they have.
 
 - **Directory facts** — UPN, email, manager, office (from AD, forest-wide via the
   Global Catalog).
-- **Their devices** — the person's SCCM-assigned machines, each with OS and last
-  domain logon. Any device can be **added to the machine list** in one click.
+- **Their devices** — the person's SCCM-assigned machines, each with OS, last
+  domain logon, and model + serial (the service tag) from SCCM hardware inventory
+  (blank when the AdminService cannot serve them). Any device can be **added to
+  the machine list** in one click.
 - **BitLocker recovery keys** — revealed on click per device (never shown by
   default), with a QR code for typing-free entry on the target.
 
