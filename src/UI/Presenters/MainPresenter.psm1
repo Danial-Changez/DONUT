@@ -459,8 +459,8 @@ class MainPresenter {
         }
         catch {
             # 1223 is ERROR_CANCELLED: the user declined the consent/credential prompt.
-            $declined = ($_.Exception -is [System.ComponentModel.Win32Exception]) -and
-                ($_.Exception.NativeErrorCode -eq 1223)
+            $win32 = $_.Exception -as [System.ComponentModel.Win32Exception]
+            $declined = $null -ne $win32 -and $win32.NativeErrorCode -eq 1223
             $this.ReportElevationFailure($declined, $_)
             return $false
         }
