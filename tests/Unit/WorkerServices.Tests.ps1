@@ -787,10 +787,26 @@ Describe "WorkerServices" {
     Context "BuildDeleteCommand" {
         It "clears contents (not the folder) and injection-proofs paths" {
             $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp\a", "C:\o'brien"))
-            $s | Should -Match "Get-ChildItem -LiteralPath"       # clears contents...
-            $s | Should -Match "Remove-Item -Recurse -Force"
-            $s | Should -Not -Match "Remove-Item -LiteralPath"    # ...never removes the folder itself
-            $s | Should -Match "o''brien"                         # embedded single quote doubled
+            $s | Should -Match 'Get-ChildItem -LiteralPath'        # walks the contents...
+            $s | Should -Match 'Clear-Tree \$p'                    # ...emptying the target in place
+            $s | Should -Not -Match 'Remove-Item -LiteralPath \$p' # never removes the folder itself
+            $s | Should -Match "o''brien"                          # embedded single quote doubled
+        }
+
+        It "empties junction children as links instead of recursing through them" {
+            $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp"))
+            # The script's own comments name the cmdlet the guard avoids, so the negative
+            # assertion below has to run against code lines only.
+            $code = (($s -split "`n" | Where-Object { $_.TrimStart() -notmatch '^#' }) -join "`n")
+            $code | Should -Not -Match 'Remove-Item -Recurse'      # -Recurse follows reparse points on 5.1
+            $code | Should -Match '\[IO\.Directory\]::Delete\(\$c\.FullName, \$false\)'
+            $code | Should -Match 'ReparsePoint'
+        }
+
+        It "canonicalizes each target and fails closed on profile enumeration" {
+            $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp"))
+            $s | Should -Match 'GetFullPath'                       # '..' resolved before the checks
+            $s | Should -Match 'profile enumeration failed'        # never clears unprotected
         }
         It "carries the safety guards: logged-on profiles, blocklist, allowlist" {
             $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp"))

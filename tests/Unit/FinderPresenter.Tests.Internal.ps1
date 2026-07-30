@@ -17,24 +17,26 @@ class ThrowingFinderPresenter : FinderPresenter {
     hidden [void] WireLensDeviceCommands() { throw "device wiring blew up" }
 }
 
-# File scope, not inside Describe: Pester 5 executes Describe bodies at discovery, so a
-# function declared there is not reliably in scope when the It blocks run.
-# A never-invoked PowerShell is safe to dispose synchronously (state NotStarted), so
-# DisposeJob takes its direct path and no reap timer is involved.
-function New-LensJob {
-    param([int]$Token, [int]$AgeSeconds, [bool]$Completed = $false, [string]$Who = 'Jane Doe')
-    return @{
-        Ps        = [System.Management.Automation.PowerShell]::Create()
-        Handle    = [PSCustomObject]@{ IsCompleted = $Completed }
-        Token     = $Token
-        Key       = 'jane@corp.example'
-        InfoSeen  = 0
-        StartedAt = [datetime]::UtcNow.AddSeconds(-$AgeSeconds)
-        Who       = $Who
-    }
-}
-
 Describe "FinderPresenter Lens poll" {
+
+    BeforeAll {
+        # Must live in BeforeAll: a helper declared at file scope runs during discovery
+        # only, and is not in scope when the It blocks execute.
+        # A never-invoked PowerShell is safe to dispose synchronously (state NotStarted),
+        # so DisposeJob takes its direct path and no reap timer is involved.
+        function New-LensJob {
+            param([int]$Token, [int]$AgeSeconds, [bool]$Completed = $false, [string]$Who = 'Jane Doe')
+            return @{
+                Ps        = [System.Management.Automation.PowerShell]::Create()
+                Handle    = [PSCustomObject]@{ IsCompleted = $Completed }
+                Token     = $Token
+                Key       = 'jane@corp.example'
+                InfoSeen  = 0
+                StartedAt = [datetime]::UtcNow.AddSeconds(-$AgeSeconds)
+                Who       = $Who
+            }
+        }
+    }
 
     BeforeEach {
         $script:logger = [CapturingLogService]::new()
