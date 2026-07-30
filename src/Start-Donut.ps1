@@ -14,52 +14,14 @@
     5.1, and some hosts start MTA) by relaunching itself via pwsh -Sta, so the
     script can be started from any shell or Explorer without touching the exe.
 
-    The SYSTEM data-root redirect exists because an autostarted instance under
-    the system profile read a default config (startWithWindows off) and
-    unregistered its own task. The settings live under the profile of whoever
-    toggled autostart on (over-the-shoulder UAC means the admin account, not the
-    console user), so the pointer StartupTaskService pins at register time wins
-    over deriving a profile from the token.
+    There is no data-root redirect here any more. DONUT's data lives at a single
+    machine-wide root (DonutPaths), so every instance reads the same config, token
+    and logs whatever account it runs as.
 #>
 
 # -Tray starts hidden in the system tray (used by the autostart scheduled task).
 # -DebugLog forces verbose [DEBUG] logging this session without touching settings.
 param([switch]$Tray, [switch]$DebugLog)
-
-# Under a SYSTEM token %LOCALAPPDATA% is the system profile, splitting config/logs
-# from the operator's: re-point it before anything reads it (see .NOTES).
-if ([System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
-    $redirected = $false
-    $pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
-    if (Test-Path -LiteralPath $pointerFile) {
-        $pinned = [string](Get-Content -LiteralPath $pointerFile -First 1 -ErrorAction SilentlyContinue)
-        if ($pinned -and (Test-Path -LiteralPath $pinned.Trim())) {
-            $env:LOCALAPPDATA = $pinned.Trim()
-            $redirected = $true
-        }
-    }
-    if (-not $redirected) {
-        $ownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-        # No pointer: fall back to the desktop this process is on, then any desktop.
-        $explorer = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-                Sort-Object { $_.SessionId -ne $ownSession }) | Select-Object -First 1
-        $explorerOwner = if ($explorer) {
-            Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
-        }
-        if ($explorerOwner -and $explorerOwner.User) {
-            try {
-                $ownerSid = ([System.Security.Principal.NTAccount]"$($explorerOwner.Domain)\$($explorerOwner.User)").Translate(
-                    [System.Security.Principal.SecurityIdentifier]).Value
-                $profilePath = (Get-ItemProperty -ErrorAction Stop `
-                        -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$ownerSid").ProfileImagePath
-                if ($profilePath) { $env:LOCALAPPDATA = Join-Path $profilePath 'AppData\Local' }
-            }
-            catch {
-                Write-Warning "Could not resolve the console user's profile ($($explorerOwner.Domain)\$($explorerOwner.User)): $($_.Exception.Message)"
-            }
-        }
-    }
-}
 
 # WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
 # instead of failing later in the XAML load.
@@ -175,15 +137,17 @@ catch {
     $ps = $PSVersionTable.PSVersion
     $apartment = [System.Threading.Thread]::CurrentThread.GetApartmentState()
 
-    # Write a crash record to %LOCALAPPDATA%\DONUT\logs (created here in case we failed
-    # before ConfigManager ran) so a silent startup death always leaves a trace.
-    $crashDir = Join-Path $env:LOCALAPPDATA 'DONUT\logs'
+    # The data root spelled out rather than via DonutPaths: this runs when the module
+    # graph may have failed to load, which is exactly what it is here to record.
+    $crashDir = Join-Path $env:ProgramData 'DONUT\data\logs'
     try {
         if (-not (Test-Path $crashDir)) {
             New-Item -ItemType Directory -Path $crashDir -Force | Out-Null
         }
     }
-    catch { }
+    catch {
+        Write-Warning "Could not create the crash-log folder '$crashDir': $($_.Exception.Message)"
+    }
     $crashFile = Join-Path $crashDir 'startup-crash.log'
     $record = @(
         "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] DONUT failed to start.",

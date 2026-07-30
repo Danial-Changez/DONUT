@@ -1,4 +1,5 @@
 using module "..\Models\AppConfig.psm1"
+using module ".\DonutPaths.psm1"
 using module ".\LogService.psm1"
 
 <#
@@ -6,9 +7,10 @@ using module ".\LogService.psm1"
     Loads and saves DONUT's JSON config and ensures its data folders exist.
 
 .DESCRIPTION
-    Reads the bundled config under the source root plus the per-user override in
-    %LOCALAPPDATA%\DONUT, deserializes config.json into an AppConfig, and persists
-    changes back. Also guarantees the logs/reports directories exist.
+    Reads the bundled config under the source root plus the machine-wide override
+    under %ProgramData%\DONUT\data, deserializes config.json into an AppConfig, and
+    persists changes back. Also guarantees the logs/reports directories exist, and
+    secures the root on the first elevated run so a de-elevated one can write it.
 #>
 class ConfigManager {
     [string] $SourceRoot
@@ -31,18 +33,16 @@ class ConfigManager {
         $this.Logger = [LogService]::Coalesce($logger)
         $this.SourceRoot = $sourceRoot
 
-        $appDataRoot = Join-Path $env:LOCALAPPDATA "DONUT"
-        $configDir = Join-Path $appDataRoot "config"
-
-        $this.ConfigPath = Join-Path $configDir "config.json"
-        $this.LogsPath = Join-Path $appDataRoot "logs"
-        $this.ReportsPath = Join-Path $appDataRoot "reports"
+        $this.ConfigPath = Join-Path ([DonutPaths]::ConfigDir()) "config.json"
+        $this.LogsPath = [DonutPaths]::LogsDir()
+        $this.ReportsPath = [DonutPaths]::ReportsDir()
 
         $this.EnsureDirectories()
     }
 
     [void] EnsureDirectories() {
         $configDir = Split-Path $this.ConfigPath -Parent
+        $fresh = -not (Test-Path ([DonutPaths]::DataRoot()))
         foreach ($dir in @($configDir, $this.LogsPath, $this.ReportsPath)) {
             if (-not (Test-Path $dir)) {
                 try {
@@ -54,6 +54,23 @@ class ConfigManager {
                     throw
                 }
             }
+        }
+        if ($fresh) { $this.SecureDataRoot() }
+    }
+
+    # Best-effort: needs elevation, and the de-elevated instance depends on the elevated
+    # one having done it. Never fatal - a missing ACL surfaces as a write failure later.
+    hidden [void] SecureDataRoot() {
+        $root = [DonutPaths]::DataRoot()
+        $reason = [DonutPaths]::Secure($root)
+        if ($reason) { $this.Logger.LogWarning("Data root left with inherited permissions: $reason") }
+        else { $this.Logger.LogInfo("Secured the data root for SYSTEM, Administrators and the interactive user: $root") }
+
+        # The move off %LOCALAPPDATA% is done by hand, so say where the old data is
+        # rather than silently starting from defaults.
+        $legacy = [DonutPaths]::LegacyRoot()
+        if ($legacy -and (Test-Path $legacy)) {
+            $this.Logger.LogWarning("Starting with a fresh data root at $root - earlier settings, logs and reports are still under $legacy.")
         }
     }
 

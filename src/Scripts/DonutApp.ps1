@@ -6,7 +6,7 @@
     Dot-sourced by Start-Donut.ps1. Imports every class module at parse time
     (using module, in dependency order: Models -> Core -> Services ->
     Presenters), loads or creates the AppConfig via ConfigManager, ensures the
-    %LOCALAPPDATA%\DONUT logs/reports folders exist, wires the central LogService
+    data root's logs/reports folders exist, wires the central LogService
     and the runspace pool (throttle from config), constructs MainPresenter and
     runs the WPF message loop.
 

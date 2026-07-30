@@ -1,3 +1,5 @@
+using module ".\DonutPaths.psm1"
+
 <#
 .SYNOPSIS
     Builds the one-line startup provenance stamp (build identity + runtime).
@@ -44,7 +46,7 @@ class BuildProvenance {
             $note = " (git probe failed: $($_.Exception.Message))"
         }
         try {
-            $versionFile = Join-Path (Join-Path $env:LOCALAPPDATA 'DONUT') 'version.txt'
+            $versionFile = Join-Path ([DonutPaths]::DataRoot()) 'version.txt'
             if (Test-Path $versionFile) {
                 $v = [string](Get-Content $versionFile -TotalCount 1 -ErrorAction Stop)
                 if ($v.Trim()) { return "version $($v.Trim())$note" }

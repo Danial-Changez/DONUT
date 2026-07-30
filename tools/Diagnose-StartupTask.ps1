@@ -200,18 +200,18 @@ foreach ($proc in $running) {
         Write-Host "  PROBLEM: not in the console session ($consoleSession) - it has no desktop, so no tray icon or window can ever appear." -ForegroundColor Red
     }
     if ($who -like '*\SYSTEM') {
-        Write-Host "  NOTE: as SYSTEM, %LOCALAPPDATA% is the system profile - this instance has none of your settings, logs, token, or WSID list." -ForegroundColor Yellow
+        Write-Host "  NOTE: as SYSTEM it authenticates on the network as the machine account, which has no rights on fleet targets - remote jobs will fail with access denied." -ForegroundColor Yellow
     }
 }
 
-# Where the SYSTEM instance gets its settings/token/logs from: the pointer pinned by
-# whoever toggled autostart on. Missing = it guesses the console user's profile.
-$pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
-if (Test-Path -LiteralPath $pointerFile) {
-    Write-Host "settings home pointer: $((Get-Content -LiteralPath $pointerFile -First 1))"
+# One machine-wide data root, so every instance reads the same settings/token/logs
+# whatever account it runs as. No pointer to follow any more.
+$dataRoot = Join-Path $env:ProgramData 'DONUT\data'
+if (Test-Path -LiteralPath $dataRoot) {
+    Write-Host "data root: $dataRoot" -ForegroundColor Green
 }
 else {
-    Write-Host "settings home pointer: $pointerFile - not present (SYSTEM instance falls back to the console user's profile, which may be empty)" -ForegroundColor Yellow
+    Write-Host "data root: $dataRoot - not present (DONUT has not run since the move off %LOCALAPPDATA%)" -ForegroundColor Yellow
 }
 
 # The shim narrates every firing here: resolved session id, the psexec line, the PID.

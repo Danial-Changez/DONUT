@@ -23,13 +23,11 @@ class FakeStartupTaskService : StartupTaskService {
     : base($logger, $null, $sourceRoot) { }
 
     [int] $StaleSweeps = 0
-    [int] $PointerSaves = 0
 
     hidden [hashtable] GetProcessIdentity() { return $this.Identity }
     hidden [string] GetInteractiveUser() { return $this.ConsoleUser }
     hidden [string] FindPsExec() { return $this.PsExec }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] SaveDataRootPointer() { $this.PointerSaves++ }
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) {
         $this.Registered++; $this.LastName = $name; $this.LastUser = $triggerUser
         $this.LastAsSystem = $asSystem; $this.LastSpec = $spec
@@ -299,33 +297,6 @@ Describe "StartupTaskService" {
             $fake.LastSpec.Execute | Should -BeLike '*\powershell.exe'
             $fake.LastSpec.Argument | Should -BeLike '*Start-DonutInConsoleSession.ps1*'
             $fake.LastSpec.Argument | Should -BeLike '*-PsExec "C:\App\src\Tools\psexec.exe"*'
-        }
-
-        # The settings live under whoever toggled autostart on (the admin-elevated
-        # instance); the pointer is what routes the SYSTEM instance to that profile.
-        It "Pins the settings home when an admin-elevated instance applies the SYSTEM lane" {
-            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
-            $fake.ConsoleUser = 'PROD\jdoe'
-            $fake.Apply($true) | Should -BeTrue
-            $fake.PointerSaves | Should -Be 1
-        }
-
-        It "Does not pin the settings home from a SYSTEM instance (its redirected env is not the source of truth)" {
-            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
-            $fake.ConsoleUser = 'PROD\jdoe'
-            $fake.Apply($true) | Should -BeTrue
-            $fake.PointerSaves | Should -Be 0
-        }
-
-        It "Does not pin the settings home on the per-user lane or when disabling" {
-            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Apply($true) | Should -BeTrue
-            $fake.PointerSaves | Should -Be 0
-            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
-            $fake.Apply($false) | Should -BeTrue
-            $fake.PointerSaves | Should -Be 0
         }
 
         It "Fails with a psexec reason when SYSTEM and psexec is missing" {

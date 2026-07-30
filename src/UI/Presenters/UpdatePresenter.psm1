@@ -2,6 +2,7 @@ using namespace System.Windows
 using namespace System.Windows.Threading
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
+using module '..\..\Core\DonutPaths.psm1'
 using module '..\..\Core\LogService.psm1'
 using module '.\LoginPresenter.psm1'
 using module '.\DialogPresenter.psm1'
@@ -76,7 +77,7 @@ class UpdatePresenter {
             if (-not $asset) { throw "No MSI asset found." }
 
             $token = $this.Service.GetStoredToken()
-            $stage = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT"
+            $stage = [DonutPaths]::DataRoot()
 
             # Blocking download is acceptable here: the update window is already
             # closed and the app shuts down right after applying.

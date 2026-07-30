@@ -9,6 +9,7 @@ using module "..\..\Models\DcuProgress.psm1"
 using module "..\..\Models\LogLine.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
+using module "..\..\Core\DonutPaths.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
@@ -1144,8 +1145,7 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         # Fallback: a reboot-required marker file, in case a future remote step writes one.
-        $appDataDir = Join-Path $env:LOCALAPPDATA "DONUT"
-        $rebootFlagPath = Join-Path $appDataDir "reports\$($job.HostName)-reboot-required.flag"
+        $rebootFlagPath = Join-Path ([DonutPaths]::ReportsDir()) "$($job.HostName)-reboot-required.flag"
         if (Test-Path $rebootFlagPath) {
             $needsReboot = $true
             Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue

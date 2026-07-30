@@ -17,7 +17,7 @@ using module ".\ToastService.psm1"
     changes (no Save button) - toggles/chips on change, text fields on lost-focus,
     keybinds via the recorder. Naming rule: Settings* is the UI surface; Config
     (AppConfig/ConfigManager) is the persisted state it edits, which lives under
-    %LOCALAPPDATA%\DONUT\config.json so it survives reinstalls.
+    %ProgramData%\DONUT\data\config so it survives reinstalls.
 
 .NOTES
     Side-effects that live outside the JSON (global hotkey, window shortcut, startup

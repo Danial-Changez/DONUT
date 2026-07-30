@@ -1,4 +1,5 @@
 using module "..\..\src\Core\HostListSource.psm1"
+using module "..\..\src\Core\DonutPaths.psm1"
 
 # Fake that overrides the filesystem seams so path-selection and parsing can be
 # exercised off-disk. PathExists consults an in-memory set of "present" paths;
@@ -27,14 +28,15 @@ class FakeHostListSource : HostListSource {
 Describe "HostListSource" {
 
     BeforeEach {
-        # SourceRoot's parent is C:\Repo, so res\WSID.txt resolves under it.
-        $script:src = [FakeHostListSource]::new("C:\Repo\src")
-        $script:userPath = (Join-Path $env:LOCALAPPDATA "DONUT\config\WSID.txt")
-        $script:resPath = (Join-Path "C:\Repo" "res\WSID.txt")
+        # SourceRoot's parent is the repo root, so res\WSID.txt resolves under it.
+        $script:repo = Join-Path ([IO.Path]::GetTempPath()) 'HostListRepo'
+        $script:src = [FakeHostListSource]::new((Join-Path $script:repo 'src'))
+        $script:userPath = (Join-Path ([DonutPaths]::ConfigDir()) "WSID.txt")
+        $script:resPath = (Join-Path $script:repo "res\WSID.txt")
     }
 
     Context "CandidatePaths" {
-        It "Lists the per-user config copy first, then res\WSID.txt" {
+        It "Lists the shared config copy first, then res\WSID.txt" {
             $paths = $script:src.CandidatePaths()
             $paths.Count | Should -Be 2
             $paths[0] | Should -Be $script:userPath
@@ -47,7 +49,7 @@ Describe "HostListSource" {
             $script:src.ResolvePath() | Should -BeNullOrEmpty
         }
 
-        It "Prefers the per-user config copy when both exist" {
+        It "Prefers the shared config copy when both exist" {
             $script:src.Present.Add($script:userPath) | Out-Null
             $script:src.Present.Add($script:resPath) | Out-Null
             $script:src.ResolvePath() | Should -Be $script:userPath

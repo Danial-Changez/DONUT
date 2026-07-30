@@ -46,6 +46,27 @@ class ElevationContext {
         return [string][System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     }
 
+    # Who owns the desktop DONUT shows on, never who DONUT runs as: under
+    # over-the-shoulder UAC those differ. $null when there is no interactive session.
+    static [string] InteractiveUser() {
+        try {
+            $session = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+            foreach ($filter in @("Name='explorer.exe' AND SessionId=$session", "Name='explorer.exe'")) {
+                $explorer = Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+                if (-not $explorer) { continue }
+                $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+                if ($owner -and $owner.User) { return "$($owner.Domain)\$($owner.User)" }
+            }
+            return $null
+        }
+        catch {
+            # No CIM at all (a locked-down or non-Windows host). Callers treat a null as
+            # "no interactive session", which is the same degraded path.
+            return $null
+        }
+    }
+
     # The verdict the UI gates on: can this action run now, and if not, why not.
     static [ElevationState] Classify([bool]$actionNeedsAdmin, [bool]$isElevated) {
         if (-not $actionNeedsAdmin) { return [ElevationState]::NotRequired }
