@@ -71,6 +71,16 @@ A short allowlist of well-known reclaimable caches *is* clearable even though it
 `Prefetch`, `Logs`, and `Downloaded Program Files`. The owning service recreates them as
 needed. To add or remove entries, edit `FolderDeletionPolicy.AllowedCaches` **and** the
 mirrored list in `ExecutionService.BuildDeleteCommand`.
+
+Because both lists are string comparisons, every path is canonicalized before they are applied —
+`..` and `.` segments are resolved, `/` is normalised, Windows' trailing dot/space stripping is
+applied, and 8.3 aliases (`PROGRA~1`) are refused. Without that, `C:\temp\..\Windows\System32`
+reads as an ordinary `temp` folder. On the target the clear also refuses a selected folder that is
+a **junction**, and never descends through one while clearing, so a link planted under an allowed
+root can't redirect the delete into the directory it points at.
+
+If the target's profile enumeration fails, the clear stops rather than proceeding without the
+logged-on-profile protection — a run that can't verify who is signed in does nothing.
 :::
 
 ## Under the hood
