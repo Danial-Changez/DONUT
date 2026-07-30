@@ -7,10 +7,16 @@
 .DESCRIPTION
     Dot-sourced by LensAgent.ps1 in the agent's main runspace, and by each lookup
     ThreadJob the serve loop spawns (a slow lookup runs off the loop so the loop stays
-    free for the next request). Callers must set these script-scope variables before use:
-      $script:KeyIv      48-byte AES key+IV (from key.bin)
+    free for the next request). Also dot-sourced by LensLookupWorker.ps1 when DONUT runs
+    de-elevated and is already the interactive user, which calls Resolve-Lens directly.
+
+    Callers must set these script-scope variables before use:
       $script:ForestNc   the forest root naming context (for GC binds)
-      $ExchangeDir       the ACL-locked exchange directory
+      $script:KeyIv      48-byte AES key+IV (from key.bin); exchange callers only
+      $ExchangeDir       the ACL-locked exchange directory; exchange callers only
+
+    Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
+    returns it, writing no partials and no result file.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -122,11 +128,22 @@ $script:HardwareScript = {
 
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
 function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
+    # No exchange means an in-process caller, which gets the whole bundle at the end;
+    # progressive painting is the agent path's benefit only.
+    if (-not $ReqId -or -not $ExchangeDir) { return }
     try {
         $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
         Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
     }
-    catch { }
+    catch {
+        Write-Verbose "Lens partial $Seq not written: $($_.Exception.Message)"
+    }
+}
+
+# The forest root naming context every GC bind hangs off. Its own function so a caller
+# that is a PowerShell class never names [ADSI], which does not resolve off Windows.
+function Get-LensForestNc {
+    return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
@@ -342,6 +359,11 @@ function Resolve-Lens {
     }
     $bundle.devices = $devices.ToArray()
 
-    $resultPath = Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)
-    Write-LensBundle $resultPath ($bundle | ConvertTo-Json -Depth 6)
+    $json = $bundle | ConvertTo-Json -Depth 6
+    # Only the agent has an exchange to write to. A de-elevated DONUT calls this in
+    # process and takes the return value, skipping the encrypted hand-off entirely.
+    if ($reqId -and $ExchangeDir) {
+        Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $json
+    }
+    return $json
 }

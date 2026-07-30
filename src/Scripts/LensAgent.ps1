@@ -104,10 +104,8 @@ try {
 catch { $script:HeartbeatJob = $null }
 
 $script:ForestNc = ''
-try {
-    $script:ForestNc = [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
-}
-catch { }
+# Blank on failure is the handled case: Find-Gc falls back without a naming context.
+try { $script:ForestNc = Get-LensForestNc } catch { $script:ForestNc = '' }
 # Bind the GC once (ThreadJob imported above).
 try { $null = Find-Gc '(objectClass=domain)' } catch { }
 if ($SiteServer) {
