@@ -64,11 +64,61 @@ $script:AffinityScript = {
     $p = @{
         Uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
-        "&`$select=UniqueUserName,ResourceName"
+        "&`$select=UniqueUserName,ResourceName,ResourceID"
         UseDefaultCredentials = $true; ErrorAction = 'Stop'
     }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     return @((Invoke-RestMethod @p).value)
+}
+
+# Per-device hardware from SCCM inventory, keyed by the affinity ResourceID.
+# ResourceID eq is the primary filter shape; the keyed segment is the fallback
+# (the string-function filters that 404 on this AdminService are avoided entirely).
+$script:HardwareScript = {
+    param($server, $pairs)
+    function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
+        $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
+        else {
+            "https://$srv/AdminService/wmi/$class?`$filter=" +
+            [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
+        }
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        $r = Invoke-RestMethod @p
+        if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
+        return $r
+    }
+    $useKey = $false
+    $results = @()
+    foreach ($pair in $pairs) {
+        $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
+        if (-not $pair.resourceId) {
+            $out.error = 'no ResourceID in the affinity rows'
+            $results += $out
+            continue
+        }
+        try {
+            $cs = $null
+            try {
+                $cs = Get-AdminServiceRow $server 'SMS_G_System_COMPUTER_SYSTEM' 'Manufacturer,Model' $pair.resourceId $useKey
+            }
+            catch {
+                # Filter shape rejected: retry once via the keyed segment, keep it for the rest.
+                if ($useKey) { throw }
+                $useKey = $true
+                $cs = Get-AdminServiceRow $server 'SMS_G_System_COMPUTER_SYSTEM' 'Manufacturer,Model' $pair.resourceId $useKey
+            }
+            if ($cs) {
+                $out.manufacturer = [string]$cs.Manufacturer
+                $out.model = [string]$cs.Model
+            }
+            $bios = Get-AdminServiceRow $server 'SMS_G_System_PC_BIOS' 'SerialNumber' $pair.resourceId $useKey
+            if ($bios) { $out.serial = [string]$bios.SerialNumber }
+        }
+        catch { $out.error = $_.Exception.Message }
+        $results += $out
+    }
+    return $results
 }
 
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
@@ -145,6 +195,7 @@ function Resolve-Lens {
 
     # SCCM user -> WSID(s): collect the parallel affinity result.
     $wsids = @()
+    $wsMap = [ordered]@{}
     if ($sam -and $server) {
         $rows = $null
         try {
@@ -164,25 +215,37 @@ function Resolve-Lens {
         finally {
             if ($affinityJob) { Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue }
         }
-        $wsids = @($rows |
-                Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } |
-                ForEach-Object { $_.ResourceName } | Where-Object { $_ } | Select-Object -Unique)
+        # name -> ResourceID pairs; the id feeds the hardware-inventory query.
+        foreach ($row in @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam })) {
+            $rn = [string]$row.ResourceName
+            if ($rn -and -not $wsMap.Contains($rn)) { $wsMap[$rn] = [string]$row.ResourceID }
+        }
+        $wsids = @($wsMap.Keys)
     }
 
     # Partial 2: name-only device rows the moment affinity lands.
     if ($wsids.Count -gt 0) {
         $bundle.devices = @($wsids | ForEach-Object {
                 [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''
+                    model = ''; serial = ''; manufacturer = ''
                     note = 'loading details…'; bitLockerKeys = @()
                 }
             })
         Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 2
     }
 
+    # Hardware runs on a thread job parallel to the per-WSID AD loop below.
+    $hwJob = $null
+    if ($wsids.Count -gt 0 -and $server) {
+        $pairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
+        try { $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript -ArgumentList $server, $pairs } catch { $hwJob = $null }
+    }
+
     # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
     $devices = [System.Collections.Generic.List[object]]::new()
     foreach ($wsid in $wsids) {
         $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
+            model = ''; serial = ''; manufacturer = ''
             note = ''; bitLockerKeys = @()
         }
         try {
@@ -248,6 +311,35 @@ function Resolve-Lens {
             if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
         }
         $devices.Add($dev)
+    }
+
+    # Merge the parallel hardware results; a failed source degrades to blank fields.
+    if ($hwJob) {
+        $hwRows = $null
+        try {
+            if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
+            else { throw 'timed out after 30s.' }
+        }
+        catch { $bundle.errors += "SCCM hardware inventory: $($_.Exception.Message)" }
+        finally { Remove-Job -Job $hwJob -Force -ErrorAction SilentlyContinue }
+
+        $hwErrors = @()
+        foreach ($row in @($hwRows)) {
+            $dev = $devices | Where-Object { $_.name -eq [string]$row.name } | Select-Object -First 1
+            if ($null -eq $dev) { continue }
+            $dev.manufacturer = [string]$row.manufacturer
+            $dev.model = [string]$row.model
+            $dev.serial = [string]$row.serial
+            if ($row.error) { $hwErrors += "$($row.name): $($row.error)" }
+        }
+        # One class-wide failure (e.g. a 404 on every device) collapses to a single entry.
+        if ($hwErrors.Count -gt 0) {
+            $unique = @($hwErrors | ForEach-Object { ($_ -split ': ', 2)[-1] } | Select-Object -Unique)
+            if ($unique.Count -eq 1 -and $hwErrors.Count -gt 1) {
+                $bundle.errors += "SCCM hardware inventory: $($unique[0])"
+            }
+            else { $bundle.errors += @($hwErrors | ForEach-Object { "SCCM hardware ($_)" }) }
+        }
     }
     $bundle.devices = $devices.ToArray()
 
