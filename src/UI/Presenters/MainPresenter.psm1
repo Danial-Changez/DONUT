@@ -431,15 +431,19 @@ class MainPresenter {
     # Which executable to relaunch: the prod launcher hosts src\, the dev path runs
     # Start-Donut.ps1 under pwsh. Each spells the wait in its own argument syntax.
     hidden [hashtable] BuildRelaunchSpec() {
-        $host_ = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-        if ([IO.Path]::GetFileName($host_) -ieq 'pwsh.exe') {
+        # Process.Id, not $PID: automatic variables are out of scope inside a class method
+        # (PowerShell rejects them at class-compile time with "not assigned in the method").
+        $proc = [System.Diagnostics.Process]::GetCurrentProcess()
+        $hostPath = $proc.MainModule.FileName
+        $ownPid = $proc.Id
+        if ([IO.Path]::GetFileName($hostPath) -ieq 'pwsh.exe') {
             $script = Join-Path $this.Config.SourceRoot 'Start-Donut.ps1'
             return @{
-                FilePath  = $host_
-                Arguments = "-NoProfile -Sta -ExecutionPolicy Bypass -File `"$script`" -AwaitPid $PID"
+                FilePath  = $hostPath
+                Arguments = "-NoProfile -Sta -ExecutionPolicy Bypass -File `"$script`" -AwaitPid $ownPid"
             }
         }
-        return @{ FilePath = $host_; Arguments = "--await-pid $PID" }
+        return @{ FilePath = $hostPath; Arguments = "--await-pid $ownPid" }
     }
 
     # Puts the setting back after a failed elevation so the switch matches reality.
