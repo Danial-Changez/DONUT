@@ -20,7 +20,7 @@ class LensDeviceViewModel : ObservableObject {
     [string] $Model = ''
     [string] $Serial = ''
     [string] $Manufacturer = ''
-    [string] $HardwareText = ''           # "Model - SN Serial"; '' collapses the row
+    [bool]   $HasHardware = $false        # false collapses the whole model/tag row
     [string] $BitLockerText = ''          # the joined keys; shown only once revealed
     [string] $LatestKey = ''              # newest recovery password (by Created); QR payload
     [bool]   $HasBitLocker = $false
@@ -40,11 +40,9 @@ class LensDeviceViewModel : ObservableObject {
             $this.Model = $d.Model
             $this.Serial = $d.Serial
             $this.Manufacturer = $d.Manufacturer
-            # SCCM hardware inventory may be unreadable: blank fields collapse the line.
-            $parts = @()
-            if ($d.Model) { $parts += $d.Model }
-            if ($d.Serial) { $parts += "SN $($d.Serial)" }
-            $this.HardwareText = ($parts -join ' - ')
+            # SCCM hardware inventory may be unreadable: each cell collapses on its own,
+            # and the row goes entirely when neither field arrived.
+            $this.HasHardware = [bool]($d.Model -or $d.Serial)
             $this.Note = $d.Note
             $this.LastSeenText = [LensFormat]::LogonLabel($d.LastLogon)
             $this.HasBitLocker = $d.HasBitLocker()
