@@ -35,8 +35,29 @@ Based on the
 
 ## Return codes
 
-DONUT treats dcu-cli's return code as authoritative (parsed from the output log):
-`0` is the only unconditional success; `1` and `5` mean "completed, reboot
-required" (flagged, not an error); everything else is a real failure — including
-`2` (unknown), `3` (not a Dell system), `4` (not admin), `6` (another DCU instance
-running), and `7`/`8` (unsupported).
+DONUT treats dcu-cli's return code as authoritative (parsed from the output log)
+and classifies it per command (`DcuLog.Classify`):
+
+- `0` succeeds for any command.
+- `1` and `5` mean "completed, reboot required". DONUT flags the reboot instead of failing the job.
+- `500` from a **scan** means the scan ran clean and found nothing to install. DONUT marks the job Completed and reports "no updates found".
+- Every other code fails the job, with the decoded meaning in the error message.
+
+**Note:** `500` is only benign for `scan`. The same code from any other command is
+a failure.
+
+| Code | Meaning | DONUT behavior |
+|------|---------|----------------|
+| `0` | Success | Job completes |
+| `1`, `5` | Completed, reboot required / reboot was already pending | Job completes, reboot flagged |
+| `500` (scan) | No updates were found | Job completes, no updates listed |
+| `501`-`503` | Scan failed (determining updates / canceled / download error) | Job fails; retry |
+| `1000`-`1002` | Apply failed (result retrieval / canceled / download error) | Job fails; retry |
+| `3`, `7` | Not a Dell system / model not supported | Job fails; do not retry |
+| `4` | dcu-cli was not run elevated | Job fails; environment problem on the target |
+| `6` | Another DCU instance is running | Job fails; retry after it exits |
+| `100`-`113` | Invalid dcu-cli arguments | Job fails; a DONUT bug, report it |
+| `3000`-`3005` | Dell Client Management Service not ready (stopped / missing / disabled / busy / updating) | Job fails; retry after the service settles |
+
+The full list is in the
+[Dell return-code reference](https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes).

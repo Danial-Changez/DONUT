@@ -21,11 +21,11 @@ Describe "RemoteError" {
             [string]$ex.Reason | Should -Be 'RpcUnavailable'
         }
         It "RemoteExecutionException carries the exit code (ExecutionFailed)" {
-            $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 500)
+            $ex = [RemoteExecutionException]::new('PC-4', 'DCU /scan', 501)
             [string]$ex.Level  | Should -Be 'Error'
             [string]$ex.Reason | Should -Be 'ExecutionFailed'
-            $ex.ExitCode       | Should -Be 500
-            $ex.Message        | Should -BeLike '*exit code 500*'
+            $ex.ExitCode       | Should -Be 501
+            $ex.Message        | Should -BeLike '*exit code 501*'
         }
         # psexec surfaces Win32 transport errors as its exit code; 5 is the machine-
         # account-not-admin-on-target signature the autostarted SYSTEM instance hits.

@@ -56,9 +56,14 @@ class TestExecutionService : ExecutionService {
     }
 
     [string] $LastCopiedOutputLog = $null
+    [bool] $LastCopyReport = $true
     [hashtable] CopyRemoteArtifacts([string]$hostName, [string]$outputLog) {
+        return $this.CopyRemoteArtifacts($hostName, $outputLog, $true)
+    }
+    [hashtable] CopyRemoteArtifacts([string]$hostName, [string]$outputLog, [bool]$copyReport) {
         # Mock behavior: capture which log the phase asked for; return dummy paths.
         $this.LastCopiedOutputLog = $outputLog
+        $this.LastCopyReport = $copyReport
         return @{ Report = "C:\Fake\Report.xml"; Log = "C:\Fake\Scan.log" }
     }
 
@@ -234,6 +239,34 @@ Describe "WorkerServices" {
             $logger.Contains("Scan: psexec launch start") | Should -BeTrue
             $logger.Contains("Scan: psexec launch done") | Should -BeTrue
             $logger.Contains("(exit 5)") | Should -BeTrue
+        }
+
+        It "flags a DCU 500 scan as NoUpdatesFound and skips the report copy" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.PsExecReturnCode = 500
+
+            $result = $service.RunScanPhase([DeviceContext]::new("TestHost"))
+
+            $result.NoUpdatesFound | Should -BeTrue
+            $result.DcuCode | Should -Be 500
+            $service.LastCopyReport | Should -BeFalse -Because "a stale previous-run XML must not masquerade as this scan's result"
+        }
+
+        It "carries the dcu code on a clean scan and keeps the report copy" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service.PsExecReturnCode = 0
+
+            $result = $service.RunScanPhase([DeviceContext]::new("TestHost"))
+
+            $result.NoUpdatesFound | Should -BeFalse
+            $result.DcuCode | Should -Be 0
+            $service.LastCopyReport | Should -BeTrue
         }
     }
 
