@@ -61,6 +61,7 @@ package "Donut.Models" #15233B {
         +Devices: LensDevice[]
         +Errors: string[]
         +{static} FromHashtable(h) / FromJson(json): PersonLens
+        +{static} FromError(message): PersonLens
     }
     class LensDevice {
         +Name / Os / LastLogon / Domain / Note: string

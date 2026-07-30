@@ -6,9 +6,11 @@ skinparam classAttributeIconSize 0
 ' infrastructure only. Cross-subsystem wiring lives in component_diagram.
 package "Donut.Core" #102A20 {
     class RunspaceManager {
+        +{static} InteractiveSize: int
         +{static} Initialize(min, max): void
         +{static} SetLogger(logger): void
         +{static} GetPool(): RunspacePool
+        +{static} GetInteractivePool(): RunspacePool
         +{static} Close(): void
     }
 

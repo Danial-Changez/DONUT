@@ -1,0 +1,129 @@
+# Unit tests for FinderPresenter's Lens poll loop - requires WPF + Donut.Mvvm (loaded by
+# the wrapper). Covers the deadline backstop and the completion guard: both exist so a
+# lookup that never lands can't leave the detail pane on its loading placeholder forever.
+using module "..\..\src\UI\Presenters\FinderPresenter.psm1"
+using module "..\..\src\Models\AppConfig.psm1"
+using module "..\..\src\Models\PersonLens.psm1"
+using module "..\Helpers\CapturingLogService.psm1"
+
+# --- Test doubles -----------------------------------------------------------
+
+# Forces the completion branch to fail after the job has already left LensJobs - the
+# exact shape that used to strand the pane with no job left to retry.
+class ThrowingFinderPresenter : FinderPresenter {
+    ThrowingFinderPresenter([AppConfig]$c, [object]$l)
+    : base($c, $null, $l, $null, $null, $null) {}
+
+    hidden [void] WireLensDeviceCommands() { throw "device wiring blew up" }
+}
+
+# File scope, not inside Describe: Pester 5 executes Describe bodies at discovery, so a
+# function declared there is not reliably in scope when the It blocks run.
+# A never-invoked PowerShell is safe to dispose synchronously (state NotStarted), so
+# DisposeJob takes its direct path and no reap timer is involved.
+function New-LensJob {
+    param([int]$Token, [int]$AgeSeconds, [bool]$Completed = $false, [string]$Who = 'Jane Doe')
+    return @{
+        Ps        = [System.Management.Automation.PowerShell]::Create()
+        Handle    = [PSCustomObject]@{ IsCompleted = $Completed }
+        Token     = $Token
+        Key       = 'jane@corp.example'
+        InfoSeen  = 0
+        StartedAt = [datetime]::UtcNow.AddSeconds(-$AgeSeconds)
+        Who       = $Who
+    }
+}
+
+Describe "FinderPresenter Lens poll" {
+
+    BeforeEach {
+        $script:logger = [CapturingLogService]::new()
+        $script:config = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", @{})
+        $script:presenter = [FinderPresenter]::new(
+            $script:config, $null, $script:logger, $null, $null, $null)
+    }
+
+    Context "deadline backstop" {
+        It "retires a lookup that outlived the deadline and shows a reason" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 120))
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 0
+            $p.LensVm.IsLoading | Should -BeFalse
+            $p.LensVm.HasError | Should -BeTrue
+            $p.LensVm.StatusText | Should -Not -BeNullOrEmpty
+            $script:logger.HasLevel("WARN") | Should -BeTrue
+        }
+
+        It "keeps the picked name on screen when it gives up" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 120 -Who 'Jane Doe'))
+
+            $p.PollLens()
+
+            # Apply() blanks DisplayName from an error lens unless the caller carries it.
+            $p.LensVm.DisplayName | Should -BeExactly 'Jane Doe'
+        }
+
+        It "leaves a lookup that is still inside the deadline alone" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 5))
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 1
+            $p.LensVm.IsLoading | Should -BeTrue
+            $p.LensVm.HasError | Should -BeFalse
+        }
+
+        It "retires a superseded expired lookup without touching the pane" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Newer Person')
+            $p.LensToken = 2                     # a newer pick already owns the pane
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 120))
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 0
+            $p.LensVm.IsLoading | Should -BeTrue -Because "the newer pick is still loading"
+            $p.LensVm.HasError | Should -BeFalse
+        }
+
+        It "honours a shortened deadline" {
+            $p = $script:presenter
+            $p.LensDeadline = [timespan]::FromSeconds(2)
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 5))
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 0
+            $p.LensVm.HasError | Should -BeTrue
+        }
+    }
+
+    Context "completion guard" {
+        It "surfaces a failure instead of stranding the pane when applying throws" {
+            $p = [ThrowingFinderPresenter]::new($script:config, $script:logger)
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 1 -Completed $true))
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 0
+            $p.LensVm.IsLoading | Should -BeFalse -Because "the job is gone, so nothing retries"
+            $p.LensVm.HasError | Should -BeTrue
+            $p.LensVm.DisplayName | Should -BeExactly 'Jane Doe'
+        }
+    }
+}

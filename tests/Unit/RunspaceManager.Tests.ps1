@@ -43,8 +43,42 @@ Describe "RunspaceManager" {
             [RunspaceManager]::Initialize(8, 8)
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)
-            $w | Should -BeGreaterOrEqual 16 -Because "max(16, max*2) with max=8 is 16"
-            $io | Should -BeGreaterOrEqual 16
+            $expected = [Math]::Max(16, (8 + [RunspaceManager]::InteractiveSize) * 2)
+            $w | Should -BeGreaterOrEqual $expected -Because "the floor must cover both pools"
+            $io | Should -BeGreaterOrEqual $expected
+        }
+
+        It "opens a separate interactive pool so lookups never queue behind worker jobs" {
+            [RunspaceManager]::Initialize(8, 8)
+
+            $worker = [RunspaceManager]::GetPool()
+            $interactive = [RunspaceManager]::GetInteractivePool()
+            $interactive | Should -Not -BeNullOrEmpty
+            $interactive.RunspacePoolStateInfo.State | Should -Be 'Opened'
+            [object]::ReferenceEquals($worker, $interactive) | Should -BeFalse
+        }
+
+        It "pins the interactive pool at min = max so warmed runspaces are not reclaimed" {
+            [RunspaceManager]::Initialize(8, 8)
+
+            $n = [RunspaceManager]::InteractiveSize
+            $pool = [RunspaceManager]::GetInteractivePool()
+            $pool.GetMinRunspaces() | Should -Be $n
+            $pool.GetMaxRunspaces() | Should -Be $n
+        }
+
+        It "re-opens the interactive pool on demand rather than throwing at the caller" {
+            [RunspaceManager]::Initialize(1, 5)
+            [RunspaceManager]::InteractivePool.Close()
+            [RunspaceManager]::InteractivePool.Dispose()
+            [RunspaceManager]::InteractivePool = $null
+
+            # A throw here fails the test on its own - no Should -Not -Throw wrapper, whose
+            # child scope would swallow the assignment.
+            $pool = [RunspaceManager]::GetInteractivePool()
+            $pool | Should -Not -BeNullOrEmpty
+            $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
+            [object]::ReferenceEquals($pool, [RunspaceManager]::RunspacePool) | Should -BeFalse
         }
     }
 
@@ -77,6 +111,14 @@ Describe "RunspaceManager" {
             [RunspaceManager]::Close()
 
             [RunspaceManager]::RunspacePool | Should -BeNullOrEmpty
+        }
+
+        It "Should close and dispose the interactive pool too" {
+            [RunspaceManager]::Initialize(1, 5)
+            [RunspaceManager]::GetInteractivePool() | Should -Not -BeNullOrEmpty
+            [RunspaceManager]::Close()
+
+            [RunspaceManager]::InteractivePool | Should -BeNullOrEmpty
         }
 
         It "Should handle being called when pool is already null" {

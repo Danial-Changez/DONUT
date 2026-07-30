@@ -78,11 +78,45 @@ Per-host IP resolves skip the pool entirely (`ResolveProcessJob` +
   Build it only if field logs show resolve wall time still gating something a
   user watches; the supervision complexity is not worth it until proven needed.
 
+## Two pools: worker and interactive
+
+`RunspaceManager` opens two pools:
+
+- The worker pool, sized to `throttleLimit` - what `AsyncJob` borrows from.
+- A small fixed interactive pool (`InteractiveSize = 3`) that `PoolScriptJob`
+  uses for the in-process scripts a user is waiting on: AD search, the Lens
+  broker, unlock, the startup task.
+
+They are separate because they starved each other: every worker job holds its
+runspace for the whole child-process lifetime, `RunAll` starts one per host with
+no cap, and with `min = max` a fleet-wide scan pinned every runspace for
+minutes. A Lens lookup submitted meanwhile had its `BeginInvoke` queued and
+never dispatched, and the detail pane sat on "Looking up directory + SCCM..."
+forever. The distinction was documented in `PoolScriptJob` before it was
+enforced; it is now pool identity, not convention.
+
+- The interactive pool is also `min = max` (idle cleanup only disposes above
+  the minimum, so a lower floor would let warmed runspaces die and cold-load).
+- The ThreadPool floor covers both pools, and the interactive pool warms
+  organically through the deferred finder warms, as before.
+- If it fails to open, `GetInteractivePool` degrades to the worker pool rather
+  than failing the app - the pre-split behaviour.
+
+Interactive lookups also carry their own deadline. Pool separation stops the
+starvation, but no poll loop should be able to wait forever:
+`FinderPresenter.LensDeadline` (90 s, deliberately longer than
+`PersonLensService.TimeoutSec` and the agent's 45 s `Wait-Job` so in-worker
+timeouts still report the real reason) retires a lookup that never lands and
+applies a `PersonLens.FromError` bundle. The completion branch is guarded too:
+it removes the job from `LensJobs` before touching the view-model, so an
+exception past that point cannot leave the pane loading with nothing left to
+retry.
+
 ## Pool script jobs
 
 Non-worker pool jobs (AD search, Lens broker, unlock, startup task) share one
-Core helper - `PoolScriptJob` - for start / complete / async-stop / reap instead
-of hand-rolled copies. The rules it pins:
+Core helper - `PoolScriptJob` - for start / complete / async-stop / reap on the
+interactive pool instead of hand-rolled copies. The rules it pins:
 
 - Never `Dispose()` a running pipeline: it blocks the UI thread. `BeginStop` and
   reap on a timer instead.
