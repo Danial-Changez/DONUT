@@ -3,6 +3,7 @@ using module '.\RunspaceManager.psm1'
 using module '.\LogService.psm1'
 using module '.\WorkerProcess.psm1'
 using module '..\Models\JobEnums.psm1'
+using module '..\Models\LogLine.psm1'
 
 <#
 .SYNOPSIS
@@ -19,7 +20,7 @@ class AsyncJob {
     [string] $HostName
     [JobKind]   $JobType
     [JobStatus] $Status
-    [ConcurrentQueue[string]] $Logs
+    [ConcurrentQueue[LogLine]] $Logs
     [object] $Result
     # First error text when Status is Failed (survives the runspace boundary).
     [string] $FailureMessage = ''
@@ -55,7 +56,7 @@ class AsyncJob {
         $this.HostName = $hostName
         $this.JobType = $type
         $this.Status = [JobStatus]::Created
-        $this.Logs = [ConcurrentQueue[string]]::new()
+        $this.Logs = [ConcurrentQueue[LogLine]]::new()
     }
 
     [void] Start([string]$scriptPath, [hashtable]$arguments, [string]$tempConfigPath) {
@@ -86,7 +87,7 @@ class AsyncJob {
         catch {
             $this.Status = [JobStatus]::Failed
             $this.Logger.LogException("[$($this.HostName)] Failed to start $($this.JobType) job", $_)
-            $this.Logs.Enqueue("Exception: $_")
+            $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
         }
     }
 
@@ -101,7 +102,9 @@ class AsyncJob {
                 if ($this.PowerShell.HadErrors -or -not $verdict.Succeeded) {
                     $this.Status = [JobStatus]::Failed
                     $this.FailureMessage = $verdict.FailureMessage
-                    $this.Logs.Enqueue("Error: $($this.FailureMessage)")
+                    # The visible [Error] tag comes from LogLine; FailureMessage itself
+                    # stays undecorated for RemoteFailure.ReasonFromMessage.
+                    $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, $this.FailureMessage))
                     $this.Logger.LogError("[$($this.HostName)] $($this.JobType) worker failed " +
                         "(exit $($verdict.ExitCode)): $($this.FailureMessage)")
                 }
@@ -113,7 +116,7 @@ class AsyncJob {
             catch {
                 $this.Status = [JobStatus]::Failed
                 $this.FailureMessage = $_.Exception.Message
-                $this.Logs.Enqueue("Exception: $_")
+                $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
         }
@@ -124,10 +127,10 @@ class AsyncJob {
             $this.LogStallHeartbeat()
         }
 
-        $this.DrainStream($this.PowerShell.Streams.Information)
-        $this.DrainStream($this.PowerShell.Streams.Verbose)
-        $this.DrainStream($this.PowerShell.Streams.Warning)
-        $this.DrainStream($this.PowerShell.Streams.Error)
+        $this.DrainStream($this.PowerShell.Streams.Information, [LogSeverity]::Info)
+        $this.DrainStream($this.PowerShell.Streams.Verbose, [LogSeverity]::Info)
+        $this.DrainStream($this.PowerShell.Streams.Warning, [LogSeverity]::Warn)
+        $this.DrainStream($this.PowerShell.Streams.Error, [LogSeverity]::Error)
     }
 
     # One WARN per interval while a job neither completes nor fails - the difference
@@ -203,10 +206,11 @@ class AsyncJob {
         }
     }
 
-    [void] DrainStream($stream) {
+    # The stream a record arrived on IS its severity; it was discarded here before.
+    [void] DrainStream($stream, [LogSeverity]$severity) {
         if (-not $stream) { return }
         foreach ($item in $stream.ReadAll()) {
-            $this.Logs.Enqueue($item.ToString())
+            $this.Logs.Enqueue([LogLine]::FromWorkerLine($item.ToString(), $severity))
         }
     }
 

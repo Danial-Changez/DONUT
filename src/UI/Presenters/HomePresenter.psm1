@@ -6,6 +6,7 @@ using namespace Donut.Mvvm
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\FleetCardStatus.psm1"
 using module "..\..\Models\DcuProgress.psm1"
+using module "..\..\Models\LogLine.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
@@ -343,7 +344,7 @@ class HomePresenter : AsyncJobPresenter {
                 $this.StartProcess($hostName)
             }
             else {
-                $this.Detail.AppendLog($hostName, "Machine is offline - queued run skipped.")
+                $this.Detail.AppendLog($hostName, "Machine is offline - queued run skipped.", [LogSeverity]::Warn)
                 if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - run skipped.") }
             }
         }
@@ -533,7 +534,7 @@ class HomePresenter : AsyncJobPresenter {
         # Never scan/apply an offline or unresolved host (reachability gating, .NOTES).
         $reach = $this.Resolver.IsHostOnline($hostName)
         if ($reach -eq 'Offline') {
-            $this.Detail.AppendLog($hostName, "Machine is offline - skipping $command.")
+            $this.Detail.AppendLog($hostName, "Machine is offline - skipping $command.", [LogSeverity]::Warn)
             if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - skipped.") }
             if ($row) { $row.SetReachability('Offline') }
             return
@@ -605,7 +606,7 @@ class HomePresenter : AsyncJobPresenter {
             }
         }
         catch {
-            $this.Detail.AppendLog($hostName, "Error starting process: $_")
+            $this.Detail.AppendLog($hostName, "Error starting process: $_", [LogSeverity]::Error)
             $row.ApplyStatus([FleetCardStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
         }
@@ -632,7 +633,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($job.JobType -eq [JobKind]::Resolve) { return }
 
         # Drain this tick's output once; append as one batch.
-        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines = [System.Collections.Generic.List[LogLine]]::new()
         $line = $null
         while ($job.Logs.TryDequeue([ref]$line)) { $lines.Add($line) }
 
@@ -649,20 +650,22 @@ class HomePresenter : AsyncJobPresenter {
         $sawNormalLine = $false
         # Reconnect status lines drive the "Reconnecting…" card; strip their marker for the
         # terminal. Any other line means the tail resumed, which clears the reconnect state.
-        $display = [System.Collections.Generic.List[string]]::new()
+        $display = [System.Collections.Generic.List[LogLine]]::new()
         foreach ($entry in $lines) {
-            if ([DcuProgress]::IsReconnectLine($entry)) {
+            if ([DcuProgress]::IsReconnectLine($entry.Text)) {
                 $sawReconnect = $true
-                $display.Add([DcuProgress]::StripReconnectMarker($entry))
+                # Re-author as Warn: a drop is worth noticing but the run is recovering.
+                $display.Add([LogLine]::Donut([LogSeverity]::Warn,
+                        [DcuProgress]::StripReconnectMarker($entry.Text)))
                 continue
             }
             $sawNormalLine = $true
             $display.Add($entry)
-            $pct = [DcuProgress]::ParsePercent($entry)
+            $pct = [DcuProgress]::ParsePercent($entry.Text)
             if ($pct -ge 0) { $latestPct = $pct }
-            $step = [DcuProgress]::ParseScanStep($entry)
+            $step = [DcuProgress]::ParseScanStep($entry.Text)
             if ($step -gt $latestStep) { $latestStep = $step }
-            if ([DcuProgress]::IsInstalling($entry)) { $installing = $true }
+            if ([DcuProgress]::IsInstalling($entry.Text)) { $installing = $true }
         }
         if ($display.Count -gt 0) { $this.Detail.AppendLogLines($job.HostName, $display.ToArray()) }
 
@@ -718,12 +721,15 @@ class HomePresenter : AsyncJobPresenter {
 
         # No end-of-job log dump: the worker already live-tailed dcu-cli's output, and
         # a dump would replay a stale previous-run file after a failed job.
-        $this.Detail.AppendLog($job.HostName, "Job $($job.JobType) finished: $($job.Status)")
+        $finishSev = if ($job.Status -eq 'Completed') { [LogSeverity]::Success }
+        elseif ($job.Status -eq 'Failed') { [LogSeverity]::Error }
+        else { [LogSeverity]::Info }
+        $this.Detail.AppendLog($job.HostName, "Job $($job.JobType) finished: $($job.Status)", $finishSev)
 
         $transitioned = $false
         if ($job.Status -eq 'Completed' -and $job.JobType -eq 'UpdateScan') {
             if ($this.ScanFoundNoUpdates($job)) {
-                $this.Detail.AppendLog($job.HostName, "No updates found.")
+                $this.Detail.AppendLog($job.HostName, "No updates found.", [LogSeverity]::Success)
                 if ($this.Toasts) { $this.Toasts.ShowInfo($job.HostName, "No updates found.") }
             }
             else {
@@ -738,14 +744,15 @@ class HomePresenter : AsyncJobPresenter {
                 # DCU 500 leaves no report on the target; the flag is the verdict.
                 $row = $this.GetRow($job.HostName)
                 if ($null -ne $row) { $row.Set('HasUpdates', $false) }
-                $this.Detail.AppendLog($job.HostName, "Scan complete: no updates found.")
+                $this.Detail.AppendLog($job.HostName, "Scan complete: no updates found.", [LogSeverity]::Success)
             }
             else {
                 $scanRows = $this.RenderUpdatesFromReport($job.HostName)
                 $summary = if ($null -eq $scanRows) { 'no report generated' }
                 elseif ($scanRows.Count -eq 0) { 'no updates found' }
                 else { "$($scanRows.Count) update(s) available" }
-                $this.Detail.AppendLog($job.HostName, "Scan complete: $summary.")
+                $scanSev = if ($null -eq $scanRows) { [LogSeverity]::Warn } else { [LogSeverity]::Success }
+                $this.Detail.AppendLog($job.HostName, "Scan complete: $summary.", $scanSev)
             }
         }
 
@@ -854,7 +861,7 @@ class HomePresenter : AsyncJobPresenter {
     hidden [bool] AbortOnIdentityMismatch([string]$hostName) {
         if ($this.Resolver.IdentityVerdict($hostName) -ne 'Mismatch') { return $false }
         $actual = $this.Resolver.GetVerifiedName($hostName)
-        $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.")
+        $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.", [LogSeverity]::Warn)
         if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
         $this.Resolution.InvalidateResolved($hostName)
         return $true
@@ -867,11 +874,11 @@ class HomePresenter : AsyncJobPresenter {
 
         $updateRows = $this.RenderUpdatesFromReport($hostName)
         if ($null -eq $updateRows) {
-            $this.Detail.AppendLog($hostName, "No report generated or scan failed.")
+            $this.Detail.AppendLog($hostName, "No report generated or scan failed.", [LogSeverity]::Warn)
             return $false
         }
         if ($updateRows.Count -eq 0) {
-            $this.Detail.AppendLog($hostName, "No updates found.")
+            $this.Detail.AppendLog($hostName, "No updates found.", [LogSeverity]::Success)
             if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "No updates found.") }
             return $false
         }
@@ -947,7 +954,7 @@ class HomePresenter : AsyncJobPresenter {
             return $true
         }
         catch {
-            $this.Detail.AppendLog($hostName, "Error starting apply phase: $_")
+            $this.Detail.AppendLog($hostName, "Error starting apply phase: $_", [LogSeverity]::Error)
             return $false
         }
     }

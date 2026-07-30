@@ -11,6 +11,7 @@ using module "..\..\Models\MachineInventory.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Models\RemoteError.psm1"
+using module "..\..\Models\LogLine.psm1"
 using module "..\..\Core\TimeFormat.psm1"
 
 <#
@@ -45,12 +46,14 @@ class InventoryPresenter {
     # Detail-panel + overview controls. The header/overview values are selectable TextBoxes
     # (SelectableText) so the operator can copy them; still binding-driven, no method reads them.
     [Button] $DetailRefreshButton
-    [TextBox] $DetailLog
+    [ListBox] $DetailLog
+    # The collection the log ListBox renders; swapped whole on host switch / trim.
+    [object] $DetailLogItems
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
 
-    [hashtable] $LogBuffers   # hostname -> List[string] of accumulated job-log lines
-    [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail TextBox
+    [hashtable] $LogBuffers   # hostname -> List[LogLine] of accumulated job-log lines
+    [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail ListBox
     hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder tri-state cascade
     # A probe fresher than this is reused instead of re-gathered (non-forced calls).
     [timespan] $InventoryTtl = [timespan]::FromMinutes(3)
@@ -81,7 +84,7 @@ class InventoryPresenter {
     [void] Initialize([System.Windows.FrameworkElement] $view) {
 
         $this.DetailRefreshButton = $view.FindName('btnDetailRefresh')
-        $this.DetailLog = $view.FindName('txtDetailLog')
+        $this.DetailLog = $view.FindName('lstDetailLog')
         $this.DetailProgress = $view.FindName('DetailProgress')
         $this.FindFoldersButton = $view.FindName('btnFindFolders')
 
@@ -89,6 +92,12 @@ class InventoryPresenter {
         if ($this.DetailRefreshButton) {
             $this.DetailRefreshButton.Add_Click({
                     $presenter.RefreshInventory($presenter.Home.SelectedHost) }.GetNewClosure())
+        }
+        # Per-line rendering costs cross-line drag-selection; Copy replaces it.
+        $copyLog = $view.FindName('btnCopyLog')
+        if ($copyLog) {
+            $copyLog.Add_Click({
+                    $presenter.CopyHostLog($presenter.Home.SelectedHost) }.GetNewClosure())
         }
         if ($this.FindFoldersButton) {
             $this.FindFoldersButton.Add_Click({
@@ -225,27 +234,31 @@ class InventoryPresenter {
 
     # Appends a job-output line to the host's buffer and, when selected, the detail log.
     [void] AppendLog([string]$hostName, [string]$text) {
-        $this.AppendLogLines($hostName, @($text))
+        $this.AppendLog($hostName, $text, [LogSeverity]::Info)
+    }
+
+    [void] AppendLog([string]$hostName, [string]$text, [LogSeverity]$severity) {
+        $this.AppendLogLines($hostName, @([LogLine]::Donut($severity, $text)))
     }
 
     # A blank line between operations (e.g. a disk scan then an update scan); skipped while the
     # host's log is still empty so a run never opens with a leading blank line.
     [void] AppendSeparator([string]$hostName) {
         if ($this.LogBuffers.ContainsKey($hostName) -and $this.LogBuffers[$hostName].Count -gt 0) {
-            $this.AppendLogLines($hostName, @(''))
+            $this.AppendLogLines($hostName, @([LogLine]::Donut([LogSeverity]::Info, '')))
         }
     }
 
-    # Batched append: one AppendText + one ScrollToEnd per batch instead of per line.
-    [void] AppendLogLines([string]$hostName, [string[]]$lines) {
+    # Batched append: buffer once, then either add the new items or re-render on trim.
+    [void] AppendLogLines([string]$hostName, [LogLine[]]$lines) {
         if ($null -eq $lines -or $lines.Count -eq 0) { return }
         if (-not $this.LogBuffers.ContainsKey($hostName)) {
-            $this.LogBuffers[$hostName] = [System.Collections.Generic.List[string]]::new()
+            $this.LogBuffers[$hostName] = [System.Collections.Generic.List[LogLine]]::new()
         }
         $buf = $this.LogBuffers[$hostName]
         $buf.AddRange($lines)
 
-        # Ring-buffer cap keeps memory (and the TextBox) bounded over a long session.
+        # Ring-buffer cap keeps memory (and the ListBox) bounded over a long session.
         $trimmed = $false
         if ($buf.Count -gt $this.MaxLogLines) {
             $buf.RemoveRange(0, $buf.Count - $this.MaxLogLines)
@@ -253,25 +266,44 @@ class InventoryPresenter {
         }
 
         if ($hostName -eq $this.Home.SelectedHost -and $this.DetailLog) {
-            if ($trimmed) {
+            if ($trimmed -or $null -eq $this.DetailLogItems) {
                 # Old lines were dropped - re-render the capped buffer once.
-                $this.DetailLog.Text = (($buf -join "`n") + "`n")
+                $this.RenderHostLog($hostName)
             }
             else {
-                $this.DetailLog.AppendText((($lines -join "`n") + "`n"))
+                foreach ($l in $lines) { $this.DetailLogItems.Add($l) }
+                $this.ScrollLogToEnd()
             }
-            $this.DetailLog.ScrollToEnd()
         }
     }
 
-    # Renders a host's buffered job-log into the detail log (on selection).
+    # Renders a host's buffered job-log into the detail log (on selection). A fresh
+    # collection swap is one change notification instead of N per-line ones.
     [void] RenderHostLog([string]$hostName) {
         if (-not $this.DetailLog) { return }
-        $this.DetailLog.Clear()
+        $items = [System.Collections.ObjectModel.ObservableCollection[object]]::new()
         if ($this.LogBuffers.ContainsKey($hostName)) {
-            $this.DetailLog.Text = (($this.LogBuffers[$hostName]) -join "`n") + "`n"
+            foreach ($l in $this.LogBuffers[$hostName]) { $items.Add($l) }
         }
-        $this.DetailLog.ScrollToEnd()
+        $this.DetailLogItems = $items
+        $this.DetailLog.ItemsSource = $items
+        $this.ScrollLogToEnd()
+    }
+
+    hidden [void] ScrollLogToEnd() {
+        if ($this.DetailLogItems -and $this.DetailLogItems.Count -gt 0) {
+            $this.DetailLog.ScrollIntoView($this.DetailLogItems[$this.DetailLogItems.Count - 1])
+        }
+    }
+
+    # Clipboard copy of the selected host's whole log ("[HH:mm:ss] [Tag] text" lines).
+    [void] CopyHostLog([string]$hostName) {
+        if (-not $hostName -or -not $this.LogBuffers.ContainsKey($hostName)) { return }
+        $text = (@($this.LogBuffers[$hostName] | ForEach-Object {
+                    if ($_.Stamp) { "[$($_.Stamp)] $($_.DisplayText)" } else { $_.DisplayText }
+                }) -join "`n")
+        try { Set-Clipboard -Value $text }
+        catch { $this.Logger.LogWarning("Copy log failed: $($_.Exception.Message)") }
     }
 
     # Drops a host's buffered log (called when its card is cleared).

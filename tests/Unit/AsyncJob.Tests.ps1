@@ -2,6 +2,7 @@ using namespace System.Collections.Concurrent
 using module "..\..\src\Core\RunspaceManager.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
 using module "..\..\src\Core\LogService.psm1"
+using module "..\..\src\Models\LogLine.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 Describe "AsyncJob" {
@@ -180,17 +181,44 @@ exit 1
         It "Should capture error messages in Logs" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:errorScript, @{ Message = "Captured error" }, "")
-            
+
             # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             $job.Logs.Count | Should -BeGreaterThan 0
-            
+
             # Cleanup
+            $job.Cleanup()
+        }
+
+        It "Enqueues the failure as an Error LogLine with undecorated text" {
+            $job = [AsyncJob]::new("TestHost", "Scan")
+            $job.Start($script:errorScript, @{ Message = "Captured error" }, "")
+
+            $timeout = [DateTime]::Now.AddSeconds(10)
+            while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
+                $job.Poll()
+                Start-Sleep -Milliseconds 50
+            }
+
+            # The failure line is severity-typed; the old "Error: " text prefix is
+            # gone (the [Error] tag renders from LogLine.Tag instead).
+            $found = $null
+            $line = $null
+            while ($job.Logs.TryDequeue([ref]$line)) {
+                if ($line.Text -eq $job.FailureMessage) { $found = $line }
+            }
+            $found | Should -Not -BeNullOrEmpty
+            $found -is [LogLine] | Should -BeTrue
+            $found.Severity | Should -Be ([LogSeverity]::Error)
+            $found.Text | Should -Not -BeLike 'Error: *'
+            $found.DisplayText | Should -BeLike '`[Error`] *'
+            $found.Stamp | Should -Match '^\d{2}:\d{2}:\d{2}$'
+
             $job.Cleanup()
         }
     }
@@ -243,7 +271,7 @@ exit 1
         It "Should handle null stream gracefully" {
             $job = [AsyncJob]::new("TestHost", "Scan")
 
-            { $job.DrainStream($null) } | Should -Not -Throw
+            { $job.DrainStream($null, [LogSeverity]::Info) } | Should -Not -Throw
         }
     }
 
