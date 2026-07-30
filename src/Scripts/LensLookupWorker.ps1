@@ -11,11 +11,11 @@
     PersonLensService.
 
     -WarmOnly: called once at app startup to start the de-elevated LensAgent (which then
-    pre-warms its libraries in parallel with DONUT's own startup) WITHOUT running a
+    pre-warms its libraries in parallel with DONUT's own startup) without running a
     lookup. Returns '' on success or the agent's failure reason.
 
     -StopAgent: called once at app close to run the full parent-side teardown
-    (StopAndPurgeAgent) WITHOUT running a lookup. Kept on the pool so the UI never has to
+    (StopAndPurgeAgent) without running a lookup. Kept on the pool so the UI never has to
     parse-load PersonLensService itself - the teardown + its literals stay single-sourced
     in the service, invoked here in the worker runspace where the service already loads.
 

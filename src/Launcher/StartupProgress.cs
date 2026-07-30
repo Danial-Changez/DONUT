@@ -24,7 +24,7 @@ public sealed class StartupProgress
 
     /// <summary>Fills the bar and dismisses the splash once the app is ready (or on failure).</summary>
     /// <remarks>
-    /// Idempotent — safe to call again from <see cref="Program"/>'s finally block as a backstop.
+    /// Idempotent - safe to call again from <see cref="Program"/>'s finally block as a backstop.
     /// </remarks>
     public void Complete() => Post(_splash.CompleteAndClose);
 

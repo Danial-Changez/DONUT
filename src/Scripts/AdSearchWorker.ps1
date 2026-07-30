@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runspace-pool worker for the live AD finder — searches one or more forests.
+    Runspace-pool worker for the live AD finder - searches one or more forests.
 
 .DESCRIPTION
     Runs the unit-tested multi-forest ActiveDirectoryService.Search off the UI

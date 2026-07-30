@@ -218,9 +218,8 @@ class HostViewModel : ObservableObject {
 
     # --- Internal composition helpers ---
 
-    # The dot has TWO writers (ApplyIdle every 30s tick, SetReachability on verdicts);
-    # both flow through this one precedence so neither can clobber the other. It derives
-    # from the same pure mapper as the list sort: attention > offline > online > idle.
+    # The dot has two writers (ApplyIdle's 30s tick, SetReachability on verdicts); both
+    # flow through the list-sort mapper's precedence: attention > offline > online > idle.
     hidden [void] RenderDot() {
         $cat = [MachineListShaper]::Categorize($false, $this.Reachability, $this.IdleStatus)
         $key = switch ($cat) {

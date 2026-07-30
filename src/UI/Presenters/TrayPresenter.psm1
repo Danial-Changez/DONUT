@@ -149,7 +149,7 @@ class TrayPresenter {
     }
 
     # Removes the icon and releases handles. Called from the window's Closed handler
-    # BEFORE the process exits, else the icon ghosts in the tray until hovered.
+    # before the process exits, else the icon ghosts in the tray until hovered.
     [void] Dispose() {
         try { if ($this.ShowRequestTimer) { $this.ShowRequestTimer.Stop() } } catch { }
         try {

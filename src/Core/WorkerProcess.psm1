@@ -19,10 +19,8 @@ class WorkerProcess {
 
     static hidden [string] $CachedPwsh
 
-    # ProcessPath is only pwsh on the dev path - launcher-hosted runs report
-    # Donut.Launcher.exe, and spawning THAT forks a second DONUT that exits 0 via the
-    # single-instance guard: no result file, which read as a silent "success" and
-    # wedged every launcher-hosted worker (the autostart "Verifying..." hang).
+    # ProcessPath is pwsh only on the dev path; launcher-hosted runs report the exe, and
+    # spawning that forks a second DONUT the single-instance guard exits 0 (silent wedge).
     static [string] FindPwsh() {
         if (-not [string]::IsNullOrWhiteSpace([WorkerProcess]::CachedPwsh)) {
             return [WorkerProcess]::CachedPwsh
@@ -103,7 +101,7 @@ class WorkerProcess {
         $exit = [int]$launch.ExitCode
         $stderr = "$($launch.StdErr)".Trim()
         if ($exit -eq 0) {
-            # Exit 0 with NO result is not success - it is the signature of the wrong
+            # Exit 0 with no result is not success - it is the signature of the wrong
             # child (a second launcher bowing out via the single-instance guard).
             if ($null -eq $launch.Result) {
                 return @{ Result = $null; Succeeded = $false; ExitCode = 0

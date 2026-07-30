@@ -5,7 +5,7 @@
     with full evidence collection, bundled into one zip.
 
 .DESCRIPTION
-    Runs the app's startup pool sequence WITHOUT the WPF UI, in a fresh child
+    Runs the app's startup pool sequence without the WPF UI, in a fresh child
     pwsh (mirroring production: the app is its own process), and collects every
     signal a wedge can leave:
 
@@ -17,11 +17,11 @@
       - events-*.csv        PowerShell script-block/module events + Defender
                             events for the run window (per-process -SettingsFile;
                             no machine policy is touched)
-      - stacks.txt          runspace call stacks captured BEFORE killing a child
+      - stacks.txt          runspace call stacks captured before killing a child
                             that blew its deadline (Get-DonutRunspaceStacks.ps1)
       - app-donut-tail.log  tail of the real app's %LOCALAPPDATA% Donut.log
 
-    Self-contained by design: it imports nothing from src/, so a FIXED COPY of
+    Self-contained by design: it imports nothing from src/, so a fixed copy of
     this script can drive `git bisect run` against any checkout via -SourceRoot
     (see docs/development/testing.md, "Empirical bisect protocol").
 
@@ -144,6 +144,7 @@ $settingsFile = Join-Path $OutDir 'pwsh-diag-settings.json'
 } | ConvertTo-Json -Depth 4 | Set-Content -Path $settingsFile
 
 # --- Child harness script ------------------------------------------------------
+
 # Runs the pool phases in a fresh process. Restricted to the worker arguments
 # every checkout in the bisect range understands (the 64dbec8-compatible core).
 $childScript = Join-Path $OutDir 'DiagHarness.ps1'
@@ -243,7 +244,7 @@ try {
         Start-Sleep -Seconds 25
     }
 
-    # DC DISCOVERY (Mode=Warm): the startup keystone every resolve gates on.
+    # DC discovery (Mode=Warm): the one result every later resolve gates on.
     $dc = Invoke-PoolScript ($common + @{ HostName = ''; JobType = 'Resolve'
             ResolvedIp = ''; Options = @{ Mode = 'Warm' } }) $DcTimeout
     $activeDc = ''
@@ -392,6 +393,7 @@ if ($appLog -and (Test-Path $appLog)) {
 }
 
 # --- Verdict evaluation --------------------------------------------------------
+
 # harness-broken: no verdict at all (the child never even wrote phase 0).
 # symptom-fail:   any executed phase incomplete/failed, or the child timed out.
 $verdict = if (Test-Path $verdictFile) {

@@ -5,7 +5,7 @@
     app's whole lifetime, so each costs only query time.
 
 .DESCRIPTION
-    Started ONCE (at app startup, or on demand when its heartbeat goes stale) by
+    Started once (at app startup, or on demand when its heartbeat goes stale) by
     PersonLensService.EnsureAgent via a scheduled task - Interactive logon = the
     logged-on token, RunLevel Limited, wrapped in conhost --headless - because the
     Lens data (SCCM affinity + BitLocker) is readable only by the operator's regular
@@ -31,7 +31,7 @@
     here and into each lookup ThreadJob.
 
     Exits when stop.flag appears, the parent process dies, or the exchange dir is
-    deleted. heartbeat.txt is touched every ~2s from a BACKGROUND thread (not the serve
+    deleted. heartbeat.txt is touched every ~2s from a background thread (not the serve
     loop), so a lookup in progress never lets the beat go stale - otherwise EnsureAgent's
     15s staleness check would tear a busy agent down mid-lookup. A genuinely gone agent
     still stops beating, so EnsureAgent can still detect and restart it.
@@ -48,10 +48,11 @@
 
 .NOTES
     Read-only against AD/SCCM. Raw LDAP/DirectorySearcher (no AD module) + the
-    AdminService REST endpoint (no ConfigMgr module / PSDrive). The affinity query
-    is the ONLY SCCM call (the /wmi route's OData translator rejects richer
-    filters, answering 404); everything per-device comes from the computer's AD
-    object. Crypto format MUST match PersonLensService.ProtectText/UnprotectText.
+    AdminService REST endpoint (no ConfigMgr module / PSDrive). The SCCM calls are
+    the affinity query and the per-device hardware pass (ResourceID-shaped; the
+    /wmi route's OData translator rejects richer string filters with 404);
+    everything else per-device comes from the computer's AD object. The crypto
+    format must match PersonLensService.ProtectText/UnprotectText.
 #>
 
 [CmdletBinding()]

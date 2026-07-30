@@ -4,7 +4,7 @@
     Dumps the script call stacks of every busy runspace in a live pwsh process.
 
 .DESCRIPTION
-    The answer to "the warm/resolve wedged - WHERE?". Attaches to the target
+    The answer to "the warm/resolve wedged - where?". Attaches to the target
     process over PowerShell's built-in named-pipe IPC (same user, no tools to
     install), enumerates its runspaces, and for each Busy one requests a debugger
     break (Enable-RunspaceDebug -BreakAll), then prints the script call stack it
@@ -27,7 +27,7 @@
     spawned; for the live app, the DONUT pwsh PID.
 
 .PARAMETER TimeoutSec
-    Bound for the attach AND for each per-runspace break wait. Default 15.
+    Bound for the attach and for each per-runspace break wait. Default 15.
 
 .PARAMETER OutFile
     Write the report here instead of stdout.

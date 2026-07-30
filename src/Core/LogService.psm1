@@ -79,7 +79,7 @@ class LogService {
     }
 
     # Lock-free atomic append (Append mode + ReadWrite sharing, one line per Write):
-    # logging must never block the app (implementation-notes: thread safety).
+    # logging must never block the app (architecture/runspaces-and-workers: logging).
     [void] WriteLog([string]$level, [string]$message) {
         $timestamp = [datetime]::Now.ToString('yyyy-MM-dd HH:mm:ss')
         $line = "[$timestamp] [$level] $message" + [System.Environment]::NewLine

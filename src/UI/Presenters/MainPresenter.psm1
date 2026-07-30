@@ -516,7 +516,7 @@ class MainPresenter {
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
     }
 
-    # The configurable shortcut opens AND closes the overlay (the gear opens; Esc still closes),
+    # The configurable shortcut opens and closes the overlay (the gear opens; Esc still closes),
     # mirroring the global hotkey's show/hide toggle instead of only opening.
     [void] ToggleSettings() {
         if ($this.MainVm -and $this.MainVm.IsSettingsOpen) { $this.CloseSettings() }
@@ -714,7 +714,7 @@ class MainPresenter {
         }
     }
 
-    # Hidden (tray) start: runs the WPF message loop WITHOUT showing the window
+    # Hidden (tray) start: runs the WPF message loop without showing the window
     # (ShutdownMode is OnExplicitShutdown, so it neither auto-shows nor auto-quits).
     [void] ShowHidden() {
         if (-not $this.Window) {

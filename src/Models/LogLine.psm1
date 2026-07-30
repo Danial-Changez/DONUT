@@ -58,9 +58,8 @@ class LogLine {
 
     # A worker/stream line: a dcu-cli date-time prefix is re-stamped as HH:mm:ss (no
     # double stamp); prefixless lines are stamped now. Classification only upgrades.
-    # ($ts/$sev/$body, not $stamp/$severity: a local matching a property name
-    # (case-insensitive) breaks assignment inside a PS class method.)
     static [LogLine] FromWorkerLine([string]$text, [LogSeverity]$streamSeverity) {
+        # $ts/$sev, not $stamp/$severity: locals matching property names break assignment.
         $ts = [datetime]::Now.ToString('HH:mm:ss')
         $body = if ($null -ne $text) { $text } else { '' }
         $m = [LogLine]::DcuStamp.Match($body)

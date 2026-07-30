@@ -16,7 +16,7 @@ using module ".\RemoteServices.psm1"
     resolves on the critical path.
 
 .NOTES
-    WPF-free and does NO network itself — the resolution runs in the worker
+    WPF-free and does no network itself - the resolution runs in the worker
     (ExecutionService.RunResolvePhase). HostResolver only holds the cached state
     plus the "do we still need to resolve this?" decision, and builds the worker
     args (subclassing RemoteJobService purely to reuse BuildWorkerArgs, so

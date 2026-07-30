@@ -123,7 +123,7 @@ region root owns its file's namescope, and exactly one presenter adopts each roo
 | `ActionBar.xaml` | — | `FinderPresenter` (+ `HomePresenter` for mode/run-all) | `SearchBox`, `GoogleSearchBar`, `SearchResultsPopup`, `SearchResultsList`, `btnMode`, `txtMode`, `btnRunAll` |
 | `StatCards.xaml` | — | binding-only (`SelectedMachine.Ov*`) | — |
 | `MachinePane.xaml` | `MachinePanel` | `HomePresenter` | `btnClearTabs`, `MachineList`, `FleetEmptyHint` |
-| `DetailPane.xaml` | `DetailPane` | `InventoryPresenter` | `btnDetailRefresh`, `btnFindFolders`, `btnDeleteFolders`, `txtDetailLog`, `DetailProgress`, `DiskFoldersList`, `slotLens` |
+| `DetailPane.xaml` | `DetailPane` | `InventoryPresenter` | `btnDetailRefresh`, `btnFindFolders`, `btnDeleteFolders`, `lstDetailLog`, `btnCopyLog`, `DetailProgress`, `DiskFoldersList`, `slotLens` |
 | `LensPane.xaml` (nested in DetailPane) | `LensPanel` | binding-only (`SelectedPerson`) | — |
 | `TrayPresenter` | The system-tray icon and menu: show/toggle the window, exit, the close-to-tray hint balloon, and the second-launch show-request listener |
 | `TourPresenter` | The first-run guided tour: spotlight + callout per `TourStep`, Back/Next/Skip navigation, first-run auto-start (`hasSeenTour`) and `?`-button replay |

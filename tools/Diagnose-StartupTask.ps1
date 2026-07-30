@@ -4,25 +4,25 @@
     Diagnoses why "Start with Windows" registers a task that never launches DONUT.
 
 .DESCRIPTION
-    Run ON THE BOX THAT RUNS DONUT, in an ELEVATED pwsh, AFTER a logon that should
+    Run on the box that runs DONUT, in an elevated pwsh, after a logon that should
     have started DONUT but didn't. It answers the four questions the Donut.log
     "Registered startup task" line cannot, in order:
 
-      1. WHICH BUILD IS INSTALLED. The launcher embeds src\ and self-extracts it to
-         %ProgramData%\DONUT\app - so `git pull` alone changes NOTHING until
+      1. Which build is installed. The launcher embeds src\ and self-extracts it to
+         %ProgramData%\DONUT\app - so `git pull` alone changes nothing until
          Donut.Launcher.exe is rebuilt. Reports whether the extracted
          StartupTaskService.psm1 has the SYSTEM/psexec lane.
-      2. WHAT ACTUALLY GOT REGISTERED. Principal (who it runs as), action, and
-         trigger - a per-user principal on a NON-admin account is the known dead
+      2. What actually got registered. Principal (who it runs as), action, and
+         trigger - a per-user principal on a non-admin account is the known dead
          end (its RunLevel Highest degrades to a standard token).
-      3. WHETHER IT FIRED AND WHAT WINDOWS SAID. LastTaskResult decoded, plus the
+      3. Whether it fired and what Windows said. LastTaskResult decoded, plus the
          TaskScheduler/Operational events for this task. 0x800702E4 = elevation
          required (CreateProcess refused the requireAdministrator launcher).
-      4. WHETHER THE ACTION COULD EVEN RUN. psexec/launcher paths resolved the way
+      4. Whether the action could even run. psexec/launcher paths resolved the way
          the task will resolve them, from SYSTEM's environment.
 
 .PARAMETER TaskName
-    Task to inspect. Defaults to the installed DONUT-* startup task (NOT
+    Task to inspect. Defaults to the installed DONUT-* startup task (not
     "DONUT-$env:USERNAME" - in a SYSTEM shell that resolves to DONUT-SYSTEM and
     finds nothing, which is the same $env: trap the service itself had).
 

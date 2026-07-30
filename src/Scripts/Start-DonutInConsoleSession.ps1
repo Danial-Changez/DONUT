@@ -51,7 +51,7 @@ Write-AutostartLog "Console session is $session; launching: psexec $psexecArgs"
 $psexecRun = Start-Process -FilePath $PsExec -ArgumentList $psexecArgs `
     -WindowStyle Hidden -Wait -PassThru
 
-# With -d, psexec's exit code IS the child PID on success; verify it points at a
+# With -d, psexec's exit code is the child PID on success; verify it points at a
 # live process so a small Win32 error code can't masquerade as one.
 $exitCode = $psexecRun.ExitCode
 if ($exitCode -gt 0 -and (Get-Process -Id $exitCode -ErrorAction SilentlyContinue)) {

@@ -12,7 +12,7 @@ using module ".\RemoteServices.psm1"
     Builds a small self-contained pwsh probe script that runs on the remote host
     (via the worker's PsExec path) and writes laptop-troubleshooting facts as
     JSON, which are copied back and parsed into a [MachineInventory]. Mirrors
-    ScanService — subclasses RemoteJobService, reusing BuildWorkerArgs.
+    ScanService - subclasses RemoteJobService, reusing BuildWorkerArgs.
 #>
 class InventoryService : RemoteJobService {
 
@@ -77,8 +77,8 @@ try {
     $inv.biosVersion = $bios.SMBIOSBIOSVersion
 } catch { }
 
-# Battery classes live in root\wmi (not root\cimv2). Request ONLY the numeric capacity
-# via -Property: serializing ALL of BatteryStaticData crashes on a corrupt datetime field.
+# Battery classes live in root\wmi (not root\cimv2). Request only the numeric capacity
+# via -Property: serializing all of BatteryStaticData crashes on a corrupt datetime field.
 try {
     $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
     if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }

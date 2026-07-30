@@ -40,10 +40,8 @@ class NetworkProbe {
 
     # --- Domain controller discovery ---
 
-    # Returns the cached list of domain controllers, discovering once on first use.
-    # Three stages, most- to least-capable: RSAT/ADWS, then .NET DirectoryServices
-    # (plain LDAP - works under tokens ADWS refuses, e.g. the autostarted SYSTEM
-    # instance's machine account), then DNS SRV records (no auth at all).
+    # Returns the cached DC list, discovering once: RSAT/ADWS, then .NET DirectoryServices
+    # (plain LDAP works under tokens ADWS refuses, e.g. SYSTEM), then DNS SRV (no auth).
     [string[]] GetDomainControllers() {
         if ($null -ne $this.DomainControllers) {
             return $this.DomainControllers
@@ -188,7 +186,7 @@ class NetworkProbe {
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
             # Pre-connect on purpose: a hooked BeginConnect never returns, so only a
-            # line logged BEFORE it can name the wedged call, host, and port.
+            # line logged before it can name the wedged call, host, and port.
             if ($logFailure) {
                 $this.Logger.LogDebug(
                     "$checkLabel probe: connecting to '$hostName':$port (2 s cap)...")

@@ -50,9 +50,13 @@ comments:
 - Sentence case; capitalize acronyms properly (`DCU`, `SMB`, `UNC`). No
   all-caps emphasis (`NEVER`, `WITHOUT`) — if a point needs stress, say why
   instead.
-- Prefer ASCII; **never emojis** (Zephyr: "avoid using non-ASCII symbols in code,
-  unless it significantly improves clarity, avoid emojis in any case"). Non-ASCII
-  punctuation is acceptable only where it genuinely reads better.
+- Plain sentences: no informal jargon ("gotcha", "magic", "hack") — name the
+  actual problem or constraint instead.
+- ASCII only; **never emojis** (Zephyr: "avoid using non-ASCII symbols in code,
+  unless it significantly improves clarity, avoid emojis in any case"). Use an
+  ASCII hyphen (` - `), not an em dash, as the sentence separator in comments.
+  Non-ASCII in string literals is a product decision, not a style one (e.g. the
+  overview tiles' `'—'` placeholder stays).
 - Section separators, used sparingly in files large enough to need navigation,
   are exactly `# --- Section name ---` (no long dash padding, no `====`).
 

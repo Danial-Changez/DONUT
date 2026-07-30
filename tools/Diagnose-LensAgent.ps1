@@ -4,7 +4,7 @@
     Diagnoses why the persistent Lens agent isn't answering lookups (UI stuck "loading").
 
 .DESCRIPTION
-    Run ON THE BOX THAT RUNS DONUT, in a NON-elevated pwsh (the same account the agent
+    Run on the box that runs DONUT, in a non-elevated pwsh (the same account the agent
     runs as - the agent is de-elevated to the interactive user), ideally right after a
     Lens pick that is stuck. It reports the agent's liveness (heartbeat age, process,
     scheduled task) and the exchange-dir contents, which together localize the failure to
@@ -20,7 +20,7 @@
             -> parent-side key or poll mismatch (not the agent).
 
     Use -Watch to poll the exchange dir + heartbeat once a second while you trigger a pick,
-    so you can SEE a request appear and whether it gets answered.
+    and watch a request appear and whether it gets answered.
 
 .PARAMETER Watch
     Poll the exchange dir + heartbeat every second for -Seconds seconds. Trigger the pick

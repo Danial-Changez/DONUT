@@ -184,11 +184,11 @@ class AsyncJob {
     }
 
     # Latched backstop for the confirmed ThreadPool-starvation regression: if a job
-    # stalls with idle runspaces AND ~0 free ThreadPool threads, raise the floor once.
+    # stalls with idle runspaces and ~0 free ThreadPool threads, raise the floor once.
     hidden [void] HealThreadPoolIfStarved([int]$freeRunspaces, [int]$freeWorkers) {
         if ([AsyncJob]::ThreadPoolHealed) { return }
         # Only idle runspaces + starved workers count; a busy-runspace stall (a slow
-        # scan) is real work, not starvation, and must NOT trip this.
+        # scan) is real work, not starvation, and must not trip this.
         if ($freeRunspaces -le 0 -or $freeWorkers -lt 0 -or $freeWorkers -gt 1) { return }
         [AsyncJob]::ThreadPoolHealed = $true
         try {
@@ -206,7 +206,7 @@ class AsyncJob {
         }
     }
 
-    # The stream a record arrived on IS its severity; it was discarded here before.
+    # The stream a record arrived on is its severity; it was discarded here before.
     [void] DrainStream($stream, [LogSeverity]$severity) {
         if (-not $stream) { return }
         foreach ($item in $stream.ReadAll()) {

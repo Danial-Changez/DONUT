@@ -9,22 +9,25 @@
 
 .NOTES
     Hosted by Donut.Launcher.exe in production. Must run under PowerShell 7+ in
-    STA — Windows PowerShell 5.1 fails to load the XAML. The guard below covers
+    STA; Windows PowerShell 5.1 fails to load the XAML. The guard below covers
     hosts that don't qualify (e.g. right-click "Run with PowerShell" picks up
     5.1, and some hosts start MTA) by relaunching itself via pwsh -Sta, so the
     script can be started from any shell or Explorer without touching the exe.
+
+    The SYSTEM data-root redirect exists because an autostarted instance under
+    the system profile read a default config (startWithWindows off) and
+    unregistered its own task. The settings live under the profile of whoever
+    toggled autostart on (over-the-shoulder UAC means the admin account, not the
+    console user), so the pointer StartupTaskService pins at register time wins
+    over deriving a profile from the token.
 #>
 
 # -Tray starts hidden in the system tray (used by the autostart scheduled task).
 # -DebugLog forces verbose [DEBUG] logging this session without touching settings.
 param([switch]$Tray, [switch]$DebugLog)
 
-# Under a SYSTEM token %LOCALAPPDATA% is the system profile, so config/logs/token/
-# WSID would split from the operator's - the autostarted ghost then read a default
-# config (startWithWindows off) and UNREGISTERED its own task. Re-point the env var
-# before anything reads it: the settings ACTUALLY live under the profile of whoever
-# toggled autostart on (over-the-shoulder UAC = the ADMIN account, not the console
-# user), so prefer the pointer StartupTaskService pinned at register time.
+# Under a SYSTEM token %LOCALAPPDATA% is the system profile, splitting config/logs
+# from the operator's: re-point it before anything reads it (see .NOTES).
 if ([System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
     $redirected = $false
     $pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
@@ -121,7 +124,7 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Security
 
-    # Dev-path C# helpers: each file guarded by ITS OWN type and compiled alone -
+    # Dev-path C# helpers: each file guarded by its own type and compiled alone -
     # a shared guard once skipped a missing helper and killed the graph parse.
     $refs = @(
         Get-RuntimeAssemblyPath 'System.ObjectModel'

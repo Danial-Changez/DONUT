@@ -32,7 +32,7 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     Extracted from HomePresenter; the two presenters share the HomeViewModel (which
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
-    $Home is a DUCK-TYPED back-reference to HomePresenter (a typed import would be a
+    $Home is a duck-typed back-reference to HomePresenter (a typed import would be a
     using-module cycle); the complete machine-side seam is: Resolution.PrefetchIp,
     EnsureRow, StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
     $presenter, since in a WPF handler $this rebinds to the sender.
@@ -137,8 +137,7 @@ class FinderPresenter {
     }
 
     # Adopts the ActionBar region root (its namescope holds the finder's controls) and
-    # wires the search-bar events. Called by HomePresenter.Initialize, which composes
-    # the regions first - the InventoryPresenter adopt-in-Initialize pattern.
+    # wires the search-bar events; HomePresenter.Initialize composes the regions first.
     [void] Initialize([System.Windows.FrameworkElement]$view) {
         $this.ViewContent = $view
         $this.SearchBar = $this.ViewContent.FindName('GoogleSearchBar')
@@ -387,7 +386,7 @@ class FinderPresenter {
         $users = @($raw | Where-Object { $_.Kind -eq 'User' })
         $firstUserIndex = -1
 
-        # Machine-like = matches a naming pattern OR an AD computer answers to exactly this
+        # Machine-like = matches a naming pattern or an AD computer answers to exactly this
         # name (so a real machine outside the patterns still leads with Add, un-dimmed).
         $names = @($computers | ForEach-Object { [string]$_.Name })
         $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns()) -or

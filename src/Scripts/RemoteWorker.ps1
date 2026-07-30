@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Invoked on the runspace pool for each queued AsyncJob. Rebuilds the AppConfig
-    — preferring the live in-memory Settings passed from the UI, else config.json,
-    else defaults — and hands off to ExecutionService.StartWorker, which dispatches
+    - preferring the live in-memory Settings passed from the UI, else config.json,
+    else defaults - and hands off to ExecutionService.StartWorker, which dispatches
     by job kind (scan / apply / inventory / disk / resolve); each phase gates its
     own transport (bounded RPC/SMB port probes) before touching the target.
 
@@ -20,7 +20,7 @@
 
 .PARAMETER ResolvedIp
     Pre-resolved target IP (from HostResolver) so the worker skips DNS on the hot
-    path. A dedicated argument, NOT an Options key, so it can never reach a dcu-cli
+    path. A dedicated argument rather than an Options key, so it can never reach a dcu-cli
     command line.
 
 .PARAMETER SourceRoot
@@ -56,7 +56,7 @@ param(
     [string]$ReportsDir,
     [hashtable]$Settings,
     [string]$ConfigPath,
-    # Parent's effective debug-log state (setting OR session override); gates [DEBUG].
+    # Parent's effective debug-log state (setting or session override); gates [DEBUG].
     [bool]$DebugLog,
     # Child-process path: args ride in through a JSON file (Options/Settings can't
     # cross a command line), the result rides back through ResultFile.
@@ -87,7 +87,7 @@ if ($ArgsFile) {
 # graph (which gates from Config) honors the -DebugLog session override too.
 if ($null -ne $Settings) { $Settings['debugLogging'] = [bool]$DebugLog }
 
-# First possible trace: the gap from "Started X job." to this line IS the queue +
+# First possible trace: the gap from "Started X job." to this line is the queue +
 # graph-compile time; "Started" with no "Worker up" = no runspace or stuck compile.
 $workerLog = $null
 try {
@@ -139,7 +139,7 @@ try {
     }
 }
 catch {
-    # Log to Donut.log, and write ONE clean line to stderr (no Write-Error decoration)
+    # Log to Donut.log, and write one clean line to stderr (no Write-Error decoration)
     # so the parent's FailureMessage stays parseable for RemoteFailure.ReasonFromMessage.
     if ($null -ne $workerLog) {
         $workerLog.LogException("[$HostName] $JobType worker failed", $_)

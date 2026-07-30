@@ -108,7 +108,7 @@ Describe "Runspace warm coverage" {
 
     It "startup submits only the warm shells + DC warm; other pool work is deferred" {
         # At 64dbec8 (known good) startup submitted exactly the warm shells and the
-        # DC warm. The stampede that accreted afterwards - one live-LDAP finder warm
+        # DC warm. The boot-window pile-up that accreted afterwards - one live-LDAP finder warm
         # per forest, the Lens agent bring-up (20 s mutex + ScheduledTasks COM), the
         # startup-task heal (whose own retry comment records the 'Collection was
         # modified' module-analysis race) - all inside the same two seconds contended

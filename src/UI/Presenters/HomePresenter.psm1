@@ -61,7 +61,7 @@ using module "..\..\Models\MachineListShaper.psm1"
     scriptblocks capture $self/$presenter, since in a WPF handler $this rebinds to
     the sender.
 
-    Reachability gating: remote work only starts on a FRESH 'Online' verdict from
+    Reachability gating: remote work only starts on a fresh 'Online' verdict from
     HostResolver. An offline host is skipped with a reason; an unknown or stale
     verdict queues the run/gather (PendingRuns / PendingGathers) behind a
     background re-resolve, and CompleteResolve starts or drops the queued work
@@ -305,8 +305,8 @@ class HomePresenter : AsyncJobPresenter {
         # time to take the loader-lock hit (see .NOTES).
         $this.Resolution.WarmPool()
 
-        # The DC warm is the ONLY job submitted at startup beyond the warm shells;
-        # everything else is deferred (implementation-notes: startup staging).
+        # The DC warm is the only job submitted at startup beyond the warm shells;
+        # everything else is deferred (architecture/runspaces-and-workers: startup staging).
         $this.Resolution.StartWarm()
         $presenter = $this
         $this.DeferredWarmTimer = [DispatcherTimer]::new()
@@ -1082,10 +1082,8 @@ class HomePresenter : AsyncJobPresenter {
         $this.RefreshIdleTimes()
     }
 
-    # Re-renders idle rows from their stored record so relative-time subtitles advance,
-    # and re-probes any verdict that aged past the TTL - reachability updates on its
-    # own instead of rotting until the next user action. PrefetchIp is single-flight
-    # and TTL-gated, so each idle host costs at most one bounded probe per TTL.
+    # Re-renders idle rows so relative-time subtitles advance, and re-probes verdicts
+    # aged past the TTL so reachability never rots; PrefetchIp is single-flight + TTL-gated.
     [void] RefreshIdleTimes() {
         foreach ($rc in $this.Store.GetAll()) {
             if (-not $this.IsRunning($rc.Hostname)) {

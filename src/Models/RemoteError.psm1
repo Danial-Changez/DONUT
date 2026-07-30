@@ -41,7 +41,7 @@ enum RemoteFailureReason {
     Unknown
 }
 
-# Base for a remote-operation failure: WHAT failed (the concrete subclass), WHO it
+# Base for a remote-operation failure: what failed (the concrete subclass), who it
 # was about ($HostName), how severe it is ($Level), and a coarse $Reason token.
 class RemoteOperationException : System.Exception {
     [string]              $HostName
@@ -133,9 +133,8 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
-# psexec's connection dropped mid-command - a Win32 transport error (233, 64, 59, ...),
-# not a dcu-cli code. The drop can be at EITHER end: a network driver resetting the
-# target's NIC, or the operator's own laptop losing Wi-Fi (surfaces as 59/1232/...).
+# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...), not
+# a dcu-cli code. Either end can drop: the target's NIC reset or the operator's Wi-Fi.
 class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
 
@@ -145,10 +144,8 @@ class RemoteConnectionLostException : RemoteOperationException {
         $this.ExitCode = $exitCode
     }
 
-    # The Win32 codes psexec surfaces on a mid-command drop. None collide with dcu-cli's
-    # own codes (0-8, 100-113, 500-503, 1000-1002, 1505-1506, 2000-2007), so seeing one
-    # means the transport died. The 5x / 59 / 123x codes are the ones that show up when the
-    # LOCAL side (the operator's laptop) loses connectivity rather than the target.
+    # The Win32 codes psexec surfaces on a mid-command drop; none collide with dcu-cli's
+    # ranges, so seeing one means the transport died. 5x/59/123x = the local side dropped.
     static [hashtable] $Codes = @{
         51   = 'ERROR_REM_NOT_LIST'
         53   = 'ERROR_BAD_NETPATH'
@@ -180,7 +177,7 @@ class RemoteConnectionLostException : RemoteOperationException {
     }
 }
 
-# The operation ran past its watchdog and the LOCAL psexec client was killed so the worker
+# The operation ran past its watchdog and the local psexec client was killed so the worker
 # could be reclaimed (no forever-Running job); the remote process may still be running.
 class RemoteTimeoutException : RemoteOperationException {
     [int] $TimeoutMinutes
