@@ -8,7 +8,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 #   Registered/Unregistered: how many times each seam ran
 #   LastName/LastUser/LastAsSystem/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
-    [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+    [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false; IsElevated = $true }
     [string] $ConsoleUser = 'PROD\jdoe'
     [string] $PsExec = 'C:\App\src\Tools\psexec.exe'
     [object] $Existing = $null
@@ -64,7 +64,7 @@ class ThrowingStartupTaskService : StartupTaskService {
     [object] $Existing = $null
     ThrowingStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
-    hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false } }
+    hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false; IsElevated = $true } }
     hidden [string] GetInteractiveUser() { return 'PROD\jdoe' }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [bool]$asSystem, [hashtable]$spec) { throw "access denied (not elevated)" }

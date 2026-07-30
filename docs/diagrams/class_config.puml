@@ -27,6 +27,20 @@ package "Donut.Core" #102A20 {
         +{static} ParseIso(value): datetime
     }
 
+    enum ElevationState {
+        NotRequired
+        Satisfied
+        RelaunchRequired
+    }
+
+    class ElevationContext {
+        +{static} IsElevated(): bool
+        +{static} IsSystem(): bool
+        +{static} CurrentIdentityName(): string
+        +{static} Classify(actionNeedsAdmin, isElevated): ElevationState
+    }
+    ElevationContext ..> ElevationState
+
     class BuildProvenance {
         +{static} Stamp(sourceRoot): string
     }

@@ -51,6 +51,7 @@ consumes the result and exposes it to the bindings.
 | `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op. `DEBUG` is gated by `DebugEnabled` (the `debugLogging` setting / `-DebugLog` override); other levels always flow |
 | `ViewLoader` | The one runtime XAML loader (`XamlReader.Load` with stream-dispose so files never stay locked; throws on missing). Page loads wrap it in catch-and-null; `HomePresenter.ComposeRegions` calls it bare so a broken region fails the boot loudly. Each returned root owns its file's namescope |
 | `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
+| `ElevationContext` (+ `ElevationState`) | The one place that reads the process token: `IsElevated` (Administrators group), `IsSystem` (the narrower service-token question), `CurrentIdentityName`. `Classify` is the pure rule the UI gates on, returning `NotRequired` / `Satisfied` / `RelaunchRequired`; it takes the elevation state as a parameter so the decision is testable off Windows |
 
 ## Services (`src/Services/`)
 

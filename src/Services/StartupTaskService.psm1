@@ -1,3 +1,4 @@
+using module "..\Core\ElevationContext.psm1"
 using module "..\Core\LogService.psm1"
 
 <#
@@ -175,9 +176,14 @@ class StartupTaskService {
 
     # --- CIM/identity seams (overridden by the test fake) ---
 
+    # IsElevated rides along because registering a task for another principal needs it,
+    # and the failure toast used to guess at the reason instead of asking.
     hidden [hashtable] GetProcessIdentity() {
-        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-        return @{ Name = $identity.Name; IsSystem = $identity.IsSystem }
+        return @{
+            Name       = [ElevationContext]::CurrentIdentityName()
+            IsSystem   = [ElevationContext]::IsSystem()
+            IsElevated = [ElevationContext]::IsElevated()
+        }
     }
 
     # Who is signed in to the desktop DONUT shows on - never who DONUT runs as. The
