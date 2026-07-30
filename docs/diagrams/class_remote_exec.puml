@@ -1,0 +1,247 @@
+@startuml class_remote_exec
+title DONUT — Remote execution, scan/apply jobs & inventory
+skinparam classAttributeIconSize 0
+
+' Subsystem cut of the retired all-in-one class diagram: the psexec transport,
+' the DCU job services, and the inventory/storage probes that ride the same
+' transport. Cross-subsystem wiring lives in component_diagram.
+package "Donut.Services" #221634 {
+    class RemoteJobService {
+        #Config: AppConfig
+        #Probe: NetworkProbe
+        #Logger: LogService
+        +{static} Fail(logger, exception): RemoteOperationException
+        #BuildWorkerArgs(host, jobType, options): Hashtable
+    }
+
+    class ScanService {
+        +PrepareScan(host): Hashtable
+    }
+
+    class RemoteUpdateService {
+        +DriverMatcher: DriverMatchingService
+        +PrepareScanForUpdates(host): Hashtable
+        +ParseUpdateReport(host): XmlDocument
+        +PrepareApplyUpdates(host, options): Hashtable
+        +CountUpdates(report): int
+        +GetUpdateRows(host): DcuUpdate[]
+    }
+
+    class HostResolver {
+        +Ttl: timespan
+        +NeedsResolve(host): bool
+        +IsVerdictStale(host): bool
+        +IsHostOnline(host): string
+        +CacheVerdict(host, ip, online): void
+        +GetCachedIp(host): string
+        +MarkInFlight(host) / ClearInFlight(host): void
+        +Invalidate(host): void
+        +PrepareWarm() / PrepareWarmRunspace(): Hashtable
+        +PrepareResolve(host) / PrepareName(host): Hashtable
+        +PrepareResolveFast(host): Hashtable
+        +IdentityVerdict(host): string
+    }
+
+    class InventoryService {
+        +PrepareInventory(host): Hashtable
+        +ParseInventory(host): MachineInventory
+        +{static} BuildProbeScript(host): string
+    }
+
+    class DiskUsageService {
+        +{static} TopN: int
+        +PrepareDiskScan(host): Hashtable
+        +ParseDiskUsage(host): DiskUsageReport
+    }
+
+    class ExecutionService {
+        +{static} StartWorker(host, jobType, options, resolvedIp, config, ...): Hashtable
+        +RunResolvePhase(device, options): Hashtable
+        +RunScanPhase(device): Hashtable
+        +RunApplyPhase(device, options): Hashtable
+        +RunInventoryPhase(device, options): Hashtable
+        +RunDiskScanPhase(device, options): Hashtable
+        +InvokePsExec(parameters): int
+        +InvokeRemotePwsh(target, script, serviceName, maxMinutes): void
+        +RecoverByResumeTail(ip, computer, remoteLog, seenChars): Hashtable
+        -TailAndScanLog(ip, remoteLog, seenChars): Hashtable
+        -EmitNewDcuLogLines(ip, remoteLog, seenChars): int
+        +{static} BuildRemoteDcuScript(command, argsString, outputLog): string
+        +CopyRemoteArtifacts(host, outputLog, copyReport): Hashtable
+    }
+
+    class DriverMatchingService {
+        +DetectBrand(manufacturer): string
+        +FindBestDriverMatch(updateName, installedDrivers): object
+        +CompareVersions(installed, update): Hashtable
+        +FormatMatchResult(match, name, version): string
+    }
+}
+
+package "Donut.Core" #102A20 {
+    class NetworkProbe {
+        +ResolveHost(hostname): IPAddress
+        +ResolveWith(hostname, dc): IPAddress
+        +ResolveComputerName(ip): string
+        +CheckReverseDNS(ip, expectedName): bool
+        +IsRpcAvailable(hostname): bool
+        +IsSmbAvailable(hostname): bool
+        +IsOnline(hostname): bool
+        +GetActiveDomainController(): string
+    }
+
+    class HostListSource {
+        +SourceRoot: string
+        +ReadHosts(): string[]
+        +ResolvePath(): string
+    }
+}
+
+package "Donut.Models" #15233B {
+    class DeviceContext {
+        +HostName: string
+        +IPAddress: string
+        +IsOnline: bool
+        +StatusMessage: string
+    }
+
+    enum DcuCommandOutcome {
+        Success
+        RebootRequired
+        NoUpdates
+        Failed
+    }
+
+    class DcuLog {
+        +{static} ParseReturnCode(logText): Hashtable
+        +{static} IsSuccess(code): bool
+        +{static} NeedsReboot(code): bool
+        +{static} Classify(command, code): DcuCommandOutcome
+        +{static} DescribeReturnCode(code): string
+    }
+
+    class DcuProgress {
+        +{static} ParsePercent(line): double
+        +{static} ScanStepCount: int
+        +{static} ParseScanStep(line): int
+        +{static} ScanStepLabel(step): string
+    }
+
+    class DcuUpdate {
+        +Name / Category / Type / Urgency: string
+        +VersionText / SizeText: string
+        +IsNewer / HasMatch: bool
+        +{static} Create(name, versions, match, urgency, ...): DcuUpdate
+    }
+
+    class RemoteOperationException {
+        +HostName: string
+        +Level: string
+        +Reason: RemoteFailureReason
+    }
+    class RemoteConnectionLostException extends RemoteOperationException {
+        +{static} IsConnectionLost(exitCode): bool
+    }
+    class RemoteTimeoutException extends RemoteOperationException {
+        +TimeoutMinutes: int
+    }
+    class RemoteFailure {
+        +{static} ReasonFromMessage(message): RemoteFailureReason
+    }
+
+    class ScanCacheDecision {
+        +{static} IsFresh(lastJobType, lastSeen, now, ttl, reportExists): bool
+    }
+
+    class MachineInventory {
+        +Model: string
+        +ServiceTag: string
+        +BiosVersion: string
+        +HasBattery: bool
+        +DesignCapacity: long
+        +FullChargeCapacity: long
+        +ChargePercent: int
+        +FreeSpaceBytes: long
+        +TotalSpaceBytes: long
+        +LastBootTime: string
+        +{static} FromHashtable(h): MachineInventory
+        +ToHashtable(): Hashtable
+    }
+
+    class InventoryFormat {
+        +{static} BatteryHealthPercent(design, full): int
+        +{static} BatteryHealthLabel(hasBattery, pct): string
+        +{static} DiskFreeLabel(free, total): string
+        +{static} UptimeLabel(lastBoot): string
+    }
+
+    class FolderUsage {
+        +Path: string
+        +SizeBytes: long
+        +{static} FromHashtable(h): FolderUsage
+        +ToHashtable(): Hashtable
+    }
+
+    class DiskUsageReport {
+        +ScannedAt: string
+        +Folders: FolderUsage[]
+        +{static} FromHashtable(h): DiskUsageReport
+        +ToHashtable(): Hashtable
+    }
+
+    class WizTreeCsv {
+        +{static} ParseTopFolders(csvText, topN): DiskUsageReport
+        +{static} ParseTopFoldersFromFile(path, topN): DiskUsageReport
+    }
+
+    class FolderTreeNode {
+        +Path: string
+        +Label: string
+        +SizeBytes: long
+        +Depth: int
+        +Children: FolderTreeNode[]
+    }
+
+    class DiskUsageTree {
+        +{static} Build(folders): FolderTreeNode[]
+        +{static} BuildNested(folders): FolderTreeNode[]
+    }
+
+    class DiskUsageFormat {
+        +{static} SizeLabel(bytes): string
+    }
+
+    class FolderDeletionPolicy {
+        +{static} $Protected: string[]
+        +{static} IsDeletable(path): bool
+    }
+}
+
+RemoteJobService <|-- ScanService
+RemoteJobService <|-- RemoteUpdateService
+RemoteJobService <|-- HostResolver
+RemoteJobService <|-- InventoryService
+RemoteJobService <|-- DiskUsageService
+
+ScanService --> ExecutionService
+RemoteUpdateService --> ExecutionService
+RemoteUpdateService --> DriverMatchingService
+InventoryService --> ExecutionService
+DiskUsageService --> ExecutionService
+
+ExecutionService --> NetworkProbe
+ExecutionService --> DriverMatchingService
+ExecutionService ..> DeviceContext
+ExecutionService ..> DcuLog
+ExecutionService ..> RemoteConnectionLostException
+ExecutionService ..> RemoteTimeoutException
+DcuLog ..> DcuCommandOutcome
+
+DiskUsageService ..> DiskUsageReport
+InventoryService ..> MachineInventory
+MachineInventory ..> InventoryFormat
+DiskUsageReport --> FolderUsage
+DiskUsageTree ..> FolderTreeNode
+WizTreeCsv ..> DiskUsageReport
+
+@enduml

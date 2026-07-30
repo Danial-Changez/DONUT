@@ -13,10 +13,11 @@ consumes the result and exposes it to the bindings.
 |-------|---------|
 | `AppConfig` | Configuration container with defaults, settings merge, and DCU CLI argument building |
 | `DeviceContext` | Remote device state: hostname, IP, online status, status message |
-| `JobStatus` / `JobKind` (enums) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `DeleteFolders`, `Resolve`) |
+| `JobStatus` / `JobKind` (enums, `JobEnums.psm1`) | Job lifecycle state and the kind of remote operation (`Scan`, `UpdateScan`, `UpdateApply`, `Inventory`, `DiskScan`, `DeleteFolders`, `Resolve`) |
+| `LogLine` (+ `LogSeverity`) | One typed terminal line: severity + normalized `HH:mm:ss` stamp + text, with the `[Error]`/`[Warn]` tag precomputed for the log ListBox binding |
 | `FleetCardStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
 | `DcuProgress` | Pure parser: a DCU output line → percent complete, plus the scan's milestone step (`N/5` beside the progress bar) |
-| `DcuLog` | Pure parser for dcu-cli's `-outputLog`: extracts the authoritative "return code: N" line and classifies it (only {0, 1, 5} are success/reboot; everything else is an error) |
+| `DcuLog` | Pure parser for dcu-cli's `-outputLog`: extracts the authoritative "return code: N" line and classifies it per command via `Classify` (0/1/5 pass everywhere; a scan's 500 is a clean no-updates result; everything else is an error, described by name) |
 | `DcuUpdate` | Pure row model for the detail pane's available-updates list: name, category, urgency badge, version transition, size |
 | `RemoteError` (exception hierarchy) | Typed, severity-tagged remote failures: offline / unresolvable / RPC blocked / DCU not installed / launch fault / **connection lost** (psexec transport codes 233, 64, ...) / **timed out** (watchdog); `RemoteFailure` re-derives the reason from a worker message that crossed the runspace boundary |
 | `ScanCacheDecision` | Pure rule: is a host's last scan still fresh enough to reuse (24h)? |
@@ -29,7 +30,7 @@ consumes the result and exposes it to the bindings.
 | `FolderDeletionPolicy` | Pure safety rule for the storage "Clear selected" action: is a scanned folder safe to clear? Blocks the volume root, the `Users` container, and protected system dirs (Windows/Program Files/ProgramData/…), with an allowlist for known caches (ccmcache, Temp, WU download, …). Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
 | `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99!` — no ambiguous glyphs, trailing special from `!#$%+=`) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
-| `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting |
+| `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / model + serial from SCCM hardware inventory / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting. The agent-side query lives in `src/Scripts/LensAgent.Common.ps1` (`Resolve-Lens`) |
 | `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory + disk usage); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
@@ -66,7 +67,7 @@ the network I/O.
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select); builds worker args for both lanes (`PrepareResolve` classic, `PrepareResolveFast` slim child) |
 | `ActiveDirectoryService` | Live multi-forest AD search (computers + users; run on the pool via `AdSearchWorker`, one job per forest), account unlock, and temp-password reset (`ResetPassword` → `InvokeReset` seam; both on the pool, password never logged) |
-| `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [Implementation notes](./implementation-notes.md#de-elevating-the-user-lens)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
+| `PersonLensService` | User Lens: resolves a person to their directory facts + SCCM devices + BitLocker keys, run **de-elevated as the logged-on user** (see [User Lens](./user-lens.md)); parses the worker's JSON bundle (the de-elevation is an overridable seam) |
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the `DONUT-<console user>` scheduled task (register / update / unregister / stale-sweep) against the toggle. The logon trigger is always the console user; the principal is per-user only when DONUT already runs as them, else SYSTEM relaunching into the console session via bundled psexec `-s -i`. Failures surface their real reason via `LastFailure` |
 | `RecentConnectionsStore` | Persists the "recent machines" entries in `AppConfig.Settings['recentHosts']`: upsert/seed/cap/sort + coalesced saves through the config manager |
@@ -133,14 +134,14 @@ region root owns its file's namescope, and exactly one presenter adopts each roo
 
 ## Diagrams
 
-The full class structure across all layers:
+The class structure is split per subsystem; each diagram is embedded on its
+subsystem page:
 
-![DONUT class diagram](/diagrams/class_diagram.svg)
+- [Runspaces and workers](./runspaces-and-workers.md) - `class_runspaces.svg`
+- [Remote execution](./remote-execution.md) - `class_remote_exec.svg`
+- [User Lens](./user-lens.md) - `class_lens.svg`
+- [UI and threading](./ui-and-threading.md) - `class_ui.svg`
+- [Configuration and persistence](./configuration-and-persistence.md) - `class_config.svg`
 
-*Source: [`class_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/class_diagram.puml)*
-
-Component wiring, launcher → scripts → presenters → services → workers:
-
-![DONUT component diagram](/diagrams/component_diagram.svg)
-
-*Source: [`component_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/component_diagram.puml)*
+Component wiring, launcher → scripts → presenters → services → workers, is on
+the [architecture overview](./overview.md#component-view).

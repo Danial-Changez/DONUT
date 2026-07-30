@@ -1,17 +1,20 @@
 ---
 title: What is DONUT?
-description: A WPF/PowerShell app that runs Dell Command Update remotely across many machines in parallel.
+description: A fleet management app for Dell workstations - AD search, remote driver updates, hardware inventory, and user-to-device lookup.
 ---
 
-DONUT automates remote execution of the **Dell Command Update (DCU)** CLI across
-multiple Dell computers on a network. You queue machines into a list, pick a mode
-(**Scan** or **Apply Updates**), and DONUT runs the DCU CLI on each of them in
-parallel — streaming progress, logs, and results back into the UI live.
+DONUT is a fleet management app for Dell workstations. It searches Active
+Directory for machines and people, runs remote driver scans and updates through
+**Dell Command Update (DCU)**, inspects hardware and storage, and looks up a
+user's devices and BitLocker recovery keys. For updates, you queue machines into
+a list, pick a mode (**Scan** or **Apply Updates**), and DONUT runs each machine
+in parallel, streaming progress, logs, and results back into the UI live.
 
 ## What it does
 
-- **Remote DCU execution** — runs `dcu-cli.exe` on networked Dell machines over
-  PsExec; no agents to install on targets.
+- **Fleet updates (Dell Command Update)** - scans and applies driver and BIOS
+  updates by running `dcu-cli.exe` on the targets over PsExec; no agents to
+  install.
 - **Parallel execution** — PowerShell runspaces run many machines at once, with each
   machine shown as a row in the Home list. Rows are kept newest-action-first and grouped
   worst-first, so machines needing attention surface at the top.

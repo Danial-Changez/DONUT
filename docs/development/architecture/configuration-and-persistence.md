@@ -1,0 +1,48 @@
+---
+title: Configuration and persistence
+description: config.json, the recents store, logging locations, and the self-update seams.
+---
+
+Where DONUT keeps its state and how settings flow through the app.
+
+![Configuration class diagram](/diagrams/class_config.svg)
+
+*Source: [`class_config.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/class_config.puml)*
+
+## Configuration
+
+- **JSON config:** `config.json` (migrated from the old `config.txt`); `wsid.txt`
+  and `config.json` live under `%LOCALAPPDATA%\DONUT\` so they persist across
+  updates and reinstalls. `ConfigManager` reads/writes both, prioritizing the
+  `%LOCALAPPDATA%` copy.
+- **Structure:** `AppConfig` merges user settings with `[AppConfig]::Defaults` so
+  all expected keys exist. The full key list is documented in the
+  [config.json reference](../../configuration/config-reference.md).
+- **`AppConfig.BuildDcuArgs()`** generates DCU CLI format: `-option=value`
+  syntax, boolean `true` becomes `-silent`/`-reboot=enable`, `false` is omitted
+  (or `=disable` where explicit), empty strings omitted, values with spaces
+  quoted. See the [DCU command reference](../../configuration/dcu-commands.md).
+- **Real-time settings:** the settings overlay has no Save button - every control
+  persists on change (text fields on focus loss), and side-effectful keys
+  re-apply immediately (hotkey re-registration, startup-task reconcile).
+
+## Persistence and logging
+
+- The recents store (`RecentConnectionsStore` over `RecentConnection`) persists
+  per-host outcomes (last status, job type, update count, reboot flag, cached
+  inventory and disk usage) into `config.json`, capped and de-duplicated.
+- Logs land in `%LOCALAPPDATA%\DONUT\logs\` - `Donut.log` for the app plus one
+  `<hostname>.log` copied back per remote run. The logging rules themselves
+  (lock-free appends, debug gate, provenance stamp) are on
+  [Runspaces and workers](./runspaces-and-workers.md#logging-and-diagnostics).
+
+## Self-update seams
+
+- `SelfUpdateService` owns the GitHub Device Flow, release download, hash
+  verification, and MSI apply; `LoginPresenter`/`UpdatePresenter` drive it.
+  Device Flow tokens are DPAPI-protected (CurrentUser).
+- `InstallWorker.ps1` stays a standalone script (not a class) in `src/Scripts/`
+  so `SelfUpdateService` can copy it to `%LOCALAPPDATA%\DONUT` and run it
+  independently for updates/rollbacks; the copy is hash-gated (SHA-256).
+- `StartupTaskService` reconciles the start-with-Windows scheduled task from the
+  same config seam (`Apply-StartupTask.ps1` applies it out of process).

@@ -28,7 +28,7 @@ but SCCM's AdminService is RBAC-scoped to your **regular account**, and that goe
 for BitLocker keys in AD too. DONUT therefore keeps a small agent running
 **de-elevated as your logged-on account** and asks it for the Lens data over an
 encrypted, ACL-locked exchange. Details in the
-[implementation notes](../development/architecture/implementation-notes.md#de-elevating-the-user-lens).
+[User Lens architecture page](../development/architecture/user-lens.md).
 
 ## Under the hood
 
