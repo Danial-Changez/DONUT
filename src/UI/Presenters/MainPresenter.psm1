@@ -4,6 +4,7 @@ using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Models\HotkeyGesture.psm1"
 using module "..\..\Models\TempPassword.psm1"
 using module "..\..\Core\ConfigManager.psm1"
+using module "..\..\Core\ElevationContext.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
@@ -394,6 +395,72 @@ class MainPresenter {
             }, $onDone)
     }
 
+    # Relaunches DONUT under the requested elevation. Prompting comes FIRST: a declined
+    # UAC must leave a fully working app, so nothing is torn down until the spawn returns.
+    [void] RestartElevated() {
+        $wantAdmin = [bool]$this.Config.GetRunAsAdmin()
+        if ($wantAdmin -eq [ElevationContext]::IsElevated()) { return }
+        if (-not $wantAdmin) {
+            # Windows has no un-elevate API, and dropping to the shell's token needs
+            # machinery this does not have yet. Take effect at the next launch.
+            $this.Logger.LogInfo('Run-as-administrator turned off; it applies from the next launch.')
+            if ($this.ToastService) {
+                $this.ToastService.ShowInfo('Run as administrator',
+                    'Turned off. DONUT will start without administrator rights next time you open it.')
+            }
+            return
+        }
+
+        $spec = $this.BuildRelaunchSpec()
+        try {
+            Start-Process -FilePath $spec.FilePath -ArgumentList $spec.Arguments -Verb RunAs -ErrorAction Stop
+        }
+        catch {
+            # 1223 is ERROR_CANCELLED: the user declined the consent/credential prompt.
+            $declined = ($_.Exception -is [System.ComponentModel.Win32Exception]) -and
+                ($_.Exception.NativeErrorCode -eq 1223)
+            $this.RevertRunAsAdmin($declined, $_)
+            return
+        }
+
+        $this.ExitRequested = $true
+        $this.Logger.LogInfo('Relaunched elevated; this instance is exiting so the new one can take the single-instance mutex.')
+        $this.Window.Close()
+    }
+
+    # Which executable to relaunch: the prod launcher hosts src\, the dev path runs
+    # Start-Donut.ps1 under pwsh. Each spells the wait in its own argument syntax.
+    hidden [hashtable] BuildRelaunchSpec() {
+        $host_ = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        if ([IO.Path]::GetFileName($host_) -ieq 'pwsh.exe') {
+            $script = Join-Path $this.Config.SourceRoot 'Start-Donut.ps1'
+            return @{
+                FilePath  = $host_
+                Arguments = "-NoProfile -Sta -ExecutionPolicy Bypass -File `"$script`" -AwaitPid $PID"
+            }
+        }
+        return @{ FilePath = $host_; Arguments = "--await-pid $PID" }
+    }
+
+    # Puts the setting back after a failed elevation so the switch matches reality.
+    hidden [void] RevertRunAsAdmin([bool]$declined, [object]$errorRecord) {
+        $this.Config.SetSetting('runAsAdmin', $false)
+        try { $this.ConfigManager.SaveConfig($this.Config) }
+        catch { $this.Logger.LogException('Could not persist the reverted run-as-administrator setting', $_) }
+
+        if ($declined) {
+            $this.Logger.LogInfo('Elevation declined at the UAC prompt; staying de-elevated.')
+            if ($this.ToastService) {
+                $this.ToastService.ShowInfo('Run as administrator', 'Elevation cancelled. DONUT is still running without administrator rights.')
+            }
+            return
+        }
+        $this.Logger.LogException('Could not relaunch DONUT elevated', $errorRecord)
+        if ($this.ToastService) {
+            $this.ToastService.ShowError('Run as administrator', "Could not relaunch elevated - $($errorRecord.Exception.Message)")
+        }
+    }
+
     # Applies the debug-logging toggle to the live logger; workers pick the effective
     # state up per job (BuildWorkerArgs ships Logger.DebugEnabled). -DebugLog wins.
     [void] ApplyDebugLogging() {
@@ -483,6 +550,7 @@ class MainPresenter {
                 WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
                 StartupTask    = { $presenter.ApplyStartupTask() }.GetNewClosure()
                 DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
+                RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
             }
             $this.SettingsPresenter = [SettingsPresenter]::new(
                 $this.Config, $this.ConfigManager, $settingsView, $this.ToastService, $sideEffects)

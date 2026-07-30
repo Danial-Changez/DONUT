@@ -14,12 +14,22 @@ namespace Donut.Launcher;
 /// </summary>
 static class Program
 {
+    /// <summary>How long to wait for the instance we are replacing to release the mutex.</summary>
+    const int AwaitPredecessorSeconds = 15;
+
     /// <summary>Process entry point; STA is required by WPF and WinForms.</summary>
-    /// <param name="args"><c>--tray</c> starts hidden in the tray (autostart).</param>
+    /// <param name="args">
+    /// <c>--tray</c> starts hidden in the tray (autostart). <c>--await-pid &lt;pid&gt;</c> waits for
+    /// that process to exit first, so an elevation relaunch does not lose the single-instance race.
+    /// </param>
     [STAThread]
     static void Main(string[] args)
     {
         bool tray = args.Contains("--tray");
+
+        // Before the mutex, not after: it is Local\-scoped, so per-session and not per-token.
+        // An elevated relaunch would otherwise bow out as a "second instance" of its parent.
+        AwaitPredecessor(args);
 
         // Single instance: the first launch owns the mutex; a later launch signals the
         // running instance to surface its window and exits without a second UI.
@@ -120,6 +130,23 @@ static class Program
         }
     }
 
+    // Waits out the instance being replaced, so an elevation relaunch can take the mutex.
+    // Best-effort: a gone/unreadable pid means there is nothing left to wait for.
+    static void AwaitPredecessor(string[] args)
+    {
+        int flag = Array.IndexOf(args, "--await-pid");
+        if (flag < 0 || flag + 1 >= args.Length) return;
+        if (!int.TryParse(args[flag + 1], out int pid)) return;
+
+        try
+        {
+            using var predecessor = Process.GetProcessById(pid);
+            predecessor.WaitForExit(AwaitPredecessorSeconds * 1000);
+        }
+        catch (ArgumentException) { /* already exited */ }
+        catch (InvalidOperationException) { /* exited between the lookup and the wait */ }
+    }
+
     // Self-extracts the embedded app tree to a stable, world-readable dir, verified per file
     // by SHA-256 (rewriting only missing/changed/tampered ones); returns the root path.
     static string ExtractEmbeddedApp()
@@ -152,10 +179,22 @@ static class Program
                 using Stream? s = asm.GetManifestResourceStream(name);
                 if (s is null || !NeedsWrite(dest, s)) continue;
 
-                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                s.Position = 0;
-                using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None);
-                s.CopyTo(fs);
+                // Deliberately NOT widened for de-elevated writers: this tree is what an
+                // elevated DONUT executes, so local-user write access here is an LPE.
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                    s.Position = 0;
+                    using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None);
+                    s.CopyTo(fs);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    throw new UnauthorizedAccessException(
+                        $"Could not refresh the app tree at {root}.\n\n" +
+                        "It was written by an elevated run and this one is not elevated. " +
+                        "Start DONUT as administrator once to update it.", ex);
+                }
             }
             PruneUnknown(root, keep);
             return root;

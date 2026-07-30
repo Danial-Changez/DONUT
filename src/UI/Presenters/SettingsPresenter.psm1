@@ -2,6 +2,7 @@ using namespace System.Windows
 using namespace System.Windows.Controls
 using module "..\..\Models\AppConfig.psm1"
 using module "..\..\Core\ConfigManager.psm1"
+using module "..\..\Core\ElevationContext.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\ViewLoader.psm1"
 using module ".\KeybindRecorder.psm1"
@@ -257,6 +258,16 @@ class SettingsPresenter {
             $h = { param($s, $e) $self.PersistToggle('closeToTray', [bool]$s.IsChecked, $null) }.GetNewClosure()
             $closeTray.Add_Checked($h)
             $closeTray.Add_Unchecked($h)
+        }
+
+        # Reflects the live token, not the stored setting: launching from an elevated
+        # shell makes DONUT admin whatever the setting says, and the switch must not lie.
+        $runAsAdmin = $view.FindName('chkRunAsAdmin')
+        if ($runAsAdmin) {
+            $runAsAdmin.IsChecked = [ElevationContext]::IsElevated()
+            $h = { param($s, $e) $self.PersistToggle('runAsAdmin', [bool]$s.IsChecked, 'RunAsAdmin') }.GetNewClosure()
+            $runAsAdmin.Add_Checked($h)
+            $runAsAdmin.Add_Unchecked($h)
         }
 
         $debugLog = $view.FindName('chkDebugLogging')

@@ -19,9 +19,9 @@
     and logs whatever account it runs as.
 #>
 
-# -Tray starts hidden in the system tray (used by the autostart scheduled task).
-# -DebugLog forces verbose [DEBUG] logging this session without touching settings.
-param([switch]$Tray, [switch]$DebugLog)
+# -Tray starts hidden in the tray; -DebugLog forces verbose logging for this session
+# only; -AwaitPid waits out the instance being replaced (launcher's --await-pid twin).
+param([switch]$Tray, [switch]$DebugLog, [int]$AwaitPid = 0)
 
 # WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
 # instead of failing later in the XAML load.
@@ -36,8 +36,16 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -or
     $childArgs = @('-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
     if ($Tray) { $childArgs += '-Tray' }
     if ($DebugLog) { $childArgs += '-DebugLog' }
+    if ($AwaitPid -gt 0) { $childArgs += @('-AwaitPid', $AwaitPid) }
     & $pwsh.Source @childArgs
     exit $LASTEXITCODE
+}
+
+# An elevation relaunch must outlive the instance it replaces before taking the mutex
+# below: that mutex is Local\-scoped, so per-session and not per-token.
+if ($AwaitPid -gt 0) {
+    $predecessor = Get-Process -Id $AwaitPid -ErrorAction SilentlyContinue
+    if ($predecessor) { $predecessor | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue }
 }
 
 # Single instance (dev path only; the launcher owns it in prod via the injected
