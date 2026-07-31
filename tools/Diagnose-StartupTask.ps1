@@ -55,19 +55,34 @@ function Write-Section([string]$title) {
 }
 
 # Task Scheduler reports launch faults as HRESULTs; these are the ones this feature hits.
-function Get-ResultMeaning([int]$code) {
+# LastTaskResult is an unsigned HRESULT. 0x800702E4 is 2147943140, past [int]'s range, so
+# casting it threw before it could ever be decoded - and some hosts hand it back already
+# wrapped negative. Normalize to uint32 first, then key the table on hex so no numeric
+# literal type has to match.
+function ConvertTo-TaskResult($value) {
+    $n = [int64]$value
+    if ($n -lt 0) { $n += 4294967296 }
+    return [uint32]$n
+}
+
+function Get-ResultMeaning([uint32]$code) {
+    $hex = '0x{0:X8}' -f $code
     $map = @{
-        0          = 'success'
-        267008     = 'task is ready (never run)'
-        267009     = 'task is currently running'
-        267011     = 'task has not yet run'
-        267014     = 'task was terminated by the user'
-        2147942402 = '0x80070002 FILE NOT FOUND - the action Execute path is wrong or unreachable from SYSTEM'
-        2147942405 = '0x80070005 ACCESS DENIED'
-        2147943140 = '0x800702E4 ELEVATION REQUIRED - CreateProcess refused a requireAdministrator exe under a non-elevated token'
+        '0x00000000' = 'success'
+        '0x00041300' = 'task is ready (never run)'
+        '0x00041301' = 'task is currently running'
+        '0x00041303' = 'task has not yet run'
+        '0x00041306' = 'task was terminated by the user'
+        '0x80070002' = 'FILE NOT FOUND - the action Execute path is wrong or unreachable'
+        '0x80070005' = 'ACCESS DENIED'
+        '0x8007010B' = 'DIRECTORY NAME INVALID - the action WorkingDirectory is missing or unreachable'
+        '0x800702E4' = 'ELEVATION REQUIRED - CreateProcess refused an elevation-requiring exe under a non-elevated token'
+        '0x800704DD' = 'NOT LOGGED ON - the principal has no interactive session'
+        '0x800704EC' = 'BLOCKED BY POLICY - AppLocker/WDAC/SRP refused this exe or script for this token, which is NOT a file ACL'
+        '0xC0000142' = 'DLL INIT FAILED - the process could not initialize on this session/desktop'
     }
-    if ($map.ContainsKey($code)) { return $map[$code] }
-    return ('0x{0:X8} (see winerror.h)' -f $code)
+    if ($map.ContainsKey($hex)) { return "$hex $($map[$hex])" }
+    return "$hex (see winerror.h)"
 }
 
 Write-Section "1. Installed build (is your fix even running?)"
@@ -150,12 +165,16 @@ if ($principal.RunLevel -eq 'Highest') {
 Write-Section "3. Did it fire?"
 $info = $task | Get-ScheduledTaskInfo
 Write-Host "last run   : $($info.LastRunTime)"
-Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning ([int]$info.LastTaskResult))"
+$script:lastResult = ConvertTo-TaskResult $info.LastTaskResult
+Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning $script:lastResult)"
 Write-Host "next run   : $($info.NextRunTime)"
-if ([int]$info.LastTaskResult -eq 267011) {
+if ($script:lastResult -eq 267011) {
     Write-Host "DIAGNOSIS: registered but NEVER RUN. The task itself is fine - its trigger never fired. Check the trigger user above against the console user." -ForegroundColor Red
 }
-if ($action.Execute -like '*PsExec*' -and [int]$info.LastTaskResult -gt 4) {
+if ($script:lastResult -eq 2147943660) {
+    Write-Host "DIAGNOSIS: BLOCKED BY POLICY (0x800704EC). An allowlisting policy refused the action for this token - the file ACL is not involved, which is why the path still reads Full Control. Section 6 names the rule." -ForegroundColor Red
+}
+if ($action.Execute -like '*PsExec*' -and $script:lastResult -gt 4) {
     Write-Host "NOTE: this old-shape action calls psexec -d directly, whose exit code is the launched PID - a result like this usually means psexec SUCCEEDED. The shim-shaped action exits 0 instead." -ForegroundColor Yellow
 }
 
