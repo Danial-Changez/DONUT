@@ -106,41 +106,52 @@
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
                              Foreground="{DynamicResource TitleTextPrimary}" ToolTip="{Binding Name}" />
-                    <TextBox Style="{DynamicResource SelectableText}" FontFamily="{DynamicResource FontMono}" FontSize="10.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
-                      <TextBox.Text>
-                        <MultiBinding StringFormat="{}{0}   ·   {1}">
-                          <Binding Path="Os" />
-                          <Binding Path="LastSeenText" />
-                        </MultiBinding>
-                      </TextBox.Text>
-                    </TextBox>
-                    <!-- Model + serial from SCCM hardware inventory; collapses when unavailable -->
-                    <TextBox Text="{Binding HardwareText}" ToolTip="{Binding Manufacturer}"
-                             FontFamily="{DynamicResource FontMono}" FontSize="10.5"
-                             Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
-                      <TextBox.Style>
-                        <!-- Selectable (mirrors SelectableText); collapses when empty. -->
-                        <Style TargetType="TextBox">
-                          <Setter Property="IsReadOnly" Value="True" />
-                          <Setter Property="IsReadOnlyCaretVisible" Value="False" />
-                          <Setter Property="IsTabStop" Value="False" />
-                          <Setter Property="AcceptsReturn" Value="False" />
-                          <Setter Property="Background" Value="Transparent" />
-                          <Setter Property="BorderThickness" Value="0" />
-                          <Setter Property="Padding" Value="0" />
-                          <Setter Property="Cursor" Value="IBeam" />
-                          <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                          <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
-                          <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
-                          <Setter Property="Visibility" Value="Visible" />
-                          <Style.Triggers>
-                            <Trigger Property="Text" Value="">
-                              <Setter Property="Visibility" Value="Collapsed" />
-                            </Trigger>
-                          </Style.Triggers>
-                        </Style>
-                      </TextBox.Style>
-                    </TextBox>
+                    <!-- One line, three tiers: model leads because it is what separates a
+                         person's machines; the tag confirms; last seen dates. OS is on the tip. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                ToolTip="{Binding DetailTip}">
+                      <!-- Value and its trailing separator collapse together, so a device SCCM
+                           cannot serve leaves no orphaned dot behind. -->
+                      <StackPanel Orientation="Horizontal">
+                        <StackPanel.Style>
+                          <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Model}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </StackPanel.Style>
+                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Model}"
+                                 FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                 Foreground="{DynamicResource TitleTextPrimary}" />
+                        <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                   Foreground="{DynamicResource BodyTextTertiary}" />
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal">
+                        <StackPanel.Style>
+                          <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding TagText}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </StackPanel.Style>
+                        <!-- Mono: a service tag is transcribed off a sticker, where 0/O and 1/I
+                             have to stay apart. -->
+                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding TagText}"
+                                 FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                 Foreground="{DynamicResource BodyTextTertiary}" />
+                        <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                   Foreground="{DynamicResource BodyTextTertiary}" />
+                      </StackPanel>
+                      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding LastSeenText}"
+                               FontFamily="{DynamicResource FontSans}" FontSize="12"
+                               Foreground="{DynamicResource BodyTextTertiary}" />
+                    </StackPanel>
                     <!-- BitLocker key: hidden until revealed (a recovery secret); selectable to copy -->
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
                              Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
@@ -172,7 +183,9 @@
                       </TextBox.Style>
                     </TextBox>
                   </StackPanel>
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                  <!-- Top, not Center: the row's actions stay level with the device name
+                       now that the card runs to four lines. -->
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
                     <!-- Wrapped so visibility can trigger (HasBitLocker &amp; not yet revealed)
                          without restyling the themed button, whose style is a runtime
                          (merged-dictionary) DynamicResource. -->

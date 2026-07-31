@@ -35,6 +35,9 @@ class AppConfig {
         startWithWindows      = $false
         closeToTray           = $false
         globalHotkey          = 'Ctrl+Alt+D'
+        # Run elevated. On by default because remote work authenticates as the process:
+        # de-elevated, DONUT is the console user, who has no rights on fleet targets.
+        runAsAdmin            = $true
         # In-app shortcut (only while DONUT is focused) to open Settings; blank disables.
         openSettingsShortcut  = 'Ctrl+,'
         # Regex patterns that mark search text as a machine name (vs. a person), so the
@@ -275,6 +278,12 @@ class AppConfig {
     # Verbose [DEBUG] logging (off by default; INFO/WARN/ERROR always flow). String-bool tolerant.
     [bool] GetDebugLogging() {
         return [AppConfig]::AsBool($this.GetSetting('debugLogging', $null), $false)
+    }
+
+    # Defaults to TRUE, unlike every other toggle here: a corrupt value must not silently
+    # drop DONUT into a mode where no remote job can run. Intent only, not the live token.
+    [bool] GetRunAsAdmin() {
+        return [AppConfig]::AsBool($this.GetSetting('runAsAdmin', $null), $true)
     }
 
     # Global show/restore hotkey gesture (e.g. 'Ctrl+Alt+D'). Blank/whitespace

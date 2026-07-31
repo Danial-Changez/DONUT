@@ -49,8 +49,8 @@
       <LogicalName>src/Tools/wiztree64.exe</LogicalName>
     </EmbeddedResource>
 
-    <!-- PsExec: the SYSTEM-lane startup task's action (StartupTaskService.FindPsExec looks
-         here first). Same drop-it-in-before-building rule as wiztree64.exe. -->
+    <!-- PsExec: how ExecutionService reaches remote targets (scan/apply/inventory/disk).
+         Same drop-it-in-before-building rule as wiztree64.exe. -->
     <EmbeddedResource Include="$(DonutSrcDir)\Tools\psexec.exe"
                       Condition="Exists('$(DonutSrcDir)\Tools\psexec.exe')">
       <LogicalName>src/Tools/psexec.exe</LogicalName>

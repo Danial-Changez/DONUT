@@ -234,7 +234,8 @@ package "Donut.UI.ViewModels" #3A2A12 {
         +SetLoading(who) / Apply(lens): void
     }
     class LensDeviceViewModel {
-        +Name / Os / LastSeenText / HardwareText / BitLockerText: string
+        +Name / Os / LastSeenText / Model / TagText / BitLockerText: string
+        +DetailTip: object
         +HasBitLocker / IsBitLockerRevealed: bool
         +RevealCommand / AddCommand: RelayCommand
     }

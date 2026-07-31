@@ -277,6 +277,41 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetRunAsAdmin" {
+        It "Should default to TRUE when the key is absent" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config.Settings.Remove('runAsAdmin')
+
+            [AppConfig]::Defaults.runAsAdmin | Should -Be $true
+            $config.GetRunAsAdmin() | Should -Be $true
+        }
+
+        It "Should return a configured real boolean" {
+            $off = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $false })
+            $on = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $true })
+
+            $off.GetRunAsAdmin() | Should -Be $false
+            $on.GetRunAsAdmin() | Should -Be $true
+        }
+
+        It "Should tolerate JSON string booleans case-insensitively" {
+            $off = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = 'False' })
+            $on = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = 'TRUE' })
+
+            $off.GetRunAsAdmin() | Should -Be $false
+            $on.GetRunAsAdmin() | Should -Be $true
+        }
+
+        It "Should fall back to TRUE, not false, on garbage values" {
+            # The one toggle whose default is on: a corrupt config must not silently
+            # drop DONUT into a mode where every remote job fails on access denied.
+            foreach ($garbage in @('yes-please', 3, '', $null)) {
+                $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $garbage })
+                $config.GetRunAsAdmin() | Should -Be $true -Because "'$garbage' is not a usable boolean"
+            }
+        }
+    }
+
     Context "GetHasSeenTour" {
         It "Should default to false and read a real/string boolean" {
             [AppConfig]::Defaults.hasSeenTour | Should -Be $false

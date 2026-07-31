@@ -15,7 +15,7 @@ DONUT keeps itself current from your org's **GitHub Releases**.
    older than the installed version — useful for pulling a bad release).
 4. The MSI asset is downloaded to a staging folder, its **SHA-256 verified**, and
    installed via `msiexec` with a basic progress UI. User data under
-   `%LOCALAPPDATA%\DONUT` is never touched.
+   `%ProgramData%\DONUT\data` is never touched.
 
 ## Publishing an update (maintainers)
 

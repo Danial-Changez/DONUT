@@ -45,6 +45,7 @@
     Runs on a pool runspace, as the elevated admin account.
 #>
 using module "..\Services\PersonLensService.psm1"
+using module "..\Core\ElevationContext.psm1"
 
 param(
     [string] $Identity = '',
@@ -58,12 +59,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Teardown needs no live service (StopAndPurgeAgent is static): run it and return before
-# constructing anything, so app close never depends on an agent/SCCM round-trip.
+# Teardown needs no live service (StopAndPurgeAgent is static) and runs de-elevated too,
+# so an agent left by an earlier elevated session is still swept at close.
 if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
-if ($WarmOnly) { return $svc.EnsureAgent() }
+if ($WarmOnly) {
+    # There is no agent to warm when DONUT is already the interactive user, and
+    # registering its scheduled task would need rights this process does not have.
+    if (-not [ElevationContext]::IsElevated()) { return '' }
+    return $svc.EnsureAgent()
+}
 $svc.RunLookupJson($Identity)

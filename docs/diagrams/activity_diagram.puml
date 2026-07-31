@@ -40,7 +40,7 @@ end note
 :Copy remote artifacts back;
 note right
   From the UNC admin share and C:/temp/DONUT
-  into %LOCALAPPDATA%/DONUT/logs and /reports
+  into %ProgramData%/DONUT/data/logs and /reports
 end note
 
 if (Artifacts copied?) then (yes)

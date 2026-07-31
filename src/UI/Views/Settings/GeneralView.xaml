@@ -15,10 +15,17 @@
                 <TextBlock Text="Start with Windows (as admin)"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,0,0,10">
                 <ToggleButton x:Name="chkCloseToTray"
                               Style="{DynamicResource ModernToggleSwitch}" />
                 <TextBlock Text="Close to tray (X hides instead of exits)"
+                           Style="{DynamicResource SettingsToggleLabel}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton x:Name="chkRunAsAdmin"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Run as administrator (needed for all remote work)"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>

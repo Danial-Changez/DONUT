@@ -68,7 +68,7 @@ root/
 
 Runtime Data Location:
 
-%LOCALAPPDATA%/DONUT/
+%ProgramData%/DONUT/data/
 ├── logs/                   <-- Runtime generated logs
 ├── reports/                <-- Runtime generated reports
 ├── config/                 <-- Configuration files
@@ -81,7 +81,7 @@ Runtime Data Location:
 - **Services** hold DONUT-specific business logic.
 - **Core** is generic infrastructure (`NetworkProbe`, `ConfigManager`).
 
-Since `logs`, `reports`, and `config` live under `%LOCALAPPDATA%\DONUT`, an MSI upgrade in
+Since `logs`, `reports`, and `config` live under `%ProgramData%\DONUT\data`, an MSI upgrade in
 `Program Files` never touches user data.
 
 ## Architecture (MVVM)
@@ -210,68 +210,18 @@ runspace-pool warm) — following a consistent seam:
 - **RegisterHotKey, never a keyboard hook.** The global hotkey uses
   `Donut.Interop.HotkeyManager` (user32 `RegisterHotKey` + a WndProc `HwndSource` hook)
   so it never observes the global keystroke stream. `SetWindowsHookEx`, key-state
-  polling, and Raw Input are deliberately avoided — they trip AV/EDR keylogger
+  polling, and Raw Input are deliberately avoided - they trip AV/EDR keylogger
   heuristics. `WM_HOTKEY` arrives on the UI thread, so the PS `Pressed` handler is
   runspace-safe like any WPF event handler.
-- **Autostart is a scheduled task, not a Run key.** `StartupTaskService` registers a
-  `DONUT-<user>` task (logon trigger) so DONUT starts elevated with no per-logon UAC
-  prompt (an HKCU Run key or `highestAvailable` manifest cannot). **Two accounts are
-  involved, and conflating them is the bug this feature keeps re-learning:**
-  - **Who TRIGGERS it** is always the *signed-in* user — the only account that
-    actually logs on. Resolved from the owner of `explorer.exe` **in DONUT's own
-    session**, because over-the-shoulder UAC (sign in as a standard user, elevate
-    DONUT with a separate admin account) leaves both in the *same* session: the token
-    says `jdoe-admin` while the desktop belongs to `jdoe`.
-    `Win32_ComputerSystem.UserName` is the fallback for a session-0 SYSTEM host, and
-    any-session explorer the last resort. A trigger bound to an account that never
-    logs on leaves the task `Ready` **forever**: no run, no error, nothing in any log.
-  - **What it RUNS AS** comes from the process token, never `$env:` (under SYSTEM that
-    names a nonexistent `DOMAIN\SYSTEM`, which Task Scheduler rejects with "No mapping
-    between account names and security IDs"). Only when DONUT already runs *as the
-    console user* is a per-user task viable (RunLevel Highest, Interactive).
-    Otherwise — a SYSTEM token, or a separate admin account that never signs in — the
-    task runs **as SYSTEM**, triggered at the console user's logon (PT15S delay so the
-    desktop is up). Its action is `powershell.exe` running
-    `Scripts/Start-DonutInConsoleSession.ps1`, which resolves the console session id
-    **at fire time** and relaunches DONUT via `psexec -s -i <id> -d`. The shim exists
-    because `psexec -i` *without* an id targets the **caller's** session — not the
-    console session its docs claim (field-verified: a SYSTEM task put DONUT in
-    session 0) — and the id can't be baked in at register time since it changes every
-    logon. Host arguments travel base64-encoded (nested quotes don't survive Task
-    Scheduler → `powershell -File`); each firing appends to
-    `%ProgramData%\DONUT\logs\autostart.log`. A per-user task cannot substitute: an
-    Interactive principal needs a session that account doesn't have, and RunLevel
-    Highest on a non-admin degrades to a standard token that CreateProcess refuses
-    against the `requireAdministrator` launcher (`ERROR_ELEVATION_REQUIRED`,
-    0x800702E4 — no process, no UAC prompt). psexec resolves from `src/Tools` first,
-    then PATH, absolute path baked into the action (SYSTEM's logon PATH may lack it).
-    An RDP-only logon won't surface the tray (known limit).
-  - **The SYSTEM instance re-points `%LOCALAPPDATA%` at the operator's settings**
-    (top of `Start-Donut.ps1`). Without this the ghost read a *default* config from
-    the system profile — startWithWindows off — and its 120 s heal **unregistered its
-    own task** two minutes after every successful autostart. The settings live under
-    the profile of *whoever toggled autostart on* — under over-the-shoulder UAC that
-    is the **admin** account, not the console user — so `Apply` pins that instance's
-    `%LOCALAPPDATA%` to `%ProgramData%\DONUT\dataroot.txt` at register time (only
-    from a non-SYSTEM instance; a SYSTEM heal's redirected env is not the source of
-    truth), and the redirect follows the pointer, falling back to the console user's
-    profile (explorer owner → SID → ProfileList) when no pointer exists. Trade-off
-    that remains by design: as SYSTEM it authenticates on the network as the machine
-    account, not the admin account a manual launch uses — `NetworkProbe` therefore
-    discovers DCs via RSAT/ADWS, then .NET DirectoryServices (the LDAP stack user
-    search already runs on), then DNS SRV.
-
-  The task *name* derives from the console user, so an owner change would strand the
-  old task — `RemoveStaleTasks` sweeps `DONUT-*` tasks that launch this install, never
-  `DONUT-LensAgent` (`PersonLensService` owns that one). Failures toast the real
-  reason (`Apply` records it in `LastFailure`, the worker returns it as `Reason`). The
-  CIM calls run off the UI thread on the pool (`Apply-StartupTask.ps1`, reaped by a
-  `DispatcherTimer`); `tools\Diagnose-StartupTask.ps1` reports the registered
-  principal, trigger, and last result when it misbehaves.
+- **Autostart is a scheduled task, not a Run key**, triggered by the console user's logon
+  and running as that user. It, the elevation model, and the single-instance handshake
+  are covered in [Elevation and autostart](./elevation.md).
 - **Single instance via named handles.** A `Local\DONUT.SingleInstance` mutex plus a
   `Local\DONUT.ShowRequest` auto-reset event: the launcher owns them in prod,
   `Start-Donut.ps1` in dev, and a second launch signals the event (polled on a
   `DispatcherTimer`) so the running instance surfaces and the newcomer exits silently.
+  The mutex is per-session, not per-token, which is why an elevation relaunch waits for
+  its predecessor to exit ([Elevation and autostart](./elevation.md)).
 
 ### First-run guided tour
 

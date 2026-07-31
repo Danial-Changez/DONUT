@@ -10,10 +10,12 @@ detail pane: who they are and what machines they have.
 
 - **Directory facts** — UPN, email, manager, office (from AD, forest-wide via the
   Global Catalog).
-- **Their devices** — the person's SCCM-assigned machines, each with OS, last
-  domain logon, and model + serial (the service tag) from SCCM hardware inventory
-  (blank when the AdminService cannot serve them). Any device can be **added to
-  the machine list** in one click.
+- **Their devices** — the person's SCCM-assigned machines, each over one line of
+  model, `Tag <service tag>` and last domain logon, so a person with three similar
+  laptops is tellable apart at a glance. Model and tag come from SCCM hardware
+  inventory and drop out (with their separator) when the AdminService cannot serve
+  them. The OS and manufacturer are on the row's tooltip. Any device can be
+  **added to the machine list** in one click.
 - **BitLocker recovery keys** — revealed on click per device (never shown by
   default), with a QR code for typing-free entry on the target.
 
@@ -27,11 +29,14 @@ running works normally. If one still can't complete, the pane reports the reason
 
 ## Why it runs de-elevated
 
-DONUT itself runs **elevated as an admin account** (needed for remote execution),
-but SCCM's AdminService is RBAC-scoped to your **regular account**, and that goes
-for BitLocker keys in AD too. DONUT therefore keeps a small agent running
-**de-elevated as your logged-on account** and asks it for the Lens data over an
-encrypted, ACL-locked exchange. Details in the
+When DONUT is running **elevated as an admin account** (which every remote operation
+needs), SCCM's AdminService is RBAC-scoped to your **regular account**, and that goes for
+BitLocker keys in AD too. DONUT therefore keeps a small agent running **de-elevated as your
+logged-on account** and asks it for the Lens data over an encrypted, ACL-locked exchange.
+
+Running DONUT without administrator rights skips all of that: it is already your account,
+so the lookup runs in process. The pane then fills in one step instead of painting
+progressively. Details in the
 [User Lens architecture page](../development/architecture/user-lens.md).
 
 ## Under the hood

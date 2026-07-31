@@ -271,9 +271,12 @@ Only the warm shells + the DC warm touch the pool at boot:
 
 - **Startup provenance stamp:** right after `DONUT starting up.`,
   `BuildProvenance::Stamp` logs the git short SHA (+`dirty`) on clones - falling
-  back to the launcher-written `version.txt` on installs - plus pwsh/CLR
-  versions, machine name, and OS build, so every `Donut.log` is attributable to
-  an exact commit.
+  back to a `version.txt` in the data root - plus pwsh/CLR versions, machine
+  name, and OS build, so every `Donut.log` is attributable to an exact commit.
+  **Note:** nothing writes that `version.txt`. No build step, installer script or
+  launcher code produces it, so on an MSI install the stamp reads `unknown` and
+  the build is identified by the uninstall key's `DisplayVersion` instead. It is
+  an optional hand-placed override, not a packaging artifact.
 - **Debug-log gate:** `[DEBUG]` breadcrumbs are opt-in (`debugLogging` setting,
   default off; `Start-Donut -DebugLog` forces a session on without persisting).
   INFO/WARN/ERROR always flow; the toggle applies live, and workers receive the

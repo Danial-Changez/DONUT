@@ -1,3 +1,5 @@
+using module ".\DonutPaths.psm1"
+
 <#
 .SYNOPSIS
     Resolves and reads the bundled WSID.txt host list.
@@ -20,11 +22,11 @@ class HostListSource {
         $this.SourceRoot = $sourceRoot
     }
 
-    # Candidate WSID.txt locations, in priority order: the per-user config copy
-    # under LOCALAPPDATA, then the repo's res\WSID.txt (sibling of SourceRoot).
+    # Candidate WSID.txt locations, in priority order: the machine-wide config copy
+    # under the data root, then the repo's res\WSID.txt (sibling of SourceRoot).
     [string[]] CandidatePaths() {
         return @(
-            (Join-Path $env:LOCALAPPDATA "DONUT\config\WSID.txt"),
+            (Join-Path ([DonutPaths]::ConfigDir()) "WSID.txt"),
             (Join-Path (Split-Path $this.SourceRoot -Parent) "res\WSID.txt")
         )
     }

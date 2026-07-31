@@ -1,3 +1,4 @@
+using module "..\Core\ElevationContext.psm1"
 using module "..\Core\LogService.psm1"
 using module "..\Models\PersonLens.psm1"
 
@@ -234,11 +235,33 @@ class PersonLensService {
         }
     }
 
+    # The same lookup the agent runs, called here instead of handed across the exchange.
+    # No partials: the pane fills in one step rather than progressively.
+    hidden [string] RunLookupInProcess([string]$identity) {
+        try {
+            $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
+            if (-not (Test-Path -LiteralPath $common)) {
+                return [PersonLensService]::ErrorBundle("Lens helpers not found at $common")
+            }
+            . $common
+            $script:ForestNc = Get-LensForestNc
+            return [string](Resolve-Lens $identity $this.SamHint $this.SiteServer '')
+        }
+        catch {
+            $this.Logger.LogException("In-process Lens lookup failed for $identity", $_)
+            return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
+        }
+    }
+
     # --- Env-coupled seam (overridden in tests) ---
 
     # One lookup over the agent exchange: write request-<id>, stream partial-<id>-N to
     # the Information stream (tag 'LensPartial'), return the decrypted final bundle.
     [string] RunLookupJson([string]$identity) {
+        # De-elevated, DONUT already IS the interactive user whose rights this data needs,
+        # so the agent, its task, the AES exchange and the heartbeat are all unnecessary.
+        if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }
+
         $agentErr = $this.EnsureAgent()
         if ($agentErr) { return [PersonLensService]::ErrorBundle("Lens agent unavailable: $agentErr") }
 

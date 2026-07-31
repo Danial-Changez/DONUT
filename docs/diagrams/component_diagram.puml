@@ -97,7 +97,7 @@ database "Bundled config (res/)" {
     [WSID.txt]
 }
 
-database "%LOCALAPPDATA%\\DONUT" {
+database "%ProgramData%\\DONUT\\data" {
     [config/]
     [logs/]
     [reports/]

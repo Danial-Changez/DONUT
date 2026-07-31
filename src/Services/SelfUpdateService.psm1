@@ -8,6 +8,7 @@
     InstallWorker.ps1 to install or roll back. Compares the installed version to
     the release tag to decide update vs. rollback vs. no-op.
 #>
+using module "..\Core\DonutPaths.psm1"
 using module "..\Core\LogService.psm1"
 
 class SelfUpdateService {
@@ -20,12 +21,12 @@ class SelfUpdateService {
 
     SelfUpdateService() {
         $this.Logger = [NullLogService]::new()
-        $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
+        $this.TokenFile = Join-Path ([DonutPaths]::ConfigDir()) "GitHub_Token.json"
     }
 
     SelfUpdateService([LogService]$logger) {
         $this.Logger = [LogService]::Coalesce($logger)
-        $this.TokenFile = Join-Path -Path $env:LOCALAPPDATA -ChildPath "DONUT\config\GitHub_Token.json"
+        $this.TokenFile = Join-Path ([DonutPaths]::ConfigDir()) "GitHub_Token.json"
     }
 
     # --- Token management (DPAPI) ---
@@ -169,7 +170,7 @@ class SelfUpdateService {
         }
 
         # Fallback for dev/portable installs: the version file.
-        $verFile = Join-Path $env:LOCALAPPDATA "DONUT\version.txt"
+        $verFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
         if (Test-Path $verFile) {
             return [version](Get-Content $verFile -Raw).Trim()
         }

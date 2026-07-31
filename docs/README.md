@@ -17,5 +17,5 @@ from this folder by Astro Starlight (`web/`) and deployed on every push to
 | [diagrams/](diagrams/README.md) | PlantUML sources for all diagrams (rendered to SVG at site build; indexed with a mermaid self-update flow that GitHub renders) |
 | [plans/](plans/) | Archived implementation plans (historical, not reference) |
 
-Runtime data (logs, reports, config) lives under `%LOCALAPPDATA%\DONUT`, separate
+Runtime data (logs, reports, config) lives under `%ProgramData%\DONUT\data`, separate
 from the `Program Files` install so an MSI upgrade never touches it.

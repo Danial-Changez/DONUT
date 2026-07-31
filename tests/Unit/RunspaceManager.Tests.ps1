@@ -38,8 +38,8 @@ Describe "RunspaceManager" {
         }
 
         It "raises the ThreadPool floor before opening the pool (starvation guard)" {
-            # Pool dispatch/completion run on ThreadPool threads; the floor MUST be
-            # raised or 8 concurrent warm opens starve dispatch (see implementation-notes).
+            # Pool dispatch/completion run on ThreadPool threads; the floor has to be raised
+            # or 8 concurrent warm opens starve dispatch (see runspaces-and-workers).
             [RunspaceManager]::Initialize(8, 8)
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)

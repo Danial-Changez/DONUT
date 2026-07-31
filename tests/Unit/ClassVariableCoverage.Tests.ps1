@@ -15,15 +15,12 @@ Describe "Class method variable coverage" {
     BeforeAll {
         $script:SrcRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../src'))
 
-        # Readable without assignment: automatic variables + $this.
+        # Readable without assignment inside a class method. NOT the full automatic-variable
+        # list: the class compiler rejects most of them (see the ProbeAutomatics test below).
         $script:Automatic = @(
             'this', 'true', 'false', 'null', '_', 'PSItem', 'args', 'input', 'error',
-            'PSScriptRoot', 'PSCommandPath', 'MyInvocation', 'PSVersionTable', 'PSCmdlet',
-            'PSBoundParameters', 'PID', 'Host', 'ExecutionContext', 'PWD', 'HOME', 'PSHOME',
-            'LASTEXITCODE', 'StackTrace', 'switch', 'foreach', 'matches', 'IsWindows',
-            'IsLinux', 'IsMacOS', 'ErrorActionPreference', 'ProgressPreference', 'PSStyle',
-            'VerbosePreference', 'WarningPreference', 'InformationPreference', 'PSEdition',
-            'DebugPreference', 'ConfirmPreference', 'OutputEncoding', 'PSDefaultParameterValues'
+            'PSScriptRoot', 'PSCommandPath', 'MyInvocation', 'PSCmdlet', 'PSBoundParameters',
+            'PWD', 'LASTEXITCODE', 'StackTrace', 'matches', 'OutputEncoding'
         )
 
         # Built with the type name inlined: FindAll runs its predicate through a
@@ -96,5 +93,23 @@ Describe "Class method variable coverage" {
             'method runs, so a missed rename ships as a field crash (the startup-task regression)')
         # If this drops to zero the walk went blind (moved classes, renamed AST types), not clean.
         $checked | Should -BeGreaterThan 0
+    }
+
+    It "allowlists only names the class compiler actually accepts" {
+        # The allowlist above used to carry the full automatic-variable list, including
+        # $PID and $Host, which class methods cannot read - so the guard waved through the
+        # exact crash it exists to catch. Ask the compiler instead of trusting the list.
+        $rejected = @()
+        foreach ($name in $script:Automatic) {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseInput(
+                "class Probe_$name { [object] Get() { return `$$name } }", [ref]$null, [ref]$errs) | Out-Null
+            if (@($errs | Where-Object { $_.Message -match 'not assigned in the method' }).Count) {
+                $rejected += $name
+            }
+        }
+        $rejected | Should -BeNullOrEmpty -Because (
+            'an allowlisted name that the class compiler rejects is a blind spot: reading it ' +
+            'crashes at invocation, which is what this file guards against')
     }
 }

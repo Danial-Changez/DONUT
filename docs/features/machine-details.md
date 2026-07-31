@@ -22,7 +22,7 @@ download size. Selecting a machine with a recent scan shows its results without 
 ## Live log
 
 While a run is active, the pane tails the remote DCU output log line by line — the
-same content that lands in `%LOCALAPPDATA%\DONUT\logs\<hostname>.log`.
+same content that lands in `%ProgramData%\DONUT\data\logs\<hostname>.log`.
 
 Every line carries a dim `HH:mm:ss` stamp and is colour-coded by severity: errors
 red with an `[Error]` tag, warnings yellow with `[Warn]`, completed-run lines

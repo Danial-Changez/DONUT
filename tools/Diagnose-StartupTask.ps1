@@ -11,15 +11,15 @@
       1. Which build is installed. The launcher embeds src\ and self-extracts it to
          %ProgramData%\DONUT\app - so `git pull` alone changes nothing until
          Donut.Launcher.exe is rebuilt. Reports whether the extracted
-         StartupTaskService.psm1 has the SYSTEM/psexec lane.
+         StartupTaskService.psm1 still carries the deleted SYSTEM/psexec lane.
       2. What actually got registered. Principal (who it runs as), action, and
-         trigger - a per-user principal on a non-admin account is the known dead
-         end (its RunLevel Highest degrades to a standard token).
+         trigger - it should run as the console user at RunLevel Highest, which is
+         that account's elevated token if it is an admin and its ordinary one if not.
       3. Whether it fired and what Windows said. LastTaskResult decoded, plus the
          TaskScheduler/Operational events for this task. 0x800702E4 = elevation
          required (CreateProcess refused the requireAdministrator launcher).
-      4. Whether the action could even run. psexec/launcher paths resolved the way
-         the task will resolve them, from SYSTEM's environment.
+      4. Whether the action could even run, with the launcher path resolved the
+         way the task will resolve it.
 
 .PARAMETER TaskName
     Task to inspect. Defaults to the installed DONUT-* startup task (not
@@ -54,20 +54,99 @@ function Write-Section([string]$title) {
     Write-Host "`n=== $title ===" -ForegroundColor Cyan
 }
 
-# Task Scheduler reports launch faults as HRESULTs; these are the ones this feature hits.
-function Get-ResultMeaning([int]$code) {
-    $map = @{
-        0          = 'success'
-        267008     = 'task is ready (never run)'
-        267009     = 'task is currently running'
-        267011     = 'task has not yet run'
-        267014     = 'task was terminated by the user'
-        2147942402 = '0x80070002 FILE NOT FOUND - the action Execute path is wrong or unreachable from SYSTEM'
-        2147942405 = '0x80070005 ACCESS DENIED'
-        2147943140 = '0x800702E4 ELEVATION REQUIRED - CreateProcess refused a requireAdministrator exe under a non-elevated token'
+$script:dataRoot = Join-Path $env:ProgramData 'DONUT\data'
+
+# Mirrors StartupTaskService.TaskNameFor, so a MISSING task can still be named.
+function Get-ExpectedTaskName {
+    $who = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    if (-not $who) { return '' }
+    return "DONUT-$(($who -split '\\')[-1])"
+}
+
+function Get-DonutSetting([string]$key) {
+    $path = Join-Path $script:dataRoot 'config\config.json'
+    if (-not (Test-Path -LiteralPath $path)) { return '(no config.json)' }
+    try {
+        $cfg = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        if ($null -eq $cfg.$key) { return '(unset - falls back to the default)' }
+        return [string]$cfg.$key
     }
-    if ($map.ContainsKey($code)) { return $map[$code] }
-    return ('0x{0:X8} (see winerror.h)' -f $code)
+    catch { return "(unreadable: $($_.Exception.Message))" }
+}
+
+# Apply() logs the resolved console user and the real failure reason; nothing surfaced them.
+function Write-StartupTaskLog {
+    $log = Join-Path $script:dataRoot 'logs\Donut.log'
+    if (-not (Test-Path -LiteralPath $log)) {
+        Write-Host "Donut.log: $log - not present" -ForegroundColor Yellow
+        return
+    }
+    $lines = @(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue |
+            Where-Object { $_ -match 'Startup task' } | Select-Object -Last 12)
+    if ($lines.Count -eq 0) {
+        Write-Host "Donut.log has no 'Startup task' lines - Apply() has never run. The toggle is off, or its side effect never fired." -ForegroundColor Yellow
+        return
+    }
+    Write-Host "Donut.log, last $($lines.Count) startup-task lines:" -ForegroundColor Green
+    $lines | ForEach-Object {
+        $color = if ($_ -match 'failed|denied|Access|error') { 'Red' } else { 'Gray' }
+        Write-Host "  $_" -ForegroundColor $color
+    }
+}
+
+# Traverse is needed on EVERY parent, and it is the one an ACL viewer on the leaf will not
+# show you. C:\Windows\IMECache is a real example: restrictive parents, permissive leaf.
+function Test-PathReachable([string]$path) {
+    if (-not $path) { return }
+    $leaf = $path.Trim('"')
+    Write-Host "execute path: $leaf"
+    Write-Host ("  exists to THIS shell: " + $(if (Test-Path -LiteralPath $leaf) { 'yes' } else { 'NO' })) `
+        -ForegroundColor $(if (Test-Path -LiteralPath $leaf) { 'Green' } else { 'Red' })
+    $dir = Split-Path $leaf -Parent
+    while ($dir -and (Split-Path $dir -Parent)) {
+        try {
+            $acl = Get-Acl -LiteralPath $dir -ErrorAction Stop
+            $users = @($acl.Access | Where-Object {
+                    $_.IdentityReference -match 'Users|Everyone|Authenticated' -and
+                    $_.FileSystemRights -match 'ReadAndExecute|ExecuteFile|FullControl|Modify'
+                })
+            $verdict = if ($users.Count -gt 0) { 'standard users can traverse' } else { 'NO standard-user traverse' }
+            Write-Host ("  {0,-55} {1}" -f $dir, $verdict) -ForegroundColor $(if ($users.Count) { 'Gray' } else { 'Red' })
+        }
+        catch { Write-Host ("  {0,-55} ACL unreadable" -f $dir) -ForegroundColor Yellow }
+        $dir = Split-Path $dir -Parent
+    }
+}
+
+# Task Scheduler reports launch faults as HRESULTs; these are the ones this feature hits.
+# LastTaskResult is an unsigned HRESULT. 0x800702E4 is 2147943140, past [int]'s range, so
+# casting it threw before it could ever be decoded - and some hosts hand it back already
+# wrapped negative. Normalize to uint32 first, then key the table on hex so no numeric
+# literal type has to match.
+function ConvertTo-TaskResult($value) {
+    $n = [int64]$value
+    if ($n -lt 0) { $n += 4294967296 }
+    return [uint32]$n
+}
+
+function Get-ResultMeaning([uint32]$code) {
+    $hex = '0x{0:X8}' -f $code
+    $map = @{
+        '0x00000000' = 'success'
+        '0x00041300' = 'task is ready (never run)'
+        '0x00041301' = 'task is currently running'
+        '0x00041303' = 'task has not yet run'
+        '0x00041306' = 'task was terminated by the user'
+        '0x80070002' = 'FILE NOT FOUND - the action Execute path is wrong or unreachable'
+        '0x80070005' = 'ACCESS DENIED'
+        '0x8007010B' = 'DIRECTORY NAME INVALID - the action WorkingDirectory is missing or unreachable'
+        '0x800702E4' = 'ELEVATION REQUIRED - CreateProcess refused an elevation-requiring exe under a non-elevated token'
+        '0x800704DD' = 'NOT LOGGED ON - the principal has no interactive session'
+        '0x800704EC' = 'BLOCKED BY POLICY - AppLocker/WDAC/SRP refused this exe or script for this token, which is NOT a file ACL'
+        '0xC0000142' = 'DLL INIT FAILED - the process could not initialize on this session/desktop'
+    }
+    if ($map.ContainsKey($hex)) { return "$hex $($map[$hex])" }
+    return "$hex (see winerror.h)"
 }
 
 Write-Section "1. Installed build (is your fix even running?)"
@@ -78,20 +157,18 @@ if (-not (Test-Path -LiteralPath $svcPath)) {
 }
 else {
     $svc = Get-Content -LiteralPath $svcPath -Raw
-    $hasLane = $svc -match 'BuildSystemSpec'
     $hasToken = $svc -match 'GetProcessIdentity'
     # The console-user trigger fix: RegisterTask takes $triggerUser, separate from the principal.
     $script:codeSplitsTrigger = $svc -match 'triggerUser'
-    # The fire-time session fix: psexec -i defaults to the CALLER's session (0 under a
-    # SYSTEM task), so the shim resolves the console session id when the trigger fires.
-    $script:codeHasShim = $svc -match 'Start-DonutInConsoleSession'
+    # The SYSTEM+psexec lane was deleted: as SYSTEM the instance authenticated as the
+    # machine account and every remote job failed on access denied.
+    $script:codeHasOldLane = $svc -match 'BuildSystemSpec'
     Write-Host "extracted : $svcPath"
     Write-Host "modified  : $((Get-Item -LiteralPath $svcPath).LastWriteTime)"
     Write-Host ("token-owner fix         : " + $(if ($hasToken) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasToken) { 'Green' } else { 'Red' })
-    Write-Host ("SYSTEM psexec lane      : " + $(if ($hasLane) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($hasLane) { 'Green' } else { 'Red' })
     Write-Host ("console-user trigger fix: " + $(if ($script:codeSplitsTrigger) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeSplitsTrigger) { 'Green' } else { 'Red' })
-    Write-Host ("fire-time session shim  : " + $(if ($script:codeHasShim) { 'PRESENT' } else { 'MISSING' })) -ForegroundColor $(if ($script:codeHasShim) { 'Green' } else { 'Red' })
-    if (-not ($hasLane -and $script:codeSplitsTrigger)) {
+    Write-Host ("de-elevated autostart   : " + $(if ($script:codeHasOldLane) { 'NO (old SYSTEM lane)' } else { 'YES' })) -ForegroundColor $(if ($script:codeHasOldLane) { 'Red' } else { 'Green' })
+    if ($script:codeHasOldLane -or -not $script:codeSplitsTrigger) {
         Write-Host "The installed launcher predates the current fixes. Rebuild Donut.Launcher.exe and reinstall - a git pull does not update an installed build." -ForegroundColor Red
     }
 }
@@ -99,8 +176,27 @@ else {
 Write-Section "2. Registered task"
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if (-not $task) {
-    Write-Host "No task named '$TaskName'. Installed DONUT tasks:" -ForegroundColor Yellow
-    Get-ScheduledTask | Where-Object TaskName -like 'DONUT*' | Select-Object TaskName, State | Format-Table -AutoSize
+    # No task is the interesting case, not a dead end: Apply() failing de-elevated leaves
+    # exactly this state, and the reason is already in Donut.log.
+    $expected = Get-ExpectedTaskName
+    Write-Host "NO STARTUP TASK IS INSTALLED." -ForegroundColor Red
+    Write-Host "expected name: $(if ($expected) { $expected } else { '(no signed-in console user - Apply refuses to register without one)' })"
+    Write-Host "Installed DONUT tasks:" -ForegroundColor Yellow
+    Get-ScheduledTask | Where-Object TaskName -Like 'DONUT*' | Select-Object TaskName, State | Format-Table -AutoSize
+
+    Write-Section "2b. Is the toggle even on?"
+    Write-Host "startWithWindows : $(Get-DonutSetting 'startWithWindows')"
+    Write-Host "runAsAdmin       : $(Get-DonutSetting 'runAsAdmin')"
+    Write-Host "config           : $(Join-Path $script:dataRoot 'config\config.json')"
+
+    Write-Section "2c. What did Apply() say?"
+    Write-StartupTaskLog
+
+    Write-PolicySection
+
+    Write-Section "VERDICT"
+    Write-Host "Registering a task needs an elevated token. A de-elevated DONUT reaches Register-ScheduledTask, gets access denied, and reports it as one toast - which is what an absent task plus an access-denied line in Donut.log means." -ForegroundColor Yellow
+    Write-Host "DO THIS: confirm above whether startWithWindows is true. If it is, relaunch DONUT as administrator and toggle it off and on - it should register immediately. If that works, the bug is that the toggle is not gated behind the elevation prompt." -ForegroundColor Green
     return
 }
 $principal = $task.Principal
@@ -125,15 +221,14 @@ foreach ($t in $task.Triggers) {
         Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
     }
 }
-# Direct psexec action = pre-shim shape: -i without a session id lands in the
-# CALLER's session (0 for a SYSTEM task), an invisible desktop.
-$script:actionLacksShim = ($action.Execute -like '*PsExec*') -or
-    ($action.Arguments -notlike '*Start-DonutInConsoleSession*' -and $action.Execute -like '*powershell*' -and $action.Arguments -like '*-accepteula*')
-if ($action.Execute -like '*PsExec*') {
-    Write-Host "PROBLEM: the action calls psexec DIRECTLY with -i and no session id - psexec then targets the caller's session (0), so DONUT starts on a desktop nobody can see. Current builds route through the Start-DonutInConsoleSession shim instead." -ForegroundColor Red
+# Any psexec or SYSTEM shape here is a task from before the lane was deleted.
+if ($action.Execute -like '*PsExec*' -or $action.Arguments -like '*Start-DonutInConsoleSession*') {
+    Write-Host "PROBLEM: this task is from an older build that started DONUT as SYSTEM via psexec. As SYSTEM it authenticates on the network as the machine account, which has no rights on fleet targets, so every remote job fails on access denied. Toggle Start with Windows off and on to re-register it." -ForegroundColor Red
 }
-$script:perUserLane = $principal.UserId -notmatch 'SYSTEM'
-if ($script:perUserLane -and $principal.RunLevel -eq 'Highest') {
+if ($principal.UserId -match 'SYSTEM') {
+    Write-Host "PROBLEM: the task runs as SYSTEM. Current builds run it as the console user at their own level and elevate on demand." -ForegroundColor Red
+}
+if ($principal.RunLevel -eq 'Highest') {
     # Direct members only - a domain account is usually admin via a nested group
     # (Domain Admins), which this cannot see, so absence is NOT proof of non-admin.
     $direct = $false
@@ -153,12 +248,16 @@ if ($script:perUserLane -and $principal.RunLevel -eq 'Highest') {
 Write-Section "3. Did it fire?"
 $info = $task | Get-ScheduledTaskInfo
 Write-Host "last run   : $($info.LastRunTime)"
-Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning ([int]$info.LastTaskResult))"
+$script:lastResult = ConvertTo-TaskResult $info.LastTaskResult
+Write-Host "last result: $($info.LastTaskResult) - $(Get-ResultMeaning $script:lastResult)"
 Write-Host "next run   : $($info.NextRunTime)"
-if ([int]$info.LastTaskResult -eq 267011) {
+if ($script:lastResult -eq 267011) {
     Write-Host "DIAGNOSIS: registered but NEVER RUN. The task itself is fine - its trigger never fired. Check the trigger user above against the console user." -ForegroundColor Red
 }
-if ($action.Execute -like '*PsExec*' -and [int]$info.LastTaskResult -gt 4) {
+if ($script:lastResult -eq 2147943660) {
+    Write-Host "DIAGNOSIS: BLOCKED BY POLICY (0x800704EC). An allowlisting policy refused the action for this token - the file ACL is not involved, which is why the path still reads Full Control. Section 6 names the rule." -ForegroundColor Red
+}
+if ($action.Execute -like '*PsExec*' -and $script:lastResult -gt 4) {
     Write-Host "NOTE: this old-shape action calls psexec -d directly, whose exit code is the launched PID - a result like this usually means psexec SUCCEEDED. The shim-shaped action exits 0 instead." -ForegroundColor Yellow
 }
 
@@ -182,6 +281,11 @@ Write-Host ("psexec on PATH: " + $(if ($onPath) { $onPath.Source } else { 'NOT F
 if ($action.Execute -and -not (Test-Path -LiteralPath ($action.Execute.Trim('"')))) {
     Write-Host "PROBLEM: the task's Execute path does not exist: $($action.Execute)" -ForegroundColor Red
 }
+# The task runs as the console user, so every parent has to grant THEM traverse - which is
+# the permission a viewer pointed at the leaf folder will not show you.
+Test-PathReachable $action.Execute
+if ($action.WorkingDirectory) { Write-Host "working dir : $($action.WorkingDirectory)" }
+else { Write-Host "working dir : (none - Task Scheduler will start it in %windir%\system32)" -ForegroundColor Yellow }
 Write-Host "console session id: $((Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1).SessionId)"
 Write-Host "this shell session: $((Get-Process -Id $PID).SessionId)   running as: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
 $donut = Get-Process -Name 'Donut.Launcher' -ErrorAction SilentlyContinue
@@ -200,18 +304,18 @@ foreach ($proc in $running) {
         Write-Host "  PROBLEM: not in the console session ($consoleSession) - it has no desktop, so no tray icon or window can ever appear." -ForegroundColor Red
     }
     if ($who -like '*\SYSTEM') {
-        Write-Host "  NOTE: as SYSTEM, %LOCALAPPDATA% is the system profile - this instance has none of your settings, logs, token, or WSID list." -ForegroundColor Yellow
+        Write-Host "  NOTE: as SYSTEM it authenticates on the network as the machine account, which has no rights on fleet targets - remote jobs will fail with access denied." -ForegroundColor Yellow
     }
 }
 
-# Where the SYSTEM instance gets its settings/token/logs from: the pointer pinned by
-# whoever toggled autostart on. Missing = it guesses the console user's profile.
-$pointerFile = Join-Path $env:ProgramData 'DONUT\dataroot.txt'
-if (Test-Path -LiteralPath $pointerFile) {
-    Write-Host "settings home pointer: $((Get-Content -LiteralPath $pointerFile -First 1))"
+# One machine-wide data root, so every instance reads the same settings/token/logs
+# whatever account it runs as. No pointer to follow any more.
+$dataRoot = Join-Path $env:ProgramData 'DONUT\data'
+if (Test-Path -LiteralPath $dataRoot) {
+    Write-Host "data root: $dataRoot" -ForegroundColor Green
 }
 else {
-    Write-Host "settings home pointer: $pointerFile - not present (SYSTEM instance falls back to the console user's profile, which may be empty)" -ForegroundColor Yellow
+    Write-Host "data root: $dataRoot - not present (DONUT has not run since the move off %LOCALAPPDATA%)" -ForegroundColor Yellow
 }
 
 # The shim narrates every firing here: resolved session id, the psexec line, the PID.
@@ -249,20 +353,84 @@ if ($action.Arguments -like '*--tray*') {
     Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
 }
 
+function Write-PolicySection {
+    Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
+    # The launcher runs src\Start-Donut.ps1 out of %ProgramData%\DONUT\app. ProgramData is
+    # user-writable, so allowlisting policies can block scripts there - and the default
+    # AppLocker rule set exempts BUILTIN\Administrators, which would make the same build run
+    # elevated and die de-elevated while every ACL on the path still reads Full Control.
+    # A DONUT-LensAgent task in the Running state is evidence AGAINST this on a given box.
+    $script:policyBlocked = $false
+    $appId = Get-Service AppIDSvc -ErrorAction SilentlyContinue
+    Write-Host "AppIDSvc (AppLocker enforcement): $(if ($appId) { $appId.Status } else { 'not present' })"
+    try {
+        $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+        $modes = @($pol.AppLockerPolicy.RuleCollection |
+                ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
+        Write-Host "effective policy : $($modes -join '  ')"
+        if ($modes -match 'Script=(Enabled|AuditOnly)') {
+            Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
+        }
+    }
+    catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
+
+    # Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
+    foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
+        'Microsoft-Windows-AppLocker/MSI and Script') {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
+                -MaxEvents 40 -ErrorAction SilentlyContinue |
+                Where-Object { $_.Message -match 'DONUT' })
+        if ($ev.Count -gt 0) {
+            $script:policyBlocked = $true
+            Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
+            $ev | Select-Object -First 5 | ForEach-Object {
+                Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
+            }
+        }
+        else { Write-Host "$log - no DONUT events" }
+    }
+
+    # WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
+    $ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
+            -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
+    if ($ci.Count -gt 0) {
+        $script:policyBlocked = $true
+        Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
+    }
+
+    # The token question the ACL viewer cannot answer: a filtered token still LISTS
+    # Administrators, but marked deny-only, so rules and ACEs granted to it do not apply.
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Host ""
+    Write-Host "this shell       : $($id.Name)  elevated=$elevated"
+    Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
+    Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
+}
+
+Write-PolicySection
+
 Write-Section "VERDICT"
+if ($script:policyBlocked) {
+    Write-Host "An allowlisting policy blocked DONUT. This is NOT an ACL problem, which is why the directory still shows Full Control." -ForegroundColor Red
+    Write-Host "The launcher executes src\Start-Donut.ps1 from $appRoot. ProgramData is user-writable, so AppLocker/WDAC commonly forbid running scripts from it, while the default rule set exempts BUILTIN\Administrators - so an elevated DONUT runs and a de-elevated one is refused." -ForegroundColor Yellow
+    Write-Host "DO THIS: either have the app tree path allowlisted for your account, or move the extraction root into the already-approved install directory so the exe and its scripts share one allowed location." -ForegroundColor Green
+}
 # The registered task is a snapshot of whichever build last applied it - so new code
 # plus an old-shaped task means the fix simply has not run yet.
-$oldShape = $script:triggerMismatch -or $script:perUserLane -or $script:actionLacksShim
-if ($oldShape -and $script:codeSplitsTrigger -and $script:codeHasShim) {
-    Write-Host "The installed code HAS the current fixes, but this task still has an OLD shape (per-user principal, a trigger bound to a non-console account, and/or a direct-psexec action with no session id)." -ForegroundColor Yellow
-    Write-Host "The task is a snapshot from whichever build last applied it - the fix has not re-registered yet." -ForegroundColor Yellow
-    Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> as SYSTEM and sweep this stale task. Then re-run this script." -ForegroundColor Green
+$oldExecute = ($action.Execute -like '*PsExec*') -or ($action.Arguments -like '*Start-DonutInConsoleSession*')
+$oldShape = $script:triggerMismatch -or ($principal.UserId -match 'SYSTEM') -or $oldExecute
+if ($oldShape -and $script:codeSplitsTrigger -and -not $script:codeHasOldLane) {
+    Write-Host "The installed code is current, but this task still has an OLD shape (a SYSTEM principal, a psexec action, and/or a trigger bound to a non-console account)." -ForegroundColor Yellow
+    Write-Host "The task is a snapshot from whichever build last applied it - the current code has not re-registered yet." -ForegroundColor Yellow
+    Write-Host "DO THIS: launch DONUT and wait ~2 minutes (the startup-task heal re-applies on a timer), or toggle Start with Windows off and on. It will register DONUT-<console user> to run as that user, and sweep this stale task. Then re-run this script." -ForegroundColor Green
 }
 elseif ($oldShape) {
     Write-Host "This task has the OLD shape AND the installed build lacks the fix." -ForegroundColor Red
     Write-Host "DO THIS: rebuild Donut.Launcher.exe from the current source and reinstall - an installed build runs src\ from INSIDE the exe, so pulling alone changes nothing. Then launch DONUT and re-run this script." -ForegroundColor Green
 }
-else {
-    Write-Host "Task shape looks correct: SYSTEM principal, triggered by the console user." -ForegroundColor Green
-    Write-Host "If DONUT is running but invisible, section 5 says why: a session other than the console one means psexec never reached your desktop; the console session means the process is there but its UI is not." -ForegroundColor Green
+elseif (-not $script:policyBlocked) {
+    Write-Host "Task shape looks correct: the console user is both the trigger and the principal, at RunLevel Highest." -ForegroundColor Green
+    Write-Host "If DONUT is running but invisible, section 5 says why: a session other than the console one means it never reached your desktop; the console session means the process is there but its UI is not." -ForegroundColor Green
 }

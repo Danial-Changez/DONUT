@@ -24,8 +24,8 @@
     Seconds to wait for a graceful process close before forcing it.
 
 .NOTES
-    Kept as a standalone script (not a class) so it can be copied to
-    %LOCALAPPDATA% and run independently of the install it is replacing.
+    Kept as a standalone script (not a class) so it can be copied to the data
+    root and run independently of the install it is replacing.
 #>
 param(
     [string]$MsiPath,

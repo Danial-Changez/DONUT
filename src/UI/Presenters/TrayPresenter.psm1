@@ -100,6 +100,16 @@ class TrayPresenter {
     [void] ShowMainWindow() {
         $w = $this.Main.Window
         if ($null -eq $w) { return }
+
+        # Sign-in and the update prompt come FIRST, the order a cold start already uses
+        # (DonutApp.ps1). Showing the window first put it on screen beside the login modal.
+        $pending = $this.Main.PendingUpdateCheck
+        if ($null -ne $pending) {
+            $this.Main.PendingUpdateCheck = $null
+            try { $pending.CheckAndPrompt() }
+            catch { $this.Logger.LogException("Deferred update check failed", $_) }
+        }
+
         try {
             $w.Show()
             if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
@@ -107,11 +117,15 @@ class TrayPresenter {
         }
         catch { $this.Logger.LogException("Show main window failed", $_) }
 
-        $pending = $this.Main.PendingUpdateCheck
-        if ($null -ne $pending) {
-            $this.Main.PendingUpdateCheck = $null
-            try { $pending.CheckAndPrompt() }
-            catch { $this.Logger.LogException("Deferred update check failed", $_) }
+        # Once per launch: the actions are elsewhere (any fleet action prompts, and the
+        # Settings toggle restarts elevated), so this only has to name the state.
+        if ($this.Main.PendingLimitedNotice) {
+            $this.Main.PendingLimitedNotice = $false
+            if ($this.Main.ToastService) {
+                $this.Main.ToastService.ShowWarning('Limited capability',
+                    'DONUT started with Windows, so it is running without administrator rights. ' +
+                    'Remote actions will ask for them, and granting one restarts DONUT elevated for the rest of the session.')
+            }
         }
     }
 
