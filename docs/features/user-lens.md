@@ -10,11 +10,12 @@ detail pane: who they are and what machines they have.
 
 - **Directory facts** — UPN, email, manager, office (from AD, forest-wide via the
   Global Catalog).
-- **Their devices** — the person's SCCM-assigned machines, each with OS and last
-  domain logon, over a labelled **MODEL** and **TAG** pair from SCCM hardware
-  inventory (the Dell service tag, so a person with three similar laptops is
-  tellable apart at a glance). Either cell collapses when the AdminService cannot
-  serve it. Any device can be **added to the machine list** in one click.
+- **Their devices** — the person's SCCM-assigned machines, each over one line of
+  model, `Tag <service tag>` and last domain logon, so a person with three similar
+  laptops is tellable apart at a glance. Model and tag come from SCCM hardware
+  inventory and drop out (with their separator) when the AdminService cannot serve
+  them. The OS and manufacturer are on the row's tooltip. Any device can be
+  **added to the machine list** in one click.
 - **BitLocker recovery keys** — revealed on click per device (never shown by
   default), with a QR code for typing-free entry on the target.
 

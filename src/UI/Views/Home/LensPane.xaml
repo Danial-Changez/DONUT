@@ -106,23 +106,13 @@
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
                              Foreground="{DynamicResource TitleTextPrimary}" ToolTip="{Binding Name}" />
-                    <TextBox Style="{DynamicResource SelectableText}" FontFamily="{DynamicResource FontMono}" FontSize="10.5" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0">
-                      <TextBox.Text>
-                        <MultiBinding StringFormat="{}{0}   ·   {1}">
-                          <Binding Path="Os" />
-                          <Binding Path="LastSeenText" />
-                        </MultiBinding>
-                      </TextBox.Text>
-                    </TextBox>
-                    <!-- The identifiers you match against the machine in hand, so they take
-                         the person-fields label/value recipe instead of a run-on dim line. -->
-                    <Grid Margin="0,10,0,0"
-                          Visibility="{Binding HasHardware, Converter={StaticResource BoolToVis}}">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                      </Grid.ColumnDefinitions>
-                      <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                    <!-- One line, three tiers: model leads because it is what separates a
+                         person's machines; the tag confirms; last seen dates. OS is on the tip. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                ToolTip="{Binding DetailTip}">
+                      <!-- Value and its trailing separator collapse together, so a device SCCM
+                           cannot serve leaves no orphaned dot behind. -->
+                      <StackPanel Orientation="Horizontal">
                         <StackPanel.Style>
                           <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Visible" />
@@ -133,30 +123,35 @@
                             </Style.Triggers>
                           </Style>
                         </StackPanel.Style>
-                        <TextBlock Text="MODEL" Style="{DynamicResource MicroLabel}" />
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Model}"
-                                 ToolTip="{Binding Manufacturer}" FontFamily="{DynamicResource FontSans}" FontSize="12.5"
-                                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                                 FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                 Foreground="{DynamicResource TitleTextPrimary}" />
+                        <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                   Foreground="{DynamicResource BodyTextTertiary}" />
                       </StackPanel>
-                      <StackPanel Grid.Column="1">
+                      <StackPanel Orientation="Horizontal">
                         <StackPanel.Style>
                           <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
-                              <DataTrigger Binding="{Binding Serial}" Value="">
+                              <DataTrigger Binding="{Binding TagText}" Value="">
                                 <Setter Property="Visibility" Value="Collapsed" />
                               </DataTrigger>
                             </Style.Triggers>
                           </Style>
                         </StackPanel.Style>
-                        <TextBlock Text="TAG" Style="{DynamicResource MicroLabel}" />
                         <!-- Mono: a service tag is transcribed off a sticker, where 0/O and 1/I
                              have to stay apart. -->
-                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Serial}"
-                                 ToolTip="{Binding Serial}" FontFamily="{DynamicResource FontMono}" FontSize="12.5"
-                                 Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
+                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding TagText}"
+                                 FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                 Foreground="{DynamicResource BodyTextTertiary}" />
+                        <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
+                                   Foreground="{DynamicResource BodyTextTertiary}" />
                       </StackPanel>
-                    </Grid>
+                      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding LastSeenText}"
+                               FontFamily="{DynamicResource FontSans}" FontSize="12"
+                               Foreground="{DynamicResource BodyTextTertiary}" />
+                    </StackPanel>
                     <!-- BitLocker key: hidden until revealed (a recovery secret); selectable to copy -->
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
                              Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
