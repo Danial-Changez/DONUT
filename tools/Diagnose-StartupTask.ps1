@@ -54,6 +54,70 @@ function Write-Section([string]$title) {
     Write-Host "`n=== $title ===" -ForegroundColor Cyan
 }
 
+$script:dataRoot = Join-Path $env:ProgramData 'DONUT\data'
+
+# Mirrors StartupTaskService.TaskNameFor, so a MISSING task can still be named.
+function Get-ExpectedTaskName {
+    $who = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    if (-not $who) { return '' }
+    return "DONUT-$(($who -split '\\')[-1])"
+}
+
+function Get-DonutSetting([string]$key) {
+    $path = Join-Path $script:dataRoot 'config\config.json'
+    if (-not (Test-Path -LiteralPath $path)) { return '(no config.json)' }
+    try {
+        $cfg = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        if ($null -eq $cfg.$key) { return '(unset - falls back to the default)' }
+        return [string]$cfg.$key
+    }
+    catch { return "(unreadable: $($_.Exception.Message))" }
+}
+
+# Apply() logs the resolved console user and the real failure reason; nothing surfaced them.
+function Write-StartupTaskLog {
+    $log = Join-Path $script:dataRoot 'logs\Donut.log'
+    if (-not (Test-Path -LiteralPath $log)) {
+        Write-Host "Donut.log: $log - not present" -ForegroundColor Yellow
+        return
+    }
+    $lines = @(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue |
+            Where-Object { $_ -match 'Startup task' } | Select-Object -Last 12)
+    if ($lines.Count -eq 0) {
+        Write-Host "Donut.log has no 'Startup task' lines - Apply() has never run. The toggle is off, or its side effect never fired." -ForegroundColor Yellow
+        return
+    }
+    Write-Host "Donut.log, last $($lines.Count) startup-task lines:" -ForegroundColor Green
+    $lines | ForEach-Object {
+        $color = if ($_ -match 'failed|denied|Access|error') { 'Red' } else { 'Gray' }
+        Write-Host "  $_" -ForegroundColor $color
+    }
+}
+
+# Traverse is needed on EVERY parent, and it is the one an ACL viewer on the leaf will not
+# show you. C:\Windows\IMECache is a real example: restrictive parents, permissive leaf.
+function Test-PathReachable([string]$path) {
+    if (-not $path) { return }
+    $leaf = $path.Trim('"')
+    Write-Host "execute path: $leaf"
+    Write-Host ("  exists to THIS shell: " + $(if (Test-Path -LiteralPath $leaf) { 'yes' } else { 'NO' })) `
+        -ForegroundColor $(if (Test-Path -LiteralPath $leaf) { 'Green' } else { 'Red' })
+    $dir = Split-Path $leaf -Parent
+    while ($dir -and (Split-Path $dir -Parent)) {
+        try {
+            $acl = Get-Acl -LiteralPath $dir -ErrorAction Stop
+            $users = @($acl.Access | Where-Object {
+                    $_.IdentityReference -match 'Users|Everyone|Authenticated' -and
+                    $_.FileSystemRights -match 'ReadAndExecute|ExecuteFile|FullControl|Modify'
+                })
+            $verdict = if ($users.Count -gt 0) { 'standard users can traverse' } else { 'NO standard-user traverse' }
+            Write-Host ("  {0,-55} {1}" -f $dir, $verdict) -ForegroundColor $(if ($users.Count) { 'Gray' } else { 'Red' })
+        }
+        catch { Write-Host ("  {0,-55} ACL unreadable" -f $dir) -ForegroundColor Yellow }
+        $dir = Split-Path $dir -Parent
+    }
+}
+
 # Task Scheduler reports launch faults as HRESULTs; these are the ones this feature hits.
 # LastTaskResult is an unsigned HRESULT. 0x800702E4 is 2147943140, past [int]'s range, so
 # casting it threw before it could ever be decoded - and some hosts hand it back already
@@ -112,8 +176,27 @@ else {
 Write-Section "2. Registered task"
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if (-not $task) {
-    Write-Host "No task named '$TaskName'. Installed DONUT tasks:" -ForegroundColor Yellow
-    Get-ScheduledTask | Where-Object TaskName -like 'DONUT*' | Select-Object TaskName, State | Format-Table -AutoSize
+    # No task is the interesting case, not a dead end: Apply() failing de-elevated leaves
+    # exactly this state, and the reason is already in Donut.log.
+    $expected = Get-ExpectedTaskName
+    Write-Host "NO STARTUP TASK IS INSTALLED." -ForegroundColor Red
+    Write-Host "expected name: $(if ($expected) { $expected } else { '(no signed-in console user - Apply refuses to register without one)' })"
+    Write-Host "Installed DONUT tasks:" -ForegroundColor Yellow
+    Get-ScheduledTask | Where-Object TaskName -Like 'DONUT*' | Select-Object TaskName, State | Format-Table -AutoSize
+
+    Write-Section "2b. Is the toggle even on?"
+    Write-Host "startWithWindows : $(Get-DonutSetting 'startWithWindows')"
+    Write-Host "runAsAdmin       : $(Get-DonutSetting 'runAsAdmin')"
+    Write-Host "config           : $(Join-Path $script:dataRoot 'config\config.json')"
+
+    Write-Section "2c. What did Apply() say?"
+    Write-StartupTaskLog
+
+    Write-PolicySection
+
+    Write-Section "VERDICT"
+    Write-Host "Registering a task needs an elevated token. A de-elevated DONUT reaches Register-ScheduledTask, gets access denied, and reports it as one toast - which is what an absent task plus an access-denied line in Donut.log means." -ForegroundColor Yellow
+    Write-Host "DO THIS: confirm above whether startWithWindows is true. If it is, relaunch DONUT as administrator and toggle it off and on - it should register immediately. If that works, the bug is that the toggle is not gated behind the elevation prompt." -ForegroundColor Green
     return
 }
 $principal = $task.Principal
@@ -198,6 +281,11 @@ Write-Host ("psexec on PATH: " + $(if ($onPath) { $onPath.Source } else { 'NOT F
 if ($action.Execute -and -not (Test-Path -LiteralPath ($action.Execute.Trim('"')))) {
     Write-Host "PROBLEM: the task's Execute path does not exist: $($action.Execute)" -ForegroundColor Red
 }
+# The task runs as the console user, so every parent has to grant THEM traverse - which is
+# the permission a viewer pointed at the leaf folder will not show you.
+Test-PathReachable $action.Execute
+if ($action.WorkingDirectory) { Write-Host "working dir : $($action.WorkingDirectory)" }
+else { Write-Host "working dir : (none - Task Scheduler will start it in %windir%\system32)" -ForegroundColor Yellow }
 Write-Host "console session id: $((Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1).SessionId)"
 Write-Host "this shell session: $((Get-Process -Id $PID).SessionId)   running as: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
 $donut = Get-Process -Name 'Donut.Launcher' -ErrorAction SilentlyContinue
@@ -265,58 +353,63 @@ if ($action.Arguments -like '*--tray*') {
     Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
 }
 
-Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
-# The launcher runs src\Start-Donut.ps1 out of %ProgramData%\DONUT\app. ProgramData is
-# user-writable, so allowlisting policies routinely block scripts there - and the default
-# AppLocker rule set exempts BUILTIN\Administrators, which is why the same build runs
-# elevated and dies de-elevated while every ACL on the path still reads Full Control.
-$script:policyBlocked = $false
-$svc = Get-Service AppIDSvc -ErrorAction SilentlyContinue
-Write-Host "AppIDSvc (AppLocker enforcement): $(if ($svc) { $svc.Status } else { 'not present' })"
-try {
-    $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
-    $modes = @($pol.AppLockerPolicy.RuleCollection |
-            ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
-    Write-Host "effective policy : $($modes -join '  ')"
-    if ($modes -match 'Script=(Enabled|AuditOnly)') {
-        Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
-    }
-}
-catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
-
-# Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
-foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
-    'Microsoft-Windows-AppLocker/MSI and Script') {
-    $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
-            -MaxEvents 40 -ErrorAction SilentlyContinue |
-            Where-Object { $_.Message -match 'DONUT' })
-    if ($ev.Count -gt 0) {
-        $script:policyBlocked = $true
-        Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
-        $ev | Select-Object -First 5 | ForEach-Object {
-            Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
+function Write-PolicySection {
+    Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
+    # The launcher runs src\Start-Donut.ps1 out of %ProgramData%\DONUT\app. ProgramData is
+    # user-writable, so allowlisting policies can block scripts there - and the default
+    # AppLocker rule set exempts BUILTIN\Administrators, which would make the same build run
+    # elevated and die de-elevated while every ACL on the path still reads Full Control.
+    # A DONUT-LensAgent task in the Running state is evidence AGAINST this on a given box.
+    $script:policyBlocked = $false
+    $appId = Get-Service AppIDSvc -ErrorAction SilentlyContinue
+    Write-Host "AppIDSvc (AppLocker enforcement): $(if ($appId) { $appId.Status } else { 'not present' })"
+    try {
+        $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+        $modes = @($pol.AppLockerPolicy.RuleCollection |
+                ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
+        Write-Host "effective policy : $($modes -join '  ')"
+        if ($modes -match 'Script=(Enabled|AuditOnly)') {
+            Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
         }
     }
-    else { Write-Host "$log - no DONUT events" }
+    catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
+
+    # Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
+    foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
+        'Microsoft-Windows-AppLocker/MSI and Script') {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
+                -MaxEvents 40 -ErrorAction SilentlyContinue |
+                Where-Object { $_.Message -match 'DONUT' })
+        if ($ev.Count -gt 0) {
+            $script:policyBlocked = $true
+            Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
+            $ev | Select-Object -First 5 | ForEach-Object {
+                Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
+            }
+        }
+        else { Write-Host "$log - no DONUT events" }
+    }
+
+    # WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
+    $ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
+            -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
+    if ($ci.Count -gt 0) {
+        $script:policyBlocked = $true
+        Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
+    }
+
+    # The token question the ACL viewer cannot answer: a filtered token still LISTS
+    # Administrators, but marked deny-only, so rules and ACEs granted to it do not apply.
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Host ""
+    Write-Host "this shell       : $($id.Name)  elevated=$elevated"
+    Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
+    Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
 }
 
-# WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
-$ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
-        -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
-if ($ci.Count -gt 0) {
-    $script:policyBlocked = $true
-    Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
-}
-
-# The token question the ACL viewer cannot answer: a filtered token still LISTS
-# Administrators, but marked deny-only, so rules and ACEs granted to it do not apply.
-$id = [Security.Principal.WindowsIdentity]::GetCurrent()
-$elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator)
-Write-Host ""
-Write-Host "this shell       : $($id.Name)  elevated=$elevated"
-Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
-Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
+Write-PolicySection
 
 Write-Section "VERDICT"
 if ($script:policyBlocked) {
@@ -326,8 +419,8 @@ if ($script:policyBlocked) {
 }
 # The registered task is a snapshot of whichever build last applied it - so new code
 # plus an old-shaped task means the fix simply has not run yet.
-$oldShape = $script:triggerMismatch -or ($principal.UserId -match 'SYSTEM') -or
-    ($action.Execute -like '*PsExec*') -or ($action.Arguments -like '*Start-DonutInConsoleSession*')
+$oldExecute = ($action.Execute -like '*PsExec*') -or ($action.Arguments -like '*Start-DonutInConsoleSession*')
+$oldShape = $script:triggerMismatch -or ($principal.UserId -match 'SYSTEM') -or $oldExecute
 if ($oldShape -and $script:codeSplitsTrigger -and -not $script:codeHasOldLane) {
     Write-Host "The installed code is current, but this task still has an OLD shape (a SYSTEM principal, a psexec action, and/or a trigger bound to a non-console account)." -ForegroundColor Yellow
     Write-Host "The task is a snapshot from whichever build last applied it - the current code has not re-registered yet." -ForegroundColor Yellow
