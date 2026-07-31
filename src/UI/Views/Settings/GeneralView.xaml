@@ -12,20 +12,20 @@
                         Margin="0,0,0,10">
                 <ToggleButton x:Name="chkStartWithWindows"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Start with Windows (as admin)"
+                <TextBlock Text="Start with Windows"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal"
                         Margin="0,0,0,10">
                 <ToggleButton x:Name="chkCloseToTray"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Close to tray (X hides instead of exits)"
+                <TextBlock Text="Close to tray"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="chkRunAsAdmin"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Run as administrator (needed for all remote work)"
+                <TextBlock Text="Run as administrator"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>
@@ -36,52 +36,61 @@
         <StackPanel>
             <TextBlock Text="SHORTCUTS"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="Global hotkey - shows/restores DONUT from anywhere. Hit Record, then press a combo (e.g. Ctrl+Alt+D). Clear to disable."
+            <TextBlock Text="App hotkey - minimizes or restores DONUT into focus"
                        Style="{DynamicResource SettingsFieldLabel}"
-                       TextWrapping="Wrap"
                        Margin="0,0,0,8" />
-            <!-- Keybind recorder: display + Clear + Record, wired by SettingsPresenter. -->
+            <!-- Keybind recorder: the field owns its own clear (X), so the row reads as one
+                 input plus one action instead of three peer controls. -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0"
+                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0,5,0"
                         VerticalAlignment="Center" Background="{DynamicResource InputFill}"
                         BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-                    <TextBlock x:Name="recGlobalHotkeyValue" Text="No keybind set" VerticalAlignment="Center"
-                               FontFamily="{DynamicResource FontSans}" FontSize="13"
-                               Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="recGlobalHotkeyValue" Grid.Column="0" Text="No keybind set"
+                                   VerticalAlignment="Center" FontFamily="{DynamicResource FontSans}" FontSize="13"
+                                   Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <Button x:Name="recGlobalHotkeyClear" Grid.Column="1" ToolTip="Clear"
+                                Style="{DynamicResource fieldClearButton}" VerticalAlignment="Center"
+                                ToolTipService.ShowOnDisabled="True" />
+                    </Grid>
                 </Border>
-                <Button x:Name="recGlobalHotkeyClear" Grid.Column="1" Content="Clear"
-                        Style="{DynamicResource ButtonGhost}" Margin="8,0,0,0"
-                        VerticalAlignment="Center" />
-                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="2" Content="Record keybind"
+                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="1" Content="Record keybind"
                         Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
-            <TextBlock Text="Open Settings (while DONUT is focused). Hit Record, then press a combo (e.g. Ctrl+,). Clear to disable."
+            <TextBlock Text="Settings shortcut - opens Settings while DONUT is focused"
                        Style="{DynamicResource SettingsFieldLabel}"
-                       TextWrapping="Wrap"
                        Margin="0,12,0,8" />
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0"
+                <Border Grid.Column="0" CornerRadius="8.4" Height="32" Padding="12,0,5,0"
                         VerticalAlignment="Center" Background="{DynamicResource InputFill}"
                         BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
-                    <TextBlock x:Name="recOpenSettingsValue" Text="No keybind set" VerticalAlignment="Center"
-                               FontFamily="{DynamicResource FontSans}" FontSize="13"
-                               Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="recOpenSettingsValue" Grid.Column="0" Text="No keybind set"
+                                   VerticalAlignment="Center" FontFamily="{DynamicResource FontSans}" FontSize="13"
+                                   Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <Button x:Name="recOpenSettingsClear" Grid.Column="1" ToolTip="Clear"
+                                Style="{DynamicResource fieldClearButton}" VerticalAlignment="Center"
+                                ToolTipService.ShowOnDisabled="True" />
+                    </Grid>
                 </Border>
-                <Button x:Name="recOpenSettingsClear" Grid.Column="1" Content="Clear"
-                        Style="{DynamicResource ButtonGhost}" Margin="8,0,0,0"
-                        VerticalAlignment="Center" />
-                <Button x:Name="recOpenSettingsRecord" Grid.Column="2" Content="Record keybind"
+                <Button x:Name="recOpenSettingsRecord" Grid.Column="1" Content="Record keybind"
                         Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
@@ -93,9 +102,8 @@
         <StackPanel>
             <TextBlock Text="TUNING"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="Throttle limit - how many machines run concurrently on the pool."
+            <TextBlock Text="Throttle limit - machines run at once"
                        Style="{DynamicResource SettingsFieldLabel}"
-                       TextWrapping="Wrap"
                        Margin="0,0,0,8" />
             <StackPanel Orientation="Horizontal">
                 <Path Data="{DynamicResource Rocket}"
@@ -109,9 +117,8 @@
                          Width="120"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
-            <TextBlock Text="Folders to scan - largest folders the storage scan returns."
+            <TextBlock Text="Folders to scan - largest folders returned"
                        Style="{DynamicResource SettingsFieldLabel}"
-                       TextWrapping="Wrap"
                        Margin="0,16,0,8" />
             <StackPanel Orientation="Horizontal">
                 <Path Data="{DynamicResource DriverLibrary}"
@@ -135,7 +142,7 @@
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="chkDebugLogging"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Debug logging (verbose breadcrumbs in Donut.log)"
+                <TextBlock Text="Debug logging"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>
