@@ -102,6 +102,34 @@ enforced; it is now pool identity, not convention.
 - If it fails to open, `GetInteractivePool` degrades to the worker pool rather
   than failing the app - the pre-split behaviour.
 
+### Concurrency has to beat its own overhead
+
+The interactive lane is small and shared, so fanning work across it is only worth
+it when a single leg is slower than the machinery around it. **The bar is 150 ms**,
+the agent serve loop's pass. Two decisions came out of applying it:
+
+- **The Lens owner lookup is one batched request, not one per machine.** The agent
+  answers it inline on that 150 ms loop, so N requests would cost N passes plus N
+  files, N AES round trips and N parent polls - slower than resolving them back to
+  back, while holding N of the three runspaces. Parent-side fan-out against a
+  serially-served agent buys no throughput at all.
+- **The AD search debounce is 250 ms.** The fan-out is one job per forest (four by
+  default) into three runspaces. At 100 ms the debounce elapsed between most
+  keystrokes, so typing re-fanned-out repeatedly; and `AbortSearch` cancels through
+  `BeginStop`, which is asynchronous, so a superseded shell keeps its runspace until
+  the reap timer collects it. The faster you typed, the more of the lane was held by
+  searches whose results were already discarded.
+
+**Cancelling the remaining forests once one answers is not on the table.** The
+forests hold disjoint populations and `RenderDropdown` applies no cap and no
+relevance ranking, so an early stop would drop real people from the result rather
+than trimming duplicate work - and make *which* people depend on which forest won
+the race, including the row `Enter` pre-selects. Cancel-on-supersede is the
+legitimate form of that idea, and `AbortSearch` already does it.
+
+Timings for each leg are logged at `LogDebug`, so the bar can be re-applied against
+real numbers rather than argued from first principles.
+
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
 `FinderPresenter.LensDeadline` (90 s, deliberately longer than

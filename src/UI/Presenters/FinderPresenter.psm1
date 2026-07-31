@@ -33,6 +33,18 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
 
+    The search debounce is 250ms because the fan-out is four pool jobs (one per forest)
+    into three interactive runspaces. At 100ms it elapsed between most keystrokes, so
+    typing re-fanned-out repeatedly and AbortSearch's BeginStop is asynchronous - a
+    cancelled shell keeps its runspace until the ReapTimer collects it. The faster you
+    typed, the more of the lane was held by superseded searches.
+
+    Cancelling the other forests once one answers would NOT be an optimization: the
+    forests hold disjoint populations, and RenderDropdown applies no cap and no relevance
+    ranking, so it would drop real people from the result and make which people
+    non-deterministic - including the row Enter pre-selects. Cancel-on-supersede is the
+    legitimate form and AbortSearch already does it.
+
     ResolveOwners keeps exactly one batch in flight, and the batch is deliberate. The
     agent serves owner requests inline on its 150ms serve loop, so a second parent job
     would queue behind the first for no extra throughput while holding a second of the
@@ -87,6 +99,7 @@ class FinderPresenter {
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
+    [datetime]            $LensWarmStartedAt
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
     # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
@@ -122,11 +135,15 @@ class FinderPresenter {
         $this.AdWarmJobs = [List[hashtable]]::new()
         $this.SearchResults = [List[object]]::new()
         $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        # 250ms, not 100: an inter-keystroke gap is usually longer than 100ms, so the old
+        # value re-fanned out to every forest between most keystrokes - see .NOTES.
         $this.SearchDebounce = [DispatcherTimer]::new()
-        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(100)
+        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(250)
         $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
+        # 150ms matches the other poll timers; 60ms ticked the UI thread 16x a second to
+        # watch for LDAP round trips that take hundreds.
         $this.SearchPollTimer = [DispatcherTimer]::new()
-        $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(60)
+        $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
         $this.SearchPollTimer.Add_Tick({ $presenter.PollSearch() }.GetNewClosure())
         $this.UnlockJobs = [List[hashtable]]::new()
         $this.UnlockPollTimer = [DispatcherTimer]::new()
@@ -247,8 +264,10 @@ class FinderPresenter {
         foreach ($domain in $this.AdService.Domains) {
             try {
                 # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
-                $this.AdWarmJobs.Add(
-                    $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
+                $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
+                $warm.StartedAt = [datetime]::UtcNow
+                $warm.Domain = $domain
+                $this.AdWarmJobs.Add($warm)
             }
             catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
@@ -259,7 +278,16 @@ class FinderPresenter {
     # Disposes the startup AD warm jobs; their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
-        foreach ($j in @($this.AdWarmJobs)) { $this.DisposeJob($j.Ps) }
+        foreach ($j in @($this.AdWarmJobs)) {
+            # These plus the Lens warm are five jobs into three interactive runspaces at
+            # launch; whether that shows up in startup time is a measured question.
+            $state = if ($j.Handle.IsCompleted) {
+                "$([long]([datetime]::UtcNow - [datetime]$j.StartedAt).TotalMilliseconds)ms"
+            }
+            else { 'still running at first search' }
+            $this.Logger.LogDebug("AD warm $($j.Domain): $state")
+            $this.DisposeJob($j.Ps)
+        }
         $this.AdWarmJobs.Clear()
     }
 
@@ -268,6 +296,7 @@ class FinderPresenter {
     [void] WarmLens() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $this.LensWarmStartedAt = [datetime]::UtcNow
             $this.LensWarmJob = $this.StartPoolScript($worker, @{
                     SiteServer = $this.Config.GetAdminServiceHost()
                     SourceRoot = $this.Config.SourceRoot
@@ -291,6 +320,8 @@ class FinderPresenter {
                     OwnerOf    = @($machines)
                 })
             $job.OnResolved = $onResolved
+            $job.StartedAt = [datetime]::UtcNow
+            $job.Count = @($machines).Count
             $this.OwnerJob = $job
             $this.LensPollTimer.Start()
         }
@@ -314,6 +345,11 @@ class FinderPresenter {
                 foreach ($row in @($bundle.owners)) {
                     if ($row.owner) { $map[[string]$row.name] = [string]$row.owner }
                 }
+                # Per-machine cost is the number that decides whether this ever needs
+                # to stop being one serial batch.
+                $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+                $each = if ($job.Count -gt 0) { [long]($ms / $job.Count) } else { 0 }
+                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms (~$($each)ms each), $($map.Count) named")
                 if ($job.OnResolved -and $map.Count -gt 0) { & $job.OnResolved $map }
             }
         }
@@ -328,9 +364,10 @@ class FinderPresenter {
         $this.LensWarmJob = $null
         try {
             if ($job.Handle.IsCompleted) {
+                $ms = [long]([datetime]::UtcNow - $this.LensWarmStartedAt).TotalMilliseconds
                 $reason = (@($job.Ps.EndInvoke($job.Handle)) -join '')
                 if ($reason) { $this.Logger.LogWarning("Lens agent warm-up: $reason") }
-                else { $this.Logger.LogInfo("Lens agent warmed and ready.") }
+                else { $this.Logger.LogInfo("Lens agent warmed and ready in ${ms}ms.") }
             }
             # DisposeJob, not $job.Ps.Dispose(): a warm agent still hung on the network must be
             # stopped asynchronously or it blocks the UI thread (see DisposeJob).
@@ -393,12 +430,18 @@ class FinderPresenter {
             try {
                 $job = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = $prefix })
                 $job.Token = $token
+                $job.Domain = $domain
+                $job.Prefix = $prefix
+                $job.StartedAt = [datetime]::UtcNow
                 $this.SearchJobs.Add($job)
             }
             catch {
                 $this.Logger.LogException("AD search could not start for '$domain'", $_)
             }
         }
+        # One line per fan-out: how often this fires while typing is the number that says
+        # whether the debounce is doing its job.
+        $this.Logger.LogDebug("AD search fan-out '$prefix': $($this.SearchJobs.Count) forest(s)")
         if ($this.SearchJobs.Count -gt 0) { $this.SearchPollTimer.Start() }
         else { $this.CloseSearchPopup() }
     }
@@ -413,6 +456,11 @@ class FinderPresenter {
             catch { $this.Logger.LogException("AD search failed", $_) }
             $this.DisposeJob($job.Ps)
             [void]$this.SearchJobs.Remove($job)
+            # Dispatch to done, so it counts pool queue wait as well as the LDAP round trip -
+            # a forest that waited for a free runspace is the case worth seeing.
+            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            $stale = if ($job.Token -ne $this.SearchToken) { ' (superseded)' } else { '' }
+            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms, $($results.Count) hit(s)$stale")
             if ($job.Token -ne $this.SearchToken) { continue }
             foreach ($row in $results) {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
