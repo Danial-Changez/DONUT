@@ -82,9 +82,11 @@ $script:AffinityScript = {
 $script:HardwareScript = {
     param($server, $pairs)
     function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
+        # The braces are load-bearing: "$class?" parses as a variable named class?, which is
+        # undefined, so the class silently vanishes from the path and the query matches nothing.
         $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
         else {
-            "https://$srv/AdminService/wmi/$class?`$filter=" +
+            "https://$srv/AdminService/wmi/${class}?`$filter=" +
             [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
         }
         $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
@@ -93,7 +95,21 @@ $script:HardwareScript = {
         if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
         return $r
     }
-    $useKey = $false
+    # A site that will not serve the filter shape says so two ways: it 404s, or it answers
+    # 200 with an empty set. Both mean "use the keyed segment", and the choice then sticks.
+    function Get-InventoryRow([string]$srv, [string]$class, [string]$select, [string]$id) {
+        if (-not $script:UseKey) {
+            try {
+                $row = Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $false
+                if ($row) { return $row }
+            }
+            catch { $script:FilterError = $_.Exception.Message }
+            $script:UseKey = $true
+        }
+        return Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $true
+    }
+    $script:UseKey = $false
+    $script:FilterError = ''
     $results = @()
     foreach ($pair in $pairs) {
         $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
@@ -103,22 +119,21 @@ $script:HardwareScript = {
             continue
         }
         try {
-            $cs = $null
-            try {
-                $cs = Get-AdminServiceRow $server 'SMS_G_System_COMPUTER_SYSTEM' 'Manufacturer,Model' $pair.resourceId $useKey
-            }
-            catch {
-                # Filter shape rejected: retry once via the keyed segment, keep it for the rest.
-                if ($useKey) { throw }
-                $useKey = $true
-                $cs = Get-AdminServiceRow $server 'SMS_G_System_COMPUTER_SYSTEM' 'Manufacturer,Model' $pair.resourceId $useKey
-            }
+            $cs = Get-InventoryRow -srv $server -class 'SMS_G_System_COMPUTER_SYSTEM' `
+                -select 'Manufacturer,Model' -id $pair.resourceId
             if ($cs) {
                 $out.manufacturer = [string]$cs.Manufacturer
                 $out.model = [string]$cs.Model
             }
-            $bios = Get-AdminServiceRow $server 'SMS_G_System_PC_BIOS' 'SerialNumber' $pair.resourceId $useKey
+            $bios = Get-InventoryRow -srv $server -class 'SMS_G_System_PC_BIOS' `
+                -select 'SerialNumber' -id $pair.resourceId
             if ($bios) { $out.serial = [string]$bios.SerialNumber }
+            # Both shapes answering nothing used to blank the card with no reason on it,
+            # which reads exactly like the feature was never built.
+            if (-not $out.model -and -not $out.serial) {
+                $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
+                if ($script:FilterError) { $out.error += " (filter form: $($script:FilterError))" }
+            }
         }
         catch { $out.error = $_.Exception.Message }
         $results += $out
@@ -252,9 +267,10 @@ function Resolve-Lens {
 
     # Hardware runs on a thread job parallel to the per-WSID AD loop below.
     $hwJob = $null
+    $hwPairs = @()
     if ($wsids.Count -gt 0 -and $server) {
-        $pairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
-        try { $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript -ArgumentList $server, $pairs } catch { $hwJob = $null }
+        $hwPairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
+        try { $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript -ArgumentList $server, $hwPairs } catch { $hwJob = $null }
     }
 
     # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
@@ -330,14 +346,19 @@ function Resolve-Lens {
     }
 
     # Merge the parallel hardware results; a failed source degrades to blank fields.
-    if ($hwJob) {
+    if ($hwPairs.Count -gt 0) {
         $hwRows = $null
         try {
-            if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
-            else { throw 'timed out after 30s.' }
+            if ($hwJob) {
+                if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
+                else { throw 'timed out after 30s.' }
+            }
+            # No job means it would not start; inline keeps the cards filled, the way the
+            # affinity read above already degrades, instead of blanking every model silently.
+            else { $hwRows = & $script:HardwareScript $server $hwPairs }
         }
         catch { $bundle.errors += "SCCM hardware inventory: $($_.Exception.Message)" }
-        finally { Remove-Job -Job $hwJob -Force -ErrorAction SilentlyContinue }
+        finally { if ($hwJob) { Remove-Job -Job $hwJob -Force -ErrorAction SilentlyContinue } }
 
         $hwErrors = @()
         foreach ($row in @($hwRows)) {

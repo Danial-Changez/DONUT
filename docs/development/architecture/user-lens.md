@@ -85,6 +85,14 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
   pass filters on
   `ResourceID eq N`, falls back once to the keyed segment `Class(N)` if the
   filter shape is rejected, and never uses a string filter.
+- **Note (a rejected filter has two shapes):** a site that will not serve the
+  filter form answers either 404 **or** 200 with an empty set. Both fall through
+  to the keyed segment, and a device that comes back empty from both records
+  `no inventory rows for ResourceID N` rather than a blank card. Treating only
+  the 404 as rejection is what made model and tag silently absent.
+- **Note (interpolating a class into the path):** the URL builder writes
+  `${class}?` with braces. `"$class?"` parses `class?` as the variable name, so
+  the class vanishes from the path and the query matches nothing, silently.
 - A failed source degrades: each appends to the bundle's `errors` list and the
   lens still renders (blank hardware fields, missing keys noted per device).
 - The parse (`PersonLens.FromJson`) is pure and unit-tested; the agent/task I/O
