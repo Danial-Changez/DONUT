@@ -169,14 +169,14 @@
                     <Button Grid.Column="2" Content="Reset..." Command="{Binding ResetCommand}"
                             Style="{DynamicResource ButtonSecondary}" Height="32" FontSize="11"
                             VerticalAlignment="Center" Margin="0,0,6,0"
-                            ToolTip="Reset this account's password to a temporary one"
+                            ToolTip="Set a temporary password"
                             Visibility="{Binding CanReset, Converter={StaticResource BoolToVis}}" />
                     <!-- The row's one action earns the tint (colour hierarchy); Outline is
                          reserved for low-emphasis navigation (tour Back). -->
                     <Button Grid.Column="3" Content="Unlock" Command="{Binding UnlockCommand}"
                             Style="{DynamicResource ButtonTintPrimary}" Height="32" FontSize="11"
                             VerticalAlignment="Center"
-                            ToolTip="Unlock this locked-out account"
+                            ToolTip="Unlock this account"
                             Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
                   </Grid>
                 </Border>
@@ -196,7 +196,7 @@
     Height="32"
     Margin="12,0,0,0"
     Style="{DynamicResource ButtonPill}"
-    ToolTip="Click to cycle the active command (Scan / Apply) using its defaults"
+    ToolTip="Cycle Scan / Apply"
   >
     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
       <TextBlock Text="&#x27F3;" FontFamily="{DynamicResource FontSymbol}" FontSize="13"

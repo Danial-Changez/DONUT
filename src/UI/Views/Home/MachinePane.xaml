@@ -24,7 +24,7 @@
                  HorizontalAlignment="Left" VerticalAlignment="Center" />
       <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
               FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
-              ToolTip="Clear completed machines from the list" />
+              ToolTip="Remove settled rows" />
     </Grid>
 
     <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
@@ -81,12 +81,34 @@
                 <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <!-- Tooltips fire only once the text is actually cut: repeating a fully
+                       visible value is noise. See ui-reference, Truncatable text. -->
                   <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
                              FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
-                             TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
+                             TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                          <Trigger Property="IsTextTrimmed" Value="True">
+                            <Setter Property="ToolTip" Value="{Binding HostName}" />
+                          </Trigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                             FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis"
-                             ToolTip="{Binding Subtitle}" />
+                             FontFamily="{DynamicResource FontMono}" FontSize="10.5"
+                             TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                          <Trigger Property="IsTextTrimmed" Value="True">
+                            <Setter Property="ToolTip" Value="{Binding Subtitle}" />
+                          </Trigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                 </StackPanel>
                 <!-- The card reads busy from the "Scanning..." chip; the live bar sits atop
                      the detail pane's terminal (DetailProgress), not here (declutter). -->
@@ -117,10 +139,10 @@
                                VerticalAlignment="Center" />
                   </StackPanel>
                 </Border>
+                <!-- No tooltip: the button says Run, and the mode pill says which. -->
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                         Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
-                        Padding="14,4" VerticalAlignment="Center"
-                        ToolTip="Run the active command on this machine" />
+                        Padding="14,4" VerticalAlignment="Center" />
               </Grid>
             </Border>
           </DataTemplate>

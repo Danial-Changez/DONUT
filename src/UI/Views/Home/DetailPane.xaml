@@ -185,8 +185,17 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}"
                                    FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}"
-                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                                   ToolTip="{Binding Name}" />
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Style.Triggers>
+                                <Trigger Property="IsTextTrimmed" Value="True">
+                                  <Setter Property="ToolTip" Value="{Binding Name}" />
+                                </Trigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
                         <!-- Urgency badge: Urgent=red, Recommended=sky, Optional=muted (inline
                              so its colour varies without a BasedOn chain). -->
                         <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
@@ -240,7 +249,17 @@
                           </Border>
                           <TextBlock Text="{Binding VersionText}" FontFamily="{DynamicResource FontMono}" FontSize="11"
                                      Foreground="{DynamicResource BodyTextPrimary}" VerticalAlignment="Center"
-                                     TextTrimming="CharacterEllipsis" ToolTip="{Binding VersionText}" />
+                                     TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                              <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                  <Trigger Property="IsTextTrimmed" Value="True">
+                                    <Setter Property="ToolTip" Value="{Binding VersionText}" />
+                                  </Trigger>
+                                </Style.Triggers>
+                              </Style>
+                            </TextBlock.Style>
+                          </TextBlock>
                           <Border Style="{DynamicResource BadgeGreen}" Margin="8,0,0,0" VerticalAlignment="Center"
                                   Visibility="{Binding IsNewer, Converter={StaticResource BoolToVis}}">
                             <TextBlock Style="{DynamicResource BadgeGreenText}" Text="NEW" />
@@ -321,7 +340,7 @@
                     <CheckBox Grid.Column="0" Style="{DynamicResource ModernCheckBox}" Margin="0,0,6,0"
                               IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                               Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
-                              ToolTip="Select to clear this folder's contents" />
+                              ToolTip="Clear this folder's contents" />
                     <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
                       <TextBox.Style>
