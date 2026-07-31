@@ -82,21 +82,9 @@
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                   <StackPanel Orientation="Horizontal">
-                  <!-- Tooltips fire only once the text is actually cut: repeating a fully
-                       visible value is noise. See ui-reference, Truncatable text. -->
-                  <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
-                             FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
-                             TextTrimming="CharacterEllipsis">
-                    <TextBlock.Style>
-                      <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                          <Trigger Property="IsTextTrimmed" Value="True">
-                            <Setter Property="ToolTip" Value="{Binding HostName}" />
-                          </Trigger>
-                        </Style.Triggers>
-                      </Style>
-                    </TextBlock.Style>
-                  </TextBlock>
+                    <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
+                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
                     <!-- Whose machine this is, from SCCM affinity. First name only, and it
                          collapses when SCCM has no primary user on record. -->
                     <TextBlock Text="{Binding OwnerName}" Foreground="{DynamicResource BodyTextTertiary}"
@@ -116,17 +104,7 @@
                   </StackPanel>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
                              FontFamily="{DynamicResource FontMono}" FontSize="10.5"
-                             TextTrimming="CharacterEllipsis">
-                    <TextBlock.Style>
-                      <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                          <Trigger Property="IsTextTrimmed" Value="True">
-                            <Setter Property="ToolTip" Value="{Binding Subtitle}" />
-                          </Trigger>
-                        </Style.Triggers>
-                      </Style>
-                    </TextBlock.Style>
-                  </TextBlock>
+                             TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
                 <!-- The card reads busy from the "Scanning..." chip; the live bar sits atop
                      the detail pane's terminal (DetailProgress), not here (declutter). -->

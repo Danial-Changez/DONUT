@@ -185,17 +185,8 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}"
                                    FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}"
-                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
-                          <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                              <Style.Triggers>
-                                <Trigger Property="IsTextTrimmed" Value="True">
-                                  <Setter Property="ToolTip" Value="{Binding Name}" />
-                                </Trigger>
-                              </Style.Triggers>
-                            </Style>
-                          </TextBlock.Style>
-                        </TextBlock>
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                   ToolTip="{Binding Name}" />
                         <!-- Urgency badge: Urgent=red, Recommended=sky, Optional=muted (inline
                              so its colour varies without a BasedOn chain). -->
                         <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
@@ -249,17 +240,7 @@
                           </Border>
                           <TextBlock Text="{Binding VersionText}" FontFamily="{DynamicResource FontMono}" FontSize="11"
                                      Foreground="{DynamicResource BodyTextPrimary}" VerticalAlignment="Center"
-                                     TextTrimming="CharacterEllipsis">
-                            <TextBlock.Style>
-                              <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                  <Trigger Property="IsTextTrimmed" Value="True">
-                                    <Setter Property="ToolTip" Value="{Binding VersionText}" />
-                                  </Trigger>
-                                </Style.Triggers>
-                              </Style>
-                            </TextBlock.Style>
-                          </TextBlock>
+                                     TextTrimming="CharacterEllipsis" ToolTip="{Binding VersionText}" />
                           <Border Style="{DynamicResource BadgeGreen}" Margin="8,0,0,0" VerticalAlignment="Center"
                                   Visibility="{Binding IsNewer, Converter={StaticResource BoolToVis}}">
                             <TextBlock Style="{DynamicResource BadgeGreenText}" Text="NEW" />
