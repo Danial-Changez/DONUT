@@ -29,13 +29,13 @@ class TourSteps {
             }
             [TourStep]@{
                 Title     = 'Add machines - or find a person'
-                Body      = 'Type machine names and press Enter to add them. Or search a person to look them up in AD and open their Lens. Enter shows what it will do - it never guesses wrong.'
+                Body      = 'Type a machine name and press Enter to add it. Search a person instead and their Lens opens: their devices with model, service tag and BitLocker key, so you can tell three similar laptops apart.'
                 TargetKey = 'search'
                 Placement = 'below'
             }
             [TourStep]@{
                 Title     = 'Pick a mode, then Run'
-                Body      = 'This button cycles between Scan and Apply. Pick one, then Run a single machine or Run all to act on the whole list.'
+                Body      = 'This button cycles between Scan and Apply. Pick one, then Run a single machine or Run all for the whole list.'
                 TargetKey = 'mode'
                 Placement = 'below'
             }
@@ -52,8 +52,8 @@ class TourSteps {
                 Placement = 'left'
             }
             [TourStep]@{
-                Title     = 'Settings & help'
-                Body      = 'The gear opens Settings - keybinds, startup, and options save as you change them. The page icon opens the full docs, and the ? replays this tour.'
+                Title     = 'Settings & admin rights'
+                Body      = 'The gear opens Settings - shortcuts, startup and Run as administrator, saved as you change them. Remote work needs administrator rights: if the title bar reads LIMITED, the first fleet action asks once and restarts DONUT elevated. The page icon opens the docs, and the ? replays this tour.'
                 TargetKey = 'settings'
                 Placement = 'below'
             }
