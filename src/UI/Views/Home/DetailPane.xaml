@@ -387,6 +387,7 @@
                A virtualized ListBox of LogLine items (chromeless, so it reads as the
                same terminal): per-line severity color without realizing 2000 visuals. -->
           <ListBox x:Name="lstDetailLog" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                   Grid.IsSharedSizeScope="True"
                    FontFamily="{DynamicResource FontMono}" FontSize="12" Margin="6" IsTabStop="False"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -415,9 +416,10 @@
                      The Auto column reserves the gutter so continuations hang beside it. -->
                 <Grid>
                   <Grid.ColumnDefinitions>
-                    <!-- Fixed, not Auto: Auto measures per row, so an unstamped separator
-                         line would collapse the gutter and knock every row out of column. -->
-                    <ColumnDefinition Width="76" />
+                    <!-- Auto sizes to the stamp itself, so the gap stays exactly the two
+                         spaces StampText carries; the shared group keeps unstamped
+                         separator lines from collapsing it and breaking the column. -->
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="LogStamp" />
                     <ColumnDefinition Width="*" />
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="{Binding StampText, Mode=OneTime}"

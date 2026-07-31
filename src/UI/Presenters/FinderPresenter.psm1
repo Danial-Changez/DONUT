@@ -100,6 +100,8 @@ class FinderPresenter {
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
     [datetime]            $LensWarmStartedAt
+    [bool]                $LensWarmTimed
+    [DispatcherTimer]     $WarmWatchTimer   # times the warms; stops itself once they land
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
     # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
@@ -162,6 +164,34 @@ class FinderPresenter {
         $this.LensPollTimer = [DispatcherTimer]::new()
         $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(200)
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
+
+        # Warm timing has to be taken when the warm LANDS. The reaps fire on the first real
+        # search/pick, so measuring there reports how long the user took, not the warm.
+        $this.WarmWatchTimer = [DispatcherTimer]::new()
+        $this.WarmWatchTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+        $this.WarmWatchTimer.Add_Tick({ $presenter.PollWarmTimings() }.GetNewClosure())
+    }
+
+    # Logs each warm's true elapsed as it completes, then stops. Debug-gated, and it only
+    # runs during startup, so the tick costs nothing once the warms have landed.
+    [void] PollWarmTimings() {
+        $pending = 0
+        foreach ($j in @($this.AdWarmJobs)) {
+            if ($j.Timed) { continue }
+            if (-not $j.Handle.IsCompleted) { $pending++; continue }
+            $j.Timed = $true
+            $ms = [long]([datetime]::UtcNow - [datetime]$j.StartedAt).TotalMilliseconds
+            $this.Logger.LogDebug("AD warm $($j.Domain) ready in $($ms)ms")
+        }
+        if ($null -ne $this.LensWarmJob -and -not $this.LensWarmTimed) {
+            if ($this.LensWarmJob.Handle.IsCompleted) {
+                $this.LensWarmTimed = $true
+                $ms = [long]([datetime]::UtcNow - $this.LensWarmStartedAt).TotalMilliseconds
+                $this.Logger.LogDebug("Lens agent warm ready in $($ms)ms")
+            }
+            else { $pending++ }
+        }
+        if ($pending -eq 0) { $this.WarmWatchTimer.Stop() }
     }
 
     # Adopts the ActionBar region root (its namescope holds the finder's controls) and
@@ -267,7 +297,9 @@ class FinderPresenter {
                 $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
                 $warm.StartedAt = [datetime]::UtcNow
                 $warm.Domain = $domain
+                $warm.Timed = $false
                 $this.AdWarmJobs.Add($warm)
+                $this.WarmWatchTimer.Start()
             }
             catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
@@ -278,14 +310,9 @@ class FinderPresenter {
     # Disposes the startup AD warm jobs; their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
+        # Timing belongs to PollWarmTimings, which sees the warm land; this only disposes.
         foreach ($j in @($this.AdWarmJobs)) {
-            # These plus the Lens warm are five jobs into three interactive runspaces at
-            # launch; whether that shows up in startup time is a measured question.
-            $state = if ($j.Handle.IsCompleted) {
-                "$([long]([datetime]::UtcNow - [datetime]$j.StartedAt).TotalMilliseconds)ms"
-            }
-            else { 'still running at first search' }
-            $this.Logger.LogDebug("AD warm $($j.Domain): $state")
+            if (-not $j.Timed) { $this.Logger.LogDebug("AD warm $($j.Domain) still running at first search") }
             $this.DisposeJob($j.Ps)
         }
         $this.AdWarmJobs.Clear()
@@ -297,6 +324,8 @@ class FinderPresenter {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
             $this.LensWarmStartedAt = [datetime]::UtcNow
+            $this.LensWarmTimed = $false
+            $this.WarmWatchTimer.Start()
             $this.LensWarmJob = $this.StartPoolScript($worker, @{
                     SiteServer = $this.Config.GetAdminServiceHost()
                     SourceRoot = $this.Config.SourceRoot
@@ -364,10 +393,10 @@ class FinderPresenter {
         $this.LensWarmJob = $null
         try {
             if ($job.Handle.IsCompleted) {
-                $ms = [long]([datetime]::UtcNow - $this.LensWarmStartedAt).TotalMilliseconds
+                # No elapsed here: this fires on the first pick, so it would time the user.
                 $reason = (@($job.Ps.EndInvoke($job.Handle)) -join '')
                 if ($reason) { $this.Logger.LogWarning("Lens agent warm-up: $reason") }
-                else { $this.Logger.LogInfo("Lens agent warmed and ready in ${ms}ms.") }
+                else { $this.Logger.LogInfo('Lens agent warmed and ready.') }
             }
             # DisposeJob, not $job.Ps.Dispose(): a warm agent still hung on the network must be
             # stopped asynchronously or it blocks the UI thread (see DisposeJob).

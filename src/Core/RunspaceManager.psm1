@@ -17,15 +17,22 @@ using module '.\LogService.psm1'
     job holds its runspace for the whole child-process lifetime, so a fleet-wide
     scan pins all of them for minutes and a Lens or AD lookup submitted meanwhile
     queues behind it and never dispatches.
+
+    InteractiveSize is 4 because the AD finder's fan-out is one job per configured
+    forest and the default is four; at 3 the last forest queued on every single
+    search, not just under contention. It is still a fixed number rather than a
+    count of forests - deriving it would put a startup cost (each runspace pays a
+    serialized using-module compile at warm) behind a value users edit, which is
+    the coupling the worker/interactive split exists to avoid.
 #>
 class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $RunspacePool
     static [System.Management.Automation.Runspaces.RunspacePool] $InteractivePool
     static [LogService] $Logger = $null
 
-    # Fixed, not throttle-derived: this lane only ever runs one user-initiated
-    # lookup at a time plus the deferred Lens/AD warms that back it.
-    static [int] $InteractiveSize = 3
+    # Fixed, not throttle-derived (that is a fleet knob). Four so a whole AD search
+    # fan-out dispatches at once instead of one forest always queuing - see .NOTES.
+    static [int] $InteractiveSize = 4
 
     # Optionally attach a logger (the pool is managed statically, so logging is
     # too). When unset, logging is silently skipped.
