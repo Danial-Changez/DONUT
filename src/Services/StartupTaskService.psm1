@@ -7,10 +7,17 @@ using module "..\Core\LogService.psm1"
 
 .DESCRIPTION
     A Task Scheduler task starts DONUT minimized to the tray at the console user's
-    logon, running as that user at their own level. DONUT elevates on demand from
-    there, so the task never needs to start it elevated.
+    logon, running as that user at RunLevel Highest.
 
 .NOTES
+    RunLevel Highest, not Limited. Both are the console user - the difference is only
+    which of that account's tokens the task gets. On an admin console account Highest
+    starts DONUT elevated with no logon-time UAC prompt, which is what runAsAdmin
+    defaults to wanting; Limited started it de-elevated and left it to relaunch itself
+    through a consent prompt at logon, which is the error this replaced. On a non-admin
+    console account Highest has no effect: it degrades to that account's standard token
+    and DONUT elevates on demand exactly as before, so the setting is safe either way.
+
     There used to be a second lane: when DONUT ran as a separate admin account, a
     task could not start it elevated (an Interactive principal needs a logon session
     that account does not have, and RunLevel Highest on a non-admin console user
@@ -183,12 +190,12 @@ class StartupTaskService {
         return Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     }
 
-    # One lane: the console user's own logon, running as that user at their own level.
-    # RunLevel Limited, not Highest - DONUT elevates on demand, it does not start elevated.
+    # One lane: the console user's own logon, as that user. RunLevel Highest so an admin
+    # console account starts elevated with no logon-time UAC prompt - see .NOTES.
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
         $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
-        $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Limited -LogonType Interactive
+        $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
             -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
         # -ErrorAction Stop: an access-denied register is non-terminating by default and

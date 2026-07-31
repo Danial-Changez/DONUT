@@ -32,10 +32,14 @@ Enabling **Start with Windows** registers a scheduled task that launches DONUT h
 the tray when you sign in. Turning the toggle off unregisters it. A second launch of DONUT
 (from the Start Menu, say) just surfaces the running instance.
 
-- The task triggers on **your** logon and runs as **you**, at your normal rights.
-- It does not start DONUT elevated. DONUT asks for administrator rights when you do
-  something that needs them, which is every remote operation. See
-  [Settings](./settings.md#general-section) for the **Run as administrator** toggle.
+- The task triggers on **your** logon and runs as **you**, with *Run with highest
+  privileges* set.
+- **If your account is a local administrator**, DONUT comes up already elevated with no
+  UAC prompt at sign-in, which is what the **Run as administrator** toggle defaults to
+  wanting. See [Settings](./settings.md#general-section).
+- **If it is not**, the task gets your ordinary token instead and DONUT asks for
+  administrator rights when you do something that needs them, which is every remote
+  operation.
 - Registering the task itself needs administrator rights, so flipping this switch while
   DONUT is de-elevated prompts to restart elevated first.
 - An RDP-only logon won't surface the tray. If the toggle fails, the error toast states

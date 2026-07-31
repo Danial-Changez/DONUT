@@ -72,7 +72,16 @@ elevates, and re-runs it.
 ## Autostart
 
 One lane: a scheduled task triggered by the console user's logon, running as that user at
-`RunLevel Limited`. DONUT elevates on demand from there.
+`RunLevel Highest`.
+
+- **Highest, not Limited.** Both run as the console user; the difference is only which of
+  that account's tokens the task receives. On an **admin** console account Highest starts
+  DONUT elevated with no logon-time UAC prompt, matching what `runAsAdmin` defaults to
+  wanting. Limited started it de-elevated and left it to relaunch itself through a consent
+  prompt at logon, which errored. On a **non-admin** console account Highest has no effect:
+  it degrades to that account's standard token and DONUT elevates on demand as before.
+- **It does not resurrect the deleted lane.** The principal is the console user either way.
+  What was broken below was the SYSTEM principal, not the run level.
 
 **There used to be a second lane, and deleting it fixed a bug rather than only simplifying
 the code.** A task cannot start an elevated process as an account that is not an admin: an
