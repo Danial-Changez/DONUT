@@ -26,6 +26,7 @@ using module ".\FolderNodeViewModel.psm1"
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
+    [string] $OwnerName = ''           # SCCM primary user's first name; '' collapses the chip
     [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone
@@ -240,6 +241,16 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipText', [HostViewModel]::HumanStatus($status))
         $this.Set('StatusGlyph', [HostViewModel]::StatusGlyph($status))
         $this.Set('ChipVisible', $true)
+    }
+
+    # First name only: enough to tell one operator's three laptops apart, and a full display
+    # name would crowd the hostname it sits beside.
+    [void] SetOwner([string]$displayName) {
+        $first = ([string]$displayName).Trim()
+        if ($first -match '^\s*(\S+)') { $first = $Matches[1] }
+        # "Doe, Jane" is the other common directory shape; the surname is the wrong half.
+        if ($first.EndsWith(',')) { $first = ([string]$displayName -split ',\s*')[-1].Trim() }
+        $this.Set('OwnerName', $first)
     }
 
     hidden [void] ApplySubtitle() {

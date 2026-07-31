@@ -81,6 +81,7 @@
                 <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal">
                   <!-- Tooltips fire only once the text is actually cut: repeating a fully
                        visible value is noise. See ui-reference, Truncatable text. -->
                   <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
@@ -96,6 +97,23 @@
                       </Style>
                     </TextBlock.Style>
                   </TextBlock>
+                    <!-- Whose machine this is, from SCCM affinity. First name only, and it
+                         collapses when SCCM has no primary user on record. -->
+                    <TextBlock Text="{Binding OwnerName}" Foreground="{DynamicResource BodyTextTertiary}"
+                               FontFamily="{DynamicResource FontSans}" FontSize="12"
+                               VerticalAlignment="Center" Margin="8,1,0,0">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Visibility" Value="Visible" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding OwnerName}" Value="">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </StackPanel>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
                              FontFamily="{DynamicResource FontMono}" FontSize="10.5"
                              TextTrimming="CharacterEllipsis">

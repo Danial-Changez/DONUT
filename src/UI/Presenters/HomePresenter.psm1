@@ -1008,7 +1008,33 @@ class HomePresenter : AsyncJobPresenter {
         $this.Rows[$hostName] = $vm
         $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
         $this.UpdateEmptyHint()
+        $this.RequestOwners()
         return $vm
+    }
+
+    # Fills "whose machine is this" from the recents cache, then asks the Lens agent for
+    # whatever is still missing - one batch for the whole list, never one call per row.
+    [void] RequestOwners() {
+        $wanted = @()
+        foreach ($name in @($this.Rows.Keys)) {
+            $vm = $this.Rows[$name]
+            if ($vm.OwnerName) { continue }
+            $cached = $this.Store.GetAll() | Where-Object { $_.Hostname -eq $name } | Select-Object -First 1
+            if ($cached -and $cached.Owner) { $vm.SetOwner($cached.Owner); continue }
+            $wanted += $name
+        }
+        if ($wanted.Count -eq 0 -or -not $this.Finder) { return }
+
+        $presenter = $this
+        $onResolved = {
+            param($map)
+            foreach ($machine in @($map.Keys)) {
+                $row = $presenter.GetRow([string]$machine)
+                if ($row) { $row.SetOwner([string]$map[$machine]) }
+                $presenter.Store.UpsertOwner([string]$machine, [string]$map[$machine])
+            }
+        }.GetNewClosure()
+        $this.Finder.ResolveOwners($wanted, $onResolved)
     }
 
     [HostViewModel] GetRow([string]$hostName) {

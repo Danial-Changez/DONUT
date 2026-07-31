@@ -20,6 +20,7 @@ class RecentConnection {
     [string] $LastJobType
     [int]    $UpdateCount
     [bool]   $RebootRequired
+    [string] $Owner           # SCCM primary user's display name; cached, looked up once
     [MachineInventory] $Inventory   # cached probe result, or $null when never probed
     [DiskUsageReport]  $DiskUsage   # cached "biggest folders" scan, or $null when never run
 
@@ -32,6 +33,7 @@ class RecentConnection {
         $rc.LastJobType    = [string]$h['lastJobType']
         $rc.UpdateCount    = if ($null -ne $h['updateCount']) { [int]$h['updateCount'] } else { 0 }
         $rc.RebootRequired = [bool]$h['rebootRequired']
+        $rc.Owner          = [string]$h['owner']
         if ($null -ne $h['inventory']) {
             $rc.Inventory = [MachineInventory]::FromHashtable([hashtable]$h['inventory'])
         }

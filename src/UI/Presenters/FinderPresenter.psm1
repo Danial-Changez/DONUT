@@ -32,6 +32,13 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     Extracted from HomePresenter; the two presenters share the HomeViewModel (which
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
+
+    ResolveOwners keeps exactly one batch in flight, and the batch is deliberate. The
+    agent serves owner requests inline on its 150ms serve loop, so a second parent job
+    would queue behind the first for no extra throughput while holding a second of the
+    three interactive runspaces - the lane a Lens pick needs to dispatch immediately.
+    It reaps on the Lens poll tick rather than owning a timer, since both wait on the
+    same agent.
     $Home is a duck-typed back-reference to HomePresenter (a typed import would be a
     using-module cycle); the complete machine-side seam is: Resolution.PrefetchIp,
     EnsureRow, StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
@@ -79,6 +86,7 @@ class FinderPresenter {
     # mirrors the search/unlock poll pattern.
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
+    [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
     # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
@@ -269,6 +277,48 @@ class FinderPresenter {
         catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
         }
+    }
+
+    # Whose machines these are, for the whole list in one request. One in flight at a time -
+    # see .NOTES for why a second buys nothing.
+    [void] ResolveOwners([string[]]$machines, [object]$onResolved) {
+        if (@($machines).Count -eq 0 -or $null -ne $this.OwnerJob) { return }
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $job = $this.StartPoolScript($worker, @{
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    OwnerOf    = @($machines)
+                })
+            $job.OnResolved = $onResolved
+            $this.OwnerJob = $job
+            $this.LensPollTimer.Start()
+        }
+        catch {
+            $this.Logger.LogException('Owner lookup could not start', $_)
+        }
+    }
+
+    # Reaped on the Lens poll tick. Hands back @{ machine = ownerDisplayName } and lets the
+    # caller decide what to do with it; a failed batch just leaves the cards unnamed.
+    hidden [void] ReapOwners() {
+        $job = $this.OwnerJob
+        if ($null -eq $job -or -not $job.Handle.IsCompleted) { return }
+        $this.OwnerJob = $null
+        try {
+            $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+            if ($json) {
+                $bundle = $json | ConvertFrom-Json
+                if ($bundle.error) { $this.Logger.LogWarning("Owner lookup: $($bundle.error)") }
+                $map = @{}
+                foreach ($row in @($bundle.owners)) {
+                    if ($row.owner) { $map[[string]$row.name] = [string]$row.owner }
+                }
+                if ($job.OnResolved -and $map.Count -gt 0) { & $job.OnResolved $map }
+            }
+        }
+        catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
+        finally { $this.DisposeJob($job.Ps) }
     }
 
     # Reap the startup agent warm job (logs its result: '' = started, else the reason).
@@ -588,6 +638,8 @@ class FinderPresenter {
     # Poll the in-flight lens lookup: mid-flight, stream any 'LensPartial' Information
     # record into the VM; on completion parse the bundle, populate, wire, and cache.
     [void] PollLens() {
+        # Shares this tick rather than owning a second timer: both wait on the same agent.
+        $this.ReapOwners()
         foreach ($job in @($this.LensJobs)) {
             # The partial (directory facts) arrives on the Information stream before the
             # SCCM/BitLocker crawl finishes - apply it so the pane fills early.
@@ -636,7 +688,8 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
+        # An owner batch outlives the pick that started it, so it keeps the tick alive too.
+        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup that outlives LensDeadline is never coming back (a starved pool or a wedged

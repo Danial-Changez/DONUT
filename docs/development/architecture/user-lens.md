@@ -93,6 +93,18 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
 - **Note (interpolating a class into the path):** the URL builder writes
   `${class}?` with braces. `"$class?"` parses `class?` as the variable name, so
   the class vanishes from the path and the query matches nothing, silently.
+- **Note (the affinity query runs both ways):** the person direction filters
+  `endswith(UniqueUserName, sam)` because a `UniqueUserName` carries a domain
+  backslash. The machine direction (`Resolve-MachineOwnerBatch`, used for the name
+  on a machine card) filters `ResourceName eq '<wsid>'`, which this AdminService
+  serves. SCCM returns an account name, so AD supplies the display name and the SAM
+  stands in when that read is what failed.
+- **The owner lookup is one batched request, not one per machine.** The serve loop
+  answers it inline and sleeps 150ms between passes, so N separate requests would
+  cost N sleeps plus N files, N AES round trips and N parent polls - slower than
+  resolving them back to back, while holding N of the three interactive runspaces.
+  Parent-side fan-out would buy no throughput against a serially-served agent.
+  `RecentConnectionsStore.UpsertOwner` caches the answer so it is asked once.
 - A failed source degrades: each appends to the bundle's `errors` list and the
   lens still renders (blank hardware fields, missing keys noted per device).
 - The parse (`PersonLens.FromJson`) is pure and unit-tested; the agent/task I/O

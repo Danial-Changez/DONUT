@@ -18,11 +18,17 @@
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
     returns it, writing no partials and no result file.
 
-    Resolve-MachineOwner runs the affinity query the other way (machine -> primary user).
+    Resolve-MachineOwnerBatch runs the affinity query the other way (machine -> primary user).
     Unlike the person direction, which must use endswith because a UniqueUserName carries
     a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
     against the site this ships to. SCCM answers with an account name, so AD supplies the
     human one and the SAM stands in when that directory read is what failed.
+
+    It takes the WHOLE list in one request and resolves it serially, deliberately. The
+    serve loop below sleeps 150ms between passes, so N separate requests would cost N of
+    those sleeps plus N files, N AES round trips and N parent polls - more wall clock than
+    doing them back to back here, while holding N of the three interactive runspaces. Thread
+    jobs would only be worth it if one query got slow enough to be felt on its own.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -178,25 +184,24 @@ $script:OwnerScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# Machine -> "who normally uses it". SCCM answers with an account name, so AD supplies the
-# human one; the SAM is the fallback when the directory read is the part that fails.
-function Resolve-MachineOwner {
+# One machine -> "who normally uses it". SCCM answers with an account name, so AD supplies
+# the human one; the SAM is the fallback when the directory read is the part that fails.
+function Get-MachineOwner {
     param([string]$wsid, [string]$server)
     $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
-    if (-not $wsid) { $out.error = 'no machine name'; return ($out | ConvertTo-Json -Compress) }
-    if (-not $server) { $out.error = 'no AdminService host configured'; return ($out | ConvertTo-Json -Compress) }
+    if (-not $wsid) { $out.error = 'no machine name'; return $out }
     try {
         $rows = @(& $script:OwnerScript $server $wsid)
         if ($rows.Count -eq 0) {
             $out.error = "no primary user recorded for $wsid"
-            return ($out | ConvertTo-Json -Compress)
+            return $out
         }
         # Affinity can list several; the first is SCCM's own ordering, same as the Lens.
         $out.sam = ([string]$rows[0].UniqueUserName -split '\\')[-1]
     }
     catch {
         $out.error = "SCCM affinity: $($_.Exception.Message)"
-        return ($out | ConvertTo-Json -Compress)
+        return $out
     }
     try {
         $hit = Find-Gc "(&(objectClass=user)(sAMAccountName=$($out.sam)))"
@@ -208,7 +213,20 @@ function Resolve-MachineOwner {
     catch { $out.error = "AD user: $($_.Exception.Message)" }
     # A SAM still tells them apart when the directory read is what failed.
     if (-not $out.owner) { $out.owner = $out.sam }
-    return ($out | ConvertTo-Json -Compress)
+    return $out
+}
+
+# The whole machine list in one request - see .NOTES for why this is not fanned out.
+function Resolve-MachineOwnerBatch {
+    param([string[]]$wsids, [string]$server)
+    $bundle = [ordered]@{ owners = @(); error = '' }
+    if (-not $server) {
+        $bundle.error = 'no AdminService host configured'
+        return ($bundle | ConvertTo-Json -Compress -Depth 4)
+    }
+    $rows = foreach ($wsid in @($wsids | Where-Object { $_ })) { Get-MachineOwner -wsid $wsid -server $server }
+    $bundle.owners = @($rows)
+    return ($bundle | ConvertTo-Json -Compress -Depth 4)
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---

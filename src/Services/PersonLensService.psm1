@@ -255,24 +255,26 @@ class PersonLensService {
 
     # --- Env-coupled seam (overridden in tests) ---
 
-    # Machine -> its SCCM primary user, as @{ name; owner; sam; error } JSON. Same RBAC
-    # scope as the person lookup, so it takes the same two routes.
-    [string] RunOwnerLookupJson([string]$machine) {
+    # The machine list -> their SCCM primary users, as @{ owners = @(...); error } JSON.
+    # One request for the whole list: same RBAC scope and the same two routes as the person
+    # lookup, but the agent resolves them back to back rather than one exchange each.
+    [string] RunOwnerLookupJson([string[]]$machines) {
+        if (@($machines).Count -eq 0) { return '' }
         if (-not [ElevationContext]::IsElevated()) {
             try {
                 $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
                 if (-not (Test-Path -LiteralPath $common)) { return '' }
                 . $common
                 $script:ForestNc = Get-LensForestNc
-                return [string](Resolve-MachineOwner -wsid $machine -server $this.SiteServer)
+                return [string](Resolve-MachineOwnerBatch -wsids $machines -server $this.SiteServer)
             }
             catch {
-                $this.Logger.LogException("In-process owner lookup failed for $machine", $_)
+                $this.Logger.LogException('In-process owner lookup failed', $_)
                 return ''
             }
         }
         return $this.ExchangeRoundTrip(
-            @{ kind = 'owner'; identity = $machine; sam = ''; siteServer = $this.SiteServer }, $false)
+            @{ kind = 'owner'; machines = @($machines); siteServer = $this.SiteServer }, $false)
     }
 
     [string] RunLookupJson([string]$identity) {
