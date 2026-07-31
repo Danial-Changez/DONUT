@@ -184,6 +184,29 @@
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
                                    Margin="24,0,56,0" />
+                        <!-- Page switcher lives in the header, not the scrolling body, so it
+                             stays reachable at any scroll depth and fills space the row wasted. -->
+                        <Border CornerRadius="8.4"
+                                Background="{DynamicResource Secondary}"
+                                Padding="3"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,56,0">
+                            <UniformGrid Rows="1">
+                                <RadioButton x:Name="cmdGeneral"
+                                             Content="General"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                                <RadioButton x:Name="cmdScan"
+                                             Content="Scan"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                                <RadioButton x:Name="cmdApplyUpdates"
+                                             Content="Apply"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                            </UniformGrid>
+                        </Border>
                         <Button HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 Height="36"

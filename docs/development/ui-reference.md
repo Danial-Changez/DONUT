@@ -87,6 +87,11 @@ update prompt) and the shell overlay cards (settings, QR, reset) — shares one 
   card): the title sits beside the X, vertically centered with clear top air, `TextPaneTitle`
   at a 24px left inset, single-line with ellipsis + tooltip when the text is dynamic; the X
   pins `Top`. On `DialogWindow` this row doubles as the drag region.
+- **The header may also carry that popup's page switcher**, right-aligned and clear of the
+  X's 56px lane. Settings puts its General/Scan/Apply segments there rather than at the top
+  of the scrolling body: nav that scrolls away is nav you cannot reach from the bottom of a
+  long form, and the row had the space already. The title keeps its 24px inset and the X
+  keeps its flush corner pad, so the contract above is unchanged for popups without pages.
 - **Content gutters are 24px** inside every popup.
 - **Footers hold decisions only** — an action-named primary and a verdict secondary
   (`Cancel` / `Later`; `OK` alone on alerts). A dismiss-only "Close" button is banned:

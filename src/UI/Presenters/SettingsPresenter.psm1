@@ -30,6 +30,7 @@ class SettingsPresenter {
     [ConfigManager] $ConfigManager
     [LogService] $Logger
     [FrameworkElement] $ViewContent
+    [FrameworkElement] $Chrome      # where the page segments live (the overlay header)
     [RadioButton] $CmdScan
     [RadioButton] $CmdApplyUpdates
     [RadioButton] $CmdGeneral
@@ -41,21 +42,24 @@ class SettingsPresenter {
     hidden [object] $HotkeyRecorder
     hidden [object] $ShortcutRecorder
 
+    # $chrome hosts the page segments, which live in the overlay's header row rather than
+    # in the scrolling body; it is the window, and $view is still the body.
     SettingsPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
-        [ToastService] $toast, [hashtable] $sideEffects) {
+        [FrameworkElement] $chrome, [ToastService] $toast, [hashtable] $sideEffects) {
         $this.Config = $config
         $this.ConfigManager = $configManager
         $this.Logger = $configManager.Logger
         $this.ViewContent = $view
+        $this.Chrome = if ($chrome) { $chrome } else { $view }
         $this.Toast = $toast
         $this.SideEffects = $sideEffects
         $this.Initialize()
     }
 
     [void] Initialize() {
-        $this.CmdScan = $this.ViewContent.FindName('cmdScan')
-        $this.CmdApplyUpdates = $this.ViewContent.FindName('cmdApplyUpdates')
-        $this.CmdGeneral = $this.ViewContent.FindName('cmdGeneral')
+        $this.CmdScan = $this.Chrome.FindName('cmdScan')
+        $this.CmdApplyUpdates = $this.Chrome.FindName('cmdApplyUpdates')
+        $this.CmdGeneral = $this.Chrome.FindName('cmdGeneral')
         $this.SettingsContent = $this.ViewContent.FindName('SettingsContent')
 
         # Picking a segment is view navigation (which option form shows), not data.
