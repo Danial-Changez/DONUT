@@ -28,6 +28,9 @@
 .PARAMETER SourceRoot
     DONUT 'src' root, used to locate Scripts\LensAgent.ps1.
 
+.PARAMETER OwnerOf
+    A machine name: return that machine's SCCM primary user instead of a person lookup.
+
 .PARAMETER Sam
     Optional sAMAccountName hint from the finder row, so the agent can start SCCM
     affinity before the AD user read resolves it.
@@ -52,6 +55,7 @@ param(
     [Parameter(Mandatory)] [string] $SiteServer,
     [Parameter(Mandatory)] [string] $SourceRoot,
     [string] $Sam = '',
+    [string] $OwnerOf = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
     [switch] $StopAgent
@@ -72,4 +76,7 @@ if ($WarmOnly) {
     if (-not [ElevationContext]::IsElevated()) { return '' }
     return $svc.EnsureAgent()
 }
+# Machine -> primary user rides the same agent and the same RBAC scope, so it is a mode
+# here rather than a second worker with its own copy of the exchange plumbing.
+if ($OwnerOf) { return $svc.RunOwnerLookupJson($OwnerOf) }
 $svc.RunLookupJson($Identity)

@@ -18,6 +18,12 @@
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
     returns it, writing no partials and no result file.
 
+    Resolve-MachineOwner runs the affinity query the other way (machine -> primary user).
+    Unlike the person direction, which must use endswith because a UniqueUserName carries
+    a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
+    against the site this ships to. SCCM answers with an account name, so AD supplies the
+    human one and the SAM stands in when that directory read is what failed.
+
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
     lookup logic here is unchanged from its previous inline home in LensAgent.ps1.
@@ -159,6 +165,50 @@ function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
 # that is a PowerShell class never names [ADSI], which does not resolve off Windows.
 function Get-LensForestNc {
     return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
+}
+
+# The affinity query run the other way: machine -> its primary user, same RBAC scope as the
+# person direction. A plain 'ResourceName eq' filter is served here - see .NOTES.
+$script:OwnerScript = {
+    param($server, $wsid)
+    $uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
+    [uri]::EscapeDataString("ResourceName eq '$wsid'") + "&`$select=UniqueUserName,ResourceName"
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+    if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+    return @((Invoke-RestMethod @p).value)
+}
+
+# Machine -> "who normally uses it". SCCM answers with an account name, so AD supplies the
+# human one; the SAM is the fallback when the directory read is the part that fails.
+function Resolve-MachineOwner {
+    param([string]$wsid, [string]$server)
+    $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
+    if (-not $wsid) { $out.error = 'no machine name'; return ($out | ConvertTo-Json -Compress) }
+    if (-not $server) { $out.error = 'no AdminService host configured'; return ($out | ConvertTo-Json -Compress) }
+    try {
+        $rows = @(& $script:OwnerScript $server $wsid)
+        if ($rows.Count -eq 0) {
+            $out.error = "no primary user recorded for $wsid"
+            return ($out | ConvertTo-Json -Compress)
+        }
+        # Affinity can list several; the first is SCCM's own ordering, same as the Lens.
+        $out.sam = ([string]$rows[0].UniqueUserName -split '\\')[-1]
+    }
+    catch {
+        $out.error = "SCCM affinity: $($_.Exception.Message)"
+        return ($out | ConvertTo-Json -Compress)
+    }
+    try {
+        $hit = Find-Gc "(&(objectClass=user)(sAMAccountName=$($out.sam)))"
+        if ($hit) {
+            $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+            $out.owner = [string]$user.Properties['displayname'][0]
+        }
+    }
+    catch { $out.error = "AD user: $($_.Exception.Message)" }
+    # A SAM still tells them apart when the directory read is what failed.
+    if (-not $out.owner) { $out.owner = $out.sam }
+    return ($out | ConvertTo-Json -Compress)
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---

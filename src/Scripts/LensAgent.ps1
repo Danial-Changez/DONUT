@@ -152,6 +152,13 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
+            # An owner lookup is two small reads, so it answers inline rather than paying for
+            # a thread job. Absent kind = the person lookup, which is what older callers send.
+            if ([string]$req.kind -eq 'owner') {
+                $ownerJson = Resolve-MachineOwner -wsid ([string]$req.identity) -server ([string]$req.siteServer)
+                Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $ownerJson
+                continue
+            }
             # Offload the lookup so a slow one never blocks the loop; fall back to inline if
             # the ThreadJob can't start, so a lookup is never silently dropped.
             $offloaded = $false

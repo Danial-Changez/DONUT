@@ -255,13 +255,38 @@ class PersonLensService {
 
     # --- Env-coupled seam (overridden in tests) ---
 
-    # One lookup over the agent exchange: write request-<id>, stream partial-<id>-N to
-    # the Information stream (tag 'LensPartial'), return the decrypted final bundle.
+    # Machine -> its SCCM primary user, as @{ name; owner; sam; error } JSON. Same RBAC
+    # scope as the person lookup, so it takes the same two routes.
+    [string] RunOwnerLookupJson([string]$machine) {
+        if (-not [ElevationContext]::IsElevated()) {
+            try {
+                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
+                if (-not (Test-Path -LiteralPath $common)) { return '' }
+                . $common
+                $script:ForestNc = Get-LensForestNc
+                return [string](Resolve-MachineOwner -wsid $machine -server $this.SiteServer)
+            }
+            catch {
+                $this.Logger.LogException("In-process owner lookup failed for $machine", $_)
+                return ''
+            }
+        }
+        return $this.ExchangeRoundTrip(
+            @{ kind = 'owner'; identity = $machine; sam = ''; siteServer = $this.SiteServer }, $false)
+    }
+
     [string] RunLookupJson([string]$identity) {
         # De-elevated, DONUT already IS the interactive user whose rights this data needs,
         # so the agent, its task, the AES exchange and the heartbeat are all unnecessary.
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }
 
+        return $this.ExchangeRoundTrip(
+            @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer }, $true)
+    }
+
+    # The encrypted round trip both lookups share: write request-<id>, wait for result-<id>,
+    # return its decrypted text. Only the person lookup streams partial-<id>-N while waiting.
+    hidden [string] ExchangeRoundTrip([hashtable]$request, [bool]$streamPartials) {
         $agentErr = $this.EnsureAgent()
         if ($agentErr) { return [PersonLensService]::ErrorBundle("Lens agent unavailable: $agentErr") }
 
@@ -273,23 +298,22 @@ class PersonLensService {
         $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
         $resultPath = Join-Path $dir "result-$reqId.bin"
         try {
-            $request = @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer } |
-                ConvertTo-Json -Compress
-            [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"), $request, $keyIv)
+            [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
+                ($request | ConvertTo-Json -Compress), $keyIv)
 
             # 100ms poll; the agent's writes are atomic (tmp + rename), so no settle wait.
             $deadline = (Get-Date).AddSeconds($this.TimeoutSec)
             $partialIndex = 1
             while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
                 $partialPath = Join-Path $dir ("partial-{0}-{1}.bin" -f $reqId, $partialIndex)
-                if (Test-Path -LiteralPath $partialPath) {
+                if ($streamPartials -and (Test-Path -LiteralPath $partialPath)) {
                     $partialIndex++
                     try {
                         $partialText = [PersonLensService]::UnprotectText(
                             [IO.File]::ReadAllBytes($partialPath), $keyIv)
                         Write-Information -MessageData $partialText -Tags 'LensPartial'
                     }
-                    catch { }
+                    catch { $this.Logger.LogWarning("Lens partial $partialIndex was unreadable; the final bundle still lands.") }
                     continue   # check for the next partial before sleeping
                 }
                 Start-Sleep -Milliseconds 100
