@@ -13,8 +13,8 @@
          Donut.Launcher.exe is rebuilt. Reports whether the extracted
          StartupTaskService.psm1 still carries the deleted SYSTEM/psexec lane.
       2. What actually got registered. Principal (who it runs as), action, and
-         trigger - it should run as the console user at RunLevel Limited, since
-         DONUT elevates on demand rather than starting elevated.
+         trigger - it should run as the console user at RunLevel Highest, which is
+         that account's elevated token if it is an admin and its ordinary one if not.
       3. Whether it fired and what Windows said. LastTaskResult decoded, plus the
          TaskScheduler/Operational events for this task. 0x800702E4 = elevation
          required (CreateProcess refused the requireAdministrator launcher).
@@ -246,7 +246,65 @@ if ($action.Arguments -like '*--tray*') {
     Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
 }
 
+Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
+# The launcher runs src\Start-Donut.ps1 out of %ProgramData%\DONUT\app. ProgramData is
+# user-writable, so allowlisting policies routinely block scripts there - and the default
+# AppLocker rule set exempts BUILTIN\Administrators, which is why the same build runs
+# elevated and dies de-elevated while every ACL on the path still reads Full Control.
+$script:policyBlocked = $false
+$svc = Get-Service AppIDSvc -ErrorAction SilentlyContinue
+Write-Host "AppIDSvc (AppLocker enforcement): $(if ($svc) { $svc.Status } else { 'not present' })"
+try {
+    $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+    $modes = @($pol.AppLockerPolicy.RuleCollection |
+            ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
+    Write-Host "effective policy : $($modes -join '  ')"
+    if ($modes -match 'Script=(Enabled|AuditOnly)') {
+        Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
+    }
+}
+catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
+
+# Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
+foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
+    'Microsoft-Windows-AppLocker/MSI and Script') {
+    $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
+            -MaxEvents 40 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'DONUT' })
+    if ($ev.Count -gt 0) {
+        $script:policyBlocked = $true
+        Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
+        $ev | Select-Object -First 5 | ForEach-Object {
+            Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
+        }
+    }
+    else { Write-Host "$log - no DONUT events" }
+}
+
+# WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
+$ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
+        -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
+if ($ci.Count -gt 0) {
+    $script:policyBlocked = $true
+    Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
+}
+
+# The token question the ACL viewer cannot answer: a filtered token still LISTS
+# Administrators, but marked deny-only, so rules and ACEs granted to it do not apply.
+$id = [Security.Principal.WindowsIdentity]::GetCurrent()
+$elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+Write-Host ""
+Write-Host "this shell       : $($id.Name)  elevated=$elevated"
+Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
+Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
+
 Write-Section "VERDICT"
+if ($script:policyBlocked) {
+    Write-Host "An allowlisting policy blocked DONUT. This is NOT an ACL problem, which is why the directory still shows Full Control." -ForegroundColor Red
+    Write-Host "The launcher executes src\Start-Donut.ps1 from $appRoot. ProgramData is user-writable, so AppLocker/WDAC commonly forbid running scripts from it, while the default rule set exempts BUILTIN\Administrators - so an elevated DONUT runs and a de-elevated one is refused." -ForegroundColor Yellow
+    Write-Host "DO THIS: either have the app tree path allowlisted for your account, or move the extraction root into the already-approved install directory so the exe and its scripts share one allowed location." -ForegroundColor Green
+}
 # The registered task is a snapshot of whichever build last applied it - so new code
 # plus an old-shaped task means the fix simply has not run yet.
 $oldShape = $script:triggerMismatch -or ($principal.UserId -match 'SYSTEM') -or
@@ -260,7 +318,7 @@ elseif ($oldShape) {
     Write-Host "This task has the OLD shape AND the installed build lacks the fix." -ForegroundColor Red
     Write-Host "DO THIS: rebuild Donut.Launcher.exe from the current source and reinstall - an installed build runs src\ from INSIDE the exe, so pulling alone changes nothing. Then launch DONUT and re-run this script." -ForegroundColor Green
 }
-else {
-    Write-Host "Task shape looks correct: SYSTEM principal, triggered by the console user." -ForegroundColor Green
-    Write-Host "If DONUT is running but invisible, section 5 says why: a session other than the console one means psexec never reached your desktop; the console session means the process is there but its UI is not." -ForegroundColor Green
+elseif (-not $script:policyBlocked) {
+    Write-Host "Task shape looks correct: the console user is both the trigger and the principal, at RunLevel Highest." -ForegroundColor Green
+    Write-Host "If DONUT is running but invisible, section 5 says why: a session other than the console one means it never reached your desktop; the console session means the process is there but its UI is not." -ForegroundColor Green
 }
