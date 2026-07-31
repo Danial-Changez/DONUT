@@ -33,14 +33,26 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
 4. **Install DONUT** — the MSI is published under the repo's
    [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases).
 
-5. **Add a Defender exclusion**:
+5. **Add two Defender exclusions**:
    - Open **Virus & threat protection → Manage settings → Add or remove exclusions**.
-   - Click **Add an exclusion**, choose **Folder**.
-   - Enter `C:\Program Files\Bakery\DONUT`.
+   - Click **Add an exclusion**, choose **Folder**, and add each of:
+     - `C:\Program Files\Bakery\DONUT` — the installed launcher.
+     - `C:\ProgramData\DONUT` — the app tree the launcher unpacks and **actually runs
+       from**, plus the shared data root.
 
-:::caution[Why the exclusion?]
-DONUT isn't digitally signed (yet), so Defender may quarantine it on sight. The
-exclusion is scoped to DONUT's own install folder only.
+:::caution[Why the exclusions?]
+DONUT isn't digitally signed (yet), so Defender may quarantine it on sight. Both are
+scoped to DONUT's own folders.
+
+The second one is also the one that costs you time if you skip it: `Donut.Launcher.exe`
+self-extracts `src\` to `C:\ProgramData\DONUT\app` and runs PowerShell from there, so
+every launch reads that whole tree. Unexcluded, each file is scanned on first touch —
+worst at sign-in, when nothing is cached yet.
+:::
+
+:::note[Running from source?]
+Neither exclusion covers a dev checkout (`bin\Debug\...\Donut.Launcher.exe`). Add that
+folder too if you are testing an unpackaged build and startup feels slow.
 :::
 
 ## Running from source (developers)
