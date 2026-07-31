@@ -115,17 +115,30 @@
                                           Data="{DynamicResource Config}" />
                                 </Button>
                             </StackPanel>
-                            <!-- The DONUT wordmark (source set in MainPresenter.LoadImages).
-                                 Left inset matches contentMain's 25 so the logo sits on the
-                                 same column as the search bar; 20px tall so it breathes in
-                                 the 36px bar. Hit-test off for DragMove. -->
-                            <Image x:Name="Logo"
-                                   Height="20"
-                                   Stretch="Uniform"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Center"
-                                   Margin="25,0,0,0"
-                                   IsHitTestVisible="False" />
+                            <StackPanel Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <!-- The DONUT wordmark (source set in MainPresenter.LoadImages).
+                                     Left inset matches contentMain's 25 so the logo sits on the
+                                     same column as the search bar; 20px tall so it breathes in
+                                     the 36px bar. Hit-test off for DragMove. -->
+                                <Image x:Name="Logo"
+                                       Height="20"
+                                       Stretch="Uniform"
+                                       VerticalAlignment="Center"
+                                       Margin="25,0,0,0"
+                                       IsHitTestVisible="False" />
+                                <!-- De-elevated is a state you carry all session, so it gets a
+                                     standing badge, not just the toast that announced it. -->
+                                <Border x:Name="badgeLimited"
+                                        Style="{DynamicResource BadgeAmber}"
+                                        VerticalAlignment="Center"
+                                        Margin="14,0,0,0"
+                                        Visibility="Collapsed">
+                                    <TextBlock Text="LIMITED"
+                                               Style="{DynamicResource BadgeAmberText}"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                            </StackPanel>
                         </DockPanel>
                         <ContentControl x:Name="contentMain"
                                         Grid.Row="1"

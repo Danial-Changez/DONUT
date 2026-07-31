@@ -136,6 +136,8 @@ class MainPresenter {
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
         $this.Controls['settingsContent'] = $this.Window.FindName("settingsContent")
         $this.Controls['settingsCard'] = $this.Window.FindName("settingsCard")
+        $this.Controls['badgeLimited'] = $this.Window.FindName("badgeLimited")
+        $this.ShowElevationBadge()
 
         $this.LoadImages()
 
@@ -478,6 +480,21 @@ class MainPresenter {
         $this.Logger.LogInfo("Resuming the $($intent.Action) action that asked for elevation.")
         try { $this.HomePresenter.ResumeGatedAction($intent) }
         catch { $this.Logger.LogException("Could not resume the $($intent.Action) action", $_) }
+    }
+
+    # Reads the live token, not runAsAdmin: the setting says what was wanted, the badge has
+    # to say what this process actually got. Elevation cannot change without a relaunch.
+    hidden [void] ShowElevationBadge() {
+        $badge = $this.Controls['badgeLimited']
+        if ($null -eq $badge) { return }
+        if ([ElevationContext]::IsElevated()) {
+            $badge.Visibility = [System.Windows.Visibility]::Collapsed
+            return
+        }
+        $badge.ToolTip = 'DONUT is running without administrator rights, so remote actions ' +
+        'are unavailable until it restarts elevated. Any fleet action will offer to do that, ' +
+        'or use Run as administrator in Settings.'
+        $badge.Visibility = [System.Windows.Visibility]::Visible
     }
 
     # Shared with the startup check in DonutApp.ps1, which has no presenter to ask.
