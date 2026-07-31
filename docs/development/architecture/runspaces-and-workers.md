@@ -130,6 +130,13 @@ legitimate form of that idea, and `AbortSearch` already does it.
 Timings for each leg are logged at `LogDebug`, so the bar can be re-applied against
 real numbers rather than argued from first principles.
 
+Measured, and the reason the interactive pool is 4: per-forest search times are stable
+and differ by forest (`forest-b` ~167ms, `prod` ~331ms, `forest-c` ~394ms, `forest-d` ~578ms). Serial
+would be the sum (~1465ms) against the max (~580ms) parallel, so the fan-out earns its
+keep several times over. Sizing the lane to fit a whole fan-out took roughly 110ms off the
+slowest forest and left the rest, so what remains is that forest's own latency rather than
+scheduling - see [AD query rules](./ad-queries.md).
+
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
 `FinderPresenter.LensDeadline` (90 s, deliberately longer than

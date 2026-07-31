@@ -70,7 +70,7 @@ function Find-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
-    $s.PageSize = 200
+    # No PageSize: it only enables paging, and every caller here takes FindOne.
     [void]$s.PropertiesToLoad.Add('distinguishedName')
     return $s.FindOne()
 }
@@ -204,7 +204,7 @@ function Get-MachineOwner {
         return $out
     }
     try {
-        $hit = Find-Gc "(&(objectClass=user)(sAMAccountName=$($out.sam)))"
+        $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$($out.sam)))"
         if ($hit) {
             $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
             $out.owner = [string]$user.Properties['displayname'][0]
@@ -254,9 +254,11 @@ function Resolve-Lens {
     # AD user (forest-wide GC -> home-domain bind).
     $sam = $samGuess
     $uFilter =
-    if ($identity -match '@') { "(&(objectClass=user)(userPrincipalName=$identity))" }
-    elseif ($identity -match '\s') { "(&(objectClass=user)(displayName=$identity))" }
-    else { "(&(objectClass=user)(sAMAccountName=$samGuess))" }
+    # objectCategory=person + objectClass=user is the canonical "users, not computers, not
+    # contacts" pair: objectClass=user alone also matches computers, which derive from it.
+    if ($identity -match '@') { "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))" }
+    elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+    else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
     try {
         $uHit = Find-Gc $uFilter
         if (-not $uHit) { throw "no AD user matched '$identity'." }
@@ -349,7 +351,7 @@ function Resolve-Lens {
             note = ''; bitLockerKeys = @()
         }
         try {
-            $cHit = Find-Gc "(&(objectClass=computer)(cn=$wsid))"
+            $cHit = Find-Gc "(&(objectCategory=computer)(cn=$wsid))"
             if ($cHit) {
                 $compDn = [string]$cHit.Properties['distinguishedname'][0]
                 $dev.domain = (($compDn -split ',' |
