@@ -37,9 +37,14 @@ the tray when you sign in. Turning the toggle off unregisters it. A second launc
 - **If your account is a local administrator**, DONUT comes up already elevated with no
   UAC prompt at sign-in, which is what the **Run as administrator** toggle defaults to
   wanting. See [Settings](./settings.md#general-section).
-- **If it is not**, the task gets your ordinary token instead and DONUT asks for
-  administrator rights when you do something that needs them, which is every remote
-  operation.
+- **If it is not**, the task gets your ordinary token instead, and DONUT deliberately does
+  **not** elevate itself at sign-in - a prompt on the logon screen is the wrong place to ask
+  for credentials. The first time you open the window from the tray it tells you it is
+  running with **limited capability**. Anything remote then asks for administrator rights,
+  and granting it once restarts DONUT elevated for the rest of the session.
+- **Turning this toggle on needs administrator rights itself**, because registering the task
+  does. From a de-elevated DONUT it prompts, elevates, and registers the task on the way
+  back - you do not have to flip it twice.
 - Registering the task itself needs administrator rights, so flipping this switch while
   DONUT is de-elevated prompts to restart elevated first.
 - An RDP-only logon won't surface the tray. If the toggle fails, the error toast states

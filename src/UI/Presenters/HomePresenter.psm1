@@ -493,6 +493,8 @@ class HomePresenter : AsyncJobPresenter {
             ([GatedAction]::Run) { foreach ($h in $intent.Hosts) { $this.StartProcess($h) } }
             ([GatedAction]::Inventory) { foreach ($h in $intent.Hosts) { $this.StartInventory($h) } }
             ([GatedAction]::DiskScan) { $this.Detail.ResumeDiskScan($intent.Hosts) }
+            # The toggle already persisted; only the registration was waiting on a token.
+            ([GatedAction]::StartupTask) { $this.Elevation.ApplyStartupTask() }
             default {
                 $this.Logger.LogInfo("No resume path for $($intent.Action); the user re-runs it.")
             }

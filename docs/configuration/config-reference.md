@@ -24,7 +24,7 @@ up).
 | `adminServiceHost` | string, org SMS Provider | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup |
 | `startWithWindows` | bool, `false` | Register the logon scheduled task, which starts DONUT as you at your normal rights ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
-| `runAsAdmin` | bool, **`true`** | Run DONUT elevated. On by default, and the only key here that falls back to `true` on a missing or corrupt value: remote work authenticates as the process, so a de-elevated DONUT is the console user, who has no rights on fleet targets. Turning it off applies at the next launch; turning it on relaunches through UAC now |
+| `runAsAdmin` | bool, **`true`** | Elevate DONUT at launch. On by default, and the only key here that falls back to `true` on a missing or corrupt value: remote work authenticates as the process, so a de-elevated DONUT is the console user, who has no rights on fleet targets. Turning it off applies at the next launch; turning it on relaunches through UAC now. **Two things do not follow it:** a tray/autostart launch never elevates (a prompt at the sign-in screen), and a declined prompt never rewrites the key |
 | `globalHotkey` | string, `"Ctrl+Alt+D"` | Global show/restore hotkey; blank disables it |
 | `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
 | `machineNamePatterns` | string[], `^CAP-`, `^B[0-9]{4}`, `^WVD` | Regex patterns that mark search text as a machine name (vs. a person), so the finder pre-selects "Add as a machine". Edit as naming conventions change |

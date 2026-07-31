@@ -68,9 +68,13 @@ class ThrowingStartupTaskService : StartupTaskService {
 
 BeforeAll {
     # A fake existing task whose action matches (or differs from) a spec.
-    function New-FakeTask([string]$execute, [string]$arguments) {
+    function New-FakeTask([string]$execute, [string]$arguments, [string]$workingDirectory) {
         return [pscustomobject]@{
-            Actions = @([pscustomobject]@{ Execute = $execute; Arguments = $arguments })
+            Actions = @([pscustomobject]@{
+                    Execute          = $execute
+                    Arguments        = $arguments
+                    WorkingDirectory = $workingDirectory
+                })
         }
     }
 }
@@ -140,6 +144,15 @@ Describe "StartupTaskService" {
             $spec = $script:svc.BuildLaunchSpec('C:\Program Files\PowerShell\7\pwsh.exe', 'C:\My App\src')
             $spec.Execute | Should -Be 'C:\Program Files\PowerShell\7\pwsh.exe'
             $spec.Argument | Should -Be '-Sta -ExecutionPolicy Bypass -File "C:\My App\src\Start-Donut.ps1" -Tray'
+            # Without this Task Scheduler starts it in %windir%\system32.
+            $spec.WorkingDirectory | Should -Be 'C:\My App\src'
+        }
+
+        # Split-Path uses the platform separator, so a Windows path only splits on Windows -
+        # the same reason the -File assertions above fail off it.
+        It "Runs the packaged launcher from its own folder" -Skip:(-not $IsWindows) {
+            $spec = $script:svc.BuildLaunchSpec('C:\Program Files\DONUT\Donut.Launcher.exe', 'C:\ignored')
+            $spec.WorkingDirectory | Should -Be 'C:\Program Files\DONUT'
         }
 
         It "Quotes the script path so spaces/OneDrive survive" {
@@ -161,9 +174,9 @@ Describe "StartupTaskService" {
 
     Context "ReconcileDecision matrix" {
         BeforeAll {
-            $script:spec = @{ Execute = 'C:\pwsh.exe'; Argument = '--x' }
-            $script:matching = New-FakeTask 'C:\pwsh.exe' '--x'
-            $script:differing = New-FakeTask 'C:\old\pwsh.exe' '--x'
+            $script:spec = @{ Execute = 'C:\pwsh.exe'; Argument = '--x'; WorkingDirectory = 'C:\src' }
+            $script:matching = New-FakeTask 'C:\pwsh.exe' '--x' 'C:\src'
+            $script:differing = New-FakeTask 'C:\old\pwsh.exe' '--x' 'C:\src'
         }
 
         It "enabled + no task => Register" {
@@ -181,8 +194,14 @@ Describe "StartupTaskService" {
         It "disabled + no task => NoOp" {
             $script:svc.ReconcileDecision($false, $null, $script:spec) | Should -Be 'NoOp'
         }
+        It "Reregisters a task that predates the working directory" {
+            # Tasks registered before WorkingDirectory existed carry a blank one, and must
+            # re-register rather than sit there launching from %windir%\system32 forever.
+            $noWorkDir = New-FakeTask 'C:\pwsh.exe' '--x' ''
+            $script:svc.ReconcileDecision($true, $noWorkDir, $script:spec) | Should -Be 'Reregister'
+        }
         It "Treats a task with a differing argument as Reregister" {
-            $argDiff = New-FakeTask 'C:\pwsh.exe' '--other'
+            $argDiff = New-FakeTask 'C:\pwsh.exe' '--other' 'C:\src'
             $script:svc.ReconcileDecision($true, $argDiff, $script:spec) | Should -Be 'Reregister'
         }
     }

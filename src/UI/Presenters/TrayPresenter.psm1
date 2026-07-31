@@ -113,6 +113,17 @@ class TrayPresenter {
             try { $pending.CheckAndPrompt() }
             catch { $this.Logger.LogException("Deferred update check failed", $_) }
         }
+
+        # Once per launch: the actions are elsewhere (any fleet action prompts, and the
+        # Settings toggle restarts elevated), so this only has to name the state.
+        if ($this.Main.PendingLimitedNotice) {
+            $this.Main.PendingLimitedNotice = $false
+            if ($this.Main.ToastService) {
+                $this.Main.ToastService.ShowWarning('Limited capability',
+                    'DONUT started with Windows, so it is running without administrator rights. ' +
+                    'Remote actions will ask for them, and granting one restarts DONUT elevated for the rest of the session.')
+            }
+        }
     }
 
     # Hotkey toggle: minimise DONUT when it's already up front, otherwise surface it (so

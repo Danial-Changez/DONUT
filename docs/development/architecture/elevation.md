@@ -76,12 +76,36 @@ One lane: a scheduled task triggered by the console user's logon, running as tha
 
 - **Highest, not Limited.** Both run as the console user; the difference is only which of
   that account's tokens the task receives. On an **admin** console account Highest starts
-  DONUT elevated with no logon-time UAC prompt, matching what `runAsAdmin` defaults to
-  wanting. Limited started it de-elevated and left it to relaunch itself through a consent
-  prompt at logon, which errored. On a **non-admin** console account Highest has no effect:
-  it degrades to that account's standard token and DONUT elevates on demand as before.
+  DONUT elevated with no logon-time UAC prompt. On a **non-admin** console account it has no
+  effect at all: it degrades to that account's standard token.
+- **An autostarted DONUT never elevates itself.** `runAsAdmin` is honoured at startup
+  (below), but a tray start is the deliberate exception: elevating there would throw a
+  consent prompt - or, from a standard account, a *credential* prompt - at the sign-in
+  screen. It runs de-elevated and says so through `MainPresenter.PendingLimitedNotice`, one
+  toast the first time the window is surfaced from the tray. Elevation is then whatever the
+  user does next: any gated action, or the **Run as administrator** toggle.
 - **It does not resurrect the deleted lane.** The principal is the console user either way.
   What was broken below was the SYSTEM principal, not the run level.
+
+## Startup
+
+`app.manifest` is `asInvoker`, so nothing elevates DONUT for free. `DonutApp.ps1` reads
+`runAsAdmin` **before it builds MainPresenter**, so an instance about to hand over never
+warms a runspace pool it is going to discard, and relaunches through
+`ElevationRelaunch::Spawn`.
+
+- **The setting is never written from this path.** A declined prompt leaves `runAsAdmin`
+  exactly as it was; otherwise one cancelled UAC would demote DONUT permanently and it would
+  never try again. Only the Settings toggle and the prompt's own "always" checkbox write it.
+- **`ElevationRelaunch` is windowless on purpose** (`src/Core/ElevationRelaunch.psm1`), so
+  the startup check and `MainPresenter.SpawnElevated` share one spec builder and one spawn.
+  The presenter adds only its own teardown.
+- **Every admin-only action is gated, including `startWithWindows`.** Registering a
+  scheduled task needs an elevated token; ungated, the toggle reached
+  `Register-ScheduledTask`, took an access-denied, and reported it as a single toast while
+  the setting still read on. `HomePresenter.ResumeGatedAction` re-runs the registration after
+  the elevated relaunch. The 120-second startup-task **heal** is not gated - it skips
+  entirely when de-elevated, because a background heal must never prompt.
 
 **There used to be a second lane, and deleting it fixed a bug rather than only simplifying
 the code.** A task cannot start an elevated process as an account that is not an admin: an

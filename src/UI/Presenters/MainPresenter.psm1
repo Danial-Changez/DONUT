@@ -7,6 +7,7 @@ using module "..\..\Services\PendingIntentStore.psm1"
 using module "..\..\Models\TempPassword.psm1"
 using module "..\..\Core\ConfigManager.psm1"
 using module "..\..\Core\ElevationContext.psm1"
+using module "..\..\Core\ElevationRelaunch.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\DispatcherWatchdog.psm1"
@@ -57,6 +58,9 @@ class MainPresenter {
     # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
     [bool] $ExitRequested
     [object] $PendingUpdateCheck
+    # An autostarted DONUT runs de-elevated on purpose; this says so the first time the
+    # user surfaces the window, since a toast into a hidden tray start is never seen.
+    [bool] $PendingLimitedNotice
 
     # Global-hotkey interop (Donut.Interop.HotkeyManager) and the HWND it binds to.
     hidden [object] $Hotkey
@@ -453,15 +457,9 @@ class MainPresenter {
     # Spawns the elevated replacement and, on success, closes this instance so the new one
     # can take the mutex. $false means we are still running and still de-elevated.
     hidden [bool] SpawnElevated() {
-        $spec = $this.BuildRelaunchSpec()
-        try {
-            Start-Process -FilePath $spec.FilePath -ArgumentList $spec.Arguments -Verb RunAs -ErrorAction Stop
-        }
-        catch {
-            # 1223 is ERROR_CANCELLED: the user declined the consent/credential prompt.
-            $win32 = $_.Exception -as [System.ComponentModel.Win32Exception]
-            $declined = $null -ne $win32 -and $win32.NativeErrorCode -eq 1223
-            $this.ReportElevationFailure($declined, $_)
+        $result = [ElevationRelaunch]::Spawn($this.BuildRelaunchSpec())
+        if (-not $result.Ok) {
+            $this.ReportElevationFailure($result.Declined, $result.Reason)
             return $false
         }
         $this.ExitRequested = $true
@@ -482,22 +480,9 @@ class MainPresenter {
         catch { $this.Logger.LogException("Could not resume the $($intent.Action) action", $_) }
     }
 
-    # Which executable to relaunch: the prod launcher hosts src\, the dev path runs
-    # Start-Donut.ps1 under pwsh. Each spells the wait in its own argument syntax.
+    # Shared with the startup check in DonutApp.ps1, which has no presenter to ask.
     hidden [hashtable] BuildRelaunchSpec() {
-        # Process.Id, not $PID: automatic variables are out of scope inside a class method
-        # (PowerShell rejects them at class-compile time with "not assigned in the method").
-        $proc = [System.Diagnostics.Process]::GetCurrentProcess()
-        $hostPath = $proc.MainModule.FileName
-        $ownPid = $proc.Id
-        if ([IO.Path]::GetFileName($hostPath) -ieq 'pwsh.exe') {
-            $script = Join-Path $this.Config.SourceRoot 'Start-Donut.ps1'
-            return @{
-                FilePath  = $hostPath
-                Arguments = "-NoProfile -Sta -ExecutionPolicy Bypass -File `"$script`" -AwaitPid $ownPid"
-            }
-        }
-        return @{ FilePath = $hostPath; Arguments = "--await-pid $ownPid" }
+        return [ElevationRelaunch]::BuildSpec($this.Config.SourceRoot)
     }
 
     # Puts the setting back after a failed elevation so the switch matches reality.
@@ -513,7 +498,7 @@ class MainPresenter {
 
     # Says why the relaunch did not happen. Never changes the setting: the caller decides
     # that, because a declined toggle and a declined gated action revert differently.
-    hidden [void] ReportElevationFailure([bool]$declined, [object]$errorRecord) {
+    hidden [void] ReportElevationFailure([bool]$declined, [string]$reason) {
         if ($declined) {
             $this.Logger.LogInfo('Elevation declined at the UAC prompt; staying de-elevated.')
             if ($this.ToastService) {
@@ -521,9 +506,9 @@ class MainPresenter {
             }
             return
         }
-        $this.Logger.LogException('Could not relaunch DONUT elevated', $errorRecord)
+        $this.Logger.LogError("Could not relaunch DONUT elevated: $reason")
         if ($this.ToastService) {
-            $this.ToastService.ShowError('Run as administrator', "Could not relaunch elevated - $($errorRecord.Exception.Message)")
+            $this.ToastService.ShowError('Run as administrator', "Could not relaunch elevated - $reason")
         }
     }
 
@@ -614,7 +599,13 @@ class MainPresenter {
             $sideEffects = @{
                 Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
                 WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
-                StartupTask    = { $presenter.ApplyStartupTask() }.GetNewClosure()
+                # Registering a task needs an elevated token: ungated this reached
+                # Register-ScheduledTask, got access denied, and died as a single toast.
+                StartupTask    = {
+                    if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
+                        $presenter.ApplyStartupTask()
+                    }
+                }.GetNewClosure()
                 DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
                 RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
             }

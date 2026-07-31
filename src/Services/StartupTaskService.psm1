@@ -73,11 +73,18 @@ class StartupTaskService {
         if ($leaf -ieq 'pwsh.exe') {
             $script = Join-Path $sourceRoot 'Start-Donut.ps1'
             return @{
-                Execute  = $processPath
-                Argument = "-Sta -ExecutionPolicy Bypass -File `"$script`" -Tray"
+                Execute          = $processPath
+                Argument         = "-Sta -ExecutionPolicy Bypass -File `"$script`" -Tray"
+                WorkingDirectory = $sourceRoot
             }
         }
-        return @{ Execute = $processPath; Argument = '--tray' }
+        # Without one Task Scheduler starts DONUT in %windir%\system32, which is neither
+        # where it was launched from nor anywhere it should resolve a relative path.
+        return @{
+            Execute          = $processPath
+            Argument         = '--tray'
+            WorkingDirectory = (Split-Path $processPath -Parent)
+        }
     }
 
     # Pure: what Apply should do - 'Register' (wanted, absent), 'Reregister' (wanted, app
@@ -98,7 +105,9 @@ class StartupTaskService {
         try {
             $action = @($existingTask.Actions)[0]
             if ($null -eq $action) { return $true }
-            return ($action.Execute -ne $spec.Execute) -or ($action.Arguments -ne $spec.Argument)
+            # WorkingDirectory too, or tasks registered before it existed never re-register.
+            return ($action.Execute -ne $spec.Execute) -or ($action.Arguments -ne $spec.Argument) -or
+            ($action.WorkingDirectory -ne $spec.WorkingDirectory)
         }
         catch { return $true }
     }
@@ -193,7 +202,8 @@ class StartupTaskService {
     # One lane: the console user's own logon, as that user. RunLevel Highest so an admin
     # console account starts elevated with no logon-time UAC prompt - see .NOTES.
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
-        $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument
+        $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument `
+            -WorkingDirectory $spec.WorkingDirectory
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
         $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
