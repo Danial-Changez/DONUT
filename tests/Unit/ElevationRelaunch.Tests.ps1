@@ -3,9 +3,16 @@ using module "..\..\src\Core\ElevationRelaunch.psm1"
 Describe "ElevationRelaunch" {
 
     Context "BuildSpec" {
+        BeforeDiscovery {
+            # -Skip evaluates at discovery, before any BeforeAll runs.
+            $script:isPwshHost =
+            [IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) -ieq 'pwsh.exe'
+        }
+
         BeforeAll {
             # The host is whatever runs the suite, so assert on the branch it selects rather
-            # than on a path only one platform produces.
+            # than on a path only one platform produces. isPwshHost is re-set here because
+            # discovery-time variables are not visible at run time (only to -Skip).
             $script:spec = [ElevationRelaunch]::BuildSpec('C:\My App\src')
             $script:isPwshHost =
             [IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) -ieq 'pwsh.exe'
