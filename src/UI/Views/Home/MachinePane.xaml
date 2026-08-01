@@ -86,17 +86,23 @@
                     <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
                                FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
-                    <!-- Whose machine this is, from SCCM affinity. First name only, and it
-                         collapses when SCCM has no primary user on record. -->
-                    <TextBlock Text="{Binding OwnerName}" Foreground="{DynamicResource BodyTextTertiary}"
+                    <!-- Whose machine this is, from SCCM affinity: "HOST (Danial C)". It
+                         collapses when SCCM has no primary user on record, and the tooltip
+                         (the full display name) fires only when it adds something. -->
+                    <TextBlock Text="{Binding OwnerName, StringFormat=({0})}"
+                               Foreground="{DynamicResource BodyTextTertiary}"
                                FontFamily="{DynamicResource FontSans}" FontSize="12"
-                               VerticalAlignment="Center" Margin="8,1,0,0">
+                               VerticalAlignment="Center" Margin="8,1,0,0"
+                               ToolTip="{Binding OwnerTip}">
                       <TextBlock.Style>
                         <Style TargetType="TextBlock">
                           <Setter Property="Visibility" Value="Visible" />
                           <Style.Triggers>
                             <DataTrigger Binding="{Binding OwnerName}" Value="">
                               <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding OwnerTip}" Value="">
+                              <Setter Property="ToolTipService.IsEnabled" Value="False" />
                             </DataTrigger>
                           </Style.Triggers>
                         </Style>
@@ -140,15 +146,11 @@
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                         Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
                         Padding="14,4" VerticalAlignment="Center" />
-                <!-- Remove this one card (a running host toasts and stays). Ghost, so
-                     Run keeps the row's single tinted action. -->
+                <!-- Remove this one card (a running host toasts and stays). Same clear-X
+                     recipe as the settings shortcut fields, red on hover included. -->
                 <Button Grid.Column="4" Command="{Binding RemoveCommand}"
-                        Style="{DynamicResource ButtonGhost}" Height="32" Width="30"
-                        Padding="0" Margin="4,0,0,0" VerticalAlignment="Center"
-                        ToolTip="Remove from the list">
-                  <Path Style="{DynamicResource controlButtonIcon}"
-                        Data="{DynamicResource xMark}" />
-                </Button>
+                        Style="{DynamicResource fieldClearButton}" Margin="6,0,0,0"
+                        VerticalAlignment="Center" ToolTip="Remove from the list" />
               </Grid>
             </Border>
           </DataTemplate>

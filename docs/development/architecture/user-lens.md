@@ -97,8 +97,14 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
   `endswith(UniqueUserName, sam)` because a `UniqueUserName` carries a domain
   backslash. The machine direction (`Resolve-MachineOwnerBatch`, used for the name
   on a machine card) filters `ResourceName eq '<wsid>'`, which this AdminService
-  serves. SCCM returns an account name, so AD supplies the display name and the SAM
-  stands in when that read is what failed.
+  serves. SCCM returns an account name; **`SMS_R_User.FullUserName` then names the
+  person** - User Discovery's copy of `displayName`, and the reason it comes first:
+  the site aggregates users from **every** forest, while `Find-Gc` reads the agent's
+  own forest's GC and can never name a sibling-forest user. That gap is exactly how
+  owner chips shipped showing SAMs. The GC stays as the fallback for its one forest,
+  the SAM stands in when both reads fail, and resolved names memoize per agent
+  session (`OwnerNameCache`) so a shared owner is named once. The card shows
+  `HOST (Danial C)` - first name + surname initial, full display name in the tooltip.
 - **The owner lookup is one batched request, not one per machine.** The serve loop
   answers it inline and sleeps 150ms between passes, so N separate requests would
   cost N sleeps plus N files, N AES round trips and N parent polls - slower than

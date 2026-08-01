@@ -21,8 +21,12 @@
     Resolve-MachineOwnerBatch runs the affinity query the other way (machine -> primary user).
     Unlike the person direction, which must use endswith because a UniqueUserName carries
     a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
-    against the site this ships to. SCCM answers with an account name, so AD supplies the
-    human one and the SAM stands in when that directory read is what failed.
+    against the site this ships to. SCCM answers with an account name; SMS_R_User's
+    FullUserName (User Discovery's copy of displayName) then names the person. SCCM first
+    because it aggregates users from EVERY forest the site covers, while Find-Gc reads the
+    agent's own forest's GC and can never name a sibling-forest user - which is exactly how
+    owner chips shipped showing SAMs. The GC stays as the fallback for its one forest, and
+    the SAM stands in when both reads fail. Names memoize per agent session (OwnerNameCache).
 
     It takes the WHOLE list in one request and resolves it serially, deliberately. The
     serve loop below sleeps 150ms between passes, so N separate requests would cost N of
@@ -184,12 +188,55 @@ $script:OwnerScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# One machine -> "who normally uses it". SCCM answers with an account name, so AD supplies
-# the human one; the SAM is the fallback when the directory read is the part that fails.
+# Session memo for owner display names: the agent is persistent, users share machines,
+# and a name does not change mid-session, so each distinct owner is resolved once.
+$script:OwnerNameCache = @{}
+
+# UniqueUserName -> display name. SCCM first: SMS_R_User.FullUserName is User Discovery's
+# copy of displayName across EVERY forest the site covers - see .NOTES.
+function Get-OwnerDisplayName {
+    param([string]$uniqueUserName, [string]$sam, [string]$server)
+    $r = [ordered]@{ owner = ''; error = '' }
+    if ($script:OwnerNameCache.ContainsKey($uniqueUserName)) {
+        $r.owner = [string]$script:OwnerNameCache[$uniqueUserName]
+        return $r
+    }
+    try {
+        # endswith, not eq: the operator this AdminService is proven to serve on this
+        # attribute; the domain prefix keeps it effectively exact.
+        $uri = "https://$server/AdminService/wmi/SMS_R_User?`$filter=" +
+        [uri]::EscapeDataString("endswith(UniqueUserName,'$uniqueUserName')") +
+        "&`$select=FullUserName,UniqueUserName"
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        $rows = @((Invoke-RestMethod @p).value)
+        if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
+    }
+    catch { $r.error = "SCCM user: $($_.Exception.Message)" }
+    if (-not $r.owner) {
+        # The GC only covers the agent's own forest, so this can never name a user from
+        # a sibling forest - it stays as the fallback for the one forest it does cover.
+        try {
+            $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$sam))"
+            if ($hit) {
+                $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+                $r.owner = [string]$user.Properties['displayname'][0]
+            }
+        }
+        catch { $r.error = "AD user: $($_.Exception.Message)" }
+    }
+    # Only a found name is memoized, so a transient failure retries on the next batch.
+    if ($r.owner) { $script:OwnerNameCache[$uniqueUserName] = $r.owner }
+    return $r
+}
+
+# One machine -> "who normally uses it". SCCM affinity names the account, then
+# Get-OwnerDisplayName names the person; the SAM is the fallback when naming fails.
 function Get-MachineOwner {
     param([string]$wsid, [string]$server)
     $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
     if (-not $wsid) { $out.error = 'no machine name'; return $out }
+    $unique = ''
     try {
         $rows = @(& $script:OwnerScript $server $wsid)
         if ($rows.Count -eq 0) {
@@ -197,21 +244,17 @@ function Get-MachineOwner {
             return $out
         }
         # Affinity can list several; the first is SCCM's own ordering, same as the Lens.
-        $out.sam = ([string]$rows[0].UniqueUserName -split '\\')[-1]
+        $unique = [string]$rows[0].UniqueUserName
+        $out.sam = ($unique -split '\\')[-1]
     }
     catch {
         $out.error = "SCCM affinity: $($_.Exception.Message)"
         return $out
     }
-    try {
-        $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$($out.sam)))"
-        if ($hit) {
-            $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
-            $out.owner = [string]$user.Properties['displayname'][0]
-        }
-    }
-    catch { $out.error = "AD user: $($_.Exception.Message)" }
-    # A SAM still tells them apart when the directory read is what failed.
+    $named = Get-OwnerDisplayName -uniqueUserName $unique -sam $out.sam -server $server
+    $out.owner = [string]$named.owner
+    if ($named.error) { $out.error = [string]$named.error }
+    # A SAM still tells them apart when the naming is what failed.
     if (-not $out.owner) { $out.owner = $out.sam }
     return $out
 }

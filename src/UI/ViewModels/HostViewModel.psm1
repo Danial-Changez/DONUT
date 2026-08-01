@@ -23,10 +23,16 @@ using module ".\FolderNodeViewModel.psm1"
     Row brushes come from the static Palette that HomePresenter seeds out of
     UIColors.xaml (presenter resolves, VM holds, view binds - no duplicated hexes).
     RunCommand / GatherCommand are assigned by the coordinator after construction.
+
+    SetOwner shortens to first name + surname initial: a full display name would crowd the
+    hostname it sits beside, while a bare first name cannot tell two Daniels apart. It
+    handles both directory shapes ("Jane Doe" and "Doe, Jane"). The card renders it in
+    brackets and tooltips the full name only when it adds something the short form lacks.
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
-    [string] $OwnerName = ''           # SCCM primary user's first name; '' collapses the chip
+    [string] $OwnerName = ''           # short owner form, e.g. "Danial C"; '' collapses the chip
+    [string] $OwnerTip = ''            # full display name, only when it says more than OwnerName
     [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone
@@ -244,14 +250,23 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipVisible', $true)
     }
 
-    # First name only: enough to tell one operator's three laptops apart, and a full display
-    # name would crowd the hostname it sits beside.
+    # First name + surname initial ("Danial C"); OwnerTip holds the full name only when it
+    # says more than the short form (a bare SAM does not) - see .NOTES.
     [void] SetOwner([string]$displayName) {
-        $first = ([string]$displayName).Trim()
-        if ($first -match '^\s*(\S+)') { $first = $Matches[1] }
-        # "Doe, Jane" is the other common directory shape; the surname is the wrong half.
-        if ($first.EndsWith(',')) { $first = ([string]$displayName -split ',\s*')[-1].Trim() }
-        $this.Set('OwnerName', $first)
+        $full = ([string]$displayName).Trim()
+        # "Doe, Jane" -> first "Jane", surname "Doe"; "Jane [M.] Doe" -> first + last token.
+        $tokens = if ($full.Contains(',')) {
+            $half = $full -split ',\s*', 2
+            @(@($half[1] -split '\s+')[0], @($half[0] -split '\s+')[-1])
+        }
+        else { @($full -split '\s+') }
+        $tokens = @($tokens | Where-Object { $_ })
+        $shortForm = [string]$tokens[0]
+        if ($tokens.Count -gt 1 -and $tokens[-1].Length -gt 0) {
+            $shortForm = "$shortForm $($tokens[-1].Substring(0, 1))"
+        }
+        $this.Set('OwnerName', $shortForm)
+        $this.Set('OwnerTip', $(if ($full -ne $shortForm) { $full } else { '' }))
     }
 
     hidden [void] ApplySubtitle() {
