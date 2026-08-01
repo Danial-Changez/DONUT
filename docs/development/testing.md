@@ -47,8 +47,12 @@ class MockNetworkProbe : NetworkProbe {
   module (`TypeImportCoverage`).
 - **Integration (`tests/Integration`):** the real child-process worker transport
   (`AsyncJob` -> `WorkerProcess` -> `RemoteWorker.ps1` over the ArgsFile/ResultFile
-  protocol, success and failure shapes); the warm-pool barrier against the real
-  runspace pool; WPF resource and view composition (STA, Windows-only); config and
+  protocol, success and failure shapes), plus the worker's legacy named-parameter
+  entry pinned to its failure contract (exit 1 + one parseable `Worker failed:`
+  stderr line); the warm-pool barrier against the real runspace pool; the real
+  `LensAgent.ps1` process serving the encrypted Lens exchange end to end
+  (heartbeat, AES round trip, stop.flag teardown; an errors bundle off-domain is
+  a pass); WPF resource and view composition (STA, Windows-only); config and
   recent-connections persistence through a redirected data root; and the
   pending-intent elevation handover, claimed once by a second real process.
   Remote-target legs (psexec, dcu-cli, SMB copy-back) run only in the manual lab
