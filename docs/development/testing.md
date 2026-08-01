@@ -57,18 +57,32 @@ Before committing:
 ```powershell
 .\tools\Invoke-Format.ps1 -Check   # layout must be clean
 .\tools\Invoke-Lint.ps1            # zero non-layout findings
-.\tools\Invoke-Tests.ps1           # full suite green (pinned Pester 5)
+.\tools\Invoke-Tests.ps1           # full suite green (pinned Pester 6)
 ```
 
 > **Always run the suite through `tools/Invoke-Tests.ps1`, never a bare
-> `Invoke-Pester`.** The suite uses Pester 5 syntax; a bare invocation binds to
-> whichever Pester wins module resolution. On machines that also carry Windows
-> PowerShell's built-in Pester 3.4.0 or a user-scoped Pester 6+, the v3 commands
-> can shadow mid-run — after which every remaining test fails with
+> `Invoke-Pester`.** A bare invocation binds to whichever Pester wins module
+> resolution. On machines that also carry Windows PowerShell's built-in
+> Pester 3.4.0 or a leftover user-scoped Pester 5, the older commands can
+> shadow mid-run, after which every remaining test fails with
 > `'-Be' is not a valid Should operator` or `The Mock command may only be used
 > inside a Describe block`. Those cascades are a tooling artifact, not product
-> failures. The runner pins the newest installed Pester 5.5+ and refuses to run
+> failures. The runner pins the newest installed Pester 6 and refuses to run
 > on any other major version.
+
+- `tools/Invoke-Tests.ps1 -FailFast` stops the whole run at the first failing
+  test (`Run.SkipRemainingOnFailure`). Use it for a tight fix-and-rerun loop;
+  leave it off for CI and pre-push runs so every failure is visible.
+
+## Assertions
+
+- New tests: prefer Pester 6's type-aware `Should-*` family (`Should-Be`,
+  `Should-Throw`, `Should-BeEquivalent` for deep object comparison). Clearer
+  failure messages, and input-shape mistakes surface as errors instead of
+  passing silently.
+- Existing tests: the classic `Should -Be` syntax is fully supported in
+  Pester 6. Leave existing assertions as they are; never set
+  `Should.DisableV5`.
 
 The analyzer rules live in `PSScriptAnalyzerSettings.psd1`; the conventions they
 enforce are described in [Coding style](./coding-style.md).
@@ -163,12 +177,12 @@ tests/Generate-CoverageReport.ps1
 
 What it does:
 
-- Runs the full suite (`tests/`) on the pinned Pester 5 with Pester's
+- Runs the full suite (`tests/`) on the pinned Pester 6 with Pester's
   [built-in code coverage](https://pester.dev/docs/usage/code-coverage) enabled.
-- Collects coverage with the profiler-based tracer
-  (`CodeCoverage.UseBreakpoints = $false`), the same engine Pester 6 uses by
-  default and much faster than the v5 breakpoint collector. If coverage numbers
-  ever look wrong, set it back to `$true` to compare.
+- Collects coverage with Pester 6's profiler-based tracer (the default engine,
+  much faster than the old breakpoint collector). If coverage numbers ever look
+  wrong, set `CodeCoverage.UseBreakpoints = $true` to compare against the
+  breakpoint collector.
 - Emits `coverage.xml` (JaCoCo format, the Pester default) at the repo root.
   Coverage is measured over `src/Core`, `src/Models`, and `src/Services`.
 - Renders the XML into an HTML site under `CoverageReport/` with
@@ -181,7 +195,3 @@ How ReportGenerator is resolved:
 - Otherwise the script installs it once as a repo-local dotnet tool under
   `tools/.cache/reportgenerator` (gitignored). This needs the .NET SDK; without
   it the script fails with install guidance instead of a broken report.
-
-Pester emits the coverage XML natively, so no Pester upgrade is needed: the
-suite stays on the pinned Pester 5. Pester 6 only adds a Cobertura output
-format, and ReportGenerator reads JaCoCo directly.

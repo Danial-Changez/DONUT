@@ -123,7 +123,7 @@ Describe "SelfUpdateService" {
                 $path = $service.DownloadAsset("token", $asset, $dest)
                 
                 $path | Should -Be (Join-Path $dest "file.txt")
-                Assert-MockCalled Invoke-RestMethod -Times 1
+                Should -Invoke Invoke-RestMethod -Times 1
             }
         }
     }
@@ -231,8 +231,8 @@ Describe "SelfUpdateService" {
 
                 $service.ApplyUpdate("C:\Temp\DONUT.msi", $false, "C:\Source")
 
-                Assert-MockCalled Start-Process -Times 1 -ParameterFilter { 
-                    $FilePath -eq "powershell.exe" -and 
+                Should -Invoke Start-Process -Times 1 -ParameterFilter {
+                    $FilePath -eq "powershell.exe" -and
                     $ArgumentList -match "InstallWorker.ps1" -and
                     $ArgumentList -match "-MsiPath"
                 }
@@ -249,7 +249,7 @@ Describe "SelfUpdateService" {
 
                 $service.ApplyUpdate("C:\Temp\DONUT.msi", $true, "C:\Source")
 
-                Assert-MockCalled Start-Process -Times 1 -ParameterFilter { 
+                Should -Invoke Start-Process -Times 1 -ParameterFilter {
                     $ArgumentList -match "-Rollback"
                 }
             }

@@ -87,7 +87,7 @@ Describe "StartupTaskService" {
     }
 
     Context "TaskNameFor" {
-        It "Is per-user from the account leaf (DONUT-<username>)" {
+        It "Is per-user from the account leaf (DONUT-jdoe from PROD\jdoe)" {
             [StartupTaskService]::TaskNameFor('PROD\jdoe') | Should -Be 'DONUT-jdoe'
         }
         It "Passes a domainless account through unchanged" {

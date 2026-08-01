@@ -52,7 +52,7 @@ Describe "RemoteServices" {
 
             $result = $service.PrepareScan("TestHost")
 
-            # Pester 5 assertions
+            # Pester assertions
             $result.ScriptPath | Should -Match "Scripts\\RemoteWorker.ps1$"
             $result.Arguments.HostName | Should -Be "TestHost"
             $result.Arguments.JobType | Should -Be "Scan"

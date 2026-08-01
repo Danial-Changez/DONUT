@@ -10,6 +10,7 @@ Describe "tools scripts parse cleanly" {
         @{ name = 'Get-DonutRunspaceStacks.ps1' }
         @{ name = 'Diagnose-LensAgent.ps1' }
         @{ name = 'Invoke-Tests.ps1' }
+        @{ name = 'Import-PinnedPester.ps1' }
     ) {
         $path = Join-Path (Resolve-Path "$PSScriptRoot\..\..\tools").Path $name
         Test-Path $path | Should -BeTrue

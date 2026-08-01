@@ -3,7 +3,7 @@
     Runs the suite with code coverage and renders an HTML report site.
 
 .DESCRIPTION
-    Runs the tests on the pinned Pester 5 (tools/Import-PinnedPester.ps1) with
+    Runs the tests on the pinned Pester 6 (tools/Import-PinnedPester.ps1) with
     Pester's built-in JaCoCo coverage output, then renders coverage.xml into an
     HTML site under CoverageReport/ using ReportGenerator. When ReportGenerator
     is not already on PATH it is installed automatically as a repo-local dotnet
@@ -40,9 +40,6 @@ $config.Run.Path = $Path
 $config.Run.PassThru = $true
 $config.Output.Verbosity = 'Normal'
 $config.CodeCoverage.Enabled = $true
-# Profiler-based tracer (the Pester 6 default), much faster than v5's
-# breakpoint collector. Flip to $true if coverage numbers ever look off.
-$config.CodeCoverage.UseBreakpoints = $false
 $config.CodeCoverage.OutputFormat = 'JaCoCo'
 $config.CodeCoverage.OutputPath = $coverageXml
 # Coverage measures the product modules, not the test tree itself.
@@ -90,7 +87,7 @@ Write-Host 'Rendering HTML report with ReportGenerator...' -ForegroundColor Cyan
 reportgenerator `
     "-reports:$coverageXml" `
     "-targetdir:$ReportDir" `
-    "-sourcedirs:$(Join-Path $repoRoot 'src')" `
+    "-sourcedirs:$repoRoot" `
     '-reporttypes:Html' `
     '-title:DONUT'
 if ($LASTEXITCODE -ne 0) {

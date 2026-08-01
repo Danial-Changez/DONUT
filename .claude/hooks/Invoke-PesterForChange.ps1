@@ -45,9 +45,9 @@ else {
     $label  = "full unit suite (no matching test for $moduleName)"
 }
 
-# --- Run Pester ---
-Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
-$config = [PesterConfiguration]::Default
+# --- Run Pester (repo pin: unloads stray majors, imports the pinned v6) ---
+. (Join-Path $repoRoot 'tools/Import-PinnedPester.ps1')
+$config = New-PesterConfiguration
 $config.Run.Path        = $target
 $config.Run.PassThru    = $true
 $config.Output.Verbosity = 'None'
