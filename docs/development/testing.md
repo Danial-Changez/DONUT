@@ -207,3 +207,7 @@ How ReportGenerator is resolved:
 - Otherwise the script installs it once as a repo-local dotnet tool under
   `tools/.cache/reportgenerator` (gitignored). This needs the .NET SDK; without
   it the script fails with install guidance instead of a broken report.
+- When `REPORTGENERATOR_LICENSE` is set, it is passed to ReportGenerator so
+  licensed (PRO) features are available. The script also reads the Windows User
+  and Machine env scopes, so a shell opened before the variable was added still
+  picks it up without a restart.

@@ -9,6 +9,10 @@
     not already on PATH it is installed automatically as a repo-local dotnet
     tool under tools/.cache/reportgenerator (requires the .NET SDK).
 
+    When REPORTGENERATOR_LICENSE is set (process env, or the Windows User or
+    Machine scope for shells opened before the variable was added), it is
+    passed to ReportGenerator so licensed (PRO) features are available.
+
 .PARAMETER Path
     Test path(s) to run. Defaults to the full suite (tests/).
 
@@ -95,13 +99,28 @@ if (Test-Path $ReportDir) {
     Remove-Item (Join-Path $ReportDir '*') -Recurse -Force
 }
 
-Write-Host 'Rendering HTML report with ReportGenerator...' -ForegroundColor Cyan
-reportgenerator `
-    "-reports:$coverageXml" `
-    "-targetdir:$ReportDir" `
-    "-sourcedirs:$repoRoot" `
-    '-reporttypes:Html' `
+$rgArgs = @(
+    "-reports:$coverageXml"
+    "-targetdir:$ReportDir"
+    "-sourcedirs:$repoRoot"
+    '-reporttypes:Html'
     '-title:DONUT'
+)
+
+# Freshly set User/Machine values are visible here even before a shell restart.
+$rgLicense = $env:REPORTGENERATOR_LICENSE
+if (-not $rgLicense -and $IsWindows) {
+    $rgLicense = @('User', 'Machine') |
+        ForEach-Object { [Environment]::GetEnvironmentVariable('REPORTGENERATOR_LICENSE', $_) } |
+        Where-Object { $_ } | Select-Object -First 1
+}
+if ($rgLicense) {
+    Write-Host 'Using ReportGenerator license from REPORTGENERATOR_LICENSE.' -ForegroundColor Cyan
+    $rgArgs += "-license:$rgLicense"
+}
+
+Write-Host 'Rendering HTML report with ReportGenerator...' -ForegroundColor Cyan
+reportgenerator @rgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ReportGenerator failed with exit code $LASTEXITCODE."
 }
