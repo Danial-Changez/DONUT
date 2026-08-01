@@ -11,13 +11,17 @@ Describe "ConfigManager" {
         $script:testSourceRoot = Join-Path $testRoot "src"
         New-Item -Path $testSourceRoot -ItemType Directory -Force | Out-Null
         
-        # Override LOCALAPPDATA for testing
+        # Redirect the machine-wide data root: ConfigManager anchors on DonutPaths
+        # (%ProgramData%), so an unredirected run edits the operator's real config.
+        $script:originalProgramData = $env:ProgramData
+        $env:ProgramData = $testRoot
         $script:originalLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = $testRoot
     }
 
     AfterAll {
-        # Restore original LOCALAPPDATA
+        # Restore the real data root
+        $env:ProgramData = $script:originalProgramData
         $env:LOCALAPPDATA = $script:originalLocalAppData
         
         # Cleanup

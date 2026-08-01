@@ -45,10 +45,14 @@ class MockNetworkProbe : NetworkProbe {
   a variable it never assigns (`ClassVariableCoverage`), an `AsyncJob` built without a
   logger (`AsyncJobLoggerCoverage`), a `[ProjectClass]::` used without importing its
   module (`TypeImportCoverage`).
-- **Integration (`tests/Integration`):** remote paths (DNS failure, reverse-DNS
-  mismatch, RPC 1722) against a mock/loopback target with temp UNC folders to verify
-  log/report copy; the ApplyUpdates flow (confirmation/skip, clipboard list); the
-  updater flow (SHA-256 verify, HTML/SSO rejection, rollback, hash-gated worker copy).
+- **Integration (`tests/Integration`):** the real child-process worker transport
+  (`AsyncJob` -> `WorkerProcess` -> `RemoteWorker.ps1` over the ArgsFile/ResultFile
+  protocol, success and failure shapes); the warm-pool barrier against the real
+  runspace pool; WPF resource and view composition (STA, Windows-only); config and
+  recent-connections persistence through a redirected data root; and the
+  pending-intent elevation handover, claimed once by a second real process.
+  Remote-target legs (psexec, dcu-cli, SMB copy-back) run only in the manual lab
+  harness (`tools/Invoke-DiagnosticRun.ps1`), never in the suite.
 
 ## Lint and format gates
 

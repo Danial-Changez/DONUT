@@ -31,7 +31,10 @@ if ($a.ConfigPath -and (Test-Path $a.ConfigPath)) {
 $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:testWorker
 
-        # Override LOCALAPPDATA for ConfigManager tests
+        # Redirect the machine-wide data root: ConfigManager anchors on DonutPaths
+        # (%ProgramData%), so an unredirected run edits the operator's real config.
+        $script:originalProgramData = $env:ProgramData
+        $env:ProgramData = $script:testRoot
         $script:originalLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = $script:testRoot
         
@@ -42,7 +45,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
     AfterAll {
         [RunspaceManager]::Close()
         
-        # Restore LOCALAPPDATA
+        # Restore the real data root
+        $env:ProgramData = $script:originalProgramData
         $env:LOCALAPPDATA = $script:originalLocalAppData
         
         # Cleanup
