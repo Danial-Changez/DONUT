@@ -909,11 +909,11 @@ class FinderPresenter {
         }
     }
 
-    # A Lens device was added: drop its WSID into the machine list via HomePresenter's
-    # Add/pick flow (row + IP prefetch + inventory + move-to-top). The Lens stays open.
+    # A Lens device joins the machine list; the Lens stays open, and its person seeds the
+    # row's owner so a name already on screen is never re-queried from the agent.
     [void] OnAddDeviceToList([string]$wsid) {
         if ([string]::IsNullOrWhiteSpace($wsid)) { return }
-        $this.Home.EnsureRow($wsid)
+        $this.Home.EnsureRow($wsid, [string]$this.LensVm.DisplayName)
         $this.Home.Resolution.PrefetchIp($wsid)
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)

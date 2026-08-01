@@ -992,12 +992,25 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     # Returns the host's row view-model, building and inserting a new one if needed.
-    [HostViewModel] EnsureRow([string]$hostName) {
+    [HostViewModel] EnsureRow([string]$hostName) { return $this.EnsureRow($hostName, '') }
+
+    # The 2-arg form seeds an already-known owner (e.g. the open Lens's person) before
+    # RequestOwners runs, so that add never re-queries the agent for a name on screen.
+    [HostViewModel] EnsureRow([string]$hostName, [string]$ownerDisplayName) {
         if ($this.Rows.ContainsKey($hostName)) {
-            return $this.Rows[$hostName]
+            $existing = $this.Rows[$hostName]
+            if ($ownerDisplayName -and -not $existing.OwnerName) {
+                $existing.SetOwner($ownerDisplayName)
+                $this.Store.UpsertOwner($hostName, $ownerDisplayName)
+            }
+            return $existing
         }
 
         $vm = [HostViewModel]::new($hostName)
+        if ($ownerDisplayName) {
+            $vm.SetOwner($ownerDisplayName)
+            $this.Store.UpsertOwner($hostName, $ownerDisplayName)
+        }
         $presenter = $this
         # Row commands close over the host name; Run = active command, double-click = gather.
         $run = { param($p) $presenter.RunHost($hostName) }.GetNewClosure()
