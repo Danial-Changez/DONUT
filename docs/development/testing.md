@@ -161,10 +161,27 @@ Generate a visual HTML coverage report from the project root:
 tests/Generate-CoverageReport.ps1
 ```
 
-It runs the `tests/Unit` suite, emits `coverage.xml` (JaCoCo format), and converts it
-into an HTML report under `CoverageReport/` (open `CoverageReport/index.html`).
+What it does:
 
-The HTML generation is powered by
-[JaCoCo-XML-to-HTML-PowerShell](https://github.com/constup/JaCoCo-XML-to-HTML-PowerShell)
-by [constup](https://github.com/constup) — coverage reports in pure PowerShell, no
-external .NET tools or licenses.
+- Runs the full suite (`tests/`) on the pinned Pester 5 with Pester's
+  [built-in code coverage](https://pester.dev/docs/usage/code-coverage) enabled.
+- Collects coverage with the profiler-based tracer
+  (`CodeCoverage.UseBreakpoints = $false`), the same engine Pester 6 uses by
+  default and much faster than the v5 breakpoint collector. If coverage numbers
+  ever look wrong, set it back to `$true` to compare.
+- Emits `coverage.xml` (JaCoCo format, the Pester default) at the repo root.
+  Coverage is measured over `src/Core`, `src/Models`, and `src/Services`.
+- Renders the XML into an HTML site under `CoverageReport/` with
+  [ReportGenerator](https://github.com/danielpalme/ReportGenerator); open
+  `CoverageReport/index.html`.
+
+How ReportGenerator is resolved:
+
+- A `reportgenerator` already on `PATH` is used as-is.
+- Otherwise the script installs it once as a repo-local dotnet tool under
+  `tools/.cache/reportgenerator` (gitignored). This needs the .NET SDK; without
+  it the script fails with install guidance instead of a broken report.
+
+Pester emits the coverage XML natively, so no Pester upgrade is needed: the
+suite stays on the pinned Pester 5. Pester 6 only adds a Cobertura output
+format, and ReportGenerator reads JaCoCo directly.

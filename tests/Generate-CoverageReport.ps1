@@ -1,90 +1,100 @@
+<#
+.SYNOPSIS
+    Runs the suite with code coverage and renders an HTML report site.
+
+.DESCRIPTION
+    Runs the tests on the pinned Pester 5 (tools/Import-PinnedPester.ps1) with
+    Pester's built-in JaCoCo coverage output, then renders coverage.xml into an
+    HTML site under CoverageReport/ using ReportGenerator. When ReportGenerator
+    is not already on PATH it is installed automatically as a repo-local dotnet
+    tool under tools/.cache/reportgenerator (requires the .NET SDK).
+
+.PARAMETER Path
+    Test path(s) to run. Defaults to the full suite (tests/).
+
+.PARAMETER ReportDir
+    Output directory for the HTML site. Defaults to CoverageReport/.
+#>
 param(
-    [string]$ReportDir = "$PSScriptRoot\..\CoverageReport"
+    [string[]] $Path = @($PSScriptRoot),
+    [string] $ReportDir = (Join-Path $PSScriptRoot '..' 'CoverageReport')
 )
 
-# Ensure STA mode for WPF integration tests
-if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
-    Write-Host "Re-launching in STA mode for WPF tests..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Stop'
+
+# WPF integration tests need an STA thread; the relaunch is Windows-only
+# because apartment state does not exist elsewhere (and would loop forever).
+if ($IsWindows -and [System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    Write-Host 'Re-launching in STA mode for WPF tests...' -ForegroundColor Yellow
     pwsh -Sta -File $MyInvocation.MyCommand.Path @PSBoundParameters
-    exit
+    exit $LASTEXITCODE
 }
 
-# Pester 5+ is required
-Import-Module Pester -ErrorAction Stop
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $repoRoot 'tools' 'Import-PinnedPester.ps1')
 
-# Run Pester with code coverage
-Write-Host "Running tests with code coverage..." -ForegroundColor Cyan
-$coverageXml = "$PSScriptRoot\..\coverage.xml"
+$coverageXml = Join-Path $repoRoot 'coverage.xml'
 
-if (-not ([System.Management.Automation.PSTypeName]'PesterConfiguration').Type) {
-    Write-Warning "PesterConfiguration type not found. This script requires Pester 5+."
-    Throw "Pester 5+ is required for this script."
-}
-else {
-    $config = [PesterConfiguration]::Default
-    $config.Run.Path = "$PSScriptRoot"
-    $config.CodeCoverage.Enabled = $true
-    
-    # Specify which folders to cover under 'src'
-    $foldersToCover = @(
-        "Core",
-        "Models",
-        "Services"
-    )
+$config = New-PesterConfiguration
+$config.Run.Path = $Path
+$config.Run.PassThru = $true
+$config.Output.Verbosity = 'Normal'
+$config.CodeCoverage.Enabled = $true
+# Profiler-based tracer (the Pester 6 default), much faster than v5's
+# breakpoint collector. Flip to $true if coverage numbers ever look off.
+$config.CodeCoverage.UseBreakpoints = $false
+$config.CodeCoverage.OutputFormat = 'JaCoCo'
+$config.CodeCoverage.OutputPath = $coverageXml
+# Coverage measures the product modules, not the test tree itself.
+$config.CodeCoverage.Path = @('Core', 'Models', 'Services') |
+    ForEach-Object { Join-Path $repoRoot 'src' $_ }
 
-    $config.CodeCoverage.Path = $foldersToCover | ForEach-Object {
-        Get-ChildItem (Join-Path "$PSScriptRoot\..\src" $_) -Recurse -ErrorAction SilentlyContinue
-    } | Select-Object -ExpandProperty FullName
-    $config.CodeCoverage.OutputFormat = 'JaCoCo'
-    $config.CodeCoverage.OutputPath = $coverageXml
-    $config.Output.Verbosity = "None"
-    $config.Run.PassThru = $true
-    
-    & Invoke-Pester -Configuration $config
-}
+Write-Host 'Running tests with code coverage...' -ForegroundColor Cyan
+$result = Invoke-Pester -Configuration $config
 
-# Generate Report using JaCoCo-XML-to-HTML-PowerShell
 if (-not (Test-Path $coverageXml)) {
-    Write-Error "Coverage XML file was not generated."
+    Write-Error 'Coverage XML file was not generated.'
 }
-else {
-    Write-Host "Generating HTML report using JaCoCo-XML-to-HTML-PowerShell..." -ForegroundColor Cyan
-    $toolPath = "$PSScriptRoot\..\tools\JaCoCoToHtml\constup-jacoco-xml-to-html.ps1"
-    
-    if (Test-Path $toolPath) {
-        $configPath = "$PSScriptRoot\jacoco-config.ps1"
-        $sourceDir = Resolve-Path "$PSScriptRoot\..\src"
-        
-        # Ensure output directory exists and is empty (tool requirement)
-        if (Test-Path $ReportDir) {
-            Remove-Item "$ReportDir\*" -Recurse -Force
-        }
-        else {
-            New-Item -ItemType Directory -Path $ReportDir -Force | Out-Null
-        }
-
-        $configContent = @"
-`$Global:jacocoxml2htmlConfig = [PSCustomObject]@{
-    'xml_file' = '$coverageXml';
-    'destination_directory' = '$ReportDir';
-    'sources_directory' = '$sourceDir';
-    'theme' = 'dark';
+if ($result.FailedCount -gt 0) {
+    Write-Host "$($result.FailedCount) test(s) failed; the report still reflects executed code." -ForegroundColor Yellow
 }
-"@
-        Set-Content -Path $configPath -Value $configContent
-        & pwsh -File $toolPath --config $configPath
-        
-        # Clean up config
-        Remove-Item $configPath -Force
-        $reportPath = Join-Path $ReportDir "index.html"
 
-        if (Test-Path $reportPath) {
-            Write-Host "Report generated successfully at: $reportPath" -ForegroundColor Green
-            Write-Host "You can open it by pasting your clipboard in the terminal" -ForegroundColor Gray
-            Set-Clipboard -Value "Invoke-Item '$reportPath'"
+# Prefer a machine-wide ReportGenerator; otherwise auto-install a repo-local
+# dotnet tool under tools/.cache (gitignored) on first use.
+if (-not (Get-Command reportgenerator -ErrorAction SilentlyContinue)) {
+    $toolDir = Join-Path $repoRoot 'tools' '.cache' 'reportgenerator'
+    if (-not (Test-Path (Join-Path $toolDir 'reportgenerator*'))) {
+        if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+            Write-Error (
+                "ReportGenerator is required to render the HTML site, and the .NET SDK is " +
+                "not available to auto-install it. Either install the SDK and re-run, or " +
+                "install the tool yourself and put it on PATH:`n" +
+                "  dotnet tool install --global dotnet-reportgenerator-globaltool")
+        }
+        Write-Host 'Installing ReportGenerator (first run only)...' -ForegroundColor Cyan
+        dotnet tool install dotnet-reportgenerator-globaltool --tool-path $toolDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet tool install failed with exit code $LASTEXITCODE."
         }
     }
-    else {
-        Write-Error "JaCoCo-XML-to-HTML-PowerShell tool not found at $toolPath."
-    }
+    $env:PATH = "$toolDir$([IO.Path]::PathSeparator)$env:PATH"
 }
+
+# ReportGenerator merges into an existing directory; clear it so removed
+# modules do not linger in the site between runs.
+if (Test-Path $ReportDir) {
+    Remove-Item (Join-Path $ReportDir '*') -Recurse -Force
+}
+
+Write-Host 'Rendering HTML report with ReportGenerator...' -ForegroundColor Cyan
+reportgenerator `
+    "-reports:$coverageXml" `
+    "-targetdir:$ReportDir" `
+    "-sourcedirs:$(Join-Path $repoRoot 'src')" `
+    '-reporttypes:Html' `
+    '-title:DONUT'
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "ReportGenerator failed with exit code $LASTEXITCODE."
+}
+
+Write-Host "Report generated at: $(Join-Path $ReportDir 'index.html')" -ForegroundColor Green
