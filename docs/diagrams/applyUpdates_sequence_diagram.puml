@@ -11,6 +11,12 @@ participant "ExecutionService" as Exec
 
 User -> Presenter: Run host (mode = Apply) / Run all
 activate Presenter
+
+opt "Run all" clicked while de-elevated (RunAll is gated; single-host Run is not)
+    Presenter -> Presenter: RequireElevation(RunAll, hosts) = false ->\nPendingIntentStore.Save(intent) + UAC relaunch\n(ElevationRelaunch.Spawn)
+    note right of Presenter: The elevated instance resumes the intent once\n(3 s dispatcher timer) and re-enters this flow.\nSee elevation_sequence_diagram.puml.
+end
+
 Presenter -> Presenter: StartProcess("PC-01")
 
 alt Scan < 24h old and report cached

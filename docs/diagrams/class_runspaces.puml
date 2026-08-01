@@ -20,14 +20,19 @@ package "Donut.Core" #102A20 {
         +Status: JobStatus
         +Logs: ConcurrentQueue<LogLine>
         +Result: object
+        +FailureMessage: string
+        +StartedAtUtc: datetime
         +Start(scriptPath, arguments, tempConfig): void
         +Poll(): void
         +DrainStream(stream, severity): void
         +Cleanup(): void
+        -LogStallHeartbeat(): void
+        -HealThreadPoolIfStarved(freeRunspaces, freeWorkers): void
     }
 
     class WorkerProcess {
         +{static} $Launcher: scriptblock
+        +{static} FindPwsh(): string
         +{static} Prepare(scriptPath, arguments, configPath): hashtable
         +{static} Interpret(launcherOutput): hashtable
     }
@@ -39,6 +44,7 @@ package "Donut.Core" #102A20 {
         +Start(scriptPath, arguments, tempConfig): void
         +Poll(): void
         +Cleanup(): void
+        -KillChild(why): void
     }
 
     class PoolScriptJob {
@@ -92,7 +98,7 @@ package "Donut.Models" #15233B {
 
 AsyncJob --> RunspaceManager
 AsyncJob --> WorkerProcess
-WorkerProcess ..> RunspaceManager
+PoolScriptJob ..> RunspaceManager : interactive pool
 AsyncJob ..> JobStatus
 AsyncJob ..> JobKind
 AsyncJob ..> LogLine

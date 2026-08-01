@@ -23,6 +23,8 @@ package "Donut.UI.Presenters" #2B1A12 {
         -TrayPresenter: TrayPresenter
         -Tour: TourPresenter
         -Hotkey: HotkeyManager
+        +Watchdog: DispatcherWatchdog
+        +IntentStore: PendingIntentStore
         +Initialize(): void
         +Show(): void
         +ShowHome(): void
@@ -32,6 +34,10 @@ package "Donut.UI.Presenters" #2B1A12 {
         +ShowReset(target) / CloseReset(): void
         +AttachHotkey(hwnd) / ApplyHotkey(): void
         +ApplyStartupTask(): void
+        +RestartElevated(): void
+        +EnsureElevated(action, hosts, what): bool
+        -SpawnElevated(): bool
+        +ResumePendingIntent(): void
     }
 
     class HomePresenter extends AsyncJobPresenter {
@@ -67,6 +73,9 @@ package "Donut.UI.Presenters" #2B1A12 {
         +RefreshInventory(host): void
         +FindBigFolders(host): void
         +CompleteDiskScan(job): void
+        +ResumeDiskScan(hosts): void
+        +DeleteSelectedFolders(host): void
+        +CompleteDeleteFolders(job): void
         +CopyHostLog(host): void
         -ReflectFailure(host, message): void
     }
@@ -80,6 +89,10 @@ package "Donut.UI.Presenters" #2B1A12 {
         +InvalidateResolved(host): void
         +StartVerifyName(host): void
         +CompleteResolve(job): void
+        -StartFastResolve(host): void
+        -StartClassicResolve(host): void
+        -StartNextFastResolve(): void
+        -OnFastResolveFault(job): void
     }
 
     class FinderPresenter {
@@ -96,6 +109,9 @@ package "Donut.UI.Presenters" #2B1A12 {
         +OnShowQr / OnShowReset: scriptblock
         +OnPickUser(r) / PollLens(): void
         +OnAddDeviceToList(wsid): void
+        +OwnerJob: object
+        +ResolveOwners(machines, onResolved): void
+        -ReapOwners(): void
         +OnAppClosing(): void
     }
 
@@ -197,18 +213,21 @@ package "Donut.UI.ViewModels" #3A2A12 {
 
     class HostViewModel {
         +HostName / Subtitle / ChipText / StepText: string
-        +StatusCategory: string
+        +OwnerName / OwnerTip: string
+        +SortStatusRank: int
         +Updates: DcuUpdate[]
+        +UpdatesIdentityText / IdentityState: string
         +Percent: double
         +ProgressVisible / ProgressIndeterminate: bool
         +DotBrush / ChipForeground / ProgressBrush: Brush
         +Ov* (overview facts): string
         +Folders: FolderNodeViewModel[]
-        +RunCommand / GatherCommand: RelayCommand
+        +RunCommand / GatherCommand / RemoveCommand: RelayCommand
         +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
         +ApplyInventory(inv) / ApplyFolders(report): void
         +SetPercent(pct) / SetScanStep(text, pct): void
         +SetReachability(state) / SetResolvedIp(ip): void
+        +SetOwner(displayName): void
         +{static} SetPalette(palette): void
     }
 
@@ -228,16 +247,20 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
 
     class PersonLensViewModel {
-        +Upn / Sam / Email / Manager / Office: string
+        +Upn / Sam / DisplayName / Email: string
+        +Manager / Office / StatusText: string
         +IsLoading / HasError / HasDevices: bool
         +Devices: ObservableCollection<LensDeviceViewModel>
         +SetLoading(who) / Apply(lens): void
+        +ApplyPartial(lens): void
     }
     class LensDeviceViewModel {
-        +Name / Os / LastSeenText / Model / TagText / BitLockerText: string
+        +Name / Os / LastSeenText / Domain / Note: string
+        +Model / Serial / Manufacturer / TagText: string
+        +BitLockerText / LatestKey: string
         +DetailTip: object
         +HasBitLocker / IsBitLockerRevealed: bool
-        +RevealCommand / AddCommand: RelayCommand
+        +RevealCommand / AddCommand / ShowQrCommand: RelayCommand
     }
 
     class ToastViewModel {
@@ -318,14 +341,19 @@ package "Donut.Models (UI mappers)" #15233B {
     class TourSteps {
         +{static} Build(): TourStep[]
     }
+}
 
+package "Donut.Services" #221634 {
     class SystemInfo {
         +Hostname: string
         +IPv4: string
         +Domain: string
+        +DomainJoined: bool
         +DomainController: string
+        +DcReachable: bool
         +HasBattery: bool
         +BatteryPercent: int
+        +Charging: bool
     }
 
     class SystemInfoService {

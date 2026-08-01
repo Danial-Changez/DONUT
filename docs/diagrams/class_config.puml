@@ -17,7 +17,10 @@ package "Donut.Core" #102A20 {
         +LogInfo(message): void
         +LogError(message): void
         +LogWarning(message): void
+        +LogDebug(message): void
         +LogException(message, errorRecord): void
+        +LogStructured(level, eventName, fields): void
+        +GetRecentLogs(count): string[]
         +{static} Coalesce(logger): LogService
     }
     class NullLogService extends LogService
@@ -44,10 +47,16 @@ package "Donut.Core" #102A20 {
         +{static} IsElevated(): bool
         +{static} IsSystem(): bool
         +{static} CurrentIdentityName(): string
+        +{static} InteractiveUser(): string
         +{static} Classify(actionNeedsAdmin, isElevated): ElevationState
     }
     ElevationContext ..> ElevationState
     DonutPaths ..> ElevationContext
+
+    class ElevationRelaunch {
+        +{static} BuildSpec(sourceRoot): Hashtable
+        +{static} Spawn(spec): Hashtable
+    }
 
     enum GatedAction {
         RunAll
@@ -82,13 +91,27 @@ package "Donut.Core" #102A20 {
 package "Donut.Services" #221634 {
     class RecentConnectionsStore {
         +{static} Cap: int
+        +DeferSave: bool
         +Upsert(host, status, jobType, count, reboot): void
         +Touch(host): void
         +UpsertInventory(host, inv): void
+        +UpsertOwner(host, owner): void
         +UpsertDiskUsage(host, report): void
         +Remove(host): void
         +SeedFrom(hosts): void
         +GetAll(): RecentConnection[]
+        +GetByHost(host): RecentConnection
+        +Count(): int
+        +FlushSave(): void
+    }
+
+    class PendingIntentStore {
+        +Logger: LogService
+        +Ttl: timespan
+        +IntentPath(): string
+        +Save(intent): void
+        +Take(nowUtc): PendingIntent
+        +Discard(): void
     }
 
     class ResourceService {
@@ -110,7 +133,8 @@ package "Donut.Services" #221634 {
     class StartupTaskService {
         +Logger: LogService
         +SourceRoot: string
-        +{static} TaskName(): string
+        +{static} TaskNameFor(user): string
+        +ResolveOwner(): Hashtable
         +BuildLaunchSpec(processPath, sourceRoot): Hashtable
         +ReconcileDecision(enabled, existingTask, spec): string
         +Apply(enabled): bool
@@ -142,6 +166,7 @@ package "Donut.Models" #15233B {
         +LastJobType: string
         +UpdateCount: int
         +RebootRequired: bool
+        +Owner: string
         +Inventory: MachineInventory
         +DiskUsage: DiskUsageReport
         +{static} FromHashtable(h): RecentConnection
@@ -166,5 +191,7 @@ ConfigManager ..> AppConfig
 RecentConnectionsStore --> RecentConnection
 DeviceFlowDecision ..> PollOutcome
 StartupTaskService --> LogService
+PendingIntentStore --> LogService
+PendingIntentStore ..> PendingIntent
 
 @enduml

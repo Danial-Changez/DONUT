@@ -9,6 +9,7 @@ participant "AdSearchWorker.ps1\n(one per forest, on pool)" as Worker
 participant "ActiveDirectoryService" as AD
 participant "AdUnlockWorker.ps1" as Unlock
 participant "AdResetPasswordWorker.ps1" as Reset
+participant "LensLookupWorker.ps1\n(-OwnerOf batch, on pool)" as OwnerWorker
 
 User -> Presenter: Type prefix (>= MinPrefix chars)
 activate Presenter
@@ -36,7 +37,7 @@ deactivate Presenter
 loop poll until every forest lands
     Timer -> Presenter: PollSearch()
     activate Presenter
-    note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nrender the growing union.
+    note right of Presenter: Discard stale-token results;\ndedupe by Kind|Domain|Sam;\nAdSearchRank.Order ranks computers and\nusers by which field prefix-matched;\nrender the growing union.
     Presenter -> User: Dropdown — COMPUTERS + USERS\n(every user shows "Reset...";\nlocked users add "Unlock")
     deactivate Presenter
 end
@@ -67,4 +68,11 @@ else Reset a user's password
     deactivate Reset
     Shell -> User: Toast; overlay stays open\n(closing wipes the secret)
 end
+
+== Machine-owner batch (background, single-flight) ==
+Presenter -> OwnerWorker: ResolveOwners(machines) ->\nBeginInvoke(-OwnerOf batch) on pool
+note right of Presenter: HomePresenter asks once for every listed\nmachine missing an owner; one in-flight\nbatch (OwnerJob), reaped on the Lens poll\ntick (ReapOwners).
+OwnerWorker --> Presenter: (async) owners bundle (machine -> owner)
+Presenter -> User: owner chip on each card\n(HostViewModel.SetOwner)
+note right of Presenter: Owners persist via\nRecentConnectionsStore.UpsertOwner ->\nConfigManager.SaveConfig (config.json),\nsaves coalesced by DeferSave.
 @enduml

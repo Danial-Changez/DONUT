@@ -10,7 +10,9 @@ component "C# Wrapper" #2A1320 {
 component "UI (src/UI/Views)" #102A2E {
     [MainWindow.xaml]
     [HomeView.xaml]
+    [Home sub-views\n(ActionBar, DetailPane, LensPane,\nMachinePane, StatCards)]
     [SettingsView.xaml]
+    [Settings sub-views\n(GeneralView, ScanView, ApplyUpdatesView)]
     [DialogWindow.xaml]
     [LoginWindow.xaml]
 }
@@ -25,6 +27,7 @@ component "Scripts (src/Scripts)" #2A2410 {
     [AdResetPasswordWorker.ps1]
     [LensLookupWorker.ps1]
     [LensAgent.ps1]
+    [LensAgent.Common.ps1]
     [InstallWorker.ps1]
     [Apply-StartupTask.ps1]
 }
@@ -57,6 +60,7 @@ component "PowerShell Classes (src)" {
         [LoginViewModel]
         [PersonLensViewModel]
         [LensDeviceViewModel]
+        [ResetPasswordViewModel]
     }
     package "Services" #221634 {
         [ScanService]
@@ -73,6 +77,7 @@ component "PowerShell Classes (src)" {
         [SystemInfoService]
         [ResourceService]
         [RecentConnectionsStore]
+        [PendingIntentStore]
     }
     package "Core" #102A20 {
         [ConfigManager]
@@ -80,8 +85,17 @@ component "PowerShell Classes (src)" {
         [AsyncJob]
         [WorkerProcess]
         [RunspaceManager]
+        [PoolScriptJob]
+        [ResolveProcessJob]
         [HostListSource]
         [LogService]
+        [DispatcherWatchdog]
+        [DonutPaths]
+        [ElevationContext]
+        [ElevationRelaunch]
+        [TimeFormat]
+        [ViewLoader]
+        [BuildProvenance]
     }
     package "Models" #15233B {
         [AppConfig]
@@ -114,6 +128,9 @@ database "%ProgramData%\\DONUT\\data" {
 [MainPresenter] ..> [TourPresenter] : first-run guided tour
 [MainPresenter] ..> [Donut.Interop\n(HotkeyManager)] : global hotkey
 [MainPresenter] ..> [Apply-StartupTask.ps1] : start-with-Windows apply
+[MainPresenter] ..> [PendingIntentStore] : gated click across elevation restart
+[MainPresenter] ..> [ElevationRelaunch] : UAC relaunch spec + spawn
+[MainPresenter] ..> [DispatcherWatchdog] : UI-stall diagnostics
 [Apply-StartupTask.ps1] ..> [StartupTaskService] : reconcile + register
 [HomePresenter] ..> [SystemInfoService] : local host facts
 
@@ -142,7 +159,7 @@ database "%ProgramData%\\DONUT\\data" {
 [FinderPresenter] ..> [PersonLensViewModel] : user Lens (agent lookup)
 [FinderPresenter] ..> [AdSearchWorker.ps1] : AD search (pool, one job per forest)
 [AdSearchWorker.ps1] ..> [ActiveDirectoryService] : in-process forest search (LDAP)
-[FinderPresenter] ..> [LensLookupWorker.ps1] : Lens lookups (pool)
+[FinderPresenter] ..> [LensLookupWorker.ps1] : Lens lookups + -OwnerOf owner batch (pool)
 [LensLookupWorker.ps1] ..> [PersonLensService] : warm / lookup on the pool
 [PersonLensService] ..> [LensAgent.ps1] : supervises (task) + request/response exchange
 [HomePresenter] ..> [AsyncJob] : queues

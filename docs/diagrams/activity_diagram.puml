@@ -29,6 +29,8 @@ case (Inventory)
     :RPC gate -> CIM/DCOM fast path (15s bound),\nfalling back to the PsExec probe (-r DonutProbe);
 case (DiskScan)
     :SMB gate -> deploy + run wiztree64.exe\n(MFT scan, -r DonutDisk, watchdog 20m);
+case (DeleteFolders)
+    :FolderDeletionPolicy filter (Canonicalize +\nIsDeletable) -> SMB gate -> BuildDeleteCommand\nvia remote pwsh (-r DonutDelete, watchdog 15m);
 endswitch
 note right
   A per-job watchdog (scan 30m / apply 120m /

@@ -73,6 +73,21 @@ P -> P : EnsureRow + PrefetchIp + StartInventory + MoveRowToTop
 P -> OP : machine added to the list (toast); Lens stays open
 deactivate P
 
+== Machine-owner batch (-OwnerOf) ==
+P -> PW : BeginInvoke(-OwnerOf machines)  on the pool
+activate PW
+PW -> AG : write request-<id>.bin (kind = 'owner',\nthe whole machine list in ONE request)
+activate AG
+AG -> SCCM : Resolve-MachineOwnerBatch (primary users)
+SCCM --> AG : owner per machine
+AG -> AG : write result-<id>.bin — answered INLINE on the\nserve loop, no thread job, no partials
+deactivate AG
+PW --> P : owners bundle (machine -> owner)
+deactivate PW
+
 == App close ==
-P -> AG : drop stop.flag; Stop/Unregister the task; purge lens-* dirs
+P -> PW : BeginInvoke(-StopAgent)  on the pool
+activate PW
+PW -> AG : StopAndPurgeAgent(): drop stop.flag,\nStop/Unregister the task, purge lens-* dirs
+deactivate PW
 @enduml

@@ -10,7 +10,7 @@ package "Donut.Services" #221634 {
         #Config: AppConfig
         #Probe: NetworkProbe
         #Logger: LogService
-        +{static} Fail(logger, exception): RemoteOperationException
+        -{static} Fail(logger, ex): RemoteOperationException
         #BuildWorkerArgs(host, jobType, options): Hashtable
     }
 
@@ -36,6 +36,12 @@ package "Donut.Services" #221634 {
         +GetCachedIp(host): string
         +MarkInFlight(host) / ClearInFlight(host): void
         +Invalidate(host): void
+        +SetActiveDc(dc): void
+        +HasActiveDc(): bool
+        +GetActiveDc(): string
+        +CacheName(host, actualName): void
+        +GetVerifiedName(host): string
+        +ClearVerifiedName(host): void
         +PrepareWarm() / PrepareWarmRunspace(): Hashtable
         +PrepareResolve(host) / PrepareName(host): Hashtable
         +PrepareResolveFast(host): Hashtable
@@ -49,8 +55,8 @@ package "Donut.Services" #221634 {
     }
 
     class DiskUsageService {
-        +{static} TopN: int
         +PrepareDiskScan(host): Hashtable
+        +PrepareDeleteFolders(host, paths): Hashtable
         +ParseDiskUsage(host): DiskUsageReport
     }
 
@@ -61,10 +67,16 @@ package "Donut.Services" #221634 {
         +RunApplyPhase(device, options): Hashtable
         +RunInventoryPhase(device, options): Hashtable
         +RunDiskScanPhase(device, options): Hashtable
+        +RunDeleteFoldersPhase(device, options): Hashtable
+        +{static} BuildDeleteCommand(paths): string
+        +WarmRuntimeAssemblies(): void
+        +WarmScanLaunchPath(): void
+        +GatherRemoteInventory(ip): Hashtable
+        +DeployWizTree(ip): void
         +InvokePsExec(parameters): int
-        +InvokeRemotePwsh(target, script, serviceName, maxMinutes): void
+        +InvokeRemotePwsh(target, scriptText, serviceName, maxMinutes): void
         +RecoverByResumeTail(ip, computer, remoteLog, seenChars): Hashtable
-        -TailAndScanLog(ip, remoteLog, seenChars): Hashtable
+        +TailAndScanLog(ip, remoteLog, seenChars): Hashtable
         -EmitNewDcuLogLines(ip, remoteLog, seenChars): int
         +{static} BuildRemoteDcuScript(command, argsString, outputLog): string
         +CopyRemoteArtifacts(host, outputLog, copyReport): Hashtable
@@ -134,13 +146,44 @@ package "Donut.Models" #15233B {
         +{static} Create(name, versions, match, urgency, ...): DcuUpdate
     }
 
+    enum ErrorLevel {
+        Info
+        Warning
+        Error
+    }
+
+    enum RemoteFailureReason {
+        Offline
+        Unresolvable
+        RpcUnavailable
+        ExecutionFailed
+        DcuMissing
+        ProcessStartFailed
+        ConnectionLost
+        TimedOut
+        Unknown
+    }
+
     class RemoteOperationException {
         +HostName: string
-        +Level: string
+        +Level: ErrorLevel
         +Reason: RemoteFailureReason
     }
+    class HostOfflineException extends RemoteOperationException
+    class HostUnresolvableException extends RemoteOperationException
+    class RpcUnavailableException extends RemoteOperationException
+    class DcuNotInstalledException extends RemoteOperationException
+    class RemoteExecutionException extends RemoteOperationException {
+        +ExitCode: int
+    }
+    class RemoteProcessStartException extends RemoteOperationException {
+        +ExitCode: int
+        +{static} Describe(exitCode): string
+    }
     class RemoteConnectionLostException extends RemoteOperationException {
+        +ExitCode: int
         +{static} IsConnectionLost(exitCode): bool
+        +{static} Describe(exitCode): string
     }
     class RemoteTimeoutException extends RemoteOperationException {
         +TimeoutMinutes: int
@@ -236,6 +279,8 @@ ExecutionService ..> DeviceContext
 ExecutionService ..> DcuLog
 ExecutionService ..> RemoteConnectionLostException
 ExecutionService ..> RemoteTimeoutException
+RemoteOperationException ..> ErrorLevel
+RemoteOperationException ..> RemoteFailureReason
 DcuLog ..> DcuCommandOutcome
 
 DiskUsageService ..> DiskUsageReport

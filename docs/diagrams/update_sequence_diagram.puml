@@ -62,10 +62,10 @@ alt Update / rollback needed
 
     Presenter -> Service: ApplyUpdate(msiPath, isRollback, sourceRoot)
     activate Service
-    Service -> Worker: Start-Process pwsh InstallWorker.ps1
+    Service -> Worker: Start-Process powershell.exe (5.1) on a\nstaged COPY of InstallWorker.ps1 (the MSI\nreplaces the source tree mid-install)
     activate Worker
     Worker -> Worker: stop DONUT (graceful)
-    Worker -> Worker: msiexec /i NewVersion.msi /passive
+    Worker -> Worker: msiexec /i NewVersion.msi\nREBOOT=ReallySuppress /passive /log (accept 0, 3010)
     Worker -> Worker: relaunch Donut.Launcher.exe
     deactivate Worker
     deactivate Service

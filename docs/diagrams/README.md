@@ -35,7 +35,7 @@ retired in favor of these):
 |---------|-------|
 | [`scan_sequence_diagram.puml`](scan_sequence_diagram.puml) | Scan a machine (async, non-blocking) |
 | [`applyUpdates_sequence_diagram.puml`](applyUpdates_sequence_diagram.puml) | Apply updates (24h scan reuse + per-host confirm) |
-| [`activity_diagram.puml`](activity_diagram.puml) | Remote worker flow inside a pool runspace (`ExecutionService`) |
+| [`activity_diagram.puml`](activity_diagram.puml) | Remote worker flow in an isolated child pwsh process (`ExecutionService`) |
 | [`inventory_sequence_diagram.puml`](inventory_sequence_diagram.puml) | Machine detail: inventory prefetch + WizTree storage scan |
 | [`ad_finder_sequence_diagram.puml`](ad_finder_sequence_diagram.puml) | Home search bar: live multi-forest AD finder + inline unlock |
 | [`lens_lookup_sequence_diagram.puml`](lens_lookup_sequence_diagram.puml) | User Lens via the persistent de-elevated agent (pick a person → devices) |
@@ -71,8 +71,8 @@ flowchart TD
   K --> L["Download MSI (+ checksum)"]
   L --> M{"SHA-256 matches?"}
   M -- No --> X3["Fail: hash mismatch </br> Exit app"]
-  M -- Yes --> N["Run MSI with basic UI </br> (msiexec /i file.msi /qb!)"]
-  N --> S{"Installer exit code OK? </br> (0, 3010, 1641)"}
+  M -- Yes --> N["Run MSI with passive progress UI </br> (msiexec /i file.msi REBOOT=ReallySuppress /passive /log)"]
+  N --> S{"Installer exit code OK? </br> (0, 3010)"}
   S -- No --> X4["Fail: MSI install error </br> Log and keep install intact"]
   S -- Yes --> T["Post-install: verify version in registry"]
   T --> U["Cleanup staging and temps"]

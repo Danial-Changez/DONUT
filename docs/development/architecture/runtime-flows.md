@@ -19,7 +19,7 @@ in the repo; the SVGs here are rendered from them on every site build.
 
 *Source: [`applyUpdates_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/applyUpdates_sequence_diagram.puml)*
 
-## Remote worker flow (in a pool runspace)
+## Remote worker flow (in an isolated child pwsh process)
 
 ![Remote worker activity diagram](/diagrams/activity_diagram.svg)
 

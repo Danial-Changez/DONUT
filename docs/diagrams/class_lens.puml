@@ -18,8 +18,18 @@ package "Donut.Services" #221634 {
 
     class PersonLensService {
         +SiteServer / SourceRoot: string
+        +{static} AgentTaskName: string
         +Lookup(identity): PersonLens
         +RunLookupJson(identity): string
+        +RunOwnerLookupJson(machines): string
+        +EnsureAgent(): string
+        +{static} AgentDir(): string
+        +{static} StopAndPurgeAgent(): void
+        +{static} SweepStaleExchanges(minutes): void
+        +{static} NewKeyIv(): byte[]
+        +{static} ProtectText(text, keyIv): byte[]
+        +{static} UnprotectText(blob, keyIv): string
+        -{static} WriteEncrypted(path, text, keyIv): void
     }
 }
 
@@ -49,10 +59,9 @@ package "Donut.Models" #15233B {
         +{static} ToSecure(value): SecureString
     }
 
-    class MachineNameMatcher {
-        +{static} DefaultPatterns: string[]
-        +{static} LooksLikeMachine(text, patterns): bool
-        +{static} AnyExactMatch(names, text): bool
+    class AdSearchRank {
+        +{static} Of(row, prefix): int
+        +{static} Order(rows, prefix): object[]
     }
 
     class PersonLens {

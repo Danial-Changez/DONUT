@@ -1,8 +1,10 @@
 @startuml inventory_sequence_diagram
-title Machine Detail — Inventory Prefetch + Storage Scan
+title Machine Detail — Inventory Prefetch + Storage Scan + Clear Folders
 
 actor User
 participant "HomePresenter" as Presenter
+participant "InventoryPresenter" as Detail
+participant "ResolutionCoordinator" as Coord
 participant "HostResolver" as Resolver
 participant "InventoryService" as Inv
 participant "DiskUsageService" as Disk
@@ -11,47 +13,65 @@ participant "RecentConnectionsStore" as Store
 
 User -> Presenter: Select machine row
 activate Presenter
-Presenter -> Presenter: SelectHost("PC-01")
+Presenter -> Detail: SelectHost("PC-01")
+activate Detail
 
 group Prefetch IP (background)
     Presenter -> Resolver: NeedsResolve("PC-01")?
     Resolver --> Presenter: true (stale / unknown)
     Presenter -> Job: queue Resolve job
-    note right of Presenter: CompleteResolve() caches the IP\nand updates the row's reachability dot.
+    note right of Coord: ResolutionCoordinator.CompleteResolve()\ncaches the IP and updates the row's\nreachability dot.
 end
 
 group Prefetch inventory (background, if stale)
-    Presenter -> Resolver: IsHostOnline + IsVerdictStale?
-    note right of Presenter: Only a FRESH 'Online' verdict gathers.\nOffline -> skipped; unknown/stale -> re-verified\noff-thread first (CompleteResolve re-gathers).
-    Presenter -> Presenter: InventoryIsStale("PC-01")?
-    Presenter -> Inv: PrepareInventory("PC-01")
-    Inv --> Presenter: worker args (CIM probe script)
-    Presenter -> Job: queue Inventory job
+    Detail -> Resolver: IsHostOnline + IsVerdictStale?
+    note right of Detail: Only a FRESH 'Online' verdict gathers.\nOffline -> skipped; unknown/stale -> re-verified\noff-thread first (CompleteResolve re-gathers).
+    Detail -> Detail: InventoryIsStale("PC-01")?
+    Detail -> Inv: PrepareInventory("PC-01")
+    Inv --> Detail: worker args (CIM probe script)
+    Detail -> Job: queue Inventory job
+    note right of Job: The worker tries a DCOM CIM session first\n(bounded 15s); the psexec probe is only\nthe fallback when CIM is unavailable/empty.
 end
+deactivate Presenter
 
-== PumpJobs(): Inventory job completes ==
-Presenter -> Inv: ParseInventory("PC-01")
+== PumpJobs(): Inventory job completes -> CompleteInventory(job) ==
+Detail -> Inv: ParseInventory("PC-01")
 activate Inv
-Inv --> Presenter: MachineInventory (model, battery, disk, uptime)
+Inv --> Detail: MachineInventory (model, battery, disk, uptime)
 deactivate Inv
-Presenter -> Store: UpsertInventory("PC-01", inv)
-Presenter -> Presenter: PopulateDetailCards() -> HostViewModel.ApplyInventory()
-note right of Presenter: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested);\nthe overview/detail bind to SelectedMachine.*.
+Detail -> Store: UpsertInventory("PC-01", inv)
+Detail -> Detail: PopulateDetailCards() -> HostViewModel.ApplyInventory()
+note right of Detail: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested);\nthe overview/detail bind to SelectedMachine.*.
 
 == On demand ==
-User -> Presenter: Click "Storage scan"
-Presenter -> Disk: PrepareDiskScan("PC-01")
-Disk --> Presenter: worker args (TopN)
-Presenter -> Job: queue DiskScan job
-note right of Presenter: Worker deploys wiztree64.exe,\nMFT-scans C:, copies folders.json back.
+User -> Detail: Click "Storage scan" -> FindBigFolders("PC-01")
+Detail -> Presenter: RequireElevation(DiskScan, "PC-01")
+note right of Presenter: Elevation-gated: de-elevated, a pending\nintent is written + UAC relaunch; after the\nrestart ResumeDiskScan() re-enters here.\nSee elevation_sequence_diagram.puml.
+Detail -> Disk: PrepareDiskScan("PC-01")
+Disk --> Detail: worker args (TopN)
+Detail -> Job: queue DiskScan job
+note right of Detail: Worker deploys wiztree64.exe,\nMFT-scans C:, copies folders.json back.
 
-== PumpJobs(): DiskScan job completes ==
-Presenter -> Disk: ParseDiskUsage("PC-01")
+== PumpJobs(): DiskScan job completes -> CompleteDiskScan(job) ==
+Detail -> Disk: ParseDiskUsage("PC-01")
 activate Disk
-Disk --> Presenter: DiskUsageReport (ranked folders)
+Disk --> Detail: DiskUsageReport (ranked folders)
 deactivate Disk
-Presenter -> Store: UpsertDiskUsage("PC-01", report)
-Presenter -> Presenter: HostViewModel.ApplyFolders(report)
-note right of Presenter: FolderNodeViewModel.FromReport() maps\nDiskUsageTree.BuildNested() to display nodes;\nthe TreeView binds SelectedMachine.Folders.
-deactivate Presenter
+Detail -> Store: UpsertDiskUsage("PC-01", report)
+Detail -> Detail: HostViewModel.ApplyFolders(report)
+note right of Detail: FolderNodeViewModel.FromReport() maps\nDiskUsageTree.BuildNested() to display nodes;\nthe TreeView binds SelectedMachine.Folders.
+
+== On demand: clear checked folders ==
+User -> Detail: "Clear selected" -> DeleteSelectedFolders("PC-01")
+Detail -> Presenter: RequireElevation(DeleteFolders, "PC-01")
+note right of Detail: Also elevation-gated, but NOT resumed after\nthe restart (the folder selection lives in this\nwindow) - the user re-picks. Confirmed via\nDialogPresenter before anything runs.
+Detail -> Disk: PrepareDeleteFolders("PC-01", paths)
+Disk --> Detail: worker args (safety-filtered paths)
+Detail -> Job: queue DeleteFolders job
+note right of Job: FolderDeletionPolicy filters locally and the\nremote script re-checks every path as SYSTEM.
+
+== PumpJobs(): DeleteFolders completes -> CompleteDeleteFolders(job) ==
+Detail -> Detail: toast "Cleared N folder(s)"
+Detail -> Detail: FindBigFolders("PC-01") (re-scan so the tree\nreflects the freed space)
+deactivate Detail
 @enduml

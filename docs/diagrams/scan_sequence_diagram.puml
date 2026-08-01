@@ -30,8 +30,8 @@ else Needs a fresh scan
     deactivate Scan
 
     Presenter -> Job: new AsyncJob("PC-01", Scan)
-    Presenter -> Pool: GetPool()
     Presenter -> Job: Start(scriptPath, args)
+    Job -> Pool: GetPool()
     note right of Job: Start spawns RemoteWorker.ps1 as an isolated child\npwsh process (WorkerProcess) from a pool runspace, so\nparallel jobs never share the class-load lock.
     Presenter -> Presenter: ActiveJobs.Add(job)
 end

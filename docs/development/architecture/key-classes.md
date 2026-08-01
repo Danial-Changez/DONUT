@@ -23,7 +23,6 @@ consumes the result and exposes it to the bindings.
 | `ScanCacheDecision` | Pure rule: is a host's last scan still fresh enough to reuse (24h)? |
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO (model, service tag, battery health, disk, uptime) + label formatting |
 | `MachineListShaper` | Pure mapper for the machine-list order: categorize a row (running / attention / online / offline) and rank categories worst-first for the list's fixed status-grouped sort |
-| `MachineNameMatcher` | Pure classifier for search text: does it look like a machine name (config-editable regex patterns, e.g. `^CAP-`) or match an AD computer exactly? Drives the finder's "Add as a machine" pre-selection |
 | `HotkeyGesture` | Pure parse/build of hotkey gestures (`Ctrl+Alt+D` ↔ Win32 modifiers + virtual key ↔ WPF `Key`); rejects modifier-less and Shift-only combos |
 | `TourStep` / `TourSteps` | The guided tour's ordered step content (title, body, target key, placement) — pure data so the tour is unit-tested headless |
 | `DiskUsage*` (`FolderUsage`, `DiskUsageReport`, `WizTreeCsv`, `DiskUsageTree`, `FolderTreeNode`, `DiskUsageFormat`) | "Biggest folders on C:" DTO + WizTree CSV parse + path-containment tree builder + size formatting |

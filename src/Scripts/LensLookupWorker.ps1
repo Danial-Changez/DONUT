@@ -4,7 +4,7 @@
     Runspace-pool wrapper that runs a Lens lookup (or warms the agent) and emits JSON.
 
 .DESCRIPTION
-    Invoked on the runspace pool by HomePresenter (like AdSearchWorker.ps1). Constructs
+    Invoked on the runspace pool by FinderPresenter (like AdSearchWorker.ps1). Constructs
     PersonLensService and returns its raw JSON bundle so the result crosses the runspace
     boundary without class-identity coupling; the UI parses it with PersonLens.FromJson.
     The persistent de-elevated agent (and the request/response exchange) lives in
