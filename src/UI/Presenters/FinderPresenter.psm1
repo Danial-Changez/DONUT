@@ -55,10 +55,10 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     thread before the next was even read. PollSearch renders once per tick for that reason.
 
     Cancelling the other forests once one answers would NOT be an optimization: the
-    forests hold disjoint populations, and RenderDropdown applies no cap and no relevance
-    ranking, so it would drop real people from the result and make which people
-    non-deterministic - including the row Enter pre-selects. Cancel-on-supersede is the
-    legitimate form and AbortSearch already does it.
+    forests hold disjoint populations, so a cancelled forest's people never enter the pool
+    AdSearchRank orders - the strongest match overall can live in the slowest forest, and
+    which people appear (including the row Enter pre-selects) would depend on which forest
+    won the race. Cancel-on-supersede is the legitimate form and AbortSearch already does it.
 
     ResolveOwners keeps exactly one batch in flight, and the batch is deliberate. The
     agent serves owner requests inline on its 150ms serve loop, so a second parent job
@@ -561,9 +561,9 @@ class FinderPresenter {
         # accumulated rows, and re-running it per leg is what put ~450ms on the last forest.
         if ($landed) {
             $renderAt = [datetime]::UtcNow
-            $this.RenderDropdown()
+            $drawn = $this.RenderDropdown()
             $renderMs = [long]([datetime]::UtcNow - $renderAt).TotalMilliseconds
-            $this.Logger.LogDebug("AD dropdown render: $($this.SearchResults.Count) row(s) in $($renderMs)ms")
+            $this.Logger.LogDebug("AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
@@ -576,11 +576,11 @@ class FinderPresenter {
         $items.Add([SearchRowViewModel]::Header("+$hidden MORE - KEEP TYPING TO NARROW"))
     }
 
-    # Rebuilds the dropdown: the "Add as a machine" action first, then the AD hits so far;
-    # pre-selects the add row for a WSID or the top user otherwise. Called per keystroke.
-    [void] RenderDropdown() {
+    # Rebuilds the dropdown (add action first, then the ranked capped hits) and pre-selects
+    # what Enter does. Returns the drawn item count, which the cap divorces from the pool's.
+    [int] RenderDropdown() {
         $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
-        if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
+        if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return 0 }
 
         $presenter = $this
         # $items, not $rows/$searchResults: a local colliding case-insensitively with
@@ -646,6 +646,7 @@ class FinderPresenter {
         $sel = if ($machineLike) { 0 } elseif ($firstUserIndex -ge 0) { $firstUserIndex } else { -1 }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
+        return $items.Count
     }
 
     # Computer chosen: drop it into the bar so the operator can run the active

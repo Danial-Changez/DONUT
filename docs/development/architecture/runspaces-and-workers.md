@@ -184,6 +184,15 @@ invalidates the ListBox layout**, so a 55-row render was 55 layout passes. `Rend
 now builds the list first and hands it over in one `Set`, so the ListBox does a single reset.
 Never populate a bound collection item by item on a path a user is waiting on.
 
+Measured after the swap (log line `AD dropdown render: N drawn of M pooled in Xms`): the
+linear term is gone - ~55-70ms roughly flat whether 6 hits pooled or 72, with tiny renders
+(1-2 rows) at ~11ms. That is the fixed cost of the pipeline sorts, the view-model build and
+the single ListBox reset, and it sits **under the 150ms bar**, so it stays. The first render
+of a session runs ~200ms - the popup's visual tree instantiates on its first open, plus
+first-call JIT of the ranking path - and is a one-time cost, not a leak. The straggler
+forest still waits out one render plus one poll tick (~90-120ms of its `notice`); that is
+the streaming trade-off, not a defect.
+
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
 `FinderPresenter.LensDeadline` (90 s, deliberately longer than
