@@ -1022,7 +1022,12 @@ class HomePresenter : AsyncJobPresenter {
             $vm = $this.Rows[$name]
             if ($vm.OwnerName) { continue }
             $cached = $this.Store.GetAll() | Where-Object { $_.Hostname -eq $name } | Select-Object -First 1
-            if ($cached -and $cached.Owner) { $vm.SetOwner($cached.Owner); continue }
+            if ($cached -and $cached.Owner) {
+                $vm.SetOwner($cached.Owner)
+                # A one-token owner is usually a SAM cached before SCCM naming existed;
+                # keep showing it but re-ask once so an old cache heals to the real name.
+                if ($cached.Owner -match '\s') { continue }
+            }
             $wanted += $name
         }
         if ($wanted.Count -eq 0 -or -not $this.Finder) { return }

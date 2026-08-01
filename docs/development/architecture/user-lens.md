@@ -110,7 +110,10 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
   cost N sleeps plus N files, N AES round trips and N parent polls - slower than
   resolving them back to back, while holding N of the four interactive runspaces.
   Parent-side fan-out would buy no throughput against a serially-served agent.
-  `RecentConnectionsStore.UpsertOwner` caches the answer so it is asked once.
+  `RecentConnectionsStore.UpsertOwner` caches the answer so it is asked once - except
+  a cached **one-token** owner (the SAM shape written before SCCM naming existed),
+  which still displays but is re-asked once per session so an old cache heals to the
+  real name instead of pinning the SAM forever.
 - A failed source degrades: each appends to the bundle's `errors` list and the
   lens still renders (blank hardware fields, missing keys noted per device).
 - The parse (`PersonLens.FromJson`) is pure and unit-tested; the agent/task I/O
