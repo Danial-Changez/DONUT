@@ -33,6 +33,29 @@ by `AdFilter` in `src/Models/AdSearchResult.psm1`) and the de-elevated Lens agen
   and `dsHeuristics` (suppressing ANR first/last matching) are forest-wide directory changes.
   A fleet tool has no business writing them.
 
+## A forest that cannot answer is not a forest with no matches
+
+`Search` isolates each forest in a try/catch so one down or untrusted directory cannot fail
+the others. The catch logged a warning and moved on, but `AdSearchWorker.ps1` constructs the
+service with a **null logger**, so `LogService.Coalesce` turned that warning into a no-op:
+an unreachable forest produced no log line, no error, and zero rows. It read exactly like a
+forest that matched nothing, which is how a **misspelt forest name went unnoticed** - the
+default said `forest-b.contoso.com` when the directory is `forest-b.contosogroup.com`, and one
+quarter of every search had been quietly returning nothing.
+
+- `ActiveDirectoryService.LastErrors` records each failure as `<domain>: <reason>` and is
+  reset at the top of every `Search`, so a recovered forest stops reporting.
+- The worker re-emits them on the **warning stream**, which crosses the runspace boundary
+  without polluting the typed result rows the caller maps.
+- `FinderPresenter.ReportForestFailure` drains that stream, logs each properly, and logs the
+  search as `FAILED` rather than `0 hit(s)`.
+- The operator is toasted **once per forest per session**. A permanently unreachable forest
+  would otherwise nag on every keystroke, and the first time is when it is news.
+
+**Changing the default does not fix an existing install.** User settings merge over defaults,
+so a wrong value already saved in `config.json` keeps winning; correct it there or in
+Settings.
+
 ## Measured, not argued
 
 Both of these change **which results come back**, so both are decided on hit counts, not just

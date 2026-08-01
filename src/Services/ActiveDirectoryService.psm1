@@ -15,12 +15,21 @@ using module "..\Models\AdSearchResult.psm1"
     in overridable hidden seams (QueryDirectory, InvokeUnlock, InvokeReset) so the
     multi-domain aggregation / mapping / guard logic is unit-testable off a domain
     by subclassing and faking the seams.
+
+    LastErrors exists because logging the per-forest failure is not enough: the usual
+    caller is AdSearchWorker.ps1, which passes a null logger, so Coalesce turns that
+    warning into a no-op and an unreachable forest looks identical to one that matched
+    nothing. That is how a misspelt forest name stayed invisible while a quarter of every
+    search silently returned nothing. The worker re-emits these on the warning stream and
+    FinderPresenter reports them; see architecture/ad-queries.md.
 #>
 class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()
     [int]        $MinPrefix = 3
     [int]        $MaxPerDomain = 8
+    # Per-forest failures from the last Search, as "<domain>: <reason>" - see .NOTES.
+    [string[]]   $LastErrors = @()
 
     ActiveDirectoryService() {
         $this.Logger = [NullLogService]::new()
@@ -34,6 +43,7 @@ class ActiveDirectoryService {
     # Searches every configured forest for computers + users matching the prefix.
     [AdSearchResult[]] Search([string]$prefix) {
         $results = [System.Collections.Generic.List[AdSearchResult]]::new()
+        $this.LastErrors = @()
         if ([string]::IsNullOrWhiteSpace($prefix) -or $prefix.Trim().Length -lt $this.MinPrefix) {
             return $results.ToArray()
         }
@@ -58,6 +68,9 @@ class ActiveDirectoryService {
                 }
             }
             catch {
+                # Recorded as well as logged: the caller is usually a pool worker whose
+                # logger is null, and a swallowed forest looks exactly like an empty one.
+                $this.LastErrors += "${domain}: $($_.Exception.Message)"
                 $this.Logger.LogWarning("AD search in '$domain' failed: $($_.Exception.Message)")
             }
         }

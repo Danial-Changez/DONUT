@@ -25,7 +25,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $svc = [ActiveDirectoryService]::new($Domains, $null)
-foreach ($r in $svc.Search($Prefix)) {
+$hits = $svc.Search($Prefix)
+# The warning stream, not the pipeline: results are typed rows the caller maps, and a
+# forest that could not answer must not read as a forest that matched nothing.
+foreach ($problem in $svc.LastErrors) { Write-Warning $problem }
+foreach ($r in $hits) {
     [PSCustomObject]@{
         Kind              = $r.Kind
         Name              = $r.Name

@@ -82,6 +82,7 @@ class FinderPresenter {
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
+    [HashSet[string]] $ForestsWarned       # toast once per dead forest, not per keystroke
     [List[hashtable]] $AdWarmJobs          # one-shot startup AD warm jobs (results discarded)
     # Accumulated rows for the current token (forests stream in).
     [List[object]]    $SearchResults
@@ -137,6 +138,7 @@ class FinderPresenter {
         $this.AdWarmJobs = [List[hashtable]]::new()
         $this.SearchResults = [List[object]]::new()
         $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $this.ForestsWarned = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         # 250ms, not 100: an inter-keystroke gap is usually longer than 100ms, so the old
         # value re-fanned out to every forest between most keystrokes - see .NOTES.
         $this.SearchDebounce = [DispatcherTimer]::new()
@@ -475,6 +477,22 @@ class FinderPresenter {
         else { $this.CloseSearchPopup() }
     }
 
+    # Drains a finished search's warning stream. Returns $true when that forest could not
+    # answer at all, which is NOT the same as matching nothing and must not read like it.
+    hidden [bool] ReportForestFailure([object]$job) {
+        $stream = $job.Ps.Streams.Warning
+        if ($stream.Count -eq 0) { return $false }
+        foreach ($w in $stream) { $this.Logger.LogWarning("AD search: $($w.Message)") }
+        $stream.Clear()
+        # Toasted once per forest per session: a permanently unreachable forest would
+        # otherwise nag on every keystroke, and the first time is when it is news.
+        if ($this.ForestsWarned.Add([string]$job.Domain) -and $this.Toasts) {
+            $this.Toasts.ShowWarning('Directory search',
+                "$($job.Domain) did not answer, so its people and machines are missing from these results.")
+        }
+        return $true
+    }
+
     # Poll the per-forest searches; as each lands, fold its hits into the current token's
     # accumulator and re-render the growing union. Stale-token jobs are discarded.
     [void] PollSearch() {
@@ -489,7 +507,9 @@ class FinderPresenter {
             # a forest that waited for a free runspace is the case worth seeing.
             $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
             $stale = if ($job.Token -ne $this.SearchToken) { ' (superseded)' } else { '' }
-            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms, $($results.Count) hit(s)$stale")
+            $failed = $this.ReportForestFailure($job)
+            $outcome = if ($failed) { 'FAILED' } else { "$($results.Count) hit(s)" }
+            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms, $outcome$stale")
             if ($job.Token -ne $this.SearchToken) { continue }
             foreach ($row in $results) {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"

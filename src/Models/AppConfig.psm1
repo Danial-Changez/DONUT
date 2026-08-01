@@ -27,7 +27,7 @@ class AppConfig {
         recoveryWindowMinutes = 30
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
-        domains               = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        domains               = @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
         adminServiceHost      = 'sccm01.contoso.com'
         # Start elevated at logon (scheduled task), hide the X into the tray, and the
@@ -198,7 +198,7 @@ class AppConfig {
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($list.Count -gt 0) { return $list }
         }
-        return @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        return @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
     }
 
     # Regex patterns marking search text as a machine name. Tolerates the JSON round-trip
