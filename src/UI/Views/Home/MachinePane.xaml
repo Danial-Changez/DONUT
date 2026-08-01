@@ -77,6 +77,7 @@
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
@@ -139,6 +140,15 @@
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                         Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
                         Padding="14,4" VerticalAlignment="Center" />
+                <!-- Remove this one card (a running host toasts and stays). Ghost, so
+                     Run keeps the row's single tinted action. -->
+                <Button Grid.Column="4" Command="{Binding RemoveCommand}"
+                        Style="{DynamicResource ButtonGhost}" Height="32" Width="30"
+                        Padding="0" Margin="4,0,0,0" VerticalAlignment="Center"
+                        ToolTip="Remove from the list">
+                  <Path Style="{DynamicResource controlButtonIcon}"
+                        Data="{DynamicResource xMark}" />
+                </Button>
               </Grid>
             </Border>
           </DataTemplate>

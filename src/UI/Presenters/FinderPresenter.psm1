@@ -54,6 +54,13 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     spread across 465ms, because each landed leg re-rendered the whole dropdown on the UI
     thread before the next was even read. PollSearch renders once per tick for that reason.
 
+    Enter prefers a real directory computer over the add row: a pattern prefix like "cap-"
+    used to pre-select Add, so Enter created a junk "cap-" card while the machines it was
+    a prefix OF sat one row below. Add is Enter's target only when AD matched nothing -
+    an unknown host, or a multi-host paste that OnSearch splits. A picked computer lands
+    on the machine pane directly (the pick is the add), and the popup stays open so one
+    prefix can yield several picks.
+
     Cancelling the other forests once one answers would NOT be an optimization: the
     forests hold disjoint populations, so a cancelled forest's people never enter the pool
     AdSearchRank orders - the strongest match overall can live in the slowest forest, and
@@ -105,7 +112,7 @@ class FinderPresenter {
     # Rows drawn per section. The popup shows ~8 at a time, so past this the rest is scroll
     # nobody reads - and drawing it costs ~3ms a row on the UI thread.
     [int]             $MaxDropdownRows = 15
-    [bool]            $SuppressSearch = $false
+    hidden [bool]     $DeactivateWired = $false   # Window.Deactivated hooked once - see WireWindowDeactivate
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
 
@@ -236,7 +243,32 @@ class FinderPresenter {
                         'Return' { $presenter.CommitSelection(); $e.Handled = $true }
                     }
                 }.GetNewClosure())
+            # Focus leaving the bar closes the dropdown - unless it went INTO the dropdown
+            # (the Unlock/Reset buttons live there and need their click).
+            $this.SearchBar.Add_LostKeyboardFocus({
+                    param($s, $e)
+                    $child = if ($presenter.SearchPopup) { $presenter.SearchPopup.Child } else { $null }
+                    $inPopup = $null -ne $child -and
+                    $e.NewFocus -is [System.Windows.Media.Visual] -and
+                    $child.IsAncestorOf($e.NewFocus)
+                    if (-not $inPopup) { $presenter.CloseSearchPopup() }
+                }.GetNewClosure())
+            # A WPF Popup floats above every window, including other apps' - so it must go
+            # down with the app's activation, not linger over whatever got Alt-Tabbed to.
+            if ($this.SearchBar.IsLoaded) { $this.WireWindowDeactivate() }
+            else { $this.SearchBar.Add_Loaded({ $presenter.WireWindowDeactivate() }.GetNewClosure()) }
         }
+    }
+
+    # Window.Deactivated -> close the dropdown. Wired once, from Initialize, as soon as the
+    # search bar is in a window (GetWindow returns null before the visual tree attaches).
+    [void] WireWindowDeactivate() {
+        if ($this.DeactivateWired -or $null -eq $this.SearchBar) { return }
+        $win = [System.Windows.Window]::GetWindow($this.SearchBar)
+        if ($null -eq $win) { return }
+        $this.DeactivateWired = $true
+        $presenter = $this
+        $win.Add_Deactivated({ $presenter.CloseSearchPopup() }.GetNewClosure())
     }
 
     # Move the dropdown highlight by $dir (+1 down / -1 up), skipping header rows and
@@ -261,8 +293,8 @@ class FinderPresenter {
         }
     }
 
-    # Enter: a highlighted dropdown row acts as if clicked (computer -> fills the bar,
-    # user -> opens the Lens); otherwise the typed WSID(s) are added to the machine list.
+    # Enter: a highlighted dropdown row acts as if clicked (computer -> added to the machine
+    # pane, user -> opens the Lens); otherwise the typed WSID(s) are added to the list.
     [void] CommitSelection() {
         if ($this.SearchPopup -and $this.SearchPopup.IsOpen -and $null -ne $this.ResultsList) {
             $sel = $this.ResultsList.SelectedItem
@@ -427,7 +459,6 @@ class FinderPresenter {
     # Restart the debounce window on each keystroke; close the dropdown when the
     # prefix is too short to search.
     [void] OnSearchTextChanged() {
-        if ($this.SuppressSearch) { return }
         $text = if ($this.SearchBar) { $this.SearchBar.Text } else { '' }
         if ([string]::IsNullOrWhiteSpace($text) -or
             $text.Trim().Length -lt $this.AdService.MinPrefix) {
@@ -603,8 +634,10 @@ class FinderPresenter {
         $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
         $items.Add($addRow)
 
+        $firstComputerIndex = -1
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
+            $firstComputerIndex = $items.Count   # the next item added is the top-ranked computer
             foreach ($c in ($computers | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($c)
                 $cap = [string]$c.Name
@@ -641,27 +674,27 @@ class FinderPresenter {
         $this.HomeVm.Set('SearchResults',
             [System.Collections.ObjectModel.ObservableCollection[object]]::new($items))
 
-        # Pre-select what Enter does: a machine (pattern or AD-confirmed) -> the add row; a
-        # name -> the top user (opens the Lens, not a junk card); nothing -> clear (bare Enter adds).
-        $sel = if ($machineLike) { 0 } elseif ($firstUserIndex -ge 0) { $firstUserIndex } else { -1 }
+        # Pre-select what Enter does: a real directory computer beats the add row, which is
+        # Enter's target only when AD matched nothing (unknown host, multi-host paste) - .NOTES.
+        $sel = if ($machineLike -and $firstComputerIndex -ge 0) { $firstComputerIndex }
+        elseif ($machineLike) { 0 }
+        elseif ($firstUserIndex -ge 0) { $firstUserIndex }
+        else { -1 }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
         return $items.Count
     }
 
-    # Computer chosen: drop it into the bar so the operator can run the active
-    # command (suppressing the re-search the programmatic edit would trigger).
+    # Computer chosen: straight onto the machine pane - the pick IS the add. The popup
+    # deliberately stays open so a sweep through "cap-" picks several without retyping.
     [void] OnPickComputer([string]$name) {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
-        $this.CloseSearchPopup()
-        $this.SuppressSearch = $true
-        if ($this.SearchBar) {
-            $this.SearchBar.Text = $name
-            $this.SearchBar.CaretIndex = $name.Length
-        }
-        $this.SuppressSearch = $false
-        # Start-early: a picked computer is about to be run - warm its IP now.
+        $vm = $this.Home.EnsureRow($name)
         $this.Home.Resolution.PrefetchIp($name)
+        $this.Home.StartInventory($name, $true)
+        $this.Home.MoveRowToTop($name)
+        # Shared-VM selection, same as OnSearch's flow: shows the new card's detail pane.
+        $this.HomeVm.SetSelected($vm)
     }
 
     # User row's Reset action: hand the row to the shell's reset-password overlay

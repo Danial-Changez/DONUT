@@ -185,13 +185,14 @@
                                    HorizontalAlignment="Left"
                                    Margin="24,0,56,0" />
                         <!-- Page switcher lives in the header, not the scrolling body, so it
-                             stays reachable at any scroll depth and fills space the row wasted. -->
+                             stays reachable at any scroll depth. Centered on the card, not
+                             right-aligned: it is the header's primary control, and the title
+                             and X already own the edges. -->
                         <Border CornerRadius="8.4"
                                 Background="{DynamicResource Secondary}"
                                 Padding="3"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Margin="0,0,56,0">
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                             <UniformGrid Rows="1">
                                 <RadioButton x:Name="cmdGeneral"
                                              Content="General"

@@ -42,6 +42,7 @@ class HostViewModel : ObservableObject {
     [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
+    [object] $RemoveCommand   # RelayCommand, assigned by the coordinator (card's X)
 
     # Machine-list sort key (maintained by RefreshShape): the Home list's CollectionView sorts
     # on SortStatusRank (then HostName), so attention-worthy machines rise to the top.

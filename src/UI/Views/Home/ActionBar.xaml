@@ -86,11 +86,14 @@
       <!-- One flat list of SearchRowViewModels: section headers and result rows share
            the template, switched by IsHeader. A ListBox (not ItemsControl) so Down/Up
            from the search bar can drive SelectedIndex; selection highlights the row. -->
+      <!-- CanContentScroll off = pixel scrolling: item scrolling leaves a dead band under
+           the last row (viewport rounds to whole items), read as phantom padding. -->
       <ListBox x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}"
                Background="Transparent" BorderThickness="0" MaxHeight="340"
                ItemContainerStyle="{DynamicResource MachineListItem}"
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-               ScrollViewer.VerticalScrollBarVisibility="Auto">
+               ScrollViewer.VerticalScrollBarVisibility="Auto"
+               ScrollViewer.CanContentScroll="False">
         <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid>
@@ -109,8 +112,8 @@
                     </Style>
                   </TextBlock.Style>
                 </TextBlock>
-                <!-- Result row: click or Enter picks (computers fill the bar, users open
-                     the Lens); keyboard highlight mirrors hover. -->
+                <!-- Result row: click or Enter picks (computers go straight onto the machine
+                     pane, users open the Lens); keyboard highlight mirrors hover. -->
                 <Border CornerRadius="7" Padding="10,6,8,6" Margin="0,0,0,2">
                   <Border.Style>
                     <Style TargetType="Border">

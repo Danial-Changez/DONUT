@@ -1002,8 +1002,10 @@ class HomePresenter : AsyncJobPresenter {
         # Row commands close over the host name; Run = active command, double-click = gather.
         $run = { param($p) $presenter.RunHost($hostName) }.GetNewClosure()
         $gather = { param($p) $presenter.OnRowActivated($hostName) }.GetNewClosure()
+        $remove = { param($p) $presenter.RemoveMachine($hostName) }.GetNewClosure()
         $vm.RunCommand = [RelayCommand]::new([System.Action[object]]$run)
         $vm.GatherCommand = [RelayCommand]::new([System.Action[object]]$gather)
+        $vm.RemoveCommand = [RelayCommand]::new([System.Action[object]]$remove)
 
         $this.Rows[$hostName] = $vm
         $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
@@ -1105,19 +1107,37 @@ class HomePresenter : AsyncJobPresenter {
     # Removes idle (not currently running) machines from the list and recents.
     [void] ClearCompleted() {
         $toRemove = @($this.Rows.Keys | Where-Object { -not $this.IsRunning($_) })
+        foreach ($hostName in $toRemove) { $this.RemoveRowCore($hostName) }
+        $this.FinishRemoval()
+    }
 
-        foreach ($hostName in $toRemove) {
-            $row = $this.Rows[$hostName]
-            if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
-            $this.Rows.Remove($hostName)
-            $this.Store.Remove($hostName)
-            $this.Detail.RemoveHostLog($hostName)
-            # Drop queued work so a pending run/gather can't re-create the cleared card.
-            $this.PendingRuns.Remove($hostName)
-            $this.PendingGathers.Remove($hostName)
-            $this.ScanSteps.Remove($hostName)
-            if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
+    # The card's X: removes just this machine. A running host stays put - stopping its
+    # job out from under the worker is a different, deliberate action.
+    [void] RemoveMachine([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName) -or -not $this.Rows.ContainsKey($hostName)) { return }
+        if ($this.IsRunning($hostName)) {
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Still running - wait for the job to finish before removing.") }
+            return
         }
+        $this.RemoveRowCore($hostName)
+        $this.FinishRemoval()
+    }
+
+    # One machine out of the list, recents, and every queue that could resurrect it.
+    hidden [void] RemoveRowCore([string]$hostName) {
+        $row = $this.Rows[$hostName]
+        if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
+        $this.Rows.Remove($hostName)
+        $this.Store.Remove($hostName)
+        $this.Detail.RemoveHostLog($hostName)
+        # Drop queued work so a pending run/gather can't re-create the removed card.
+        $this.PendingRuns.Remove($hostName)
+        $this.PendingGathers.Remove($hostName)
+        $this.ScanSteps.Remove($hostName)
+        if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
+    }
+
+    hidden [void] FinishRemoval() {
         $this.UpdateEmptyHint()
         $this.Detail.RefreshOverview()
         $this.Store.FlushSave()
