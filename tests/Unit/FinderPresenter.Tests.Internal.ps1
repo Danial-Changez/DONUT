@@ -36,6 +36,19 @@ Describe "FinderPresenter Lens poll" {
                 Who       = $Who
             }
         }
+
+        # A finished search leg carrying whatever the worker put on its Information stream.
+        # Omit -Payload for the leg that emitted nothing at all.
+        function New-TimedSearchJob {
+            param([datetime]$StartedAt, [string]$Payload, [string]$Tag = 'AdTiming')
+            $ps = [System.Management.Automation.PowerShell]::Create()
+            if ($Payload) {
+                $rec = [System.Management.Automation.InformationRecord]::new($Payload, 'worker')
+                $rec.Tags.Add($Tag)
+                $ps.Streams.Information.Add($rec)
+            }
+            return @{ Ps = $ps; StartedAt = $StartedAt; Domain = 'd1'; Prefix = 'dan' }
+        }
     }
 
     BeforeEach {
@@ -110,6 +123,41 @@ Describe "FinderPresenter Lens poll" {
 
             $p.LensJobs.Count | Should -Be 0
             $p.LensVm.HasError | Should -BeTrue
+        }
+    }
+
+    Context "search timing breadcrumb" {
+        It "splits a leg into queue / search / rows / notice" {
+            $dispatch = [datetime]::UtcNow.AddMilliseconds(-500)
+            $begun = $dispatch.AddMilliseconds(20)
+            $ended = $begun.AddMilliseconds(210)
+            $job = New-TimedSearchJob -StartedAt $dispatch `
+                -Payload "$($begun.Ticks) 200 $($ended.Ticks)"
+
+            $text = $script:presenter.DescribeSearchTiming($job)
+
+            $text | Should -Match 'queue 20\b'
+            $text | Should -Match 'search 200\b'
+            $text | Should -Match 'rows 10\b'   # worker total minus the search itself
+            $text | Should -Match 'notice \d+'
+        }
+
+        # A superseded or thrown leg never emits one, and the caller still logs its total -
+        # a missing breadcrumb must not throw inside the poll loop.
+        It "degrades to nothing when the worker emitted no record" {
+            $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow)
+            $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''
+        }
+
+        It "degrades to nothing when another record carries a different tag" {
+            $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow) `
+                -Payload 'partial bundle' -Tag 'LensPartial'
+            $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''
+        }
+
+        It "degrades to nothing when the record is not three fields" {
+            $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow) -Payload '123 456'
+            $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''
         }
     }
 

@@ -102,7 +102,7 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
 - **The owner lookup is one batched request, not one per machine.** The serve loop
   answers it inline and sleeps 150ms between passes, so N separate requests would
   cost N sleeps plus N files, N AES round trips and N parent polls - slower than
-  resolving them back to back, while holding N of the three interactive runspaces.
+  resolving them back to back, while holding N of the four interactive runspaces.
   Parent-side fan-out would buy no throughput against a serially-served agent.
   `RecentConnectionsStore.UpsertOwner` caches the answer so it is asked once.
 - A failed source degrades: each appends to the bundle's `errors` list and the

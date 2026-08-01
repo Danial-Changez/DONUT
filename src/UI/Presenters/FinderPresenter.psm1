@@ -33,11 +33,22 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
 
-    The search debounce is 250ms because the fan-out is four pool jobs (one per forest)
-    into three interactive runspaces. At 100ms it elapsed between most keystrokes, so
-    typing re-fanned-out repeatedly and AbortSearch's BeginStop is asynchronous - a
-    cancelled shell keeps its runspace until the ReapTimer collects it. The faster you
-    typed, the more of the lane was held by superseded searches.
+    The search timers are 100ms debounce / 60ms poll, and both are back at those values
+    after a raise to 250/150 that cost more than it saved. The debounce was raised on the
+    theory that typing re-fanned-out and the superseded shells held the lane (AbortSearch
+    cancels through BeginStop, which is asynchronous); that was argued, never measured, and
+    it charged every completed search a flat +150ms - on the interactive path, above the
+    150ms bar the same change set for whether an optimization is worth its complexity.
+    The poll raise was simply wrong: SearchPollTimer starts only when a fan-out begins and
+    stops when the last job lands, so it never ticks while idle and a fast tick costs
+    nothing, while a slow one is dead time before the dropdown paints AND inflates the
+    per-forest elapsed, which is measured when the poll notices rather than when the job
+    finished. Raise the debounce again only on log evidence: the fan-out count per search
+    and the (superseded) marker are there to provide it.
+
+    DescribeSearchTiming splits each leg into queue / search / rows / notice from the
+    worker's AdTiming record, so the next call here is made on numbers - a total alone
+    cannot separate the directory from the machinery around it.
 
     Cancelling the other forests once one answers would NOT be an optimization: the
     forests hold disjoint populations, and RenderDropdown applies no cap and no relevance
@@ -100,12 +111,11 @@ class FinderPresenter {
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
-    [datetime]            $LensWarmStartedAt
     [bool]                $LensWarmTimed
     [DispatcherTimer]     $WarmWatchTimer   # times the warms; stops itself once they land
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
-    # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
+    # Startup agent warm-up @{ Ps; Handle; StartedAt }, reaped on the first pick.
     [object]              $LensWarmJob
     # Per-person result cache: identity -> @{ At; Json }. Memory only - it holds
     # BitLocker keys, so it must never be written to disk.
@@ -139,15 +149,15 @@ class FinderPresenter {
         $this.SearchResults = [List[object]]::new()
         $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $this.ForestsWarned = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-        # 250ms, not 100: an inter-keystroke gap is usually longer than 100ms, so the old
-        # value re-fanned out to every forest between most keystrokes - see .NOTES.
+        # Every ms here is dead time before the search even starts - see .NOTES for the
+        # 250ms experiment and why it was reverted.
         $this.SearchDebounce = [DispatcherTimer]::new()
-        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(250)
+        $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(100)
         $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
-        # 150ms matches the other poll timers; 60ms ticked the UI thread 16x a second to
-        # watch for LDAP round trips that take hundreds.
+        # Deliberately faster than the other poll timers: this one is gated on SearchJobs, so
+        # it never ticks while idle, and its interval is latency before the dropdown paints.
         $this.SearchPollTimer = [DispatcherTimer]::new()
-        $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(150)
+        $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(60)
         $this.SearchPollTimer.Add_Tick({ $presenter.PollSearch() }.GetNewClosure())
         $this.UnlockJobs = [List[hashtable]]::new()
         $this.UnlockPollTimer = [DispatcherTimer]::new()
@@ -188,7 +198,8 @@ class FinderPresenter {
         if ($null -ne $this.LensWarmJob -and -not $this.LensWarmTimed) {
             if ($this.LensWarmJob.Handle.IsCompleted) {
                 $this.LensWarmTimed = $true
-                $ms = [long]([datetime]::UtcNow - $this.LensWarmStartedAt).TotalMilliseconds
+                $ms = [long]([datetime]::UtcNow -
+                    [datetime]$this.LensWarmJob.StartedAt).TotalMilliseconds
                 $this.Logger.LogDebug("Lens agent warm ready in $($ms)ms")
             }
             else { $pending++ }
@@ -297,7 +308,6 @@ class FinderPresenter {
             try {
                 # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
                 $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
-                $warm.StartedAt = [datetime]::UtcNow
                 $warm.Domain = $domain
                 $warm.Timed = $false
                 $this.AdWarmJobs.Add($warm)
@@ -325,7 +335,6 @@ class FinderPresenter {
     [void] WarmLens() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $this.LensWarmStartedAt = [datetime]::UtcNow
             $this.LensWarmTimed = $false
             $this.WarmWatchTimer.Start()
             $this.LensWarmJob = $this.StartPoolScript($worker, @{
@@ -351,7 +360,6 @@ class FinderPresenter {
                     OwnerOf    = @($machines)
                 })
             $job.OnResolved = $onResolved
-            $job.StartedAt = [datetime]::UtcNow
             $job.Count = @($machines).Count
             $this.OwnerJob = $job
             $this.LensPollTimer.Start()
@@ -463,7 +471,6 @@ class FinderPresenter {
                 $job.Token = $token
                 $job.Domain = $domain
                 $job.Prefix = $prefix
-                $job.StartedAt = [datetime]::UtcNow
                 $this.SearchJobs.Add($job)
             }
             catch {
@@ -493,6 +500,28 @@ class FinderPresenter {
         return $true
     }
 
+    # Splits a finished leg into the four spans that sum to its total, from the worker's
+    # AdTiming record. Empty when there is none - see .NOTES and AdSearchWorker.
+    hidden [string] DescribeSearchTiming([object]$job) {
+        $stamped = $null
+        foreach ($info in $job.Ps.Streams.Information) {
+            if ($info.Tags -contains 'AdTiming') { $stamped = [string]$info.MessageData; break }
+        }
+        if ([string]::IsNullOrWhiteSpace($stamped)) { return '' }
+        $parts = $stamped -split ' '
+        if ($parts.Count -ne 3) { return '' }
+
+        $begun = [datetime]::new([long]$parts[0], [System.DateTimeKind]::Utc)
+        $ended = [datetime]::new([long]$parts[2], [System.DateTimeKind]::Utc)
+        $searchMs = [long]$parts[1]
+        # queue = pool slot + the worker's using-module compile; notice = poll granularity
+        # + marshalling. Neither side of the runspace boundary can see both.
+        $queue = [long]($begun - [datetime]$job.StartedAt).TotalMilliseconds
+        $rowMs = [long](($ended - $begun).TotalMilliseconds) - $searchMs
+        $notice = [long]([datetime]::UtcNow - $ended).TotalMilliseconds
+        return " (queue $queue, search $searchMs, rows $rowMs, notice $notice)"
+    }
+
     # Poll the per-forest searches; as each lands, fold its hits into the current token's
     # accumulator and re-render the growing union. Stale-token jobs are discarded.
     [void] PollSearch() {
@@ -501,15 +530,18 @@ class FinderPresenter {
             $results = @()
             try { $results = @($job.Ps.EndInvoke($job.Handle)) }
             catch { $this.Logger.LogException("AD search failed", $_) }
+            # Dispatch to here, so it counts pool queue wait as well as the LDAP round trip,
+            # and is taken alongside the spans rather than after the dispose below.
+            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            # Both stream reads go before DisposeJob. A disposed shell does still hand its
+            # streams back, but nothing in the contract says it must, and this costs nothing.
+            $failed = $this.ReportForestFailure($job)
+            $timing = $this.DescribeSearchTiming($job)
             $this.DisposeJob($job.Ps)
             [void]$this.SearchJobs.Remove($job)
-            # Dispatch to done, so it counts pool queue wait as well as the LDAP round trip -
-            # a forest that waited for a free runspace is the case worth seeing.
-            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
             $stale = if ($job.Token -ne $this.SearchToken) { ' (superseded)' } else { '' }
-            $failed = $this.ReportForestFailure($job)
             $outcome = if ($failed) { 'FAILED' } else { "$($results.Count) hit(s)" }
-            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms, $outcome$stale")
+            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms$timing, $outcome$stale")
             if ($job.Token -ne $this.SearchToken) { continue }
             foreach ($row in $results) {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
@@ -718,7 +750,6 @@ class FinderPresenter {
             $job.Token = $token
             $job.Key = $cacheKey
             $job.InfoSeen = 0
-            $job.StartedAt = [datetime]::UtcNow
             $job.Who = $who   # Apply() blanks DisplayName on an error lens without it
             $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()

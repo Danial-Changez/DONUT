@@ -58,33 +58,55 @@ Settings.
 
 ## Measured, not argued
 
-Both of these change **which results come back**, so both are decided on hit counts, not just
-the clock. `tools\Measure-AdSearch.ps1` times all four combinations per forest and prints
-elapsed beside hits:
+Both of these change **which results come back**, so neither is decided on the clock.
+`tools\Measure-AdSearch.ps1` times all four combinations per forest, then runs a second,
+untimed pass that prints the rows only one filter returned and names the attribute that
+pulled each one in:
 
 ```powershell
 pwsh -File tools\Measure-AdSearch.ps1
 ```
 
+The two passes are separate on purpose. Attributing a match needs `givenName`, `sn`,
+`proxyAddresses` and `physicalDeliveryOfficeName` loaded, and widening `PropertiesToLoad`
+changes what the DC serialises back - folding it into the timed path would corrupt the
+measurement.
+
 - **ANR.** `(anr=dan)` is a single optimized clause across the naming attributes, and it is
   the only shape that handles `first last` (it matches `givenName` AND `sn`). The current
-  four-clause OR cannot, which is why a full-name search returns almost nothing today. Its
-  cost is breadth: the ANR set is schema-level and also covers
+  four-clause OR cannot, and it also cannot reach a `Smith, Daniel` whose `cn` never starts
+  with the typed prefix. Its cost is breadth: the ANR set is schema-level and also covers
   `physicalDeliveryOfficeName` and `proxyAddresses`, so a three-letter office prefix could
   crowd out real people under the per-forest cap. **`userPrincipalName` is not in the ANR
-  set**, so any adoption keeps a UPN clause ORed alongside. Adopt only where ANR is faster
-  **and** returns at least as many hits.
+  set**, so any adoption keeps a UPN clause ORed alongside. Adopt where ANR is **not slower**
+  and the rows only it finds are **people, attributed to a name attribute** - the script
+  flags a row whose only match is an office or a mail alias, and anything listed under
+  *Only the current filter found* is a person ANR would lose.
 - **Referral chasing.** `DirectorySearcher.ReferralChasing` defaults to `External`. AD reaches
   child domains through subordinate references, so `None` is only safe where the hit count is
   unchanged. Fewer hits means referrals are load-bearing for a child domain and chasing stays
-  on. The count is the test, not the clock.
+  on. The count is the test, not the clock. Measured: counts identical everywhere and `None`
+  won by ~6ms, which is far under the 150ms bar - so it stays at the default.
 
-## Forest latency is not a query problem
+## Most of a search is not the query
 
-Per-forest search times are stable and differ by forest, measured across six searches:
-`forest-b` ~167ms, `prod` ~331ms, `forest-c` ~394ms, `forest-d` ~578ms. Raising the interactive pool so a
-whole fan-out dispatches at once took roughly 110ms off `forest-d` and left the rest, so what
-remains is that forest's own latency rather than scheduling. See
-[Runspaces and workers](./runspaces-and-workers.md) for the pool sizing and why the fan-out
-earns its keep. The dropdown renders each forest as it lands, so a slow forest delays only its
-own rows.
+An earlier version of this page credited the residual per-forest time to forest latency.
+Measurement says otherwise, and the gap is large:
+
+| | prod | forest-b | forest-c | forest-d |
+|---|---|---|---|---|
+| LDAP alone (`Measure-AdSearch.ps1`) | ~90ms | ~105ms | ~90ms | ~205ms |
+| What `Donut.log` recorded for the same search | 337ms | - | 378-444ms | 539-601ms |
+
+That leaves roughly **250-390ms per forest per search that is not the directory**. Two
+contributors were identified and fixed on the spot: the search poll had been raised to 150ms,
+which is both real latency *and* inflation, because the elapsed is taken when the poll notices
+rather than when the job finished; and the debounce had been raised to 250ms, which delays
+every search before it starts. The rest is what the four-span breadcrumb exists to find - see
+[Reading the AD search breadcrumb](./runspaces-and-workers.md#reading-the-ad-search-breadcrumb).
+
+Do not re-quote the old per-forest figures (`forest-b` ~167 / `prod` ~331 / `forest-c` ~394 /
+`forest-d` ~578). They were taken while `forest-b` was misconfigured and answering nothing, and with
+the 150ms poll adding up to a tick of measurement error to every one of them.
+
+The dropdown still renders each forest as it lands, so a slow forest delays only its own rows.

@@ -9,10 +9,15 @@ using module ".\LogService.psm1"
     One home for the start / complete / async-stop / reap plumbing that
     FinderPresenter and MainPresenter each hand-rolled around
     PowerShell.Create() + the shared RunspacePool. The job envelope stays a
-    plain hashtable (@{ Ps; Handle }) so poll loops can attach per-job state
-    (Token, Upn, OnDone, ...) the way they always have.
+    plain hashtable (@{ Ps; Handle; StartedAt }) so poll loops can attach per-job
+    state (Token, Upn, OnDone, ...) the way they always have.
 
 .NOTES
+    StartedAt is stamped immediately before BeginInvoke, which is the only place that
+    can see the whole dispatch. Every poll loop wants it, and each one that stamped after
+    Start returned was silently charging nothing for the pool queue wait - the number that
+    says whether a job waited for a runspace or the work itself was slow.
+
     Worker JobKind operations do NOT come through here - they are AsyncJobs
     running in isolated child processes (WorkerProcess). This path is only for
     scripts that must run in-process on the pool (AD search, Lens broker,
@@ -23,13 +28,16 @@ using module ".\LogService.psm1"
 class PoolScriptJob {
 
     # Starts $scriptPath on the shared pool; throws on failure so each call site
-    # keeps its own catch/log/toast behavior. Returns the @{ Ps; Handle } envelope.
+    # keeps its own catch/log/toast behavior. Returns @{ Ps; Handle; StartedAt }.
     static [hashtable] Start([string]$scriptPath, [hashtable]$parameters) {
         $ps = [System.Management.Automation.PowerShell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetInteractivePool()
         $ps.AddCommand($scriptPath) | Out-Null
         foreach ($k in $parameters.Keys) { $ps.AddParameter($k, $parameters[$k]) | Out-Null }
-        return @{ Ps = $ps; Handle = $ps.BeginInvoke() }
+        # Stamped here rather than by the caller: a call site that stamps after Start returns
+        # loses its own dispatch cost, which is the pool queue wait worth seeing - see .NOTES.
+        $started = [datetime]::UtcNow
+        return @{ Ps = $ps; Handle = $ps.BeginInvoke(); StartedAt = $started }
     }
 
     # EndInvoke + dispose for the generic case: invoke errors log and yield $null so a

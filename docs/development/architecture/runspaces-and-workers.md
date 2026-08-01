@@ -83,9 +83,11 @@ Per-host IP resolves skip the pool entirely (`ResolveProcessJob` +
 `RunspaceManager` opens two pools:
 
 - The worker pool, sized to `throttleLimit` - what `AsyncJob` borrows from.
-- A small fixed interactive pool (`InteractiveSize = 3`) that `PoolScriptJob`
+- A small fixed interactive pool (`InteractiveSize = 4`) that `PoolScriptJob`
   uses for the in-process scripts a user is waiting on: AD search, the Lens
-  broker, unlock, the startup task.
+  broker, unlock, the startup task. Four, because the AD finder's fan-out is one
+  job per configured forest and the default is four; at 3 the last forest queued
+  on every search, not just under contention.
 
 They are separate because they starved each other: every worker job holds its
 runspace for the whole child-process lifetime, `RunAll` starts one per host with
@@ -111,14 +113,22 @@ the agent serve loop's pass. Two decisions came out of applying it:
 - **The Lens owner lookup is one batched request, not one per machine.** The agent
   answers it inline on that 150 ms loop, so N requests would cost N passes plus N
   files, N AES round trips and N parent polls - slower than resolving them back to
-  back, while holding N of the three runspaces. Parent-side fan-out against a
+  back, while holding N of the four runspaces. Parent-side fan-out against a
   serially-served agent buys no throughput at all.
-- **The AD search debounce is 250 ms.** The fan-out is one job per forest (four by
-  default) into three runspaces. At 100 ms the debounce elapsed between most
-  keystrokes, so typing re-fanned-out repeatedly; and `AbortSearch` cancels through
-  `BeginStop`, which is asynchronous, so a superseded shell keeps its runspace until
-  the reap timer collects it. The faster you typed, the more of the lane was held by
-  searches whose results were already discarded.
+- **The bar cuts both ways, and it caught a change of its own.** The AD search
+  debounce was raised 100 -> 250 ms and its poll 60 -> 150 ms, on the theory that
+  typing re-fanned-out and the superseded shells held the lane (`AbortSearch`
+  cancels through `BeginStop`, which is asynchronous). Both are back at 100/60:
+  - The debounce charged every completed search a flat +150 ms - *above* the bar
+    the same change set - to avoid a cost that was argued rather than measured.
+  - The poll raise was simply wrong. `SearchPollTimer` starts only when a fan-out
+    begins and stops when the last leg lands, so it never ticks while idle and a
+    fast tick costs nothing; a slow one is dead time before the dropdown paints,
+    and it inflates the per-forest elapsed, which is taken when the poll *notices*
+    rather than when the job finished.
+
+  Raise the debounce again only on log evidence: the fan-out count per search and
+  the `(superseded)` marker are logged so the case can be made from numbers.
 
 **Cancelling the remaining forests once one answers is not on the table.** The
 forests hold disjoint populations and `RenderDropdown` applies no cap and no
@@ -127,15 +137,32 @@ than trimming duplicate work - and make *which* people depend on which forest wo
 the race, including the row `Enter` pre-selects. Cancel-on-supersede is the
 legitimate form of that idea, and `AbortSearch` already does it.
 
-Timings for each leg are logged at `LogDebug`, so the bar can be re-applied against
-real numbers rather than argued from first principles.
+Per-forest search times differ by forest and are stable, and the fan-out clearly earns
+its keep: serial would be the sum of every forest against the slowest one in parallel.
 
-Measured, and the reason the interactive pool is 4: per-forest search times are stable
-and differ by forest (`forest-b` ~167ms, `prod` ~331ms, `forest-c` ~394ms, `forest-d` ~578ms). Serial
-would be the sum (~1465ms) against the max (~580ms) parallel, so the fan-out earns its
-keep several times over. Sizing the lane to fit a whole fan-out took roughly 110ms off the
-slowest forest and left the rest, so what remains is that forest's own latency rather than
-scheduling - see [AD query rules](./ad-queries.md).
+### Reading the AD search breadcrumb
+
+A total alone cannot separate the directory from the machinery around it, so each leg
+logs the four spans that sum to it:
+
+```
+AD search forest-d.local 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
+```
+
+| Span | Covers | A large value points at |
+|---|---|---|
+| `queue` | dispatch -> the worker's first line | pool slot wait, or a `using module` compile because the warm missed that runspace |
+| `search` | `ActiveDirectoryService.Search` | the directory itself - compare against `tools\Measure-AdSearch.ps1` |
+| `rows` | the rest of the worker | `MapRow` plus building the result objects |
+| `notice` | worker done -> `PollSearch` sees it | poll granularity and cross-runspace marshalling |
+
+`AdSearchWorker.ps1` emits its start ticks, `Search` elapsed and end ticks as a single
+`AdTiming` record on the **Information** stream (the success stream is the typed row
+contract, and Warning already carries forest failures); `PoolScriptJob.Start` stamps the
+dispatch; `FinderPresenter.DescribeSearchTiming` does the arithmetic. Neither side of the
+runspace boundary can see all four, and both run in the same process on the same clock so
+there is no skew to correct. A leg with no record - superseded, or thrown - still logs its
+total. See [AD query rules](./ad-queries.md) for what the spans have been measured at.
 
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
