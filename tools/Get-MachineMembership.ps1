@@ -11,8 +11,10 @@
       - Which forest holds the machine/user, and their DIRECT AD groups (memberOf, every
         value). The primary group is printed separately: primaryGroupID is not in memberOf,
         and the popup omitting it should be a decision made on sight, not an accident.
-      - With -Nested, the transitive expansion via LDAP_MATCHING_RULE_IN_CHAIN, timed -
-        the number that decides whether the popup can ever offer "include nested".
+      - With -Nested, the transitive expansion via LDAP_MATCHING_RULE_IN_CHAIN, timed,
+        and the groups that arrive ONLY through nesting listed separately from the direct
+        set - together they decide whether the popup can offer "include nested" and what
+        it would add.
       - The SCCM chain: identity -> ResourceID -> SMS_FullCollectionMembership ->
         collection names. This AdminService serves only some filter shapes (numeric eq
         and endswith are proven; string eq has 404'd elsewhere), so EVERY step prints the
@@ -159,13 +161,26 @@ function Show-AdMembership {
             $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
             $s = [System.DirectoryServices.DirectorySearcher]::new($entry)
             try {
-                $s.Filter = "(&(objectCategory=group)(member:1.2.840.113556.1.4.1941:=$dn))"
+                # The DN rides INSIDE a filter, so its filter-special characters need
+                # escaping - a group named "VPN (Staff)" would otherwise break the query.
+                $dnEsc = $dn -replace '\\', '\5c' -replace '\(', '\28' -replace '\)', '\29' -replace '\*', '\2a'
+                $s.Filter = "(&(objectCategory=group)(member:1.2.840.113556.1.4.1941:=$dnEsc))"
                 $s.PageSize = 500   # transitive sets can be big; here completeness beats the cap
                 [void]$s.PropertiesToLoad.Add('distinguishedName')
                 $all = $s.FindAll()
-                try { $count = @($all).Count } finally { $all.Dispose() }
+                $transitive = [System.Collections.Generic.List[string]]::new()
+                try {
+                    foreach ($hit in $all) { $transitive.Add([string]$hit.Properties['distinguishedname'][0]) }
+                }
+                finally { $all.Dispose() }
                 $sw.Stop()
-                Write-Host "  Nested (transitive) groups: $count in $($sw.ElapsedMilliseconds)ms" -ForegroundColor Magenta
+                # Only the inherited ones are listed - the direct set is already printed above.
+                $direct = [System.Collections.Generic.HashSet[string]]::new(
+                    [string[]]$groups, [System.StringComparer]::OrdinalIgnoreCase)
+                $inherited = @($transitive | Where-Object { -not $direct.Contains($_) } | Sort-Object)
+                Write-Host "  Nested (transitive) groups: $($transitive.Count) total in $($sw.ElapsedMilliseconds)ms" -ForegroundColor Magenta
+                Write-Host "  Inherited via nesting only ($($inherited.Count)):"
+                foreach ($g in $inherited) { Write-Host ("    {0,-40} {1}" -f (Get-CnFromDn $g), $g) }
             }
             catch { Write-Host "  Nested expansion FAILED: $($_.Exception.Message)" -ForegroundColor Yellow }
             finally { $s.Dispose(); $entry.Dispose() }
