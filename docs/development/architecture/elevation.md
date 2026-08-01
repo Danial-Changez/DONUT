@@ -12,6 +12,12 @@ on fleet targets.
 
 *Source: [`class_config.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/class_config.puml)*
 
+The round trip a gated click takes when DONUT is de-elevated:
+
+![Elevation round trip sequence diagram](/diagrams/elevation_sequence_diagram.svg)
+
+*Source: [`elevation_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/elevation_sequence_diagram.puml)*
+
 ## The model
 
 - **`asInvoker`, not `requireAdministrator`.** The launcher manifest no longer demands

@@ -40,6 +40,7 @@ retired in favor of these):
 | [`ad_finder_sequence_diagram.puml`](ad_finder_sequence_diagram.puml) | Home search bar: live multi-forest AD finder + inline unlock |
 | [`lens_lookup_sequence_diagram.puml`](lens_lookup_sequence_diagram.puml) | User Lens via the persistent de-elevated agent (pick a person → devices) |
 | [`network-flow.puml`](network-flow.puml) ([png](network-flow.png)) | Remote operation network routing: resolve → reconnect → update → settle (code-grounded trace) |
+| [`elevation_sequence_diagram.puml`](elevation_sequence_diagram.puml) | Elevation round trip: a gated click writes a pending intent, relaunches elevated, resumes once |
 | [`update_sequence_diagram.puml`](update_sequence_diagram.puml) | Self-update: GitHub device flow + MSI (detailed source for the flow below) |
 
 ## Self-update flow

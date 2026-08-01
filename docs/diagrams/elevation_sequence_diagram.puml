@@ -1,0 +1,70 @@
+@startuml elevation_sequence_diagram
+title Elevation round trip (gated click -> pending intent -> relaunch -> resume once)
+' Code-grounded trace. Method names map 1:1 to source so each step is navigable.
+
+skinparam maxMessageSize 260
+skinparam sequenceMessageAlign left
+skinparam noteFontSize 11
+
+actor Operator as OP
+
+box "De-elevated DONUT (console user)" #151221
+  participant "HomePresenter /\nInventoryPresenter" as HP
+  participant "MainPresenter" as MP
+  participant "PendingIntentStore" as STORE
+  participant "ElevationRelaunch" as REL
+end box
+
+participant "pending-intent.json\n(%ProgramData%\\DONUT\\data)" as FILE
+
+box "Elevated DONUT (new process, admin token)" #101B14
+  participant "Start-Donut.ps1" as BOOT
+  participant "MainPresenter" as MP2
+  participant "HomePresenter" as HP2
+end box
+
+== A gated click (RunAll, DiskScan, DeleteFolders, StartupTask) ==
+OP -> HP : RunAll / FindBigFolders / DeleteSelectedFolders
+HP -> MP : RequireElevation -> EnsureElevated(action, hosts)
+MP -> MP : ElevationContext::IsElevated()
+
+alt already elevated
+  MP --> HP : true - the action runs in place
+else de-elevated
+  MP -> MP : ShowRememberableConfirmation\n(optionally persists runAsAdmin)
+  MP -> STORE : Save(PendingIntent::Create(action, hosts, utcNow))
+  STORE -> FILE : WriteText (action NAME, hosts, createdUtc as ISO 'o')
+  note right of STORE #2A2211
+    Untrusted across the privilege boundary: only an action
+    kind + host names cross, never paths or arguments.
+  end note
+  MP -> REL : Spawn(BuildSpec(sourceRoot))
+  note right of REL
+    pwsh host: Start-Donut.ps1 -AwaitPid <pid>
+    launcher:  DONUT.exe --await-pid <pid>
+    Start-Process -Verb RunAs (one UAC prompt)
+  end note
+  alt UAC declined (Win32 1223)
+    MP -> STORE : Discard()
+    STORE -> FILE : delete
+  else spawned
+    MP -> MP : ExitRequested = true; Window.Close()\n(Add_Closed -> Environment.Exit)
+  end
+end
+
+== The elevated instance boots ==
+BOOT -> BOOT : wait out -AwaitPid predecessor,\nthen take Local\\DONUT.SingleInstance
+BOOT -> MP2 : DonutApp.ps1 builds the UI;\na 3 s dispatcher timer arms the resume
+MP2 -> MP2 : ResumePendingIntent (elevated-only guard)
+MP2 -> STORE : Take(utcNow)
+STORE -> FILE : read, then DELETE before validating
+note right of STORE #13291D
+  Claim-then-validate: the note fires at most once even
+  if the resume throws. Rejected notes (unparseable,
+  stale beyond the 2 min TTL, future-stamped, or
+  DeleteFolders - never resumable) return null.
+end note
+STORE --> MP2 : intent | null
+MP2 -> HP2 : ResumeGatedAction(intent)
+HP2 -> HP2 : RunAll | StartProcess | StartInventory |\nResumeDiskScan | ApplyStartupTask
+@enduml
