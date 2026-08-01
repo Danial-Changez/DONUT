@@ -104,12 +104,20 @@ catch { $result.Error = $_.Exception.Message }
         $script:OutJson = Join-Path $WorkDir 'smoke-result.json'
         $pwshPath = (Get-Process -Id $PID).Path
         if ([string]::IsNullOrWhiteSpace($pwshPath)) { $pwshPath = 'pwsh' }
-        $proc = Start-Process -FilePath $pwshPath -PassThru -NoNewWindow -ArgumentList @(
-            '-NoProfile', '-File', $script:ChildScript,
-            '-SourceRoot', $script:SourceRoot,
-            '-LogsDir', $script:LogsDir,
-            '-ReportsDir', $script:ReportsDir,
-            '-OutFile', $script:OutJson)
+        # ProcessStartInfo.ArgumentList quotes each argument; Start-Process joins its
+        # -ArgumentList unquoted, truncating paths with spaces (e.g. this checkout's).
+        $psi = [System.Diagnostics.ProcessStartInfo]::new($pwshPath)
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        foreach ($arg in @(
+                '-NoProfile', '-File', $script:ChildScript,
+                '-SourceRoot', $script:SourceRoot,
+                '-LogsDir', $script:LogsDir,
+                '-ReportsDir', $script:ReportsDir,
+                '-OutFile', $script:OutJson)) {
+            $psi.ArgumentList.Add($arg)
+        }
+        $proc = [System.Diagnostics.Process]::Start($psi)
         $script:ChildTimedOut = -not $proc.WaitForExit(360000)
         if ($script:ChildTimedOut) {
             try { $proc.Kill() } catch { Write-Warning "Smoke child kill failed: $_" }
