@@ -4,9 +4,9 @@
 
 .DESCRIPTION
     Runs the tests on the pinned Pester 6 (tools/Import-PinnedPester.ps1) with
-    Pester's built-in JaCoCo coverage output, then renders coverage.xml into an
-    HTML site under CoverageReport/ using ReportGenerator. When ReportGenerator
-    is not already on PATH it is installed automatically as a repo-local dotnet
+    Pester's built-in coverage output, then renders coverage.xml into an HTML
+    site under CoverageReport/ using ReportGenerator. When ReportGenerator is
+    not already on PATH it is installed automatically as a repo-local dotnet
     tool under tools/.cache/reportgenerator (requires the .NET SDK).
 
 .PARAMETER Path
@@ -14,24 +14,36 @@
 
 .PARAMETER ReportDir
     Output directory for the HTML site. Defaults to CoverageReport/.
+
+.PARAMETER Format
+    Coverage XML format: JaCoCo (default) or Cobertura. ReportGenerator renders
+    either; pick whichever a downstream consumer (CI, IDE plugin) expects.
 #>
 param(
-    [string[]] $Path = @($PSScriptRoot),
-    [string] $ReportDir = (Join-Path $PSScriptRoot '..' 'CoverageReport')
+    [string[]] $Path = @(Join-Path $PSScriptRoot '..' 'tests'),
+    [string] $ReportDir = (Join-Path $PSScriptRoot '..' 'CoverageReport'),
+    [ValidateSet('JaCoCo', 'Cobertura')]
+    [string] $Format = 'JaCoCo'
 )
 
 $ErrorActionPreference = 'Stop'
 
-# WPF integration tests need an STA thread; the relaunch is Windows-only
-# because apartment state does not exist elsewhere (and would loop forever).
-if ($IsWindows -and [System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
-    Write-Host 'Re-launching in STA mode for WPF tests...' -ForegroundColor Yellow
-    pwsh -Sta -File $MyInvocation.MyCommand.Path @PSBoundParameters
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+# WPF integration tests need an STA thread, and (like Invoke-Tests.ps1) a session
+# holding repo modules would test stale classes - both get a clean child pwsh.
+$staleModules = Get-Module | Where-Object {
+    $_.Path -and $_.Path.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+$needSta = $IsWindows -and [System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA'
+if ($needSta -or $staleModules) {
+    Write-Host 'Re-launching in a clean pwsh (STA for WPF tests)...' -ForegroundColor Yellow
+    $staArgs = if ($IsWindows) { @('-Sta') } else { @() }
+    & ([System.Environment]::ProcessPath) @staArgs -File $MyInvocation.MyCommand.Path @PSBoundParameters
     exit $LASTEXITCODE
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-. (Join-Path $repoRoot 'tools' 'Import-PinnedPester.ps1')
+. (Join-Path $PSScriptRoot 'Import-PinnedPester.ps1')
 
 $coverageXml = Join-Path $repoRoot 'coverage.xml'
 
@@ -40,13 +52,13 @@ $config.Run.Path = $Path
 $config.Run.PassThru = $true
 $config.Output.Verbosity = 'Normal'
 $config.CodeCoverage.Enabled = $true
-$config.CodeCoverage.OutputFormat = 'JaCoCo'
+$config.CodeCoverage.OutputFormat = $Format
 $config.CodeCoverage.OutputPath = $coverageXml
 # Coverage measures the product modules, not the test tree itself.
 $config.CodeCoverage.Path = @('Core', 'Models', 'Services') |
     ForEach-Object { Join-Path $repoRoot 'src' $_ }
 
-Write-Host 'Running tests with code coverage...' -ForegroundColor Cyan
+Write-Host "Running tests with code coverage ($Format)..." -ForegroundColor Cyan
 $result = Invoke-Pester -Configuration $config
 
 if (-not (Test-Path $coverageXml)) {

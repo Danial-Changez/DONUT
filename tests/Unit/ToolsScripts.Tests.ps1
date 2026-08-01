@@ -11,6 +11,7 @@ Describe "tools scripts parse cleanly" {
         @{ name = 'Diagnose-LensAgent.ps1' }
         @{ name = 'Invoke-Tests.ps1' }
         @{ name = 'Import-PinnedPester.ps1' }
+        @{ name = 'Generate-CoverageReport.ps1' }
     ) {
         $path = Join-Path (Resolve-Path "$PSScriptRoot\..\..\tools").Path $name
         Test-Path $path | Should -BeTrue

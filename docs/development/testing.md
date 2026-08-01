@@ -178,7 +178,8 @@ when a regression has no obvious first-bad commit:
 Generate a visual HTML coverage report from the project root:
 
 ```powershell
-tests/Generate-CoverageReport.ps1
+tools/Generate-CoverageReport.ps1                     # JaCoCo XML (default)
+tools/Generate-CoverageReport.ps1 -Format Cobertura   # Cobertura XML instead
 ```
 
 What it does:
@@ -189,7 +190,8 @@ What it does:
   much faster than the old breakpoint collector). If coverage numbers ever look
   wrong, set `CodeCoverage.UseBreakpoints = $true` to compare against the
   breakpoint collector.
-- Emits `coverage.xml` (JaCoCo format, the Pester default) at the repo root.
+- Emits `coverage.xml` at the repo root, in JaCoCo or Cobertura format per
+  `-Format` (both render identically; pick what a downstream consumer expects).
   Coverage is measured over `src/Core`, `src/Models`, and `src/Services`.
 - Renders the XML into an HTML site under `CoverageReport/` with
   [ReportGenerator](https://github.com/danielpalme/ReportGenerator); open
