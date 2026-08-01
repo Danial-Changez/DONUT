@@ -43,11 +43,12 @@ $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
 $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
 'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager'
 
-$results = $files | ForEach-Object {
-    Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings -ErrorAction SilentlyContinue
-} | Where-Object {
-    -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
-}
+# One analyzer invocation for the whole list (piped: -Path only takes a single
+# string) - the per-call setup cost made the old per-file loop ~9x slower.
+$results = $files.FullName | Invoke-ScriptAnalyzer -Settings $settings -ErrorAction SilentlyContinue |
+    Where-Object {
+        -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
+    }
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"
 
