@@ -23,8 +23,13 @@ by `AdFilter` in `src/Models/AdSearchResult.psm1`) and the de-elevated Lens agen
   `(&(objectCategory=person)(objectClass=user)…)`, and both the finder and the agent use it.
   Computers are `(objectCategory=computer)`.
 - **Name the attributes.** `PropertiesToLoad` is always explicit, never a full-object read.
-- **Always bound the search.** `SizeLimit` plus `ClientTimeout` on every searcher. The finder
-  caps at `MaxPerDomain * 2`.
+- **Always bound the search - and leave headroom in the bound.** `SizeLimit` plus
+  `ClientTimeout` on every searcher; the finder caps at `MaxPerDomain * 2`. An LDAP size cap
+  truncates in **server order, not by relevance**, so a search that reaches its cap drops
+  people arbitrarily and the one you wanted has no better odds than anyone else. `prod` was
+  returning 16 of 16 for a three-letter prefix before `MaxPerDomain` went 8 -> 12. Widening
+  a filter without checking the cap makes the search quietly *worse*, because
+  `RenderDropdown` applies no ranking either.
 - **Do not add `PageSize` to a capped search.** Setting it enables paging and makes
   `SizeLimit` be **ignored**, so a "small" type-ahead query would fetch the whole result set.
   `ServerPageTimeLimit` has no effect without it either, so it is not a way to bound a slow
@@ -72,16 +77,23 @@ The two passes are separate on purpose. Attributing a match needs `givenName`, `
 changes what the DC serialises back - folding it into the timed path would corrupt the
 measurement.
 
-- **ANR.** `(anr=dan)` is a single optimized clause across the naming attributes, and it is
-  the only shape that handles `first last` (it matches `givenName` AND `sn`). The current
-  four-clause OR cannot, and it also cannot reach a `Smith, Daniel` whose `cn` never starts
-  with the typed prefix. Its cost is breadth: the ANR set is schema-level and also covers
-  `physicalDeliveryOfficeName` and `proxyAddresses`, so a three-letter office prefix could
-  crowd out real people under the per-forest cap. **`userPrincipalName` is not in the ANR
-  set**, so any adoption keeps a UPN clause ORed alongside. Adopt where ANR is **not slower**
-  and the rows only it finds are **people, attributed to a name attribute** - the script
-  flags a row whose only match is an office or a mail alias, and anything listed under
-  *Only the current filter found* is a person ANR would lose.
+- **ANR: measured, and rejected in favour of one explicit clause.** `(anr=dan)` returned 15
+  hits on `forest-b` against the four-clause filter's 10, and the identity pass showed **every
+  one of the five extras was a surname match**. Nothing came from ANR's other attributes.
+  So the filter gained `(sn=$p*)` and ANR stayed out:
+  - ANR's headline feature is splitting `first last` across `givenName`/`sn`. That buys
+    nothing here - `displayName` in these forests is `First Last`, so the existing
+    `displayName=` clause already answers a full-name search, and measurement confirmed ANR
+    and the current filter returning identical hits for `danial changez`.
+  - Its cost is breadth. The ANR set is schema-level and also covers
+    `physicalDeliveryOfficeName`, `proxyAddresses` and `legacyExchangeDN`, so a three-letter
+    office prefix could crowd real people out of the per-forest cap - for a recall gain that
+    one indexed `sn` clause delivers on its own.
+  - **`userPrincipalName` is not in the ANR set**, so adopting it would also have meant
+    keeping a UPN clause ORed alongside anyway.
+
+  Re-run the script if the filter changes: anything ANR still finds that `sn` does not is
+  worth a look, and anything under *Only the current filter found* is a person it would lose.
 - **Referral chasing.** `DirectorySearcher.ReferralChasing` defaults to `External`. AD reaches
   child domains through subordinate references, so `None` is only safe where the hit count is
   unchanged. Fewer hits means referrals are load-bearing for a child domain and chasing stays
@@ -98,12 +110,30 @@ Measurement says otherwise, and the gap is large:
 | LDAP alone (`Measure-AdSearch.ps1`) | ~90ms | ~105ms | ~90ms | ~205ms |
 | What `Donut.log` recorded for the same search | 337ms | - | 378-444ms | 539-601ms |
 
-That leaves roughly **250-390ms per forest per search that is not the directory**. Two
-contributors were identified and fixed on the spot: the search poll had been raised to 150ms,
-which is both real latency *and* inflation, because the elapsed is taken when the poll notices
-rather than when the job finished; and the debounce had been raised to 250ms, which delays
-every search before it starts. The rest is what the four-span breadcrumb exists to find - see
-[Reading the AD search breadcrumb](./runspaces-and-workers.md#reading-the-ad-search-breadcrumb).
+That leaves roughly **250-390ms per forest per search that is not the directory**. The
+[four-span breadcrumb](./runspaces-and-workers.md#reading-the-ad-search-breadcrumb) found it,
+and it was not the directory or the pool - it was the dropdown re-rendering per forest:
+
+```
+AD search prod.contoso.com  'dan': 392ms (queue  59, search 246, rows 61, notice  65), 16 hit(s)
+AD search forest-b...       'dan': 643ms (queue  65, search 236, rows 46, notice 297), 10 hit(s)
+AD search forest-c.local   'dan': 736ms (queue  78, search 231, rows 32, notice 395),  6 hit(s)
+AD search forest-d.local    'dan': 857ms (queue 133, search 204, rows  2, notice 518), 10 hit(s)
+```
+
+Add each row's `queue + search + rows` and all four workers finished within **27ms of each
+other** (366 / 347 / 341 / 339). The totals still spread across 465ms, entirely in `notice` -
+because `PollSearch` called `RenderDropdown` per landed leg, on the UI thread, before reading
+the next one. The confirmation is in the same log: a `danial` fan-out returning 2/0/0/0 hits
+had almost nothing to draw, and its notices were a flat 33 / 65 / 58 / 66.
+
+**`search` is also uniform (~170-246ms) across every forest, so `forest-d` is not the slow one.**
+That belief came from totals, which were mostly render. The in-app span runs higher than the
+script's because `Measure-AdSearch.ps1` times `UserFilter` alone while the app sends
+`CombinedFilter` - computers *and* users in one query.
+
+Fixed since: the dropdown renders once per poll tick, the poll and debounce raises were
+reverted, and `AD dropdown render` now logs its own cost so the next claim is checkable.
 
 Do not re-quote the old per-forest figures (`forest-b` ~167 / `prod` ~331 / `forest-c` ~394 /
 `forest-d` ~578). They were taken while `forest-b` was misconfigured and answering nothing, and with

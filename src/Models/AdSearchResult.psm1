@@ -61,10 +61,11 @@ class AdFilter {
         return $sb.ToString()
     }
 
-    # Users: match the prefix against sam / cn / displayName / UPN (escaped).
+    # Users: match the prefix against sam / cn / displayName / UPN / sn (escaped). sn is
+    # explicit rather than via ANR, which would also drag in office and proxyAddresses.
     static [string] UserFilter([string]$prefix) {
         $p = [AdFilter]::EscapeLdap($prefix)
-        return "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)))"
+        return "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)(sn=$p*)))"
     }
 
     # Computers: match the prefix against name / sam (escaped).

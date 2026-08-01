@@ -27,7 +27,9 @@ class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()
     [int]        $MinPrefix = 3
-    [int]        $MaxPerDomain = 8
+    # 12 (so SizeLimit is 24) because a three-letter prefix already returned 16 of 16 on the
+    # biggest forest, and an LDAP size cap truncates in server order, not by relevance.
+    [int]        $MaxPerDomain = 12
     # Per-forest failures from the last Search, as "<domain>: <reason>" - see .NOTES.
     [string[]]   $LastErrors = @()
 

@@ -14,12 +14,21 @@ Describe "AdFilter.EscapeLdap" {
 }
 
 Describe "AdFilter filter construction" {
-    It "UserFilter matches sam/cn/displayName/UPN with the prefix" {
+    It "UserFilter matches sam/cn/displayName/UPN/sn with the prefix" {
         $f = [AdFilter]::UserFilter('sar')
-        foreach ($attr in 'sAMAccountName', 'cn', 'displayName', 'userPrincipalName') {
+        foreach ($attr in 'sAMAccountName', 'cn', 'displayName', 'userPrincipalName', 'sn') {
             $f | Should -Match ([regex]::Escape("$attr=sar*"))
         }
         $f | Should -Match ([regex]::Escape('(objectClass=user)'))
+    }
+
+    # sn is carried explicitly instead of via ANR, whose schema-level set would also match
+    # physicalDeliveryOfficeName and proxyAddresses and crowd real people out of the cap.
+    It "reaches a surname without pulling in ANR's office and proxy attributes" {
+        $f = [AdFilter]::UserFilter('sar')
+        $f | Should -Match ([regex]::Escape('sn=sar*'))
+        $f | Should -Not -Match 'anr='
+        $f | Should -Not -Match 'physicalDeliveryOfficeName|proxyAddresses'
     }
     It "ComputerFilter matches name/sam with the prefix" {
         $f = [AdFilter]::ComputerFilter('WS-01')

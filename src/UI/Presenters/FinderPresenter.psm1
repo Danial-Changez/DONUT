@@ -48,7 +48,10 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
 
     DescribeSearchTiming splits each leg into queue / search / rows / notice from the
     worker's AdTiming record, so the next call here is made on numbers - a total alone
-    cannot separate the directory from the machinery around it.
+    cannot separate the directory from the machinery around it. That is how the render
+    below was found: all four forests finished within 27ms of each other, yet their totals
+    spread across 465ms, because each landed leg re-rendered the whole dropdown on the UI
+    thread before the next was even read. PollSearch renders once per tick for that reason.
 
     Cancelling the other forests once one answers would NOT be an optimization: the
     forests hold disjoint populations, and RenderDropdown applies no cap and no relevance
@@ -525,6 +528,7 @@ class FinderPresenter {
     # Poll the per-forest searches; as each lands, fold its hits into the current token's
     # accumulator and re-render the growing union. Stale-token jobs are discarded.
     [void] PollSearch() {
+        $landed = $false
         foreach ($job in @($this.SearchJobs)) {
             if (-not $job.Handle.IsCompleted) { continue }
             $results = @()
@@ -547,7 +551,15 @@ class FinderPresenter {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
                 if ($this.SearchSeen.Add($key)) { $this.SearchResults.Add($row) }
             }
+            $landed = $true
+        }
+        # Once per tick, not once per landed forest. It is UI-thread work proportional to the
+        # accumulated rows, and re-running it per leg is what put ~450ms on the last forest.
+        if ($landed) {
+            $renderAt = [datetime]::UtcNow
             $this.RenderDropdown()
+            $renderMs = [long]([datetime]::UtcNow - $renderAt).TotalMilliseconds
+            $this.Logger.LogDebug("AD dropdown render: $($this.SearchResults.Count) row(s) in $($renderMs)ms")
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }

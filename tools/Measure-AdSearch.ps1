@@ -8,22 +8,24 @@
     Answers the two open questions about DONUT's AD search that cannot be settled by
     reading code, because both change WHICH results come back:
 
-      1. ANR vs the current four-clause OR. Microsoft calls ANR an efficient single-clause
-         search across the naming attributes, and it is the only shape that handles
-         "first last" (it matches givenName AND sn), which the current filter cannot. But
-         ANR is schema-level: it also matches physicalDeliveryOfficeName and proxyAddresses,
-         so it can return people the current filter would not.
+      1. ANR vs the current five-clause OR. Microsoft calls ANR an efficient single-clause
+         search across the naming attributes. Its surname half is now carried explicitly by
+         the sn clause, so what this comparison still shows is what ANR adds BEYOND that -
+         physicalDeliveryOfficeName, proxyAddresses and legacyExchangeDN, which are the
+         breadth that crowds real people out of the per-forest cap. Re-run it if the filter
+         changes; anything ANR still finds that sn does not is worth a look.
       2. ReferralChasing None vs the default External. AD reaches child domains through
          subordinate references, so turning chasing off is only safe when nothing is being
          referred to - which shows up as an unchanged hit count, not a faster clock.
 
     Read BOTH columns. A variant that is faster and returns fewer rows is a regression.
 
-    A hit count cannot tell the two ANR outcomes apart: "found Smith, Daniel by givenName,
+    A hit count cannot tell the two ANR outcomes apart: "found Danielson, Kim by surname,
     which no cn=dan* prefix can ever reach" and "matched an office named Danforth" both read
     as +1. So a second, untimed pass re-runs each filter with the ANR attributes loaded and
     prints the symmetric difference, naming every attribute that pulled each extra row in.
-    That is the evidence the ANR decision is actually made on.
+    That pass is what settled it: every row ANR added was a surname, so sn went into the
+    filter directly and the rest of the ANR set stayed out.
 
 .PARAMETER Prefix
     Search prefixes to time. The default covers both shapes: one token, and a full name
@@ -109,7 +111,7 @@ function Get-Filter([string]$shape, [string]$escaped) {
         # dropping it here would silently stop UPN searches working in the app.
         return "$head(|(anr=$escaped)(userPrincipalName=$escaped*)))"
     }
-    return "$head(|(sAMAccountName=$escaped*)(cn=$escaped*)(displayName=$escaped*)(userPrincipalName=$escaped*)))"
+    return "$head(|(sAMAccountName=$escaped*)(cn=$escaped*)(displayName=$escaped*)(userPrincipalName=$escaped*)(sn=$escaped*)))"
 }
 
 # One run: returns @{ Ms; Count } or @{ Error }. Never throws - a forest that is down
@@ -121,7 +123,7 @@ function Invoke-Timed([string]$domain, [string]$filter, [string]$referral) {
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
         $searcher.Filter = $filter
-        $searcher.SizeLimit = 16          # AdSearchResult's MaxPerDomain * 2
+        $searcher.SizeLimit = 24          # ActiveDirectoryService MaxPerDomain * 2
         $searcher.ClientTimeout = [TimeSpan]::FromSeconds(10)
         $searcher.ReferralChasing = $referral
         foreach ($p in @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
@@ -164,7 +166,7 @@ function Get-IdentityRow([string]$domain, [string]$filter) {
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
         $searcher.Filter = $filter
-        $searcher.SizeLimit = 16          # the same MaxPerDomain * 2 the app caps at
+        $searcher.SizeLimit = 24          # the same MaxPerDomain * 2 the app caps at
         $searcher.ClientTimeout = [TimeSpan]::FromSeconds(10)
         $searcher.ReferralChasing = 'External'
         foreach ($p in $script:IdentityProps) { [void]$searcher.PropertiesToLoad.Add($p) }
@@ -181,7 +183,7 @@ function Get-IdentityRow([string]$domain, [string]$filter) {
             }
         }
         finally { $found.Dispose() }
-        return @{ Rows = $rows.ToArray(); Capped = ($rows.Count -ge 16) }
+        return @{ Rows = $rows.ToArray(); Capped = ($rows.Count -ge 24) }
     }
     catch { return @{ Error = $_.Exception.Message } }
     finally {
@@ -302,7 +304,7 @@ foreach ($p in $Prefix) {
 Write-Host ''
 $rows | Format-Table -AutoSize | Out-String -Width 160 | Write-Host
 
-Write-Host 'Which rows differ (untimed, ReferralChasing=External, same 16-row cap):' -ForegroundColor Cyan
+Write-Host 'Which rows differ (untimed, ReferralChasing=External, same 24-row cap):' -ForegroundColor Cyan
 foreach ($p in $Prefix) {
     $escaped = Get-EscapedPrefix $p
     foreach ($domain in $Domains) {
@@ -316,7 +318,7 @@ foreach ($p in $Prefix) {
         }
         Write-Host "$domain  '$p'   current $($cur.Rows.Count), anr $($anr.Rows.Count)"
         if ($cur.Capped -or $anr.Capped) {
-            Write-Host '  A side reached the 16-row cap, so this diff is truncated.' -ForegroundColor Yellow
+            Write-Host '  A side reached the 24-row cap, so this diff is truncated.' -ForegroundColor Yellow
         }
         Write-DiffSection -Title 'Only ANR found' -Left $anr.Rows -Right $cur.Rows -Prefix $p
         Write-DiffSection -Title 'Only the current filter found' -Left $cur.Rows -Right $anr.Rows -Prefix $p

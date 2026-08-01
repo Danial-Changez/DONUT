@@ -162,7 +162,16 @@ contract, and Warning already carries forest failures); `PoolScriptJob.Start` st
 dispatch; `FinderPresenter.DescribeSearchTiming` does the arithmetic. Neither side of the
 runspace boundary can see all four, and both run in the same process on the same clock so
 there is no skew to correct. A leg with no record - superseded, or thrown - still logs its
-total. See [AD query rules](./ad-queries.md) for what the spans have been measured at.
+total.
+
+**Read `notice` across a whole fan-out, not one line at a time.** The first thing these
+spans found was that all four forests finished within 27ms of each other while their totals
+spread across 465ms - every bit of it in `notice`, because `PollSearch` re-rendered the
+dropdown per landed leg on the UI thread. It now renders **once per tick**, after folding
+every completed leg, and logs `AD dropdown render: N row(s) in Xms` so that cost is visible
+instead of hiding inside somebody else's `notice`. Rendering per leg is the shape to watch
+for: any UI-thread work inside a poll loop is charged to whichever job is unlucky enough to
+be read next. See [AD query rules](./ad-queries.md) for the full numbers.
 
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
