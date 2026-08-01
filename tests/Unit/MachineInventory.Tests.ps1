@@ -52,6 +52,16 @@ Describe "InventoryFormat" {
 
 Describe "MachineInventory" {
     Context "FromHashtable" {
+        It "Keeps lastBootTime and probedAt ISO8601 through a real JSON round-trip" {
+            # ConvertFrom-Json sniffs the ISO strings into [datetime]; the stamps must
+            # come back canonical UTC, not locale-formatted with the zone dropped.
+            $h = '{"model":"L5340","lastBootTime":"2026-06-25T08:00:00Z","probedAt":"2026-06-27T12:00:00Z"}' |
+                ConvertFrom-Json -AsHashtable
+            $mi = [MachineInventory]::FromHashtable([hashtable]$h)
+            $mi.LastBootTime | Should -Be '2026-06-25T08:00:00.0000000Z'
+            $mi.ProbedAt     | Should -Be '2026-06-27T12:00:00.0000000Z'
+        }
+
         It "Builds a populated inventory from a full hashtable" {
             $h = @{
                 model = 'Latitude 5340'; serviceTag = 'ABC1234'; biosVersion = '1.18.0'

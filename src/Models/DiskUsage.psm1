@@ -1,3 +1,5 @@
+using module "..\Core\TimeFormat.psm1"
+
 <#
 .SYNOPSIS
     Pure DTO + parsing/formatting for the "biggest folders on C:" feature.
@@ -49,7 +51,7 @@ class DiskUsageReport {
     static [DiskUsageReport] FromHashtable([hashtable]$h) {
         $r = [DiskUsageReport]::new()
         if ($null -eq $h) { return $r }
-        $r.ScannedAt = [string]$h['scannedAt']
+        $r.ScannedAt = [TimeFormat]::NormalizeStamp($h['scannedAt'])
         $list = [System.Collections.Generic.List[FolderUsage]]::new()
         foreach ($item in @($h['folders'])) {
             if ($null -eq $item) { continue }

@@ -2,6 +2,32 @@ using module "..\..\src\Core\TimeFormat.psm1"
 
 Describe "TimeFormat" {
 
+    Context "NormalizeStamp" {
+        It "keeps a string stamp exactly as written (and blanks null)" {
+            [TimeFormat]::NormalizeStamp('2026-07-30T12:00:00.0000000Z') |
+                Should -Be '2026-07-30T12:00:00.0000000Z'
+            [TimeFormat]::NormalizeStamp('not-a-date') | Should -Be 'not-a-date'
+            [TimeFormat]::NormalizeStamp('') | Should -Be ''
+            [TimeFormat]::NormalizeStamp($null) | Should -Be ''
+        }
+
+        It "re-emits a JSON-sniffed [datetime] as the UTC round-trip format" {
+            $utc = [datetime]::new(2026, 7, 30, 12, 0, 0, [DateTimeKind]::Utc)
+            [TimeFormat]::NormalizeStamp($utc) | Should -Be '2026-07-30T12:00:00.0000000Z'
+            [TimeFormat]::NormalizeStamp($utc.ToLocalTime()) | Should -Be '2026-07-30T12:00:00.0000000Z'
+        }
+
+        It "treats an unzoned datetime as UTC (the stamp contract), never local" {
+            [TimeFormat]::NormalizeStamp([datetime]::new(2026, 7, 30, 12, 0, 0)) |
+                Should -Be '2026-07-30T12:00:00.0000000Z'
+        }
+
+        It "converts a DateTimeOffset to its UTC instant" {
+            $off = [System.DateTimeOffset]::new(2026, 7, 30, 8, 0, 0, [timespan]::FromHours(-4))
+            [TimeFormat]::NormalizeStamp($off) | Should -Be '2026-07-30T12:00:00.0000000Z'
+        }
+    }
+
     Context "Relative" {
         It "Returns 'just now' for the present" {
             [TimeFormat]::Relative([datetime]::UtcNow) | Should -Be 'just now'

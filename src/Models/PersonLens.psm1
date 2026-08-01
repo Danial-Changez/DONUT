@@ -25,7 +25,7 @@ class LensBitLockerKey {
         $k = [LensBitLockerKey]::new()
         if ($null -eq $h) { return $k }
         $k.Password = [string]$h['password']
-        $k.Created = [string]$h['created']
+        $k.Created = [TimeFormat]::NormalizeStamp($h['created'])
         return $k
     }
 }
@@ -46,7 +46,7 @@ class LensDevice {
         if ($null -eq $h) { return $d }
         $d.Name = [string]$h['name']
         $d.Os = [string]$h['os']
-        $d.LastLogon = [string]$h['lastLogon']
+        $d.LastLogon = [TimeFormat]::NormalizeStamp($h['lastLogon'])
         $d.Domain = [string]$h['domain']
         $d.Model = [string]$h['model']
         $d.Serial = [string]$h['serial']

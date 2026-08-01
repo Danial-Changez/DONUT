@@ -9,6 +9,14 @@ class FakeLensService : PersonLensService {
     [string] RunLookupJson([string]$identity) { return $this.Json }
 }
 
+# Overrides only agent startup, so the encrypted exchange loop runs against a
+# TestDrive exchange dir with no scheduled task or live agent behind it.
+class StubAgentLensService : PersonLensService {
+    [string] $AgentError = ''
+    StubAgentLensService() : base('site.example', 'C:\Src') {}
+    [string] EnsureAgent() { return $this.AgentError }
+}
+
 Describe "PersonLensService" {
 
     It "constructs with site + source root" {
@@ -90,6 +98,134 @@ Describe "PersonLensService" {
             }
             finally {
                 Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    It "coalesces a missing logger to the null logger" {
+        ([PersonLensService]::new('site.example', 'C:\Src', $null)).Logger.GetType().Name |
+            Should -Be 'NullLogService'
+    }
+
+    It "returns empty owner JSON for an empty machine list" {
+        [StubAgentLensService]::new().RunOwnerLookupJson(@()) | Should -Be ''
+    }
+
+    Context "exchange round trip (stubbed agent, TestDrive exchange dir)" {
+
+        BeforeEach {
+            $script:savedProgramData = $env:ProgramData
+            $env:ProgramData = Join-Path $TestDrive ([guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $env:ProgramData -Force | Out-Null
+        }
+
+        AfterEach {
+            $env:ProgramData = $script:savedProgramData
+        }
+
+        It "anchors the exchange under ProgramData" {
+            [PersonLensService]::AgentDir() | Should -Be (Join-Path $env:ProgramData 'DONUT\lens-agent')
+        }
+
+        It "sweeps only stale per-lookup exchanges, never the live agent dir" {
+            $root = Join-Path $env:ProgramData 'DONUT'
+            foreach ($n in 'lens-agent', 'lens-stale', 'lens-fresh') {
+                New-Item -ItemType Directory -Path (Join-Path $root $n) -Force | Out-Null
+            }
+            # Even a stale-aged agent dir survives; only per-lookup lens-* dirs sweep.
+            (Get-Item (Join-Path $root 'lens-stale')).LastWriteTime = (Get-Date).AddMinutes(-30)
+            (Get-Item (Join-Path $root 'lens-agent')).LastWriteTime = (Get-Date).AddMinutes(-30)
+
+            [PersonLensService]::SweepStaleExchanges(15)
+
+            Test-Path (Join-Path $root 'lens-stale') | Should -BeFalse
+            Test-Path (Join-Path $root 'lens-agent') | Should -BeTrue
+            Test-Path (Join-Path $root 'lens-fresh') | Should -BeTrue
+        }
+
+        It "wraps an agent startup failure as a parseable error bundle" {
+            $svc = [StubAgentLensService]::new()
+            $svc.AgentError = 'no interactive desktop session.'
+
+            $out = $svc.ExchangeRoundTrip(@{ kind = 'owner' }, $false)
+
+            $out | Should -BeLike '*Lens agent unavailable*no interactive desktop session*'
+            ([PersonLens]::FromJson($out)).Errors.Count | Should -Be 1
+        }
+
+        It "reports a missing session key rather than hanging" {
+            $svc = [StubAgentLensService]::new()
+            New-Item -ItemType Directory -Path ([PersonLensService]::AgentDir()) -Force | Out-Null
+
+            $out = $svc.ExchangeRoundTrip(@{ identity = 'a@b.com' }, $true)
+
+            $out | Should -BeLike '*session key is missing*'
+        }
+
+        It "times out cleanly and consumes this lookup's request file" {
+            $svc = [StubAgentLensService]::new()
+            $svc.TimeoutSec = 0
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+
+            $out = $svc.ExchangeRoundTrip(@{ identity = 'a@b.com' }, $true)
+
+            $out | Should -BeLike '*did not complete within 0s*'
+            @(Get-ChildItem -Path $dir -Filter 'request-*.bin') | Should -BeNullOrEmpty
+            Test-Path (Join-Path $dir 'key.bin') | Should -BeTrue   # only its own files go
+        }
+
+        It "completes a full encrypted round trip (with a partial) against a faked agent" {
+            $svc = [StubAgentLensService]::new()
+            $svc.TimeoutSec = 10
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $keyIv = [PersonLensService]::NewKeyIv()
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), $keyIv)
+            $response = '{ "sam": "U1", "devices": [] }'
+
+            # A minimal in-process agent: waits for request-<id>, then answers in the
+            # wire format (AES-256-CBC, tmp + rename) - partial first, then the result.
+            $agent = [powershell]::Create()
+            [void]$agent.AddScript({
+                    param($dir, $keyIv, $response)
+                    $deadline = (Get-Date).AddSeconds(8)
+                    $req = $null
+                    while ((Get-Date) -lt $deadline -and -not $req) {
+                        $req = Get-ChildItem -Path $dir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
+                            Select-Object -First 1
+                        if (-not $req) { Start-Sleep -Milliseconds 50 }
+                    }
+                    if (-not $req) { return }
+                    $id = $req.BaseName.Substring('request-'.Length)
+                    $aes = [System.Security.Cryptography.Aes]::Create()
+                    try {
+                        $aes.Key = [byte[]]($keyIv[0..31]); $aes.IV = [byte[]]($keyIv[32..47])
+                        foreach ($msg in @(@{ name = "partial-$id-1.bin"; text = '{ "sam": "U1" }' },
+                                @{ name = "result-$id.bin"; text = $response })) {
+                            $enc = $aes.CreateEncryptor()
+                            $plain = [System.Text.Encoding]::UTF8.GetBytes($msg.text)
+                            $tmp = Join-Path $dir ($msg.name + '.tmp')
+                            [IO.File]::WriteAllBytes($tmp, $enc.TransformFinalBlock($plain, 0, $plain.Length))
+                            Move-Item -LiteralPath $tmp -Destination (Join-Path $dir $msg.name) -Force
+                            Start-Sleep -Milliseconds 120
+                        }
+                    }
+                    finally { $aes.Dispose() }
+                })
+            [void]$agent.AddArgument($dir).AddArgument($keyIv).AddArgument($response)
+            $handle = $agent.BeginInvoke()
+            try {
+                $out = $svc.ExchangeRoundTrip(@{ identity = 'jane@corp.example'; sam = 'U1' }, $true)
+
+                $out | Should -Be $response
+                @(Get-ChildItem -Path $dir -Filter '*-*.bin' -Exclude 'key.bin') |
+                    Should -BeNullOrEmpty   # request, partial and result all consumed
+            }
+            finally {
+                if (-not $handle.IsCompleted) { $agent.Stop() }
+                $agent.Dispose()
             }
         }
     }

@@ -21,6 +21,18 @@ class TimeFormat {
         return [datetime]::MinValue
     }
 
+    # ConvertFrom-Json sniffs ISO strings into [datetime]; a bare [string] cast then
+    # drops the zone marker and the instant shifts by the machine's UTC offset.
+    static [string] NormalizeStamp($value) {
+        if ($value -is [System.DateTimeOffset]) { return $value.UtcDateTime.ToString('o') }
+        if ($value -isnot [datetime]) { return [string]$value }
+        # Stamp fields are UTC by contract, so an unzoned parse is taken as UTC.
+        if ($value.Kind -eq [System.DateTimeKind]::Unspecified) {
+            $value = [datetime]::SpecifyKind($value, [System.DateTimeKind]::Utc)
+        }
+        return $value.ToUniversalTime().ToString('o')
+    }
+
     static [string] Relative([datetime]$when) {
         $whenUtc = if ($when.Kind -eq [System.DateTimeKind]::Utc) {
             $when

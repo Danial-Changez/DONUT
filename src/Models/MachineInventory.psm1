@@ -1,3 +1,5 @@
+using module "..\Core\TimeFormat.psm1"
+
 <#
 .SYNOPSIS
     Pure DTO + formatting for the per-machine detail panel.
@@ -38,8 +40,8 @@ class MachineInventory {
         $mi.Charging           = [bool]$h['charging']
         $mi.FreeSpaceBytes     = [MachineInventory]::AsLong($h['freeSpaceBytes'])
         $mi.TotalSpaceBytes    = [MachineInventory]::AsLong($h['totalSpaceBytes'])
-        $mi.LastBootTime       = [string]$h['lastBootTime']
-        $mi.ProbedAt           = [string]$h['probedAt']
+        $mi.LastBootTime       = [TimeFormat]::NormalizeStamp($h['lastBootTime'])
+        $mi.ProbedAt           = [TimeFormat]::NormalizeStamp($h['probedAt'])
         return $mi
     }
 

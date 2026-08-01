@@ -41,14 +41,14 @@ Describe "PersonLens" {
             $d0 = $p.Devices[0]
             $d0.Name   | Should -Be 'WS-1'
             $d0.Os     | Should -Be 'Windows 11 Enterprise'
-            $d0.LastLogon | Should -Match '2026'
+            $d0.LastLogon | Should -Be '2026-07-03T10:00:00.0000000Z'
             $d0.Domain | Should -Be 'prod.contoso.com'
             $d0.HasBitLocker() | Should -BeTrue
             $d0.BitLockerKeys.Count | Should -Be 2
             $d0.BitLockerKeys[0].Password | Should -Be '111-222'
-            # ConvertFrom-Json coerces the ISO date to [datetime], so the string is
-            # locale-formatted - assert on the stable year rather than the exact format.
-            $d0.BitLockerKeys[0].Created  | Should -Match '2026'
+            # ConvertFrom-Json coerces the ISO date to [datetime]; NormalizeStamp must
+            # re-emit the UTC round-trip format, never a locale string.
+            $d0.BitLockerKeys[0].Created  | Should -Be '2026-05-01T00:00:00.0000000Z'
             $d0.BitLockerKeys[1].Created  | Should -BeNullOrEmpty
         }
 
