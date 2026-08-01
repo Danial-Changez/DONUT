@@ -112,6 +112,34 @@ Describe "ActiveDirectoryService.Search" {
         $log.HasLevel('WARN') | Should -BeTrue
     }
 
+    It "records the failed forest even with no logger, naming it and the reason" {
+        # The pool worker constructs this with a null logger, so LogWarning goes nowhere.
+        # Without LastErrors an unreachable forest is indistinguishable from an empty one,
+        # which is exactly how a misspelt forest name stayed hidden.
+        $svc = [FakeAdService]::new(@('d1', 'd2'), $null)
+        $svc.FailDomains = @('d1')
+        $svc.UserRows['d2'] = @(New-UserRow 'bob' 'bob@x' 'Bob' $false)
+
+        $r = @($svc.Search('bob'))
+
+        $r.Count | Should -Be 1
+        @($svc.LastErrors).Count | Should -Be 1
+        $svc.LastErrors[0] | Should -BeLike 'd1:*unreachable*'
+    }
+
+    It "clears the previous search's failures so a recovered forest stops reporting" {
+        $svc = [FakeAdService]::new(@('d1'), $null)
+        $svc.FailDomains = @('d1')
+        [void]$svc.Search('bob')
+        @($svc.LastErrors).Count | Should -Be 1
+
+        $svc.FailDomains = @()
+        $svc.UserRows['d1'] = @(New-UserRow 'bob' 'bob@x' 'Bob' $false)
+        [void]$svc.Search('bob')
+
+        @($svc.LastErrors).Count | Should -Be 0
+    }
+
     It "dedupes identical rows returned within a forest" {
         $svc = [FakeAdService]::new(@('d1'), $null)
         $svc.UserRows['d1'] = @((New-UserRow 'dup' 'dup@x' 'Dup' $true), (New-UserRow 'dup' 'dup@x' 'Dup' $true))

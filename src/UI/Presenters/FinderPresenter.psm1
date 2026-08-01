@@ -8,7 +8,7 @@ using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Core\PoolScriptJob.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\PersonLens.psm1"
-using module "..\..\Models\MachineNameMatcher.psm1"
+using module "..\..\Models\AdSearchResult.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
@@ -32,6 +32,47 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     Extracted from HomePresenter; the two presenters share the HomeViewModel (which
     enforces machine/Lens detail-pane exclusivity) and the dual-use search TextBox
     (the finder wires TextChanged/Escape; HomePresenter's Add flow reads/clears it).
+
+    The search timers are 100ms debounce / 60ms poll, and both are back at those values
+    after a raise to 250/150 that cost more than it saved. The debounce was raised on the
+    theory that typing re-fanned-out and the superseded shells held the lane (AbortSearch
+    cancels through BeginStop, which is asynchronous); that was argued, never measured, and
+    it charged every completed search a flat +150ms - on the interactive path, above the
+    150ms bar the same change set for whether an optimization is worth its complexity.
+    The poll raise was simply wrong: SearchPollTimer starts only when a fan-out begins and
+    stops when the last job lands, so it never ticks while idle and a fast tick costs
+    nothing, while a slow one is dead time before the dropdown paints AND inflates the
+    per-forest elapsed, which is measured when the poll notices rather than when the job
+    finished. Raise the debounce again only on log evidence: the fan-out count per search
+    and the (superseded) marker are there to provide it.
+
+    DescribeSearchTiming splits each leg into queue / search / rows / notice from the
+    worker's AdTiming record, so the next call here is made on numbers - a total alone
+    cannot separate the directory from the machinery around it. That is how the render
+    below was found: all four forests finished within 27ms of each other, yet their totals
+    spread across 465ms, because each landed leg re-rendered the whole dropdown on the UI
+    thread before the next was even read. PollSearch renders once per tick for that reason.
+
+    There is no "Add as a machine" row, and Enter can never fabricate a machine. It acts
+    on real rows only - the top-ranked computer when any matched, else the top user - so
+    a pattern prefix like "cap-" adds an actual CAP- machine instead of a junk "cap-"
+    card (the add row's failure mode that got it removed). The one non-row Enter is a
+    pasted list: 2+ tokens split on whitespace/commas go through OnSearch, which is how
+    several machines are added at once. A picked computer lands on the machine pane
+    directly (the pick is the add) and the dropdown closes, like a user pick.
+
+    Cancelling the other forests once one answers would NOT be an optimization: the
+    forests hold disjoint populations, so a cancelled forest's people never enter the pool
+    AdSearchRank orders - the strongest match overall can live in the slowest forest, and
+    which people appear (including the row Enter pre-selects) would depend on which forest
+    won the race. Cancel-on-supersede is the legitimate form and AbortSearch already does it.
+
+    ResolveOwners keeps exactly one batch in flight, and the batch is deliberate. The
+    agent serves owner requests inline on its 150ms serve loop, so a second parent job
+    would queue behind the first for no extra throughput while holding a second of the
+    three interactive runspaces - the lane a Lens pick needs to dispatch immediately.
+    It reaps on the Lens poll tick rather than owning a timer, since both wait on the
+    same agent.
     $Home is a duck-typed back-reference to HomePresenter (a typed import would be a
     using-module cycle); the complete machine-side seam is: Resolution.PrefetchIp,
     EnsureRow, StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
@@ -63,11 +104,15 @@ class FinderPresenter {
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
+    [HashSet[string]] $ForestsWarned       # toast once per dead forest, not per keystroke
     [List[hashtable]] $AdWarmJobs          # one-shot startup AD warm jobs (results discarded)
     # Accumulated rows for the current token (forests stream in).
     [List[object]]    $SearchResults
     [HashSet[string]] $SearchSeen          # dedupe keys (Kind|Domain|Sam) for the current token
-    [bool]            $SuppressSearch = $false
+    # Rows drawn per section. The popup shows ~8 at a time, so past this the rest is scroll
+    # nobody reads - and drawing it costs ~3ms a row on the UI thread.
+    [int]             $MaxDropdownRows = 15
+    hidden [bool]     $DeactivateWired = $false   # Window.Deactivated hooked once - see WireWindowDeactivate
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
 
@@ -79,9 +124,12 @@ class FinderPresenter {
     # mirrors the search/unlock poll pattern.
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
+    [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
+    [bool]                $LensWarmTimed
+    [DispatcherTimer]     $WarmWatchTimer   # times the warms; stops itself once they land
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins; stale results are discarded
-    # Startup agent warm-up @{ Ps; Handle }, reaped on the first pick.
+    # Startup agent warm-up @{ Ps; Handle; StartedAt }, reaped on the first pick.
     [object]              $LensWarmJob
     # Per-person result cache: identity -> @{ At; Json }. Memory only - it holds
     # BitLocker keys, so it must never be written to disk.
@@ -114,9 +162,14 @@ class FinderPresenter {
         $this.AdWarmJobs = [List[hashtable]]::new()
         $this.SearchResults = [List[object]]::new()
         $this.SearchSeen = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $this.ForestsWarned = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        # Every ms here is dead time before the search even starts - see .NOTES for the
+        # 250ms experiment and why it was reverted.
         $this.SearchDebounce = [DispatcherTimer]::new()
         $this.SearchDebounce.Interval = [TimeSpan]::FromMilliseconds(100)
         $this.SearchDebounce.Add_Tick({ $presenter.RunAdSearch() }.GetNewClosure())
+        # Deliberately faster than the other poll timers: this one is gated on SearchJobs, so
+        # it never ticks while idle, and its interval is latency before the dropdown paints.
         $this.SearchPollTimer = [DispatcherTimer]::new()
         $this.SearchPollTimer.Interval = [TimeSpan]::FromMilliseconds(60)
         $this.SearchPollTimer.Add_Tick({ $presenter.PollSearch() }.GetNewClosure())
@@ -137,6 +190,35 @@ class FinderPresenter {
         $this.LensPollTimer = [DispatcherTimer]::new()
         $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(200)
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
+
+        # Warm timing has to be taken when the warm LANDS. The reaps fire on the first real
+        # search/pick, so measuring there reports how long the user took, not the warm.
+        $this.WarmWatchTimer = [DispatcherTimer]::new()
+        $this.WarmWatchTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+        $this.WarmWatchTimer.Add_Tick({ $presenter.PollWarmTimings() }.GetNewClosure())
+    }
+
+    # Logs each warm's true elapsed as it completes, then stops. Debug-gated, and it only
+    # runs during startup, so the tick costs nothing once the warms have landed.
+    [void] PollWarmTimings() {
+        $pending = 0
+        foreach ($j in @($this.AdWarmJobs)) {
+            if ($j.Timed) { continue }
+            if (-not $j.Handle.IsCompleted) { $pending++; continue }
+            $j.Timed = $true
+            $ms = [long]([datetime]::UtcNow - [datetime]$j.StartedAt).TotalMilliseconds
+            $this.Logger.LogDebug("AD warm $($j.Domain) ready in $($ms)ms")
+        }
+        if ($null -ne $this.LensWarmJob -and -not $this.LensWarmTimed) {
+            if ($this.LensWarmJob.Handle.IsCompleted) {
+                $this.LensWarmTimed = $true
+                $ms = [long]([datetime]::UtcNow -
+                    [datetime]$this.LensWarmJob.StartedAt).TotalMilliseconds
+                $this.Logger.LogDebug("Lens agent warm ready in $($ms)ms")
+            }
+            else { $pending++ }
+        }
+        if ($pending -eq 0) { $this.WarmWatchTimer.Stop() }
     }
 
     # Adopts the ActionBar region root (its namescope holds the finder's controls) and
@@ -161,7 +243,32 @@ class FinderPresenter {
                         'Return' { $presenter.CommitSelection(); $e.Handled = $true }
                     }
                 }.GetNewClosure())
+            # Focus leaving the bar closes the dropdown - unless it went INTO the dropdown
+            # (the Unlock/Reset buttons live there and need their click).
+            $this.SearchBar.Add_LostKeyboardFocus({
+                    param($s, $e)
+                    $child = if ($presenter.SearchPopup) { $presenter.SearchPopup.Child } else { $null }
+                    $inPopup = $null -ne $child -and
+                    $e.NewFocus -is [System.Windows.Media.Visual] -and
+                    $child.IsAncestorOf($e.NewFocus)
+                    if (-not $inPopup) { $presenter.CloseSearchPopup() }
+                }.GetNewClosure())
+            # A WPF Popup floats above every window, including other apps' - so it must go
+            # down with the app's activation, not linger over whatever got Alt-Tabbed to.
+            if ($this.SearchBar.IsLoaded) { $this.WireWindowDeactivate() }
+            else { $this.SearchBar.Add_Loaded({ $presenter.WireWindowDeactivate() }.GetNewClosure()) }
         }
+    }
+
+    # Window.Deactivated -> close the dropdown. Wired once, from Initialize, as soon as the
+    # search bar is in a window (GetWindow returns null before the visual tree attaches).
+    [void] WireWindowDeactivate() {
+        if ($this.DeactivateWired -or $null -eq $this.SearchBar) { return }
+        $win = [System.Windows.Window]::GetWindow($this.SearchBar)
+        if ($null -eq $win) { return }
+        $this.DeactivateWired = $true
+        $presenter = $this
+        $win.Add_Deactivated({ $presenter.CloseSearchPopup() }.GetNewClosure())
     }
 
     # Move the dropdown highlight by $dir (+1 down / -1 up), skipping header rows and
@@ -186,8 +293,8 @@ class FinderPresenter {
         }
     }
 
-    # Enter: a highlighted dropdown row acts as if clicked (computer -> fills the bar,
-    # user -> opens the Lens); otherwise the typed WSID(s) are added to the machine list.
+    # Enter: the highlighted row acts as if clicked; with no row, only a pasted list
+    # (2+ tokens) still adds - a single unmatched name adds nothing. See .NOTES.
     [void] CommitSelection() {
         if ($this.SearchPopup -and $this.SearchPopup.IsOpen -and $null -ne $this.ResultsList) {
             $sel = $this.ResultsList.SelectedItem
@@ -196,7 +303,8 @@ class FinderPresenter {
                 return
             }
         }
-        $this.Home.OnSearch()
+        $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
+        if (@($text -split '[\s,]+' | Where-Object { $_ }).Count -ge 2) { $this.Home.OnSearch() }
     }
 
     # Tears down the Lens agent via the pool worker so the UI never parse-loads
@@ -239,8 +347,11 @@ class FinderPresenter {
         foreach ($domain in $this.AdService.Domains) {
             try {
                 # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
-                $this.AdWarmJobs.Add(
-                    $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' }))
+                $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
+                $warm.Domain = $domain
+                $warm.Timed = $false
+                $this.AdWarmJobs.Add($warm)
+                $this.WarmWatchTimer.Start()
             }
             catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
@@ -251,7 +362,11 @@ class FinderPresenter {
     # Disposes the startup AD warm jobs; their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
-        foreach ($j in @($this.AdWarmJobs)) { $this.DisposeJob($j.Ps) }
+        # Timing belongs to PollWarmTimings, which sees the warm land; this only disposes.
+        foreach ($j in @($this.AdWarmJobs)) {
+            if (-not $j.Timed) { $this.Logger.LogDebug("AD warm $($j.Domain) still running at first search") }
+            $this.DisposeJob($j.Ps)
+        }
         $this.AdWarmJobs.Clear()
     }
 
@@ -260,6 +375,8 @@ class FinderPresenter {
     [void] WarmLens() {
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $this.LensWarmTimed = $false
+            $this.WarmWatchTimer.Start()
             $this.LensWarmJob = $this.StartPoolScript($worker, @{
                     SiteServer = $this.Config.GetAdminServiceHost()
                     SourceRoot = $this.Config.SourceRoot
@@ -271,6 +388,54 @@ class FinderPresenter {
         }
     }
 
+    # Whose machines these are, for the whole list in one request. One in flight at a time -
+    # see .NOTES for why a second buys nothing.
+    [void] ResolveOwners([string[]]$machines, [object]$onResolved) {
+        if (@($machines).Count -eq 0 -or $null -ne $this.OwnerJob) { return }
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $job = $this.StartPoolScript($worker, @{
+                    SiteServer = $this.Config.GetAdminServiceHost()
+                    SourceRoot = $this.Config.SourceRoot
+                    OwnerOf    = @($machines)
+                })
+            $job.OnResolved = $onResolved
+            $job.Count = @($machines).Count
+            $this.OwnerJob = $job
+            $this.LensPollTimer.Start()
+        }
+        catch {
+            $this.Logger.LogException('Owner lookup could not start', $_)
+        }
+    }
+
+    # Reaped on the Lens poll tick. Hands back @{ machine = ownerDisplayName } and lets the
+    # caller decide what to do with it; a failed batch just leaves the cards unnamed.
+    hidden [void] ReapOwners() {
+        $job = $this.OwnerJob
+        if ($null -eq $job -or -not $job.Handle.IsCompleted) { return }
+        $this.OwnerJob = $null
+        try {
+            $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+            if ($json) {
+                $bundle = $json | ConvertFrom-Json
+                if ($bundle.error) { $this.Logger.LogWarning("Owner lookup: $($bundle.error)") }
+                $map = @{}
+                foreach ($row in @($bundle.owners)) {
+                    if ($row.owner) { $map[[string]$row.name] = [string]$row.owner }
+                }
+                # Per-machine cost is the number that decides whether this ever needs
+                # to stop being one serial batch.
+                $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+                $each = if ($job.Count -gt 0) { [long]($ms / $job.Count) } else { 0 }
+                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms (~$($each)ms each), $($map.Count) named")
+                if ($job.OnResolved -and $map.Count -gt 0) { & $job.OnResolved $map }
+            }
+        }
+        catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
+        finally { $this.DisposeJob($job.Ps) }
+    }
+
     # Reap the startup agent warm job (logs its result: '' = started, else the reason).
     hidden [void] ReapLensWarm() {
         if ($null -eq $this.LensWarmJob) { return }
@@ -278,9 +443,10 @@ class FinderPresenter {
         $this.LensWarmJob = $null
         try {
             if ($job.Handle.IsCompleted) {
+                # No elapsed here: this fires on the first pick, so it would time the user.
                 $reason = (@($job.Ps.EndInvoke($job.Handle)) -join '')
                 if ($reason) { $this.Logger.LogWarning("Lens agent warm-up: $reason") }
-                else { $this.Logger.LogInfo("Lens agent warmed and ready.") }
+                else { $this.Logger.LogInfo('Lens agent warmed and ready.') }
             }
             # DisposeJob, not $job.Ps.Dispose(): a warm agent still hung on the network must be
             # stopped asynchronously or it blocks the UI thread (see DisposeJob).
@@ -294,7 +460,6 @@ class FinderPresenter {
     # Restart the debounce window on each keystroke; close the dropdown when the
     # prefix is too short to search.
     [void] OnSearchTextChanged() {
-        if ($this.SuppressSearch) { return }
         $text = if ($this.SearchBar) { $this.SearchBar.Text } else { '' }
         if ([string]::IsNullOrWhiteSpace($text) -or
             $text.Trim().Length -lt $this.AdService.MinPrefix) {
@@ -343,41 +508,111 @@ class FinderPresenter {
             try {
                 $job = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = $prefix })
                 $job.Token = $token
+                $job.Domain = $domain
+                $job.Prefix = $prefix
                 $this.SearchJobs.Add($job)
             }
             catch {
                 $this.Logger.LogException("AD search could not start for '$domain'", $_)
             }
         }
+        # One line per fan-out: how often this fires while typing is the number that says
+        # whether the debounce is doing its job.
+        $this.Logger.LogDebug("AD search fan-out '$prefix': $($this.SearchJobs.Count) forest(s)")
         if ($this.SearchJobs.Count -gt 0) { $this.SearchPollTimer.Start() }
         else { $this.CloseSearchPopup() }
+    }
+
+    # Drains a finished search's warning stream. Returns $true when that forest could not
+    # answer at all, which is NOT the same as matching nothing and must not read like it.
+    hidden [bool] ReportForestFailure([object]$job) {
+        $stream = $job.Ps.Streams.Warning
+        if ($stream.Count -eq 0) { return $false }
+        foreach ($w in $stream) { $this.Logger.LogWarning("AD search: $($w.Message)") }
+        $stream.Clear()
+        # Toasted once per forest per session: a permanently unreachable forest would
+        # otherwise nag on every keystroke, and the first time is when it is news.
+        if ($this.ForestsWarned.Add([string]$job.Domain) -and $this.Toasts) {
+            $this.Toasts.ShowWarning('Directory search',
+                "$($job.Domain) did not answer, so its people and machines are missing from these results.")
+        }
+        return $true
+    }
+
+    # Splits a finished leg into the four spans that sum to its total, from the worker's
+    # AdTiming record. Empty when there is none - see .NOTES and AdSearchWorker.
+    hidden [string] DescribeSearchTiming([object]$job) {
+        $stamped = $null
+        foreach ($info in $job.Ps.Streams.Information) {
+            if ($info.Tags -contains 'AdTiming') { $stamped = [string]$info.MessageData; break }
+        }
+        if ([string]::IsNullOrWhiteSpace($stamped)) { return '' }
+        $parts = $stamped -split ' '
+        if ($parts.Count -ne 3) { return '' }
+
+        $begun = [datetime]::new([long]$parts[0], [System.DateTimeKind]::Utc)
+        $ended = [datetime]::new([long]$parts[2], [System.DateTimeKind]::Utc)
+        $searchMs = [long]$parts[1]
+        # queue = pool slot + the worker's using-module compile; notice = poll granularity
+        # + marshalling. Neither side of the runspace boundary can see both.
+        $queue = [long]($begun - [datetime]$job.StartedAt).TotalMilliseconds
+        $rowMs = [long](($ended - $begun).TotalMilliseconds) - $searchMs
+        $notice = [long]([datetime]::UtcNow - $ended).TotalMilliseconds
+        return " (queue $queue, search $searchMs, rows $rowMs, notice $notice)"
     }
 
     # Poll the per-forest searches; as each lands, fold its hits into the current token's
     # accumulator and re-render the growing union. Stale-token jobs are discarded.
     [void] PollSearch() {
+        $landed = $false
         foreach ($job in @($this.SearchJobs)) {
             if (-not $job.Handle.IsCompleted) { continue }
             $results = @()
             try { $results = @($job.Ps.EndInvoke($job.Handle)) }
             catch { $this.Logger.LogException("AD search failed", $_) }
+            # Dispatch to here, so it counts pool queue wait as well as the LDAP round trip,
+            # and is taken alongside the spans rather than after the dispose below.
+            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            # Both stream reads go before DisposeJob. A disposed shell does still hand its
+            # streams back, but nothing in the contract says it must, and this costs nothing.
+            $failed = $this.ReportForestFailure($job)
+            $timing = $this.DescribeSearchTiming($job)
             $this.DisposeJob($job.Ps)
             [void]$this.SearchJobs.Remove($job)
+            $stale = if ($job.Token -ne $this.SearchToken) { ' (superseded)' } else { '' }
+            $outcome = if ($failed) { 'FAILED' } else { "$($results.Count) hit(s)" }
+            $this.Logger.LogDebug("AD search $($job.Domain) '$($job.Prefix)': $($ms)ms$timing, $outcome$stale")
             if ($job.Token -ne $this.SearchToken) { continue }
             foreach ($row in $results) {
                 $key = "$($row.Kind)|$($row.Domain)|$($row.SamAccountName)"
                 if ($this.SearchSeen.Add($key)) { $this.SearchResults.Add($row) }
             }
-            $this.RenderDropdown()
+            $landed = $true
+        }
+        # Once per tick, not once per landed forest. It is UI-thread work proportional to the
+        # accumulated rows, and re-running it per leg is what put ~450ms on the last forest.
+        if ($landed) {
+            $renderAt = [datetime]::UtcNow
+            $drawn = $this.RenderDropdown()
+            $renderMs = [long]([datetime]::UtcNow - $renderAt).TotalMilliseconds
+            $this.Logger.LogDebug("AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
-    # Rebuilds the dropdown: the "Add as a machine" action first, then the AD hits so far;
-    # pre-selects the add row for a WSID or the top user otherwise. Called per keystroke.
-    [void] RenderDropdown() {
+    # Says how many ranked rows the cap held back. A header row, so it reads as a hint and
+    # cannot be picked or selected by the arrow keys.
+    hidden [void] AddOverflowHint([object]$items, [int]$total) {
+        $hidden = $total - $this.MaxDropdownRows
+        if ($hidden -le 0) { return }
+        $items.Add([SearchRowViewModel]::Header("+$hidden MORE - KEEP TYPING TO NARROW"))
+    }
+
+    # Rebuilds the dropdown from the ranked capped hits and pre-selects what Enter does.
+    # Returns the drawn item count, which the cap divorces from the pool's.
+    [int] RenderDropdown() {
         $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
-        if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return }
+        if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return 0 }
 
         $presenter = $this
         # $items, not $rows/$searchResults: a local colliding case-insensitively with
@@ -385,35 +620,27 @@ class FinderPresenter {
         $items = [System.Collections.Generic.List[object]]::new()
 
         $raw = $this.SearchResults.ToArray()
-        $computers = @($raw | Where-Object { $_.Kind -eq 'Computer' })
-        $users = @($raw | Where-Object { $_.Kind -eq 'User' })
+        $computers = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'Computer' }), $text)
+        $users = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'User' }), $text)
         $firstUserIndex = -1
 
-        # Machine-like = matches a naming pattern or an AD computer answers to exactly this
-        # name (so a real machine outside the patterns still leads with Add, un-dimmed).
-        $names = @($computers | ForEach-Object { [string]$_.Name })
-        $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns()) -or
-        [MachineNameMatcher]::AnyExactMatch($names, $text)
-
-        # Explicit add action, always first; a bare Enter still falls through to Add too.
-        $addRow = [SearchRowViewModel]::AddMachine($text, $machineLike)
-        $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
-        $items.Add($addRow)
-
+        $firstComputerIndex = -1
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
-            foreach ($c in $computers) {
+            $firstComputerIndex = $items.Count   # the next item added is the top-ranked computer
+            foreach ($c in ($computers | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($c)
                 $cap = [string]$c.Name
                 $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
                 $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
                 $items.Add($vm)
             }
+            $this.AddOverflowHint($items, $computers.Count)
         }
         if ($users.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('USERS'))
             $firstUserIndex = $items.Count   # the next item added is the first user row
-            foreach ($u in $users) {
+            foreach ($u in ($users | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($u)
                 # Clicking a user row opens the Lens (its directory + SCCM devices).
                 $capU = $u
@@ -429,31 +656,37 @@ class FinderPresenter {
                 }
                 $items.Add($vm)
             }
+            $this.AddOverflowHint($items, $users.Count)
         }
 
-        $this.HomeVm.SearchResults.Clear()
-        foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
+        # Nothing matched: no popup shell, and Enter has nothing to act on - see .NOTES.
+        if ($items.Count -eq 0) { $this.CloseSearchPopup(); return 0 }
 
-        # Pre-select what Enter does: a machine (pattern or AD-confirmed) -> the add row; a
-        # name -> the top user (opens the Lens, not a junk card); nothing -> clear (bare Enter adds).
-        $sel = if ($machineLike) { 0 } elseif ($firstUserIndex -ge 0) { $firstUserIndex } else { -1 }
+        # One Set, not Clear + N Adds: every Add on the bound collection raises
+        # CollectionChanged and invalidates the ListBox layout - measured at ~3ms a row.
+        $this.HomeVm.Set('SearchResults',
+            [System.Collections.ObjectModel.ObservableCollection[object]]::new($items))
+
+        # Pre-select what Enter does: the top-ranked computer, else the top user - .NOTES.
+        $sel = if ($firstComputerIndex -ge 0) { $firstComputerIndex }
+        elseif ($firstUserIndex -ge 0) { $firstUserIndex }
+        else { -1 }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
+        return $items.Count
     }
 
-    # Computer chosen: drop it into the bar so the operator can run the active
-    # command (suppressing the re-search the programmatic edit would trigger).
+    # Computer chosen: straight onto the machine pane - the pick IS the add. Closes the
+    # dropdown like a user pick does; adding several machines is the paste path's job.
     [void] OnPickComputer([string]$name) {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
         $this.CloseSearchPopup()
-        $this.SuppressSearch = $true
-        if ($this.SearchBar) {
-            $this.SearchBar.Text = $name
-            $this.SearchBar.CaretIndex = $name.Length
-        }
-        $this.SuppressSearch = $false
-        # Start-early: a picked computer is about to be run - warm its IP now.
+        $vm = $this.Home.EnsureRow($name)
         $this.Home.Resolution.PrefetchIp($name)
+        $this.Home.StartInventory($name, $true)
+        $this.Home.MoveRowToTop($name)
+        # Shared-VM selection, same as OnSearch's flow: shows the new card's detail pane.
+        $this.HomeVm.SetSelected($vm)
     }
 
     # User row's Reset action: hand the row to the shell's reset-password overlay
@@ -571,7 +804,6 @@ class FinderPresenter {
             $job.Token = $token
             $job.Key = $cacheKey
             $job.InfoSeen = 0
-            $job.StartedAt = [datetime]::UtcNow
             $job.Who = $who   # Apply() blanks DisplayName on an error lens without it
             $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()
@@ -588,6 +820,8 @@ class FinderPresenter {
     # Poll the in-flight lens lookup: mid-flight, stream any 'LensPartial' Information
     # record into the VM; on completion parse the bundle, populate, wire, and cache.
     [void] PollLens() {
+        # Shares this tick rather than owning a second timer: both wait on the same agent.
+        $this.ReapOwners()
         foreach ($job in @($this.LensJobs)) {
             # The partial (directory facts) arrives on the Information stream before the
             # SCCM/BitLocker crawl finishes - apply it so the pane fills early.
@@ -636,7 +870,8 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        if ($this.LensJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
+        # An owner batch outlives the pick that started it, so it keeps the tick alive too.
+        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup that outlives LensDeadline is never coming back (a starved pool or a wedged
@@ -674,11 +909,11 @@ class FinderPresenter {
         }
     }
 
-    # A Lens device was added: drop its WSID into the machine list via HomePresenter's
-    # Add/pick flow (row + IP prefetch + inventory + move-to-top). The Lens stays open.
+    # A Lens device joins the machine list; the Lens stays open, and its person seeds the
+    # row's owner so a name already on screen is never re-queried from the agent.
     [void] OnAddDeviceToList([string]$wsid) {
         if ([string]::IsNullOrWhiteSpace($wsid)) { return }
-        $this.Home.EnsureRow($wsid)
+        $this.Home.EnsureRow($wsid, [string]$this.LensVm.DisplayName)
         $this.Home.Resolution.PrefetchIp($wsid)
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)

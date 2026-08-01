@@ -23,9 +23,16 @@ using module ".\FolderNodeViewModel.psm1"
     Row brushes come from the static Palette that HomePresenter seeds out of
     UIColors.xaml (presenter resolves, VM holds, view binds - no duplicated hexes).
     RunCommand / GatherCommand are assigned by the coordinator after construction.
+
+    SetOwner shortens to first name + surname initial: a full display name would crowd the
+    hostname it sits beside, while a bare first name cannot tell two Daniels apart. It
+    handles both directory shapes ("Jane Doe" and "Doe, Jane"). The card renders it in
+    brackets and tooltips the full name only when it adds something the short form lacks.
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
+    [string] $OwnerName = ''           # short owner form, e.g. "Danial C"; '' collapses the chip
+    [string] $OwnerTip = ''            # full display name, only when it says more than OwnerName
     [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone
@@ -41,6 +48,7 @@ class HostViewModel : ObservableObject {
     [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
+    [object] $RemoveCommand   # RelayCommand, assigned by the coordinator (card's X)
 
     # Machine-list sort key (maintained by RefreshShape): the Home list's CollectionView sorts
     # on SortStatusRank (then HostName), so attention-worthy machines rise to the top.
@@ -240,6 +248,25 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipText', [HostViewModel]::HumanStatus($status))
         $this.Set('StatusGlyph', [HostViewModel]::StatusGlyph($status))
         $this.Set('ChipVisible', $true)
+    }
+
+    # First name + surname initial ("Danial C"); OwnerTip holds the full name only when it
+    # says more than the short form (a bare SAM does not) - see .NOTES.
+    [void] SetOwner([string]$displayName) {
+        $full = ([string]$displayName).Trim()
+        # "Doe, Jane" -> first "Jane", surname "Doe"; "Jane [M.] Doe" -> first + last token.
+        $tokens = if ($full.Contains(',')) {
+            $half = $full -split ',\s*', 2
+            @(@($half[1] -split '\s+')[0], @($half[0] -split '\s+')[-1])
+        }
+        else { @($full -split '\s+') }
+        $tokens = @($tokens | Where-Object { $_ })
+        $shortForm = [string]$tokens[0]
+        if ($tokens.Count -gt 1 -and $tokens[-1].Length -gt 0) {
+            $shortForm = "$shortForm $($tokens[-1].Substring(0, 1))"
+        }
+        $this.Set('OwnerName', $shortForm)
+        $this.Set('OwnerTip', $(if ($full -ne $shortForm) { $full } else { '' }))
     }
 
     hidden [void] ApplySubtitle() {

@@ -109,6 +109,7 @@ export default defineConfig({
                 'development/architecture/runspaces-and-workers',
                 'development/architecture/remote-execution',
                 'development/architecture/user-lens',
+                'development/architecture/ad-queries',
                 'development/architecture/ui-and-threading',
                 'development/architecture/configuration-and-persistence',
                 'development/architecture/elevation',

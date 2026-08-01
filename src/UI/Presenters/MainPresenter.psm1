@@ -626,8 +626,11 @@ class MainPresenter {
                 DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
                 RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
             }
+            # The window is the chrome root: the page segments sit in the overlay header,
+            # which is part of MainWindow, not of the settings body loaded into it.
             $this.SettingsPresenter = [SettingsPresenter]::new(
-                $this.Config, $this.ConfigManager, $settingsView, $this.ToastService, $sideEffects)
+                $this.Config, $this.ConfigManager, $settingsView, $this.Window,
+                $this.ToastService, $sideEffects)
             if ($this.Controls['settingsContent']) {
                 $this.Controls['settingsContent'].Content = $settingsView
             }

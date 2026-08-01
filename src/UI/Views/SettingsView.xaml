@@ -1,30 +1,7 @@
-<!-- Config form chrome, hosted in the settings overlay card. The command segments and
-     SettingsContent are looked up by name; edits persist live (no Save button). -->
+<!-- Config form body, hosted in the settings overlay card. The page switcher lives in the
+     overlay's header row (MainWindow.xaml) so it survives scrolling; this is only the form.
+     SettingsContent is looked up by name; edits persist live (no Save button). -->
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Command picker: a segmented pill; the presenter loads the matching view. -->
-    <Border CornerRadius="8.4"
-            Background="{DynamicResource Secondary}"
-            Padding="3"
-            HorizontalAlignment="Center"
-            Margin="0,4,0,16">
-        <!-- UniformGrid = equal-width segments (Apple HIG): unequal widths would imply
-             unequal importance, and the control's footprint stays stable. -->
-        <UniformGrid Rows="1">
-            <RadioButton x:Name="cmdGeneral"
-                         Content="General"
-                         GroupName="cmd"
-                         Style="{DynamicResource SegmentToggle}" />
-            <RadioButton x:Name="cmdScan"
-                         Content="Scan"
-                         GroupName="cmd"
-                         Style="{DynamicResource SegmentToggle}" />
-            <RadioButton x:Name="cmdApplyUpdates"
-                         Content="Apply"
-                         GroupName="cmd"
-                         Style="{DynamicResource SegmentToggle}" />
-        </UniformGrid>
-    </Border>
-    <!-- No Save button: every setting persists the moment it changes (SettingsPresenter). -->
     <ContentControl x:Name="SettingsContent" />
 </StackPanel>

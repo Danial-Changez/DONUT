@@ -15,12 +15,29 @@ using module "..\Models\AdSearchResult.psm1"
     in overridable hidden seams (QueryDirectory, InvokeUnlock, InvokeReset) so the
     multi-domain aggregation / mapping / guard logic is unit-testable off a domain
     by subclassing and faking the seams.
+
+    MaxPerDomain is 25, so SizeLimit is 50. An LDAP size cap truncates in server order rather
+    than by relevance, so a tight bound silently drops people and the one you wanted has no
+    better odds than anyone else: a three-letter prefix filled 16 of 16 on the biggest forest,
+    then 24 of 24 after the first raise. This bound decides who is considered; AdSearchRank
+    and FinderPresenter.MaxDropdownRows decide who is drawn. Keep the two separate - widening
+    the filter against a tight cap here is what makes a search quietly worse.
+
+    LastErrors exists because logging the per-forest failure is not enough: the usual
+    caller is AdSearchWorker.ps1, which passes a null logger, so Coalesce turns that
+    warning into a no-op and an unreachable forest looks identical to one that matched
+    nothing. That is how a misspelt forest name stayed invisible while a quarter of every
+    search silently returned nothing. The worker re-emits these on the warning stream and
+    FinderPresenter reports them; see architecture/ad-queries.md.
 #>
 class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()
     [int]        $MinPrefix = 3
-    [int]        $MaxPerDomain = 8
+    # Who is CONSIDERED, not who is shown (AdSearchRank decides that) - see .NOTES.
+    [int]        $MaxPerDomain = 25
+    # Per-forest failures from the last Search, as "<domain>: <reason>" - see .NOTES.
+    [string[]]   $LastErrors = @()
 
     ActiveDirectoryService() {
         $this.Logger = [NullLogService]::new()
@@ -34,6 +51,7 @@ class ActiveDirectoryService {
     # Searches every configured forest for computers + users matching the prefix.
     [AdSearchResult[]] Search([string]$prefix) {
         $results = [System.Collections.Generic.List[AdSearchResult]]::new()
+        $this.LastErrors = @()
         if ([string]::IsNullOrWhiteSpace($prefix) -or $prefix.Trim().Length -lt $this.MinPrefix) {
             return $results.ToArray()
         }
@@ -58,6 +76,9 @@ class ActiveDirectoryService {
                 }
             }
             catch {
+                # Recorded as well as logged: the caller is usually a pool worker whose
+                # logger is null, and a swallowed forest looks exactly like an empty one.
+                $this.LastErrors += "${domain}: $($_.Exception.Message)"
                 $this.Logger.LogWarning("AD search in '$domain' failed: $($_.Exception.Message)")
             }
         }

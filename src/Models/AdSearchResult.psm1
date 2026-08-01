@@ -39,6 +39,55 @@ class AdSearchResult {
 }
 
 # Pure helpers: LDAP filter construction + escaping + account-control bit decode.
+<#
+.SYNOPSIS
+    Orders finder rows so the strongest match leads, and says how many were held back.
+
+.NOTES
+    Exists because UserFilter matches sn as well now. A surname hit is worth having - it is
+    the whole reason sn was added - but it must not outrank the name the user is typing,
+    since people type a first name far more often than a surname.
+
+    Rows arrive as PSCustomObjects marshalled out of AdSearchWorker, not as AdSearchResult,
+    so Of reads its fields duck-typed and works for either shape.
+
+    The last tier is inferred, not read. sn is deliberately NOT in the finder's
+    PropertiesToLoad, so a row that matches none of the four visible fields can only have
+    arrived via the sn clause - which makes "matched nothing you can see" a reliable
+    surname-only signal without paying for another attribute on every search.
+
+    Order sorts on materialised properties rather than Sort-Object script blocks, because a
+    script block evaluated by Sort-Object cannot see $prefix from inside a class method.
+#>
+class AdSearchRank {
+    # Lower sorts first: displayName, then cn/name, then sam, then UPN, then surname-only.
+    static [int] Of([object]$row, [string]$prefix) {
+        if ($null -eq $row -or [string]::IsNullOrWhiteSpace($prefix)) { return 99 }
+        $p = $prefix.Trim()
+        $fields = @([string]$row.DisplayName, [string]$row.Name,
+            [string]$row.SamAccountName, [string]$row.UserPrincipalName)
+        for ($i = 0; $i -lt $fields.Count; $i++) {
+            if ($fields[$i].StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $i
+            }
+        }
+        return $fields.Count
+    }
+
+    # Rank first, then name, so a re-render never reshuffles rows under the cursor.
+    static [object[]] Order([object[]]$rows, [string]$prefix) {
+        $keyed = [System.Collections.Generic.List[object]]::new()
+        foreach ($r in $rows) {
+            $keyed.Add([pscustomobject]@{
+                    Rank = [AdSearchRank]::Of($r, $prefix)
+                    Tie  = "$([string]$r.DisplayName)|$([string]$r.SamAccountName)"
+                    Row  = $r
+                })
+        }
+        return @($keyed | Sort-Object Rank, Tie | ForEach-Object { $_.Row })
+    }
+}
+
 class AdFilter {
     static [int] $UF_ACCOUNTDISABLE = 0x0002
     static [int] $UF_LOCKOUT        = 0x0010
@@ -61,10 +110,11 @@ class AdFilter {
         return $sb.ToString()
     }
 
-    # Users: match the prefix against sam / cn / displayName / UPN (escaped).
+    # Users: match the prefix against sam / cn / displayName / UPN / sn (escaped). sn is
+    # explicit rather than via ANR, which would also drag in office and proxyAddresses.
     static [string] UserFilter([string]$prefix) {
         $p = [AdFilter]::EscapeLdap($prefix)
-        return "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)))"
+        return "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)(sn=$p*)))"
     }
 
     # Computers: match the prefix against name / sam (escaped).

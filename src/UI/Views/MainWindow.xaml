@@ -184,6 +184,30 @@
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Left"
                                    Margin="24,0,56,0" />
+                        <!-- Page switcher lives in the header, not the scrolling body, so it
+                             stays reachable at any scroll depth. Centered on the card, not
+                             right-aligned: it is the header's primary control, and the title
+                             and X already own the edges. -->
+                        <Border CornerRadius="8.4"
+                                Background="{DynamicResource Secondary}"
+                                Padding="3"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <UniformGrid Rows="1">
+                                <RadioButton x:Name="cmdGeneral"
+                                             Content="General"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                                <RadioButton x:Name="cmdScan"
+                                             Content="Scan"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                                <RadioButton x:Name="cmdApplyUpdates"
+                                             Content="Apply"
+                                             GroupName="cmd"
+                                             Style="{DynamicResource SegmentToggle}" />
+                            </UniformGrid>
+                        </Border>
                         <Button HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 Height="36"

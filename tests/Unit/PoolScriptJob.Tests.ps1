@@ -40,16 +40,32 @@ Describe "PoolScriptJob" {
         Remove-Item -Path $script:root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It "Start returns the @{ Ps; Handle } envelope and the script's output completes" {
+    It "Start returns the @{ Ps; Handle; StartedAt } envelope and the script's output completes" {
         $stub = New-Stub 'ok.ps1' "'pool-ok'"
         $job = [PoolScriptJob]::Start($stub, @{})
 
         $job.Ps | Should -Not -BeNullOrEmpty
         $job.Handle | Should -Not -BeNullOrEmpty
+        $job.StartedAt | Should -BeOfType [datetime]
         Wait-Until { $job.Handle.IsCompleted } | Should -BeTrue
 
         $result = [PoolScriptJob]::Complete($job, $null)
         @($result) -join '' | Should -Be 'pool-ok'
+    }
+
+    # StartedAt has to precede the script actually running, because the AD search breadcrumb
+    # reports (script start - StartedAt) as its queue span and that must never go negative.
+    It "stamps StartedAt no later than the moment the script begins running" {
+        $stub = New-Stub 'stamp.ps1' '[datetime]::UtcNow.Ticks'
+        $before = [datetime]::UtcNow
+        $job = [PoolScriptJob]::Start($stub, @{})
+
+        Wait-Until { $job.Handle.IsCompleted } | Should -BeTrue
+        $ticks = [long](@([PoolScriptJob]::Complete($job, $null)) -join '')
+        $ranAt = [datetime]::new($ticks, [System.DateTimeKind]::Utc)
+
+        $job.StartedAt | Should -BeGreaterOrEqual $before
+        $job.StartedAt | Should -BeLessOrEqual $ranAt
     }
 
     It "Start passes named parameters through to the script" {

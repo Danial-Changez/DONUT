@@ -276,6 +276,50 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- In-field clear (the X inside an input). Dim and inert when there is nothing to
+         clear, destructive on hover when there is, so the affordance encodes its own state. -->
+    <Style x:Key="fieldClearButton"
+           TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="6">
+                        <Path x:Name="glyph"
+                              Data="{DynamicResource xMark}"
+                              Width="9"
+                              Height="9"
+                              Stretch="Uniform"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Fill="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="glyph" Property="Fill" Value="{DynamicResource Destructive}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
+                        </Trigger>
+                        <!-- Nothing to clear: no hand cursor, no hover colour, just dim. -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="glyph" Property="Opacity" Value="0.35" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- destructive: bg-destructive text-white hover:bg-destructive/90 -->
     <Style x:Key="ButtonDestructive"
            TargetType="Button">

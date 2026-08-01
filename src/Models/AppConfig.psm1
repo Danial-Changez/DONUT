@@ -27,7 +27,7 @@ class AppConfig {
         recoveryWindowMinutes = 30
         # AD forests searched by the Home live-finder (separate forests; each is
         # queried independently). Editable; these are the org defaults.
-        domains               = @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
+        domains               = @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
         adminServiceHost      = 'sccm01.contoso.com'
         # Start elevated at logon (scheduled task), hide the X into the tray, and the
@@ -40,9 +40,6 @@ class AppConfig {
         runAsAdmin            = $true
         # In-app shortcut (only while DONUT is focused) to open Settings; blank disables.
         openSettingsShortcut  = 'Ctrl+,'
-        # Regex patterns that mark search text as a machine name (vs. a person), so the
-        # finder pre-selects "Add as a machine". Editable as naming conventions change.
-        machineNamePatterns   = @('^CAP-', '^B[0-9]{4}', '^WVD')
         # Set once the first-run guided tour is shown/skipped; the ? button replays it.
         hasSeenTour           = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
@@ -198,19 +195,7 @@ class AppConfig {
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($list.Count -gt 0) { return $list }
         }
-        return @('prod.contoso.com', 'forest-b.contoso.com', 'forest-c.local', 'forest-d.local')
-    }
-
-    # Regex patterns marking search text as a machine name. Tolerates the JSON round-trip
-    # (Object[]/strings) and falls back to the org defaults when absent/blank.
-    [string[]] GetMachineNamePatterns() {
-        $val = $this.GetSetting('machineNamePatterns', $null)
-        if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
-            $list = @($val | ForEach-Object { [string]$_ } |
-                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            if ($list.Count -gt 0) { return $list }
-        }
-        return @('^CAP-', '^B[0-9]{4}', '^WVD')
+        return @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
     }
 
     # SCCM AdminService host for the user Lens device lookup. Falls back to the org default.

@@ -83,9 +83,11 @@ Per-host IP resolves skip the pool entirely (`ResolveProcessJob` +
 `RunspaceManager` opens two pools:
 
 - The worker pool, sized to `throttleLimit` - what `AsyncJob` borrows from.
-- A small fixed interactive pool (`InteractiveSize = 3`) that `PoolScriptJob`
+- A small fixed interactive pool (`InteractiveSize = 4`) that `PoolScriptJob`
   uses for the in-process scripts a user is waiting on: AD search, the Lens
-  broker, unlock, the startup task.
+  broker, unlock, the startup task. Four, because the AD finder's fan-out is one
+  job per configured forest and the default is four; at 3 the last forest queued
+  on every search, not just under contention.
 
 They are separate because they starved each other: every worker job holds its
 runspace for the whole child-process lifetime, `RunAll` starts one per host with
@@ -101,6 +103,95 @@ enforced; it is now pool identity, not convention.
   organically through the deferred finder warms, as before.
 - If it fails to open, `GetInteractivePool` degrades to the worker pool rather
   than failing the app - the pre-split behaviour.
+
+### Concurrency has to beat its own overhead
+
+The interactive lane is small and shared, so fanning work across it is only worth
+it when a single leg is slower than the machinery around it. **The bar is 150 ms**,
+the agent serve loop's pass. Two decisions came out of applying it:
+
+- **The Lens owner lookup is one batched request, not one per machine.** The agent
+  answers it inline on that 150 ms loop, so N requests would cost N passes plus N
+  files, N AES round trips and N parent polls - slower than resolving them back to
+  back, while holding N of the four runspaces. Parent-side fan-out against a
+  serially-served agent buys no throughput at all.
+- **The bar cuts both ways, and it caught a change of its own.** The AD search
+  debounce was raised 100 -> 250 ms and its poll 60 -> 150 ms, on the theory that
+  typing re-fanned-out and the superseded shells held the lane (`AbortSearch`
+  cancels through `BeginStop`, which is asynchronous). Both are back at 100/60:
+  - The debounce charged every completed search a flat +150 ms - *above* the bar
+    the same change set - to avoid a cost that was argued rather than measured.
+  - The poll raise was simply wrong. `SearchPollTimer` starts only when a fan-out
+    begins and stops when the last leg lands, so it never ticks while idle and a
+    fast tick costs nothing; a slow one is dead time before the dropdown paints,
+    and it inflates the per-forest elapsed, which is taken when the poll *notices*
+    rather than when the job finished.
+
+  Raise the debounce again only on log evidence: the fan-out count per search and
+  the `(superseded)` marker are logged so the case can be made from numbers.
+
+**Cancelling the remaining forests once one answers is not on the table.** The
+forests hold disjoint populations and `RenderDropdown` applies no cap and no
+relevance ranking, so an early stop would drop real people from the result rather
+than trimming duplicate work - and make *which* people depend on which forest won
+the race, including the row `Enter` pre-selects. Cancel-on-supersede is the
+legitimate form of that idea, and `AbortSearch` already does it.
+
+Per-forest search times differ by forest and are stable, and the fan-out clearly earns
+its keep: serial would be the sum of every forest against the slowest one in parallel.
+
+### Reading the AD search breadcrumb
+
+A total alone cannot separate the directory from the machinery around it, so each leg
+logs the four spans that sum to it:
+
+```
+AD search forest-d.local 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
+```
+
+| Span | Covers | A large value points at |
+|---|---|---|
+| `queue` | dispatch -> the worker's first line | pool slot wait, or a `using module` compile because the warm missed that runspace |
+| `search` | `ActiveDirectoryService.Search` | the directory itself - compare against `tools\Measure-AdSearch.ps1` |
+| `rows` | the rest of the worker | `MapRow` plus building the result objects |
+| `notice` | worker done -> `PollSearch` sees it | poll granularity and cross-runspace marshalling |
+
+`AdSearchWorker.ps1` emits its start ticks, `Search` elapsed and end ticks as a single
+`AdTiming` record on the **Information** stream (the success stream is the typed row
+contract, and Warning already carries forest failures); `PoolScriptJob.Start` stamps the
+dispatch; `FinderPresenter.DescribeSearchTiming` does the arithmetic. Neither side of the
+runspace boundary can see all four, and both run in the same process on the same clock so
+there is no skew to correct. A leg with no record - superseded, or thrown - still logs its
+total.
+
+**Read `notice` across a whole fan-out, not one line at a time.** The first thing these
+spans found was that all four forests finished within 27ms of each other while their totals
+spread across 465ms - every bit of it in `notice`, because `PollSearch` re-rendered the
+dropdown per landed leg on the UI thread. It now renders **once per tick**, after folding
+every completed leg, and logs `AD dropdown render: N row(s) in Xms` so that cost is visible
+instead of hiding inside somebody else's `notice`. Rendering per leg is the shape to watch
+for: any UI-thread work inside a poll loop is charged to whichever job is unlucky enough to
+be read next. See [AD query rules](./ad-queries.md) for the full numbers.
+
+**A single render is still UI-thread work, so it still blocks the stragglers.** With the
+per-leg renders gone, `prod` finished its own work at 293ms and was not read until 673ms -
+it sat behind one 204ms render of the three forests that landed first. That render cost was
+~3ms a row and linear (2 rows 10ms, 20 rows 51ms, 45 rows 164ms, 55 rows 178ms), and it was
+neither WPF virtualization (the ListBox has a `MaxHeight`, so it virtualizes) nor PowerShell
+closures (measured at ~0.2ms a row). It was `SearchResults.Clear()` followed by an `Add` per
+row: **every `Add` on a bound `ObservableCollection` raises `CollectionChanged` and
+invalidates the ListBox layout**, so a 55-row render was 55 layout passes. `RenderDropdown`
+now builds the list first and hands it over in one `Set`, so the ListBox does a single reset.
+Never populate a bound collection item by item on a path a user is waiting on.
+
+Measured after the swap (log line `AD dropdown render: N drawn of M pooled in Xms`): the
+linear term is gone - ~55-70ms roughly flat whether 6 hits pooled or 72, with tiny renders
+(1-2 rows) at ~11ms. That is the fixed cost of the pipeline sorts, the view-model build and
+the single ListBox reset, and it sits **under the 150ms bar**, so it stays. The first render
+of a session runs ~200ms - the popup's visual tree instantiates on its first open, plus
+first-call JIT of the ranking path - and is a one-time cost, not a leak. The straggler
+forest still waits out one render plus one poll tick (~90-120ms of its `notice`); that is
+the streaming trade-off, not a defect.
 
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:

@@ -24,7 +24,7 @@
                  HorizontalAlignment="Left" VerticalAlignment="Center" />
       <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
               FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
-              ToolTip="Clear completed machines from the list" />
+              ToolTip="Remove settled rows" />
     </Grid>
 
     <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
@@ -77,16 +77,41 @@
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
-                             FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
-                             TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
+                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
+                    <!-- Whose machine this is, from SCCM affinity: "HOST (Danial C)". It
+                         collapses when SCCM has no primary user on record, and the tooltip
+                         (the full display name) fires only when it adds something. -->
+                    <TextBlock Text="{Binding OwnerName, StringFormat=({0})}"
+                               Foreground="{DynamicResource BodyTextTertiary}"
+                               FontFamily="{DynamicResource FontSans}" FontSize="12"
+                               VerticalAlignment="Center" Margin="8,1,0,0"
+                               ToolTip="{Binding OwnerTip}">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Visibility" Value="Visible" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding OwnerName}" Value="">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding OwnerTip}" Value="">
+                              <Setter Property="ToolTipService.IsEnabled" Value="False" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </StackPanel>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                             FontFamily="{DynamicResource FontMono}" FontSize="10.5" TextTrimming="CharacterEllipsis"
-                             ToolTip="{Binding Subtitle}" />
+                             FontFamily="{DynamicResource FontMono}" FontSize="10.5"
+                             TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
                 <!-- The card reads busy from the "Scanning..." chip; the live bar sits atop
                      the detail pane's terminal (DetailProgress), not here (declutter). -->
@@ -117,10 +142,15 @@
                                VerticalAlignment="Center" />
                   </StackPanel>
                 </Border>
+                <!-- No tooltip: the button says Run, and the mode pill says which. -->
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                         Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
-                        Padding="14,4" VerticalAlignment="Center"
-                        ToolTip="Run the active command on this machine" />
+                        Padding="14,4" VerticalAlignment="Center" />
+                <!-- Remove this one card (a running host toasts and stays). Same clear-X
+                     recipe as the settings shortcut fields, red on hover included. -->
+                <Button Grid.Column="4" Command="{Binding RemoveCommand}"
+                        Style="{DynamicResource fieldClearButton}" Margin="6,0,0,0"
+                        VerticalAlignment="Center" ToolTip="Remove from the list" />
               </Grid>
             </Border>
           </DataTemplate>
@@ -142,11 +172,13 @@
         <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
                    TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
-          <Run Text="1.  Add machines: paste names, then Enter." />
+          <Run Text="1.  Search a machine, then Enter adds the top match." />
           <LineBreak />
-          <Run Text="2.  Or search a name to open its Lens." />
+          <Run Text="2.  Paste several names to add them all at once." />
           <LineBreak />
-          <Run Text="3.  Run (or Run all) to scan or apply updates." />
+          <Run Text="3.  Or search a person to open their Lens." />
+          <LineBreak />
+          <Run Text="4.  Run (or Run all) to scan or apply updates." />
         </TextBlock>
       </StackPanel>
     </Grid>

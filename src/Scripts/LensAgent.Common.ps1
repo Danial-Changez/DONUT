@@ -18,6 +18,22 @@
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
     returns it, writing no partials and no result file.
 
+    Resolve-MachineOwnerBatch runs the affinity query the other way (machine -> primary user).
+    Unlike the person direction, which must use endswith because a UniqueUserName carries
+    a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
+    against the site this ships to. SCCM answers with an account name; SMS_R_User's
+    FullUserName (User Discovery's copy of displayName) then names the person. SCCM first
+    because it aggregates users from EVERY forest the site covers, while Find-Gc reads the
+    agent's own forest's GC and can never name a sibling-forest user - which is exactly how
+    owner chips shipped showing SAMs. The GC stays as the fallback for its one forest, and
+    the SAM stands in when both reads fail. Names memoize per agent session (OwnerNameCache).
+
+    It takes the WHOLE list in one request and resolves it serially, deliberately. The
+    serve loop below sleeps 150ms between passes, so N separate requests would cost N of
+    those sleeps plus N files, N AES round trips and N parent polls - more wall clock than
+    doing them back to back here, while holding N of the three interactive runspaces. Thread
+    jobs would only be worth it if one query got slow enough to be felt on its own.
+
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
     lookup logic here is unchanged from its previous inline home in LensAgent.ps1.
@@ -58,7 +74,7 @@ function Find-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
-    $s.PageSize = 200
+    # No PageSize: it only enables paging, and every caller here takes FindOne.
     [void]$s.PropertiesToLoad.Add('distinguishedName')
     return $s.FindOne()
 }
@@ -161,6 +177,101 @@ function Get-LensForestNc {
     return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 }
 
+# The affinity query run the other way: machine -> its primary user, same RBAC scope as the
+# person direction. A plain 'ResourceName eq' filter is served here - see .NOTES.
+$script:OwnerScript = {
+    param($server, $wsid)
+    $uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
+    [uri]::EscapeDataString("ResourceName eq '$wsid'") + "&`$select=UniqueUserName,ResourceName"
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+    if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+    return @((Invoke-RestMethod @p).value)
+}
+
+# Session memo for owner display names: the agent is persistent, users share machines,
+# and a name does not change mid-session, so each distinct owner is resolved once.
+$script:OwnerNameCache = @{}
+
+# UniqueUserName -> display name. SCCM first: SMS_R_User.FullUserName is User Discovery's
+# copy of displayName across EVERY forest the site covers - see .NOTES.
+function Get-OwnerDisplayName {
+    param([string]$uniqueUserName, [string]$sam, [string]$server)
+    $r = [ordered]@{ owner = ''; error = '' }
+    if ($script:OwnerNameCache.ContainsKey($uniqueUserName)) {
+        $r.owner = [string]$script:OwnerNameCache[$uniqueUserName]
+        return $r
+    }
+    try {
+        # endswith, not eq: the operator this AdminService is proven to serve on this
+        # attribute; the domain prefix keeps it effectively exact.
+        $uri = "https://$server/AdminService/wmi/SMS_R_User?`$filter=" +
+        [uri]::EscapeDataString("endswith(UniqueUserName,'$uniqueUserName')") +
+        "&`$select=FullUserName,UniqueUserName"
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        $rows = @((Invoke-RestMethod @p).value)
+        if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
+    }
+    catch { $r.error = "SCCM user: $($_.Exception.Message)" }
+    if (-not $r.owner) {
+        # The GC only covers the agent's own forest, so this can never name a user from
+        # a sibling forest - it stays as the fallback for the one forest it does cover.
+        try {
+            $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$sam))"
+            if ($hit) {
+                $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+                $r.owner = [string]$user.Properties['displayname'][0]
+            }
+        }
+        catch { $r.error = "AD user: $($_.Exception.Message)" }
+    }
+    # Only a found name is memoized, so a transient failure retries on the next batch.
+    if ($r.owner) { $script:OwnerNameCache[$uniqueUserName] = $r.owner }
+    return $r
+}
+
+# One machine -> "who normally uses it". SCCM affinity names the account, then
+# Get-OwnerDisplayName names the person; the SAM is the fallback when naming fails.
+function Get-MachineOwner {
+    param([string]$wsid, [string]$server)
+    $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
+    if (-not $wsid) { $out.error = 'no machine name'; return $out }
+    $unique = ''
+    try {
+        $rows = @(& $script:OwnerScript $server $wsid)
+        if ($rows.Count -eq 0) {
+            $out.error = "no primary user recorded for $wsid"
+            return $out
+        }
+        # Affinity can list several; the first is SCCM's own ordering, same as the Lens.
+        $unique = [string]$rows[0].UniqueUserName
+        $out.sam = ($unique -split '\\')[-1]
+    }
+    catch {
+        $out.error = "SCCM affinity: $($_.Exception.Message)"
+        return $out
+    }
+    $named = Get-OwnerDisplayName -uniqueUserName $unique -sam $out.sam -server $server
+    $out.owner = [string]$named.owner
+    if ($named.error) { $out.error = [string]$named.error }
+    # A SAM still tells them apart when the naming is what failed.
+    if (-not $out.owner) { $out.owner = $out.sam }
+    return $out
+}
+
+# The whole machine list in one request - see .NOTES for why this is not fanned out.
+function Resolve-MachineOwnerBatch {
+    param([string[]]$wsids, [string]$server)
+    $bundle = [ordered]@{ owners = @(); error = '' }
+    if (-not $server) {
+        $bundle.error = 'no AdminService host configured'
+        return ($bundle | ConvertTo-Json -Compress -Depth 4)
+    }
+    $rows = foreach ($wsid in @($wsids | Where-Object { $_ })) { Get-MachineOwner -wsid $wsid -server $server }
+    $bundle.owners = @($rows)
+    return ($bundle | ConvertTo-Json -Compress -Depth 4)
+}
+
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
 function Resolve-Lens {
     # "Lens" is singular; the rule misreads the trailing 's'.
@@ -186,9 +297,11 @@ function Resolve-Lens {
     # AD user (forest-wide GC -> home-domain bind).
     $sam = $samGuess
     $uFilter =
-    if ($identity -match '@') { "(&(objectClass=user)(userPrincipalName=$identity))" }
-    elseif ($identity -match '\s') { "(&(objectClass=user)(displayName=$identity))" }
-    else { "(&(objectClass=user)(sAMAccountName=$samGuess))" }
+    # objectCategory=person + objectClass=user is the canonical "users, not computers, not
+    # contacts" pair: objectClass=user alone also matches computers, which derive from it.
+    if ($identity -match '@') { "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))" }
+    elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+    else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
     try {
         $uHit = Find-Gc $uFilter
         if (-not $uHit) { throw "no AD user matched '$identity'." }
@@ -281,7 +394,7 @@ function Resolve-Lens {
             note = ''; bitLockerKeys = @()
         }
         try {
-            $cHit = Find-Gc "(&(objectClass=computer)(cn=$wsid))"
+            $cHit = Find-Gc "(&(objectCategory=computer)(cn=$wsid))"
             if ($cHit) {
                 $compDn = [string]$cHit.Properties['distinguishedname'][0]
                 $dev.domain = (($compDn -split ',' |

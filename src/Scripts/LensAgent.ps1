@@ -152,6 +152,13 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
+            # One request carries the whole machine list and answers inline: resolving them
+            # back to back here beats N requests through this loop's 150ms pass. See .NOTES.
+            if ([string]$req.kind -eq 'owner') {
+                $ownerJson = Resolve-MachineOwnerBatch -wsids @($req.machines) -server ([string]$req.siteServer)
+                Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $ownerJson
+                continue
+            }
             # Offload the lookup so a slow one never blocks the loop; fall back to inline if
             # the ThreadJob can't start, so a lookup is never silently dropped.
             $offloaded = $false

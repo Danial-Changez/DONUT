@@ -93,6 +93,27 @@ a future source (e.g. an Intune API) slots in beside the existing ones here:
 - **Note (interpolating a class into the path):** the URL builder writes
   `${class}?` with braces. `"$class?"` parses `class?` as the variable name, so
   the class vanishes from the path and the query matches nothing, silently.
+- **Note (the affinity query runs both ways):** the person direction filters
+  `endswith(UniqueUserName, sam)` because a `UniqueUserName` carries a domain
+  backslash. The machine direction (`Resolve-MachineOwnerBatch`, used for the name
+  on a machine card) filters `ResourceName eq '<wsid>'`, which this AdminService
+  serves. SCCM returns an account name; **`SMS_R_User.FullUserName` then names the
+  person** - User Discovery's copy of `displayName`, and the reason it comes first:
+  the site aggregates users from **every** forest, while `Find-Gc` reads the agent's
+  own forest's GC and can never name a sibling-forest user. That gap is exactly how
+  owner chips shipped showing SAMs. The GC stays as the fallback for its one forest,
+  the SAM stands in when both reads fail, and resolved names memoize per agent
+  session (`OwnerNameCache`) so a shared owner is named once. The card shows
+  `HOST (Danial C)` - first name + surname initial, full display name in the tooltip.
+- **The owner lookup is one batched request, not one per machine.** The serve loop
+  answers it inline and sleeps 150ms between passes, so N separate requests would
+  cost N sleeps plus N files, N AES round trips and N parent polls - slower than
+  resolving them back to back, while holding N of the four interactive runspaces.
+  Parent-side fan-out would buy no throughput against a serially-served agent.
+  `RecentConnectionsStore.UpsertOwner` caches the answer so it is asked once - except
+  a cached **one-token** owner (the SAM shape written before SCCM naming existed),
+  which still displays but is re-asked once per session so an old cache heals to the
+  real name instead of pinning the SAM forever.
 - A failed source degrades: each appends to the bundle's `errors` list and the
   lens still renders (blank hardware fields, missing keys noted per device).
 - The parse (`PersonLens.FromJson`) is pure and unit-tested; the agent/task I/O

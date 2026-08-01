@@ -992,23 +992,69 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     # Returns the host's row view-model, building and inserting a new one if needed.
-    [HostViewModel] EnsureRow([string]$hostName) {
+    [HostViewModel] EnsureRow([string]$hostName) { return $this.EnsureRow($hostName, '') }
+
+    # The 2-arg form seeds an already-known owner (e.g. the open Lens's person) before
+    # RequestOwners runs, so that add never re-queries the agent for a name on screen.
+    [HostViewModel] EnsureRow([string]$hostName, [string]$ownerDisplayName) {
         if ($this.Rows.ContainsKey($hostName)) {
-            return $this.Rows[$hostName]
+            $existing = $this.Rows[$hostName]
+            if ($ownerDisplayName -and -not $existing.OwnerName) {
+                $existing.SetOwner($ownerDisplayName)
+                $this.Store.UpsertOwner($hostName, $ownerDisplayName)
+            }
+            return $existing
         }
 
         $vm = [HostViewModel]::new($hostName)
+        if ($ownerDisplayName) {
+            $vm.SetOwner($ownerDisplayName)
+            $this.Store.UpsertOwner($hostName, $ownerDisplayName)
+        }
         $presenter = $this
         # Row commands close over the host name; Run = active command, double-click = gather.
         $run = { param($p) $presenter.RunHost($hostName) }.GetNewClosure()
         $gather = { param($p) $presenter.OnRowActivated($hostName) }.GetNewClosure()
+        $remove = { param($p) $presenter.RemoveMachine($hostName) }.GetNewClosure()
         $vm.RunCommand = [RelayCommand]::new([System.Action[object]]$run)
         $vm.GatherCommand = [RelayCommand]::new([System.Action[object]]$gather)
+        $vm.RemoveCommand = [RelayCommand]::new([System.Action[object]]$remove)
 
         $this.Rows[$hostName] = $vm
         $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
         $this.UpdateEmptyHint()
+        $this.RequestOwners()
         return $vm
+    }
+
+    # Fills "whose machine is this" from the recents cache, then asks the Lens agent for
+    # whatever is still missing - one batch for the whole list, never one call per row.
+    [void] RequestOwners() {
+        $wanted = @()
+        foreach ($name in @($this.Rows.Keys)) {
+            $vm = $this.Rows[$name]
+            if ($vm.OwnerName) { continue }
+            $cached = $this.Store.GetAll() | Where-Object { $_.Hostname -eq $name } | Select-Object -First 1
+            if ($cached -and $cached.Owner) {
+                $vm.SetOwner($cached.Owner)
+                # A one-token owner is usually a SAM cached before SCCM naming existed;
+                # keep showing it but re-ask once so an old cache heals to the real name.
+                if ($cached.Owner -match '\s') { continue }
+            }
+            $wanted += $name
+        }
+        if ($wanted.Count -eq 0 -or -not $this.Finder) { return }
+
+        $presenter = $this
+        $onResolved = {
+            param($map)
+            foreach ($machine in @($map.Keys)) {
+                $row = $presenter.GetRow([string]$machine)
+                if ($row) { $row.SetOwner([string]$map[$machine]) }
+                $presenter.Store.UpsertOwner([string]$machine, [string]$map[$machine])
+            }
+        }.GetNewClosure()
+        $this.Finder.ResolveOwners($wanted, $onResolved)
     }
 
     [HostViewModel] GetRow([string]$hostName) {
@@ -1079,19 +1125,37 @@ class HomePresenter : AsyncJobPresenter {
     # Removes idle (not currently running) machines from the list and recents.
     [void] ClearCompleted() {
         $toRemove = @($this.Rows.Keys | Where-Object { -not $this.IsRunning($_) })
+        foreach ($hostName in $toRemove) { $this.RemoveRowCore($hostName) }
+        $this.FinishRemoval()
+    }
 
-        foreach ($hostName in $toRemove) {
-            $row = $this.Rows[$hostName]
-            if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
-            $this.Rows.Remove($hostName)
-            $this.Store.Remove($hostName)
-            $this.Detail.RemoveHostLog($hostName)
-            # Drop queued work so a pending run/gather can't re-create the cleared card.
-            $this.PendingRuns.Remove($hostName)
-            $this.PendingGathers.Remove($hostName)
-            $this.ScanSteps.Remove($hostName)
-            if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
+    # The card's X: removes just this machine. A running host stays put - stopping its
+    # job out from under the worker is a different, deliberate action.
+    [void] RemoveMachine([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName) -or -not $this.Rows.ContainsKey($hostName)) { return }
+        if ($this.IsRunning($hostName)) {
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Still running - wait for the job to finish before removing.") }
+            return
         }
+        $this.RemoveRowCore($hostName)
+        $this.FinishRemoval()
+    }
+
+    # One machine out of the list, recents, and every queue that could resurrect it.
+    hidden [void] RemoveRowCore([string]$hostName) {
+        $row = $this.Rows[$hostName]
+        if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
+        $this.Rows.Remove($hostName)
+        $this.Store.Remove($hostName)
+        $this.Detail.RemoveHostLog($hostName)
+        # Drop queued work so a pending run/gather can't re-create the removed card.
+        $this.PendingRuns.Remove($hostName)
+        $this.PendingGathers.Remove($hostName)
+        $this.ScanSteps.Remove($hostName)
+        if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
+    }
+
+    hidden [void] FinishRemoval() {
         $this.UpdateEmptyHint()
         $this.Detail.RefreshOverview()
         $this.Store.FlushSave()

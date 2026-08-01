@@ -376,27 +376,6 @@ Describe "AppConfig" {
         }
     }
 
-    Context "GetMachineNamePatterns" {
-        It "Should default to the org machine-name patterns" {
-            [AppConfig]::Defaults.machineNamePatterns | Should -Contain '^CAP-'
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            $config.GetMachineNamePatterns() | Should -Contain '^CAP-'
-            $config.GetMachineNamePatterns() | Should -Contain '^WVD'
-        }
-        It "Should honor a custom list and drop blank entries" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
-                    machineNamePatterns = @('^LAB-', '', '  ')
-                })
-            $config.GetMachineNamePatterns() | Should -Be @('^LAB-')
-        }
-        It "Should fall back to defaults when the list is empty" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
-                    machineNamePatterns = @()
-                })
-            $config.GetMachineNamePatterns() | Should -Contain '^CAP-'
-        }
-    }
-
     Context "BuildDcuArgs" {
         It "Should build empty string when args are all empty or false" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{

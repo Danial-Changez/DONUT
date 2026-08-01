@@ -14,12 +14,21 @@ Describe "AdFilter.EscapeLdap" {
 }
 
 Describe "AdFilter filter construction" {
-    It "UserFilter matches sam/cn/displayName/UPN with the prefix" {
+    It "UserFilter matches sam/cn/displayName/UPN/sn with the prefix" {
         $f = [AdFilter]::UserFilter('sar')
-        foreach ($attr in 'sAMAccountName', 'cn', 'displayName', 'userPrincipalName') {
+        foreach ($attr in 'sAMAccountName', 'cn', 'displayName', 'userPrincipalName', 'sn') {
             $f | Should -Match ([regex]::Escape("$attr=sar*"))
         }
         $f | Should -Match ([regex]::Escape('(objectClass=user)'))
+    }
+
+    # sn is carried explicitly instead of via ANR, whose schema-level set would also match
+    # physicalDeliveryOfficeName and proxyAddresses and crowd real people out of the cap.
+    It "reaches a surname without pulling in ANR's office and proxy attributes" {
+        $f = [AdFilter]::UserFilter('sar')
+        $f | Should -Match ([regex]::Escape('sn=sar*'))
+        $f | Should -Not -Match 'anr='
+        $f | Should -Not -Match 'physicalDeliveryOfficeName|proxyAddresses'
     }
     It "ComputerFilter matches name/sam with the prefix" {
         $f = [AdFilter]::ComputerFilter('WS-01')
@@ -32,6 +41,89 @@ Describe "AdFilter filter construction" {
         $f | Should -Match ([regex]::Escape('(objectClass=user)'))         # user clause
         $f | Should -Match '^\(\|\('                                       # top-level OR
     }
+    It "escapes an injection attempt so no extra clause is injected" {
+        $f = [AdFilter]::UserFilter('a)(uid=*')
+        $f | Should -Match ([regex]::Escape('sAMAccountName=a\29\28uid=\2a'))
+        # the raw ')(' break-out must not survive
+        $f | Should -Not -Match ([regex]::Escape(')(uid='))
+    }
+}
+
+Describe "AdSearchRank" {
+    BeforeAll {
+        function New-Row([string]$display, [string]$name, [string]$sam, [string]$upn) {
+            return [pscustomobject]@{
+                DisplayName = $display; Name = $name
+                SamAccountName = $sam; UserPrincipalName = $upn
+            }
+        }
+    }
+
+    It "ranks a displayName match ahead of cn, sam and UPN" {
+        $display = New-Row 'Dan Okafor' 'Okafor' 'dokafor' 'dokafor@x'
+        $cn = New-Row 'Kim Roy' 'Dan Roy' 'kroy' 'kroy@x'
+        $sam = New-Row 'Kim Roy' 'Roy' 'danroy' 'kroy@x'
+        $upn = New-Row 'Kim Roy' 'Roy' 'kroy' 'danroy@x'
+
+        [AdSearchRank]::Of($display, 'dan') | Should -Be 0
+        [AdSearchRank]::Of($cn, 'dan') | Should -Be 1
+        [AdSearchRank]::Of($sam, 'dan') | Should -Be 2
+        [AdSearchRank]::Of($upn, 'dan') | Should -Be 3
+    }
+
+    # The whole point of the tier: sn is why the row came back, but people type first names.
+    It "puts a surname-only match last, since nothing visible explains it" {
+        $surname = New-Row 'Kim Danielson' 'Kim Danielson' 'kdanielson' 'kdanielson@x'
+        [AdSearchRank]::Of($surname, 'dan') | Should -Be 4
+    }
+
+    # A forest that stores cn as "Last, First" surfaces the surname in a field the finder
+    # already reads, so that row is a visible match and must not be demoted to the sn tier.
+    It "treats a 'Last, First' cn as the visible match it is" {
+        $lastFirst = New-Row 'Kim Danielson' 'Danielson, Kim' 'kdanielson' 'kdanielson@x'
+        [AdSearchRank]::Of($lastFirst, 'dan') | Should -Be 1
+    }
+
+    It "orders a mixed set strongest-match first" {
+        $rows = @(
+            (New-Row 'Kim Danielson' 'X' 'kd' 'kd@x'),      # surname only -> last
+            (New-Row 'Dan Okafor' 'Okafor' 'dok' 'dok@x'),  # displayName  -> first
+            (New-Row 'Kim Roy' 'Roy' 'danroy' 'kr@x')       # sam          -> middle
+        )
+        $ordered = [AdSearchRank]::Order($rows, 'dan')
+        @($ordered).Count | Should -Be 3
+        $ordered[0].DisplayName | Should -BeExactly 'Dan Okafor'
+        $ordered[1].SamAccountName | Should -BeExactly 'danroy'
+        $ordered[2].DisplayName | Should -BeExactly 'Kim Danielson'
+    }
+
+    # A redraw must not reshuffle rows under the cursor while the user is arrowing down.
+    It "breaks ties deterministically so a re-render keeps the same order" {
+        $rows = @(
+            (New-Row 'Dan Zephyr' 'Z' 'dz' 'dz@x'),
+            (New-Row 'Dan Abbott' 'A' 'da' 'da@x'),
+            (New-Row 'Dan Mbeki' 'M' 'dm' 'dm@x')
+        )
+        $first = @([AdSearchRank]::Order($rows, 'dan') | ForEach-Object { $_.DisplayName })
+        $again = @([AdSearchRank]::Order(($rows[2], $rows[0], $rows[1]), 'dan') |
+                ForEach-Object { $_.DisplayName })
+        $first -join ',' | Should -BeExactly 'Dan Abbott,Dan Mbeki,Dan Zephyr'
+        $again -join ',' | Should -BeExactly ($first -join ',')
+    }
+
+    It "is safe on a null row and an empty prefix" {
+        [AdSearchRank]::Of($null, 'dan') | Should -Be 99
+        [AdSearchRank]::Of((New-Row 'Dan' 'Dan' 'dan' 'dan@x'), '  ') | Should -Be 99
+        @([AdSearchRank]::Order(@(), 'dan')).Count | Should -Be 0
+    }
+
+    It "ignores case, so a typed prefix matches however the directory stored it" {
+        [AdSearchRank]::Of((New-Row 'DANIEL ROY' 'x' 'y' 'z'), 'dan') | Should -Be 0
+        [AdSearchRank]::Of((New-Row 'daniel roy' 'x' 'y' 'z'), 'DAN') | Should -Be 0
+    }
+}
+
+Describe "AdFilter escaping" {
     It "escapes an injection attempt so no extra clause is injected" {
         $f = [AdFilter]::UserFilter('a)(uid=*')
         $f | Should -Match ([regex]::Escape('sAMAccountName=a\29\28uid=\2a'))

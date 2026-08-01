@@ -84,6 +84,35 @@ try {
     $logger.LogInfo([BuildProvenance]::Stamp($srcRoot))
     [RunspaceManager]::SetLogger($logger)
 
+    # Hidden (tray) start: launcher sets $global:StartHidden; the dev path sets
+    # $global:TrayStart from Start-Donut.ps1's -Tray switch.
+    $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
+
+    # runAsAdmin, honoured here because the manifest is asInvoker - see .NOTES. As early as
+    # the config and logger allow: an instance about to hand over builds nothing it discards.
+    $limitedCapability = $false
+    if ($global:AppConfig.GetRunAsAdmin() -and -not [ElevationContext]::IsElevated()) {
+        if ($hidden) {
+            # A logon start must never throw a credential prompt at the sign-in screen, so
+            # autostart runs de-elevated and says so once the user surfaces the window.
+            $limitedCapability = $true
+            $logger.LogInfo('Autostarted de-elevated: elevating at logon would prompt for credentials.')
+        }
+        else {
+            $spawn = [ElevationRelaunch]::Spawn([ElevationRelaunch]::BuildSpec($srcRoot))
+            if ($spawn.Ok) {
+                $logger.LogInfo('Relaunching elevated; this instance is exiting before it builds anything.')
+                Close-Splash
+                return
+            }
+            # Deliberately does NOT write runAsAdmin: one declined prompt must not demote
+            # DONUT permanently. The gated actions still offer elevation all session.
+            $limitedCapability = $true
+            if ($spawn.Declined) { $logger.LogInfo('Elevation declined at startup; continuing de-elevated.') }
+            else { $logger.LogError("Could not elevate at startup: $($spawn.Reason)") }
+        }
+    }
+
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
     # RunspaceManager.Initialize raises the ThreadPool floor before it opens the pool
@@ -103,35 +132,6 @@ try {
     $networkProbe = [NetworkProbe]::new($logger)
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
-
-    # Hidden (tray) start: launcher sets $global:StartHidden; the dev path sets
-    # $global:TrayStart from Start-Donut.ps1's -Tray switch.
-    $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
-
-    # runAsAdmin, honoured here because the manifest is asInvoker - see .NOTES. Before the
-    # presenter, so an instance about to hand over never warms a pool it discards.
-    $limitedCapability = $false
-    if ($global:AppConfig.GetRunAsAdmin() -and -not [ElevationContext]::IsElevated()) {
-        if ($hidden) {
-            # A logon start must never throw a credential prompt at the sign-in screen, so
-            # autostart runs de-elevated and says so once the user surfaces the window.
-            $limitedCapability = $true
-            $logger.LogInfo('Autostarted de-elevated: elevating at logon would prompt for credentials.')
-        }
-        else {
-            $spawn = [ElevationRelaunch]::Spawn([ElevationRelaunch]::BuildSpec($global:AppConfig.SourceRoot))
-            if ($spawn.Ok) {
-                $logger.LogInfo('Relaunching elevated; this instance is exiting before it builds anything.')
-                Close-Splash
-                return
-            }
-            # Deliberately does NOT write runAsAdmin: one declined prompt must not demote
-            # DONUT permanently. The gated actions still offer elevation all session.
-            $limitedCapability = $true
-            if ($spawn.Declined) { $logger.LogInfo('Elevation declined at startup; continuing de-elevated.') }
-            else { $logger.LogError("Could not elevate at startup: $($spawn.Reason)") }
-        }
-    }
 
     # Build the main window (and warm the pool) before showing login: with no window
     # on screen the synchronous warm is just launch delay, not a frozen login modal.

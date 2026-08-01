@@ -140,6 +140,19 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
+    # Caches the machine's SCCM primary user. Written once and kept: affinity changes
+    # rarely, and re-asking on every render would be a round trip per card per paint.
+    [void] UpsertOwner([string]$hostname, [string]$owner) {
+        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
+        if ([string]::IsNullOrWhiteSpace($owner)) { return }
+        $name = $hostname.Trim()
+
+        $entry = $this.FindEntry($name)
+        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
+        $entry['owner'] = $owner
+        $this.CommitFront($entry, $name)
+    }
+
     # Merges a fresh "biggest folders" scan onto the host's entry without touching
     # its scan/apply status fields. Mirrors UpsertInventory.
     [void] UpsertDiskUsage([string]$hostname, [DiskUsageReport]$report) {
