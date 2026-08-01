@@ -5,15 +5,13 @@ using module "..\Core\LogService.psm1"
     Matches Dell Command Update results to installed drivers by brand/category.
 
 .DESCRIPTION
-    Pattern tables (brand, category, device-class) plus version comparison and
-    result formatting, used to enrich the update report with "what is this, and
-    is it newer than what's installed?" detail.
+    Pattern tables (brand, category) plus version comparison, used to enrich the
+    update report with "what is this, and is it newer than what's installed?"
+    detail.
 #>
 class DriverMatchingService {
     [hashtable] $BrandPatterns
     [hashtable] $CategoryPatterns
-    [hashtable] $CategoryMappings
-    [hashtable] $DeviceClassMappings
     [LogService] $Logger
 
     DriverMatchingService() {
@@ -61,28 +59,6 @@ class DriverMatchingService {
             "Application" = @("Application", "App")
             "Others"      = @("Others", "Other")
         }
-
-        # DCU report category -> standard category (used when parsing DCU XML reports)
-        $this.CategoryMappings = @{
-            "Audio"       = @("Audio", "MEDIA")
-            "Network"     = @("Network", "NET", "Docks/Stands")
-            "Graphics"    = @("Video", "DISPLAY", "Graphics")
-            "Application" = @("Application")
-            "BIOS"        = @("BIOS")
-            "Chipset"     = @("Chipset")
-            "Storage"     = @("Storage")
-            "Input"       = @("Input")
-            "Others"      = @("Others")
-        }
-
-        # Windows device class -> category (used with Win32_PnPSignedDriver)
-        $this.DeviceClassMappings = @{
-            "MEDIA"     = "Audio"
-            "NET"       = "Network"
-            "NETWORK"   = "Network"
-            "Bluetooth" = "Network"
-            "DISPLAY"   = "Graphics"
-        }
     }
 
     [string] DetectBrand([string]$manufacturer) {
@@ -103,24 +79,6 @@ class DriverMatchingService {
                     return $category
                 }
             }
-        }
-        return "Other"
-    }
-
-    # Maps a DCU report category string to a standard category name
-    [string] MapReportCategory([string]$reportCategory) {
-        foreach ($stdCategory in $this.CategoryMappings.Keys) {
-            if ($this.CategoryMappings[$stdCategory] -contains $reportCategory) {
-                return $stdCategory
-            }
-        }
-        return "Other"
-    }
-
-    # Maps Windows DeviceClass to standard category
-    [string] MapDeviceClass([string]$deviceClass) {
-        if ($this.DeviceClassMappings.ContainsKey($deviceClass)) {
-            return $this.DeviceClassMappings[$deviceClass]
         }
         return "Other"
     }
@@ -153,7 +111,7 @@ class DriverMatchingService {
             }
 
             # Provider/Brand match
-            $updateBrand = $this.DetectBrandFromName($updateName)
+            $updateBrand = $this.DetectBrand($updateName)
             $driverBrand = $this.DetectBrand($driverProvider)
             if ($updateBrand -eq $driverBrand -and $updateBrand -ne "Unknown") {
                 $score += 30
@@ -187,17 +145,6 @@ class DriverMatchingService {
         }
 
         return $null
-    }
-
-    [string] DetectBrandFromName([string]$name) {
-        foreach ($brand in $this.BrandPatterns.Keys) {
-            foreach ($pattern in $this.BrandPatterns[$brand]) {
-                if ($name -like "*$pattern*") {
-                    return $brand
-                }
-            }
-        }
-        return "Unknown"
     }
 
     [hashtable] CompareVersions([string]$installedVersion, [string]$updateVersion) {
@@ -234,33 +181,5 @@ class DriverMatchingService {
         }
 
         return $result
-    }
-
-    [string] FormatMatchResult([object]$match, [string]$updateName, [string]$updateVersion) {
-        if ($null -eq $match) {
-            return "No matching installed driver found for: $updateName"
-        }
-
-        $driver = $match.Driver
-        $comparison = $this.CompareVersions($driver.DriverVersion, $updateVersion)
-
-        $newerText = if ($comparison.IsNewer) { "[NEWER]" } else { "[SAME/OLDER]" }
-
-        return @"
-Update: $updateName ($updateVersion)
-Matched Driver: $($driver.DriverName)
-Category: $($match.Category) | Brand: $($match.Brand)
-Installed Version: $($driver.DriverVersion) -> Update: $updateVersion $newerText
-Match Score: $($match.Score)
-"@
-    }
-
-    # Normalizes application names for matching: strips a trailing 'Application',
-    # removes spaces, lowercases.
-    [string] NormalizeAppName([string]$name) {
-        if ([string]::IsNullOrEmpty($name)) { return "" }
-        $n = $name -replace '(?i)\s*Application$', ''
-        $n = $n -replace '\s+', ''
-        return $n.ToLowerInvariant()
     }
 }
