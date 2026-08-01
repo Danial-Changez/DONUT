@@ -20,9 +20,19 @@
         and endswith are proven; string eq has 404'd elsewhere), so EVERY step prints the
         shape it tried and whether the site served it. Those verdicts are what the real
         implementation gets built from.
+      - What Software Center offers, and from where: SMS_DeploymentSummary rows whose
+        CollectionID is one of the identity's collections - software name, Required vs
+        Available intent, deployment type, via which collection. Device collections drive
+        the machine's list, user collections the person's.
 
     An empty SCCM section with served shapes means RBAC hides those collections from this
     account - a different fact from a 404, and the output tells them apart.
+
+    Two honest limits on the software rows: Software Center's final list also passes
+    client-side requirement rules, so this is the OFFERED superset, not a per-device
+    install menu; and apps published only through Intune (true Company Portal deployments
+    on a co-managed device) live behind Microsoft Graph, not this AdminService - anything
+    the run cannot see there points at that boundary.
 
 .PARAMETER Name
     The machine (WSID) to look up.
@@ -215,17 +225,19 @@ function Invoke-AdminServiceProbe {
     }
 }
 
+# Prints the identity's collections and returns their IDs, which the deployments step
+# joins against - Software Center's list IS "deployments targeting collections you're in".
 function Show-SccmMembership {
     param([string]$label, [long]$resourceId)
     Write-Host "  Collections for $label (ResourceID $resourceId):" -ForegroundColor Cyan
     $m = Invoke-AdminServiceProbe -label "SMS_FullCollectionMembership ResourceID eq $resourceId" `
         -uri ("https://$SiteServer/AdminService/wmi/SMS_FullCollectionMembership?`$filter=" +
         [uri]::EscapeDataString("ResourceID eq $resourceId") + "&`$select=CollectionID")
-    if (-not $m.Ok) { return }
+    if (-not $m.Ok) { return @() }
     $ids = @($m.Rows | ForEach-Object { [string]$_.CollectionID } | Sort-Object -Unique)
     if ($ids.Count -eq 0) {
         Write-Host '  0 collections. With a served shape this usually means RBAC hides them from this account.' -ForegroundColor Yellow
-        return
+        return @()
     }
     # Names: keyed access first (proven pattern); the string filter tried once for the record.
     $eqTried = $false
@@ -240,6 +252,65 @@ function Show-SccmMembership {
                     -uri ("https://$SiteServer/AdminService/wmi/SMS_Collection?`$filter=" +
                     [uri]::EscapeDataString("CollectionID eq '$id'") + "&`$select=Name"))
         }
+    }
+    return $ids
+}
+
+$script:IntentNames = @{ 1 = 'Required'; 2 = 'Available'; 3 = 'Simulate' }
+$script:FeatureNames = @{ 1 = 'Application'; 2 = 'Program'; 3 = 'MobileProgram'; 4 = 'Script'
+    5 = 'SoftwareUpdate'; 6 = 'Baseline'; 7 = 'TaskSequence'; 8 = 'ContentDistribution'
+}
+
+# All deployments, fetched at most once per run - the fallback when a per-collection
+# server-side filter is not served, shared by the device and user directions.
+$script:AllDeployments = $null
+
+function Show-SccmDeployment {
+    param([string]$label, [string[]]$collectionIds)
+    if (@($collectionIds).Count -eq 0) { return }
+    Write-Host "  Software offered to $label (via its collections):" -ForegroundColor Cyan
+
+    $sel = '&$select=SoftwareName,CollectionID,CollectionName,DeploymentIntent,FeatureType'
+    $rows = @()
+    # Shape probe on the first collection: string eq server-side beats hauling everything.
+    $first = Invoke-AdminServiceProbe -label "SMS_DeploymentSummary CollectionID eq '$($collectionIds[0])' (string filter)" `
+        -uri ("https://$SiteServer/AdminService/wmi/SMS_DeploymentSummary?`$filter=" +
+        [uri]::EscapeDataString("CollectionID eq '$($collectionIds[0])'") + $sel)
+    if ($first.Ok) {
+        $rows = @($first.Rows)
+        foreach ($id in @($collectionIds | Select-Object -Skip 1)) {
+            $r = Invoke-AdminServiceProbe -label "SMS_DeploymentSummary CollectionID eq '$id'" `
+                -uri ("https://$SiteServer/AdminService/wmi/SMS_DeploymentSummary?`$filter=" +
+                [uri]::EscapeDataString("CollectionID eq '$id'") + $sel)
+            if ($r.Ok) { $rows += @($r.Rows) }
+        }
+    }
+    else {
+        # Fallback: one unfiltered fetch, joined client-side. Row count tells us whether
+        # that is a sane shape for the app or a probe-only crutch.
+        if ($null -eq $script:AllDeployments) {
+            $all = Invoke-AdminServiceProbe -label 'SMS_DeploymentSummary unfiltered (client-side join fallback)' `
+                -uri ("https://$SiteServer/AdminService/wmi/SMS_DeploymentSummary?" + $sel.TrimStart('&'))
+            $script:AllDeployments = if ($all.Ok) { @($all.Rows) } else { @() }
+        }
+        $wanted = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]]$collectionIds, [System.StringComparer]::OrdinalIgnoreCase)
+        $rows = @($script:AllDeployments | Where-Object { $wanted.Contains([string]$_.CollectionID) })
+    }
+
+    if ($rows.Count -eq 0) {
+        Write-Host '    No deployments target these collections (or RBAC hides them).' -ForegroundColor Yellow
+        return
+    }
+    $printed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($d in ($rows | Sort-Object SoftwareName)) {
+        if (-not $printed.Add("$($d.SoftwareName)|$($d.CollectionID)")) { continue }
+        $intent = $script:IntentNames[[int]$d.DeploymentIntent]
+        if (-not $intent) { $intent = "intent $($d.DeploymentIntent)" }
+        $feature = $script:FeatureNames[[int]$d.FeatureType]
+        if (-not $feature) { $feature = "type $($d.FeatureType)" }
+        Write-Host ("    {0,-45} {1,-10} {2,-14} via {3} ({4})" -f
+            [string]$d.SoftwareName, $intent, $feature, [string]$d.CollectionName, [string]$d.CollectionID)
     }
 }
 
@@ -270,7 +341,8 @@ if ($SiteServer) {
             [uri]::EscapeDataString("endswith(Name,'$Name')") + "&`$select=ResourceID,Name")
     }
     if ($dev.Ok -and @($dev.Rows).Count -gt 0) {
-        Show-SccmMembership -label "device $Name" -resourceId ([long]$dev.Rows[0].ResourceID)
+        $devCollections = Show-SccmMembership -label "device $Name" -resourceId ([long]$dev.Rows[0].ResourceID)
+        Show-SccmDeployment -label "device $Name" -collectionIds $devCollections
     }
     else { Write-Host "  Device $Name not resolvable over AdminService with either shape." -ForegroundColor Yellow }
 
@@ -279,7 +351,8 @@ if ($SiteServer) {
             -uri ("https://$SiteServer/AdminService/wmi/SMS_R_User?`$filter=" +
             [uri]::EscapeDataString("endswith(UniqueUserName,'$User')") + "&`$select=ResourceID,UniqueUserName")
         if ($u.Ok -and @($u.Rows).Count -gt 0) {
-            Show-SccmMembership -label "user $($u.Rows[0].UniqueUserName)" -resourceId ([long]$u.Rows[0].ResourceID)
+            $userCollections = Show-SccmMembership -label "user $($u.Rows[0].UniqueUserName)" -resourceId ([long]$u.Rows[0].ResourceID)
+            Show-SccmDeployment -label "user $($u.Rows[0].UniqueUserName)" -collectionIds $userCollections
         }
         else { Write-Host "  User $User not resolvable over AdminService." -ForegroundColor Yellow }
     }
@@ -291,3 +364,6 @@ Write-Host '  Every SCCM step names the filter shape it tried and whether this s
 Write-Host '  those verdicts, not assumptions, decide how the in-app queries get written.'
 Write-Host '  0 collections on a SERVED shape = RBAC hides them from this account; run non-elevated.'
 Write-Host '  The Nested timing decides whether the popup can afford an "include nested" option.' -ForegroundColor Yellow
+Write-Host '  Software rows are what deployments OFFER via collections; Software Center also applies'
+Write-Host '  client-side requirement rules, and Intune/Company-Portal-only apps come from Graph,'
+Write-Host '  not this AdminService - anything missing from a co-managed device points there.'
