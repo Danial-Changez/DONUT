@@ -22,6 +22,21 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# using module never reloads an already-imported module, so a session that has
+# run the suite (or the app) before an edit would test STALE classes silently.
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$stale = Get-Module | Where-Object {
+    $_.Path -and $_.Path.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+if ($stale) {
+    Write-Host "Repo modules already loaded in this session ($($stale.Name -join ', ')); relaunching in a clean pwsh..." -ForegroundColor Yellow
+    $quoted = @($Path | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ', '
+    $cmd = "& '$($PSCommandPath -replace "'", "''")' -Path @($quoted)"
+    if ($FailFast) { $cmd += ' -FailFast' }
+    & ([System.Environment]::ProcessPath) -NoProfile -Command $cmd
+    exit $LASTEXITCODE
+}
+
 . (Join-Path $PSScriptRoot 'Import-PinnedPester.ps1')
 
 $config = New-PesterConfiguration

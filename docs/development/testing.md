@@ -73,6 +73,12 @@ Before committing:
 - `tools/Invoke-Tests.ps1 -FailFast` stops the whole run at the first failing
   test (`Run.SkipRemainingOnFailure`). Use it for a tight fix-and-rerun loop;
   leave it off for CI and pre-push runs so every failure is visible.
+- **Stale classes:** `using module` never reloads a module the session already
+  imported, so a session that ran the suite before a `git pull` or edit would
+  keep testing the old classes from memory. The runner detects repo modules in
+  the session and relaunches itself in a clean child `pwsh` automatically; the
+  same applies to any ad-hoc snippet that touches product classes - run those
+  via `pwsh -NoProfile -File` rather than pasting into a long-lived terminal.
 
 ## Assertions
 
