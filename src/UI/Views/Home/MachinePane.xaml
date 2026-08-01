@@ -170,11 +170,13 @@
         <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
                    TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
-          <Run Text="1.  Add machines: paste names, then Enter." />
+          <Run Text="1.  Search a machine, then Enter adds the top match." />
           <LineBreak />
-          <Run Text="2.  Or search a name to open its Lens." />
+          <Run Text="2.  Paste several names to add them all at once." />
           <LineBreak />
-          <Run Text="3.  Run (or Run all) to scan or apply updates." />
+          <Run Text="3.  Or search a person to open their Lens." />
+          <LineBreak />
+          <Run Text="4.  Run (or Run all) to scan or apply updates." />
         </TextBlock>
       </StackPanel>
     </Grid>

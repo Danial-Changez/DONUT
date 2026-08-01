@@ -125,10 +125,6 @@
                         <DataTrigger Binding="{Binding IsHeader}" Value="True">
                           <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
-                        <!-- Add row shown but the text isn't a machine name: dim, still pickable. -->
-                        <DataTrigger Binding="{Binding Dim}" Value="True">
-                          <Setter Property="Opacity" Value="0.55" />
-                        </DataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                           <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
                         </Trigger>
@@ -146,20 +142,11 @@
                   </Border.InputBindings>
                   <Grid>
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="*" />
                       <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <!-- "+" badge for the Add-as-a-machine action row only -->
-                    <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6" Margin="0,0,10,0"
-                            VerticalAlignment="Center" Background="{DynamicResource PanelBackgroundActive}"
-                            Visibility="{Binding IsAction, Converter={StaticResource BoolToVis}}">
-                      <TextBlock Text="+" FontFamily="{DynamicResource FontSans}" FontSize="15" FontWeight="Bold"
-                                 Foreground="{DynamicResource AccentPurpleLight}"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock Text="{Binding Primary}" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                  Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis"
                                  ToolTip="{Binding Primary}" />
@@ -169,14 +156,14 @@
                     </StackPanel>
                     <!-- Grey utility (one tint per row - Unlock keeps it when shown):
                          opens the shell's temp-password reset overlay. -->
-                    <Button Grid.Column="2" Content="Reset..." Command="{Binding ResetCommand}"
+                    <Button Grid.Column="1" Content="Reset..." Command="{Binding ResetCommand}"
                             Style="{DynamicResource ButtonSecondary}" Height="32" FontSize="11"
                             VerticalAlignment="Center" Margin="0,0,6,0"
                             ToolTip="Set a temporary password"
                             Visibility="{Binding CanReset, Converter={StaticResource BoolToVis}}" />
                     <!-- The row's one action earns the tint (colour hierarchy); Outline is
                          reserved for low-emphasis navigation (tour Back). -->
-                    <Button Grid.Column="3" Content="Unlock" Command="{Binding UnlockCommand}"
+                    <Button Grid.Column="2" Content="Unlock" Command="{Binding UnlockCommand}"
                             Style="{DynamicResource ButtonTintPrimary}" Height="32" FontSize="11"
                             VerticalAlignment="Center"
                             ToolTip="Unlock this account"

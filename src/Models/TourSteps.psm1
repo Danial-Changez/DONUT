@@ -29,7 +29,7 @@ class TourSteps {
             }
             [TourStep]@{
                 Title     = 'Add machines - or find a person'
-                Body      = 'Type a machine name and press Enter to add it. Search a person instead and their Lens opens: their devices with model, service tag and BitLocker key, so you can tell three similar laptops apart.'
+                Body      = 'Search a machine and press Enter - the top match is added to the list (paste several names to add them all). Search a person instead and their Lens opens: their devices with model, service tag and BitLocker key, so you can tell three similar laptops apart.'
                 TargetKey = 'search'
                 Placement = 'below'
             }

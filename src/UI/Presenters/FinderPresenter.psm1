@@ -9,7 +9,6 @@ using module "..\..\Core\PoolScriptJob.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\PersonLens.psm1"
 using module "..\..\Models\AdSearchResult.psm1"
-using module "..\..\Models\MachineNameMatcher.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
@@ -54,12 +53,13 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     spread across 465ms, because each landed leg re-rendered the whole dropdown on the UI
     thread before the next was even read. PollSearch renders once per tick for that reason.
 
-    Enter prefers a real directory computer over the add row: a pattern prefix like "cap-"
-    used to pre-select Add, so Enter created a junk "cap-" card while the machines it was
-    a prefix OF sat one row below. Add is Enter's target only when AD matched nothing -
-    an unknown host, or a multi-host paste that OnSearch splits. A picked computer lands
-    on the machine pane directly (the pick is the add), and the popup stays open so one
-    prefix can yield several picks.
+    There is no "Add as a machine" row, and Enter can never fabricate a machine. It acts
+    on real rows only - the top-ranked computer when any matched, else the top user - so
+    a pattern prefix like "cap-" adds an actual CAP- machine instead of a junk "cap-"
+    card (the add row's failure mode that got it removed). The one non-row Enter is a
+    pasted list: 2+ tokens split on whitespace/commas go through OnSearch, which is how
+    several machines are added at once. A picked computer lands on the machine pane
+    directly (the pick is the add) and the dropdown closes, like a user pick.
 
     Cancelling the other forests once one answers would NOT be an optimization: the
     forests hold disjoint populations, so a cancelled forest's people never enter the pool
@@ -293,8 +293,8 @@ class FinderPresenter {
         }
     }
 
-    # Enter: a highlighted dropdown row acts as if clicked (computer -> added to the machine
-    # pane, user -> opens the Lens); otherwise the typed WSID(s) are added to the list.
+    # Enter: the highlighted row acts as if clicked; with no row, only a pasted list
+    # (2+ tokens) still adds - a single unmatched name adds nothing. See .NOTES.
     [void] CommitSelection() {
         if ($this.SearchPopup -and $this.SearchPopup.IsOpen -and $null -ne $this.ResultsList) {
             $sel = $this.ResultsList.SelectedItem
@@ -303,7 +303,8 @@ class FinderPresenter {
                 return
             }
         }
-        $this.Home.OnSearch()
+        $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
+        if (@($text -split '[\s,]+' | Where-Object { $_ }).Count -ge 2) { $this.Home.OnSearch() }
     }
 
     # Tears down the Lens agent via the pool worker so the UI never parse-loads
@@ -607,8 +608,8 @@ class FinderPresenter {
         $items.Add([SearchRowViewModel]::Header("+$hidden MORE - KEEP TYPING TO NARROW"))
     }
 
-    # Rebuilds the dropdown (add action first, then the ranked capped hits) and pre-selects
-    # what Enter does. Returns the drawn item count, which the cap divorces from the pool's.
+    # Rebuilds the dropdown from the ranked capped hits and pre-selects what Enter does.
+    # Returns the drawn item count, which the cap divorces from the pool's.
     [int] RenderDropdown() {
         $text = if ($this.SearchBar) { $this.SearchBar.Text.Trim() } else { '' }
         if ($text.Length -lt $this.AdService.MinPrefix) { $this.CloseSearchPopup(); return 0 }
@@ -622,17 +623,6 @@ class FinderPresenter {
         $computers = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'Computer' }), $text)
         $users = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'User' }), $text)
         $firstUserIndex = -1
-
-        # Machine-like = matches a naming pattern or an AD computer answers to exactly this
-        # name (so a real machine outside the patterns still leads with Add, un-dimmed).
-        $names = @($computers | ForEach-Object { [string]$_.Name })
-        $machineLike = [MachineNameMatcher]::LooksLikeMachine($text, $this.Config.GetMachineNamePatterns()) -or
-        [MachineNameMatcher]::AnyExactMatch($names, $text)
-
-        # Explicit add action, always first; a bare Enter still falls through to Add too.
-        $addRow = [SearchRowViewModel]::AddMachine($text, $machineLike)
-        $addRow.PickCommand = [RelayCommand]::new([System.Action[object]] { param($p) $presenter.Home.OnSearch() }.GetNewClosure())
-        $items.Add($addRow)
 
         $firstComputerIndex = -1
         if ($computers.Count -gt 0) {
@@ -669,15 +659,16 @@ class FinderPresenter {
             $this.AddOverflowHint($items, $users.Count)
         }
 
+        # Nothing matched: no popup shell, and Enter has nothing to act on - see .NOTES.
+        if ($items.Count -eq 0) { $this.CloseSearchPopup(); return 0 }
+
         # One Set, not Clear + N Adds: every Add on the bound collection raises
         # CollectionChanged and invalidates the ListBox layout - measured at ~3ms a row.
         $this.HomeVm.Set('SearchResults',
             [System.Collections.ObjectModel.ObservableCollection[object]]::new($items))
 
-        # Pre-select what Enter does: a real directory computer beats the add row, which is
-        # Enter's target only when AD matched nothing (unknown host, multi-host paste) - .NOTES.
-        $sel = if ($machineLike -and $firstComputerIndex -ge 0) { $firstComputerIndex }
-        elseif ($machineLike) { 0 }
+        # Pre-select what Enter does: the top-ranked computer, else the top user - .NOTES.
+        $sel = if ($firstComputerIndex -ge 0) { $firstComputerIndex }
         elseif ($firstUserIndex -ge 0) { $firstUserIndex }
         else { -1 }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
@@ -685,10 +676,11 @@ class FinderPresenter {
         return $items.Count
     }
 
-    # Computer chosen: straight onto the machine pane - the pick IS the add. The popup
-    # deliberately stays open so a sweep through "cap-" picks several without retyping.
+    # Computer chosen: straight onto the machine pane - the pick IS the add. Closes the
+    # dropdown like a user pick does; adding several machines is the paste path's job.
     [void] OnPickComputer([string]$name) {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
+        $this.CloseSearchPopup()
         $vm = $this.Home.EnsureRow($name)
         $this.Home.Resolution.PrefetchIp($name)
         $this.Home.StartInventory($name, $true)
