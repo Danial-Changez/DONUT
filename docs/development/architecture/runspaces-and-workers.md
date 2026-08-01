@@ -173,6 +173,17 @@ instead of hiding inside somebody else's `notice`. Rendering per leg is the shap
 for: any UI-thread work inside a poll loop is charged to whichever job is unlucky enough to
 be read next. See [AD query rules](./ad-queries.md) for the full numbers.
 
+**A single render is still UI-thread work, so it still blocks the stragglers.** With the
+per-leg renders gone, `prod` finished its own work at 293ms and was not read until 673ms -
+it sat behind one 204ms render of the three forests that landed first. That render cost was
+~3ms a row and linear (2 rows 10ms, 20 rows 51ms, 45 rows 164ms, 55 rows 178ms), and it was
+neither WPF virtualization (the ListBox has a `MaxHeight`, so it virtualizes) nor PowerShell
+closures (measured at ~0.2ms a row). It was `SearchResults.Clear()` followed by an `Add` per
+row: **every `Add` on a bound `ObservableCollection` raises `CollectionChanged` and
+invalidates the ListBox layout**, so a 55-row render was 55 layout passes. `RenderDropdown`
+now builds the list first and hands it over in one `Set`, so the ListBox does a single reset.
+Never populate a bound collection item by item on a path a user is waiting on.
+
 Interactive lookups also carry their own deadline. Pool separation stops the
 starvation, but no poll loop should be able to wait forever:
 `FinderPresenter.LensDeadline` (90 s, deliberately longer than

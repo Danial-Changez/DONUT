@@ -23,13 +23,15 @@ by `AdFilter` in `src/Models/AdSearchResult.psm1`) and the de-elevated Lens agen
   `(&(objectCategory=person)(objectClass=user)…)`, and both the finder and the agent use it.
   Computers are `(objectCategory=computer)`.
 - **Name the attributes.** `PropertiesToLoad` is always explicit, never a full-object read.
-- **Always bound the search - and leave headroom in the bound.** `SizeLimit` plus
+- **Always bound the search - and bound the *display* separately.** `SizeLimit` plus
   `ClientTimeout` on every searcher; the finder caps at `MaxPerDomain * 2`. An LDAP size cap
   truncates in **server order, not by relevance**, so a search that reaches its cap drops
-  people arbitrarily and the one you wanted has no better odds than anyone else. `prod` was
-  returning 16 of 16 for a three-letter prefix before `MaxPerDomain` went 8 -> 12. Widening
-  a filter without checking the cap makes the search quietly *worse*, because
-  `RenderDropdown` applies no ranking either.
+  people arbitrarily and the one you wanted has no better odds than anyone else. `prod` filled
+  16 of 16 for a three-letter prefix, then 24 of 24, so `MaxPerDomain` is now **25**
+  (`SizeLimit` 50). The two bounds do different jobs and must not be conflated: the LDAP cap
+  decides who is *considered*, `AdSearchRank` decides who is *shown*. Widening a filter
+  against a tight LDAP cap makes the search quietly worse; widening it against a generous one
+  costs only rows on the wire.
 - **Do not add `PageSize` to a capped search.** Setting it enables paging and makes
   `SizeLimit` be **ignored**, so a "small" type-ahead query would fetch the whole result set.
   `ServerPageTimeLimit` has no effect without it either, so it is not a way to bound a slow
@@ -94,6 +96,16 @@ measurement.
 
   Re-run the script if the filter changes: anything ANR still finds that `sn` does not is
   worth a look, and anything under *Only the current filter found* is a person it would lose.
+
+  **Adding `sn` moved a cost from recall to presentation, and that had to be paid too.**
+  A surname hit is worth having, but people type a first name far more often, so
+  `AdSearchRank` orders rows by where the prefix landed - `displayName`, then `cn`/`name`,
+  then `sAMAccountName`, then `userPrincipalName`, then surname-only last. That last tier is
+  **inferred rather than read**: `sn` is deliberately not in `PropertiesToLoad`, so a row
+  matching none of the four visible fields can only have arrived via the `sn` clause. It
+  costs nothing per search and needs no extra attribute. A forest that stores `cn` as
+  `Last, First` surfaces the surname in a field the finder already reads, and those rows
+  correctly rank as visible matches rather than being demoted.
 - **Referral chasing.** `DirectorySearcher.ReferralChasing` defaults to `External`. AD reaches
   child domains through subordinate references, so `None` is only safe where the hit count is
   unchanged. Fewer hits means referrals are load-bearing for a child domain and chasing stays

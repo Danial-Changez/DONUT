@@ -8,6 +8,7 @@ using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Core\PoolScriptJob.psm1"
 using module "..\..\Services\ActiveDirectoryService.psm1"
 using module "..\..\Models\PersonLens.psm1"
+using module "..\..\Models\AdSearchResult.psm1"
 using module "..\..\Models\MachineNameMatcher.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
@@ -101,6 +102,9 @@ class FinderPresenter {
     # Accumulated rows for the current token (forests stream in).
     [List[object]]    $SearchResults
     [HashSet[string]] $SearchSeen          # dedupe keys (Kind|Domain|Sam) for the current token
+    # Rows drawn per section. The popup shows ~8 at a time, so past this the rest is scroll
+    # nobody reads - and drawing it costs ~3ms a row on the UI thread.
+    [int]             $MaxDropdownRows = 15
     [bool]            $SuppressSearch = $false
     [List[hashtable]] $UnlockJobs          # in-flight @{ Ps; Handle; Upn }
     [DispatcherTimer] $UnlockPollTimer
@@ -564,6 +568,14 @@ class FinderPresenter {
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
+    # Says how many ranked rows the cap held back. A header row, so it reads as a hint and
+    # cannot be picked or selected by the arrow keys.
+    hidden [void] AddOverflowHint([object]$items, [int]$total) {
+        $hidden = $total - $this.MaxDropdownRows
+        if ($hidden -le 0) { return }
+        $items.Add([SearchRowViewModel]::Header("+$hidden MORE - KEEP TYPING TO NARROW"))
+    }
+
     # Rebuilds the dropdown: the "Add as a machine" action first, then the AD hits so far;
     # pre-selects the add row for a WSID or the top user otherwise. Called per keystroke.
     [void] RenderDropdown() {
@@ -576,8 +588,8 @@ class FinderPresenter {
         $items = [System.Collections.Generic.List[object]]::new()
 
         $raw = $this.SearchResults.ToArray()
-        $computers = @($raw | Where-Object { $_.Kind -eq 'Computer' })
-        $users = @($raw | Where-Object { $_.Kind -eq 'User' })
+        $computers = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'Computer' }), $text)
+        $users = [AdSearchRank]::Order(@($raw | Where-Object { $_.Kind -eq 'User' }), $text)
         $firstUserIndex = -1
 
         # Machine-like = matches a naming pattern or an AD computer answers to exactly this
@@ -593,18 +605,19 @@ class FinderPresenter {
 
         if ($computers.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('COMPUTERS'))
-            foreach ($c in $computers) {
+            foreach ($c in ($computers | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($c)
                 $cap = [string]$c.Name
                 $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
                 $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
                 $items.Add($vm)
             }
+            $this.AddOverflowHint($items, $computers.Count)
         }
         if ($users.Count -gt 0) {
             $items.Add([SearchRowViewModel]::Header('USERS'))
             $firstUserIndex = $items.Count   # the next item added is the first user row
-            foreach ($u in $users) {
+            foreach ($u in ($users | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($u)
                 # Clicking a user row opens the Lens (its directory + SCCM devices).
                 $capU = $u
@@ -620,10 +633,13 @@ class FinderPresenter {
                 }
                 $items.Add($vm)
             }
+            $this.AddOverflowHint($items, $users.Count)
         }
 
-        $this.HomeVm.SearchResults.Clear()
-        foreach ($item in $items) { $this.HomeVm.SearchResults.Add($item) }
+        # One Set, not Clear + N Adds: every Add on the bound collection raises
+        # CollectionChanged and invalidates the ListBox layout - measured at ~3ms a row.
+        $this.HomeVm.Set('SearchResults',
+            [System.Collections.ObjectModel.ObservableCollection[object]]::new($items))
 
         # Pre-select what Enter does: a machine (pattern or AD-confirmed) -> the add row; a
         # name -> the top user (opens the Lens, not a junk card); nothing -> clear (bare Enter adds).

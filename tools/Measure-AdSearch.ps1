@@ -123,7 +123,7 @@ function Invoke-Timed([string]$domain, [string]$filter, [string]$referral) {
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
         $searcher.Filter = $filter
-        $searcher.SizeLimit = 24          # ActiveDirectoryService MaxPerDomain * 2
+        $searcher.SizeLimit = 50          # ActiveDirectoryService MaxPerDomain * 2
         $searcher.ClientTimeout = [TimeSpan]::FromSeconds(10)
         $searcher.ReferralChasing = $referral
         foreach ($p in @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
@@ -166,7 +166,7 @@ function Get-IdentityRow([string]$domain, [string]$filter) {
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
         $searcher.Filter = $filter
-        $searcher.SizeLimit = 24          # the same MaxPerDomain * 2 the app caps at
+        $searcher.SizeLimit = 50          # the same MaxPerDomain * 2 the app caps at
         $searcher.ClientTimeout = [TimeSpan]::FromSeconds(10)
         $searcher.ReferralChasing = 'External'
         foreach ($p in $script:IdentityProps) { [void]$searcher.PropertiesToLoad.Add($p) }
@@ -183,7 +183,7 @@ function Get-IdentityRow([string]$domain, [string]$filter) {
             }
         }
         finally { $found.Dispose() }
-        return @{ Rows = $rows.ToArray(); Capped = ($rows.Count -ge 24) }
+        return @{ Rows = $rows.ToArray(); Capped = ($rows.Count -ge 50) }
     }
     catch { return @{ Error = $_.Exception.Message } }
     finally {
@@ -304,7 +304,7 @@ foreach ($p in $Prefix) {
 Write-Host ''
 $rows | Format-Table -AutoSize | Out-String -Width 160 | Write-Host
 
-Write-Host 'Which rows differ (untimed, ReferralChasing=External, same 24-row cap):' -ForegroundColor Cyan
+Write-Host 'Which rows differ (untimed, ReferralChasing=External, same 50-row cap):' -ForegroundColor Cyan
 foreach ($p in $Prefix) {
     $escaped = Get-EscapedPrefix $p
     foreach ($domain in $Domains) {
@@ -318,7 +318,7 @@ foreach ($p in $Prefix) {
         }
         Write-Host "$domain  '$p'   current $($cur.Rows.Count), anr $($anr.Rows.Count)"
         if ($cur.Capped -or $anr.Capped) {
-            Write-Host '  A side reached the 24-row cap, so this diff is truncated.' -ForegroundColor Yellow
+            Write-Host '  A side reached the 50-row cap, so this diff is truncated.' -ForegroundColor Yellow
         }
         Write-DiffSection -Title 'Only ANR found' -Left $anr.Rows -Right $cur.Rows -Prefix $p
         Write-DiffSection -Title 'Only the current filter found' -Left $cur.Rows -Right $anr.Rows -Prefix $p

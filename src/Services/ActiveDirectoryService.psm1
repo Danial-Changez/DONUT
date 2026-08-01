@@ -16,6 +16,13 @@ using module "..\Models\AdSearchResult.psm1"
     multi-domain aggregation / mapping / guard logic is unit-testable off a domain
     by subclassing and faking the seams.
 
+    MaxPerDomain is 25, so SizeLimit is 50. An LDAP size cap truncates in server order rather
+    than by relevance, so a tight bound silently drops people and the one you wanted has no
+    better odds than anyone else: a three-letter prefix filled 16 of 16 on the biggest forest,
+    then 24 of 24 after the first raise. This bound decides who is considered; AdSearchRank
+    and FinderPresenter.MaxDropdownRows decide who is drawn. Keep the two separate - widening
+    the filter against a tight cap here is what makes a search quietly worse.
+
     LastErrors exists because logging the per-forest failure is not enough: the usual
     caller is AdSearchWorker.ps1, which passes a null logger, so Coalesce turns that
     warning into a no-op and an unreachable forest looks identical to one that matched
@@ -27,9 +34,8 @@ class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()
     [int]        $MinPrefix = 3
-    # 12 (so SizeLimit is 24) because a three-letter prefix already returned 16 of 16 on the
-    # biggest forest, and an LDAP size cap truncates in server order, not by relevance.
-    [int]        $MaxPerDomain = 12
+    # Who is CONSIDERED, not who is shown (AdSearchRank decides that) - see .NOTES.
+    [int]        $MaxPerDomain = 25
     # Per-forest failures from the last Search, as "<domain>: <reason>" - see .NOTES.
     [string[]]   $LastErrors = @()
 
