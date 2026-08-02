@@ -1,3 +1,5 @@
+using module "..\Core\TimeFormat.psm1"
+
 <#
 .SYNOPSIS
     The action a de-elevated DONUT was asked to run, carried across an elevation restart.
@@ -83,23 +85,11 @@ class PendingIntent {
             $intent.Action = [GatedAction]$known[0]
             $intent.Hosts = @(@($h['hosts']) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
                     ForEach-Object { [string]$_ })
-            $intent.CreatedUtc = [PendingIntent]::NormalizeStamp($h['createdUtc'])
+            $intent.CreatedUtc = [TimeFormat]::NormalizeStamp($h['createdUtc'])
             return $intent
         }
         catch {
             return $null
         }
-    }
-
-    # ConvertFrom-Json sniffs ISO strings into [datetime]; a bare [string] cast then
-    # drops the zone marker and the instant shifts by the machine's UTC offset.
-    hidden static [string] NormalizeStamp($value) {
-        if ($value -is [System.DateTimeOffset]) { return $value.UtcDateTime.ToString('o') }
-        if ($value -isnot [datetime]) { return [string]$value }
-        # The field is UTC by contract, so an unzoned parse is taken as UTC.
-        if ($value.Kind -eq [System.DateTimeKind]::Unspecified) {
-            $value = [datetime]::SpecifyKind($value, [System.DateTimeKind]::Utc)
-        }
-        return $value.ToUniversalTime().ToString('o')
     }
 }
