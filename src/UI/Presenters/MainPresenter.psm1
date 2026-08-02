@@ -91,22 +91,8 @@ class MainPresenter {
     }
 
     [void] Initialize() {
-        $xamlPath = Join-Path $this.Config.SourceRoot "UI\Views\MainWindow.xaml"
-
-        if (-not (Test-Path $xamlPath)) {
-            throw "MainWindow.xaml not found at $xamlPath"
-        }
-
-        # Load XAML through a stream we explicitly dispose, so the .xaml file isn't
-        # left locked (and uneditable on disk) for the app's lifetime.
         try {
-            $stream = [System.IO.File]::OpenRead($xamlPath)
-            try {
-                $this.Window = [System.Windows.Markup.XamlReader]::Load($stream)
-            }
-            finally {
-                $stream.Dispose()
-            }
+            $this.Window = [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\MainWindow.xaml")
 
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.MainWindow = $this.Window

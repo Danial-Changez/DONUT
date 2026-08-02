@@ -4,6 +4,7 @@ using namespace Donut.Mvvm
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\LogService.psm1'
+using module '..\..\Core\ViewLoader.psm1'
 using module '..\..\Models\DeviceFlowDecision.psm1'
 using module '..\ViewModels\LoginViewModel.psm1'
 
@@ -170,19 +171,9 @@ class LoginPresenter {
     }
 
     [Window] LoadXaml([string]$FileName) {
-        $xamlPath = Join-Path -Path $PSScriptRoot -ChildPath "..\Views\$FileName"
-        if (-not (Test-Path $xamlPath)) {
-            $this.Logger.LogError("XAML file not found: $xamlPath")
-            return $null
-        }
-
         try {
-            $reader = [System.Xml.XmlReader]::Create($xamlPath)
-            $window = [System.Windows.Markup.XamlReader]::Load($reader)
-            $reader.Close()
-
+            $window = [ViewLoader]::Load($this.Resources.SourceRoot, "UI\Views\$FileName")
             $this.Resources.ApplyResourcesToWindow($window)
-
             return $window
         }
         catch {
