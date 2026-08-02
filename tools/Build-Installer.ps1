@@ -54,9 +54,17 @@ if (Test-Path (Join-Path $repo 'installer\bin')) {
 Write-Host "Building the MSI..." -ForegroundColor Cyan
 # Quoted as one token: the checkout path may carry spaces ("VS Programs"), and an
 # unquoted -p value truncates at the first one.
-dotnet build (Join-Path $repo 'installer\Donut.Installer.wixproj') -c Release -v quiet -nologo `
-    "-p:DonutVersion=$Version" "-p:StageDir=$stage"
+$buildOutput = dotnet build (Join-Path $repo 'installer\Donut.Installer.wixproj') -c Release -v quiet -nologo `
+    "-p:DonutVersion=$Version" "-p:StageDir=$stage" 2>&1
+$buildOutput | Write-Output
 if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE." }
+# Windows Installer policy (enterprise GPO, typically) can make WiX silently skip
+# ICE validation - the build stays green and the MSI ships unvalidated. Surface it.
+if ($buildOutput -match 'WIX1105') {
+    Write-Warning ('ICE validation was skipped by system policy (WIX1105): this MSI was NOT ' +
+        'validated on this machine. Package.wxs validates clean where policy allows; build ' +
+        'on such a machine when changing the installer.')
+}
 
 $msi = Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.msi' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
