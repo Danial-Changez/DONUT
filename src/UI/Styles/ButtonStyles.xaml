@@ -58,9 +58,12 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <!-- Control button icon. FlowDirection is pinned LTR: the control bar's button
-         stack is RightToLeft (the dock-right idiom) and Paths inherit it, which
-         mirrors every glyph - only the asymmetric ones (the tour's ?) show it. -->
+    <!-- Control button icon: a Lucide stroke outline taking the button's Foreground.
+         Thickness scales with size (Lucide native weight = size/12; instances that
+         raise Width raise StrokeThickness with it). FlowDirection is pinned LTR:
+         the control bar's button stack is RightToLeft (the dock-right idiom) and
+         Paths inherit it, which mirrors every glyph - only the asymmetric ones
+         (the tour's ?) show it. -->
     <Style x:Key="controlButtonIcon"
            TargetType="Path">
         <Setter Property="Width"
@@ -72,6 +75,16 @@
         <Setter Property="FlowDirection"
                 Value="LeftToRight" />
         <Setter Property="Fill"
+                Value="{x:Null}" />
+        <Setter Property="StrokeThickness"
+                Value="0.85" />
+        <Setter Property="StrokeStartLineCap"
+                Value="Round" />
+        <Setter Property="StrokeEndLineCap"
+                Value="Round" />
+        <Setter Property="StrokeLineJoin"
+                Value="Round" />
+        <Setter Property="Stroke"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
     </Style>
         <!-- Circular image button: hit area is the circle only -->
@@ -265,13 +278,18 @@
                               Width="9"
                               Height="9"
                               Stretch="Uniform"
+                              StrokeThickness="0.75"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              FlowDirection="LeftToRight"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center"
-                              Fill="{TemplateBinding Foreground}" />
+                              Stroke="{TemplateBinding Foreground}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="glyph" Property="Fill" Value="{DynamicResource Destructive}" />
+                            <Setter TargetName="glyph" Property="Stroke" Value="{DynamicResource Destructive}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Opacity" Value="0.85" />

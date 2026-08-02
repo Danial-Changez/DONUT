@@ -55,6 +55,7 @@
                                 ToolTip="Minimize">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Width="13"
+                                  StrokeThickness="1.08"
                                   Data="{DynamicResource Minimize}" />
                         </Button>
                     </StackPanel>
