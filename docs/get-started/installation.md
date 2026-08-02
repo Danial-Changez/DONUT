@@ -43,11 +43,9 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
      - `C:\ProgramData\DONUT` — the shared data root (config, logs, reports).
 
 :::caution[Why the exclusions?]
-DONUT's MSI is **self-signed** (signer `CN=Danial Changez`; the public cert is
-`installer\DonutCodeSigning.cer` — import it into a machine's *Trusted People /
-Trusted Publishers* to remove the unknown-publisher prompt), not CA-signed, so
-Defender may still quarantine it on sight. Both exclusions are scoped to DONUT's
-own folders.
+DONUT isn't digitally signed (pending an org-sanctioned certificate; the build
+script signs automatically once one is provisioned), so Defender may quarantine
+it on sight. Both exclusions are scoped to DONUT's own folders.
 
 The first one is also the one that costs you time if you skip it: `Donut.Launcher.exe`
 self-extracts its PowerShell tree to an `app\` folder beside the exe and runs from

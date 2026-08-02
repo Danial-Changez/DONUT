@@ -69,9 +69,12 @@ if ($buildOutput -match 'WIX1105') {
 $msi = Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.msi' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-# --- Signing (Set-AuthenticodeSignature cannot sign compound documents like MSI,
-# so this needs signtool; it bootstraps from the Windows SDK BuildTools NuGet
-# package into tools\.cache on first use, same pattern as ReportGenerator). ---
+# --- Signing. Policy: this script NEVER creates or imports a certificate - it
+# only reads one already provisioned in the user store through sanctioned
+# channels. Until one exists, builds are unsigned by design. (signtool is needed
+# because Set-AuthenticodeSignature cannot sign compound documents like MSI; it
+# bootstraps from the Windows SDK BuildTools NuGet package into tools\.cache on
+# first use, same pattern as ReportGenerator.) ---
 $cert = if (-not $SkipSigning) {
     Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
         Where-Object Subject -eq 'CN=Danial Changez' |
@@ -108,7 +111,7 @@ if ($cert) {
     }
 }
 else {
-    Write-Warning 'No CN=Danial Changez code-signing certificate in Cert:\CurrentUser\My - MSI is unsigned.'
+    Write-Host 'No signing certificate provisioned - building unsigned (expected until one is sanctioned).'
 }
 
 Write-Host "MSI built: $($msi.FullName)" -ForegroundColor Green
