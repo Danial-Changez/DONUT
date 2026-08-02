@@ -45,7 +45,7 @@ Describe "FolderNodeViewModel" {
         @([FolderNodeViewModel]::FromReport([DiskUsageReport]::new())).Count | Should -Be 0
     }
 
-    Context "tri-state clear selection" {
+    Context "clear selection" {
         BeforeEach {
             $script:roots = [FolderNodeViewModel]::FromReport((New-Report @(
                         @{ Path = 'C:\App';   Size = 10GB },
@@ -62,22 +62,35 @@ Describe "FolderNodeViewModel" {
             (@([FolderNodeViewModel]::CollectSelected($roots)).Path) | Should -Be 'C:\App'
         }
 
-        It "unchecking one child leaves the parent indeterminate and spares that child" {
+        It "checking a child never selects the parent - the tree shows only the largest folders" {
+            # The roll-up this replaces promoted "all visible children checked" to a checked
+            # parent, escalating one child's clear into the parent's entire on-disk contents.
+            $a = $app.Children | Where-Object { $_.Path -eq 'C:\App\a' }
+            $a.SetChecked($true)
+
+            $app.IsSelected | Should -BeFalse
+            (@([FolderNodeViewModel]::CollectSelected($roots)).Path) | Should -Be 'C:\App\a'
+        }
+
+        It "unchecking one child releases the checked parent and spares that child" {
             $app.SetChecked($true)
             ($app.Children | Where-Object { $_.Path -eq 'C:\App\a' }).SetChecked($false)
 
-            ($null -eq $app.IsSelected) | Should -BeTrue           # indeterminate
+            $app.IsSelected | Should -BeFalse
             ($app.Children | Where-Object { $_.Path -eq 'C:\App\a' }).IsSelected | Should -BeFalse
             # only the still-checked child is collected - the unchecked one is never cleared
             (@([FolderNodeViewModel]::CollectSelected($roots)).Path) | Should -Be 'C:\App\b'
         }
 
-        It "re-checking all children rolls the parent back to fully checked" {
+        It "re-checking the spared child collects both children, never the parent" {
             $app.SetChecked($true)
             $a = $app.Children | Where-Object { $_.Path -eq 'C:\App\a' }
             $a.SetChecked($false)
             $a.SetChecked($true)
-            $app.IsSelected | Should -BeTrue
+
+            $app.IsSelected | Should -BeFalse
+            (@([FolderNodeViewModel]::CollectSelected($roots)).Path | Sort-Object) |
+                Should -Be @('C:\App\a', 'C:\App\b')
         }
     }
 }

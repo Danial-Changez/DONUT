@@ -45,10 +45,11 @@ cleans up.
 ## Clearing folder contents
 
 Each folder row in the tree has a checkbox. Tick the ones you want to reclaim, then
-**Clear selected** in the card header. Checkboxes are hierarchical, like the Windows
-"Turn Windows features on or off" list: checking a parent checks every clearable folder
-under it, and unchecking one child leaves the parent half-filled (indeterminate) and
-spares that child — so you can clear most of a folder while keeping specific subfolders.
+**Clear selected** in the card header. Checking a parent checks every clearable folder
+shown under it; unchecking one child un-ticks the parent and spares that child (its
+still-ticked siblings are cleared individually) — so you can clear most of a folder
+while keeping specific subfolders. Ticking a child never selects its parent: the tree
+only shows the largest folders, and a parent holds more on disk than the rows you see.
 DONUT shows a confirmation dialog listing the folders and their combined size before
 anything is removed — the operation **clears each
 folder's contents but keeps the folder itself** (so a cache like `ccmcache` is emptied, not

@@ -4,14 +4,18 @@ using module "..\..\Models\FolderDeletionPolicy.psm1"
 
 <#
 .SYNOPSIS
-    Display-ready node for the largest-folders TreeView, with tri-state clear selection.
+    Display-ready node for the largest-folders TreeView, with explicit clear selection.
 
 .DESCRIPTION
     Wraps a FolderTreeNode with the values the HierarchicalDataTemplate binds (Label, SizeText,
     Path, Depth, IsRoot, Children) plus the clear-selection state: IsDeletable gates the checkbox,
-    and IsSelected is a tri-state (true / false / null) that rolls up and down the tree like the
-    Windows "Turn Windows features on/off" list - checking a parent checks every deletable
-    descendant; unchecking one child leaves the parent indeterminate and spares that child.
+    and a checked folder means "clear THIS folder's contents" - checking one also checks every
+    deletable descendant shown under it. Selection never travels upward: the tree shows only the
+    largest folders, so a parent's visible children are not its whole contents, and a roll-up
+    that promoted "all visible children checked" to a checked parent once escalated a single
+    child's clear into clearing the parent's entire on-disk contents. Unchecking a child instead
+    releases any checked ancestor (it no longer covers the spared child); the ancestor's other
+    checked descendants stay selected individually.
 
 .NOTES
     An ObservableObject so cascaded selection changes notify the bound checkboxes. The cascade
@@ -25,8 +29,8 @@ class FolderNodeViewModel : ObservableObject {
     [int]      $Depth = 0
     [bool]     $IsRoot = $false
     [bool]     $IsDeletable = $false   # gates the checkbox (FolderDeletionPolicy)
-    [object]   $IsSelected = $false    # tri-state: $true / $false / $null (indeterminate)
-    [object]   $Parent = $null         # set by FromNodes; drives the tri-state roll-up
+    [bool]     $IsSelected = $false
+    [object]   $Parent = $null         # set by FromNodes; walked when a child is spared
     [object[]] $Children = @()
 
     # Root display nodes for a report (empty for a null/empty report).
@@ -55,13 +59,20 @@ class FolderNodeViewModel : ObservableObject {
         return $out.ToArray()
     }
 
-    # --- Tri-state clear selection ---
+    # --- Clear selection ---
 
-    # The user (un)checked this node: cascade the value to every deletable descendant, then roll
-    # the tri-state up the ancestors. Idempotent, so the presenter can relay a click blindly.
+    # The user (un)checked this node: cascade the value to every deletable descendant.
+    # Unchecking also releases any checked ancestor - see .DESCRIPTION. Idempotent,
+    # so the presenter can relay a click blindly.
     [void] SetChecked([bool]$value) {
         $this.CascadeDown($value)
-        if ($null -ne $this.Parent) { $this.Parent.RollUp() }
+        if (-not $value) {
+            $p = $this.Parent
+            while ($null -ne $p) {
+                if ($p.IsSelected) { $p.Set('IsSelected', $false) }
+                $p = $p.Parent
+            }
+        }
     }
 
     hidden [void] CascadeDown([bool]$value) {
@@ -69,35 +80,13 @@ class FolderNodeViewModel : ObservableObject {
         foreach ($c in $this.Children) { $c.CascadeDown($value) }
     }
 
-    # Recompute this node's tri-state from its deletable descendants (all checked -> checked,
-    # none -> unchecked, mixed -> indeterminate), then bubble up to the parent.
-    hidden [void] RollUp() {
-        $desc = @($this.DeletableDescendants())
-        if ($this.IsDeletable -and $desc.Count -gt 0) {
-            $checked = @($desc | Where-Object { $_.IsSelected -eq $true }).Count
-            if ($checked -eq 0) { $this.Set('IsSelected', $false) }
-            elseif ($checked -eq $desc.Count) { $this.Set('IsSelected', $true) }
-            else { $this.Set('IsSelected', $null) }
-        }
-        if ($null -ne $this.Parent) { $this.Parent.RollUp() }
-    }
-
-    hidden [object[]] DeletableDescendants() {
-        $out = [System.Collections.Generic.List[object]]::new()
-        foreach ($c in $this.Children) {
-            if ($c.IsDeletable) { $out.Add($c) }
-            $out.AddRange([object[]]@($c.DeletableDescendants()))
-        }
-        return $out.ToArray()
-    }
-
-    # Top-most fully-checked (IsSelected == $true) deletable nodes: a $true node covers its whole
-    # subtree, while an indeterminate parent yields only its checked children (unchecked ones spared).
+    # Top-most checked deletable nodes: a checked node clears its whole subtree, so its
+    # descendants are not listed separately.
     static [FolderNodeViewModel[]] CollectSelected([object[]]$nodes) {
         $out = [System.Collections.Generic.List[FolderNodeViewModel]]::new()
         foreach ($n in @($nodes)) {
             if ($null -eq $n) { continue }
-            if ($n.IsDeletable -and $n.IsSelected -eq $true) { $out.Add($n) }
+            if ($n.IsDeletable -and $n.IsSelected) { $out.Add($n) }
             elseif ($n.Children) { $out.AddRange([FolderNodeViewModel]::CollectSelected($n.Children)) }
         }
         return $out.ToArray()

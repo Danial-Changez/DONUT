@@ -55,7 +55,7 @@ class InventoryPresenter {
 
     [hashtable] $LogBuffers   # hostname -> List[LogLine] of accumulated job-log lines
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail ListBox
-    hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder tri-state cascade
+    hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder selection cascade
     # A probe fresher than this is reused instead of re-gathered (non-forced calls).
     [timespan] $InventoryTtl = [timespan]::FromMinutes(3)
 
@@ -130,7 +130,7 @@ class InventoryPresenter {
         }
     }
 
-    # Relays a folder checkbox toggle into the node's tri-state cascade (guarded against the
+    # Relays a folder checkbox toggle into the node's selection cascade (guarded against the
     # PropertyChanged echo the cascade itself raises). Pure tree logic lives on the node.
     [void] OnFolderCheckToggled([System.Windows.RoutedEventArgs]$e) {
         if ($this.CascadingChecks) { return }
