@@ -46,8 +46,12 @@ class RunspaceManager {
         }
     }
 
+    # Lazy-init fallback for GetPool/GetInteractivePool when nothing configured the
+    # pool first. min = max, same invariant as the composition root: idle cleanup
+    # only disposes above the minimum, and a smaller floor lets warmed runspaces
+    # die and cold-load.
     static [void] Initialize() {
-        [RunspaceManager]::Initialize(1, 5)
+        [RunspaceManager]::Initialize(5, 5)
     }
 
     static [void] Initialize([int]$MinRunspaces, [int]$MaxRunspaces) {
