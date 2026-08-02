@@ -90,20 +90,18 @@ class SettingsPresenter {
 
     [void] LoadSettingsView([string] $viewName) {
         $fileName = "${viewName}View.xaml"
-        $path = Join-Path $this.Config.SourceRoot "UI\Views\Settings\$fileName"
+        # No disk pre-check: hosted runs serve the view from the embedded copy, where
+        # a Test-Path would wrongly skip it. ViewLoader throws on a truly missing view.
+        try {
+            $this.CurrentSettingsView = [ViewLoader]::Load(
+                $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
 
-        if (Test-Path $path) {
-            try {
-                $this.CurrentSettingsView = [ViewLoader]::Load(
-                    $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
-
-                $this.SettingsContent.Content = $this.CurrentSettingsView
-                $this.CurrentSection = $viewName
-                $this.PopulateFields()
-            }
-            catch {
-                $this.Logger.LogException("Failed to load option view $fileName", $_)
-            }
+            $this.SettingsContent.Content = $this.CurrentSettingsView
+            $this.CurrentSection = $viewName
+            $this.PopulateFields()
+        }
+        catch {
+            $this.Logger.LogException("Failed to load option view $fileName", $_)
         }
     }
 

@@ -171,6 +171,15 @@ static class Program
                       name.StartsWith("res/", StringComparison.Ordinal)))
                     continue;
 
+                // XAML never touches disk: ViewLoader/ResourceService read it from this
+                // assembly (EmbeddedAssets). Only what MUST be a file is extracted - the
+                // PowerShell graph (using module / worker children / the LensAgent task
+                // resolve real paths), tools, fonts and images. PruneUnknown clears any
+                // xaml an older build extracted.
+                if (name.StartsWith("src/", StringComparison.Ordinal) &&
+                    name.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 string rel = name.Replace('/', Path.DirectorySeparatorChar)
                                  .Replace('\\', Path.DirectorySeparatorChar);
                 string dest = Path.Combine(root, rel);
