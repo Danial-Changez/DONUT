@@ -112,6 +112,11 @@ Describe "DiskUsageFormat.SizeLabel" {
         [DiskUsageFormat]::SizeLabel(524288000) | Should -Be '500 MB'
         [DiskUsageFormat]::SizeLabel(1048576)   | Should -Be '1 MB'
     }
+    It "formats < 1 MB as KB, never a 0 MB row" {
+        [DiskUsageFormat]::SizeLabel(524288) | Should -Be '512 KB'
+        [DiskUsageFormat]::SizeLabel(1024)   | Should -Be '1 KB'
+        [DiskUsageFormat]::SizeLabel(0)      | Should -Be '0 KB'
+    }
 }
 
 Describe "DiskUsageTree.BuildNested" {

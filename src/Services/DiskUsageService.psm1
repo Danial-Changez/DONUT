@@ -10,8 +10,8 @@ using module ".\RemoteServices.psm1"
 
 .DESCRIPTION
     A WizTree MFT scan that runs on the remote host (deployed and executed by the
-    worker's RunDiskScanPhase), exports a size-ranked folder CSV that is trimmed
-    to the top rows on the target before the copy-back, then parsed into a
+    worker's RunDiskScanPhase), exports a folder CSV whose N largest rows are
+    selected on the target before the copy-back, then parsed into a
     [DiskUsageReport]. Mirrors InventoryService - subclasses RemoteJobService,
     reusing BuildWorkerArgs. Heavier than the inventory probe, so it is triggered
     on demand rather than on every scan/apply.

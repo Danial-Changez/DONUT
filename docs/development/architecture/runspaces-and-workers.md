@@ -402,7 +402,8 @@ Only the warm shells + the DC warm touch the pool at boot:
   line by line on the pool thread; the earlier `-Raw` + `-split` +
   `ConvertFrom-Csv` pass materialized a giant string, a line array, and a
   `PSObject` per row, and the resulting gen-2 GCs suspended the UI thread right
-  as a disk scan finished. The export is now also trimmed to the top rows on the
-  target itself (it arrives size-descending via `/sortby=1`), so the ~40 MB full
-  export never crosses SMB; the streaming parser stays as the quoting authority
-  over whatever arrives.
+  as a disk scan finished. The target itself now streams the export once and
+  keeps only the N largest rows (the export is tree-ordered, so a simple head
+  trim would walk one big branch - see `BuildScanCommand`); the ~40 MB full
+  export never crosses SMB, and the streaming parser stays as the quoting
+  authority over whatever arrives.

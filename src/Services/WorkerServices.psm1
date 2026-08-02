@@ -756,18 +756,55 @@ foreach (`$t in `$targets) {
         }
     }
 
-    # The headless WizTree command: fast MFT scan of C:, folders only, size-sorted
-    # CSV. /sortby=1 is size DESCENDING, so the export's first rows are the top N;
-    # the trim keeps them (plus a margin for the banner/header/volume-root lines the
-    # parser skips) and only that small file ever crosses SMB - the full export ran
-    # ~40 MB per scan. TotalCount never reads past the kept lines, so the trim is
-    # instant on the target, and the big export is deleted rather than left behind.
+    # The headless WizTree command: fast MFT scan of C:, folders only. The export is
+    # TREE-ordered (depth-first; /sortby=1 only orders siblings), so a head trim
+    # walks down the one biggest branch instead of ranking the drive - the loop
+    # below streams the whole export once and keeps the cap largest rows. Size sits
+    # directly after the quoted path (column order: File Name, Size, Allocated, ...)
+    # and a Windows path can never contain a quote, so IndexOf('",') splits without
+    # CSV parsing; winners keep their original text, so the controller-side parser
+    # stays the quoting authority. Only those rows cross SMB (~KB, was ~40 MB) and
+    # the full export is deleted, not left behind. A /filter=">=size" export was
+    # considered and rejected: whether it filters on folder AGGREGATE size is
+    # undocumented, and it returns short lists on low-usage disks.
     # Isolated here so a pure-PowerShell fallback would be a single-method swap.
     static [string] BuildScanCommand([int]$topN) {
-        $keep = [Math]::Max($topN, 1) + 8
+        # +1: the volume-root row always wins a slot and the local parser drops it.
+        $cap = [Math]::Max($topN, 1) + 1
         return @"
 & 'C:\temp\DONUT\wiztree64.exe' "C:" /export="C:\temp\DONUT\folders.csv" /admin=1 /exportfolders=1 /exportfiles=0 /sortby=1 /exportmaxdepth=4 | Out-Null
-Get-Content 'C:\temp\DONUT\folders.csv' -TotalCount $keep | Set-Content 'C:\temp\DONUT\folders-top.csv'
+`$head = [Collections.Generic.List[string]]::new()
+`$sizes = [Collections.Generic.List[long]]::new()
+`$rows = [Collections.Generic.List[string]]::new()
+`$min = [long]::MaxValue
+`$inData = `$false
+foreach (`$line in [IO.File]::ReadLines('C:\temp\DONUT\folders.csv')) {
+    if (-not `$inData) {
+        `$head.Add(`$line)
+        if (`$line -match 'File Name') { `$inData = `$true }
+        elseif (`$head.Count -ge 16) { break }
+        continue
+    }
+    `$q = `$line.IndexOf('",')
+    if (`$q -lt 1) { continue }
+    `$size = 0L
+    if (-not [long]::TryParse(`$line.Substring(`$q + 2).Split(',')[0], [ref]`$size)) { continue }
+    if (`$rows.Count -lt $cap) {
+        `$sizes.Add(`$size)
+        `$rows.Add(`$line)
+        if (`$size -lt `$min) { `$min = `$size }
+        continue
+    }
+    if (`$size -le `$min) { continue }
+    `$evict = 0
+    for (`$i = 1; `$i -lt `$sizes.Count; `$i++) { if (`$sizes[`$i] -lt `$sizes[`$evict]) { `$evict = `$i } }
+    `$sizes[`$evict] = `$size
+    `$rows[`$evict] = `$line
+    `$min = [long]::MaxValue
+    foreach (`$s in `$sizes) { if (`$s -lt `$min) { `$min = `$s } }
+}
+`$order = if (`$rows.Count -gt 0) { 0..(`$rows.Count - 1) | Sort-Object { `$sizes[`$_] } -Descending } else { @() }
+[IO.File]::WriteAllLines('C:\temp\DONUT\folders-top.csv', [string[]](@(`$head) + @(foreach (`$i in `$order) { `$rows[`$i] })))
 Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
 "@
     }

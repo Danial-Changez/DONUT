@@ -250,8 +250,9 @@ class DiskUsageTree {
 
 # Pure formatting for the big-folders list rows. Static, WPF-free, tested.
 class DiskUsageFormat {
-    # Human-readable size: GB at >= 1 GB, otherwise MB (1 decimal, InvariantCulture).
-    # Reuses the 1024^3 GB convention from InventoryFormat.DiskFreeLabel.
+    # Human-readable size: GB at >= 1 GB, MB at >= 1 MB, otherwise KB - never a
+    # "0 MB" row (1 decimal, InvariantCulture). Reuses the 1024^3 GB convention
+    # from InventoryFormat.DiskFreeLabel.
     static [string] SizeLabel([long]$bytes) {
         $ci = [System.Globalization.CultureInfo]::InvariantCulture
         $gb = 1073741824.0   # 1024^3
@@ -260,7 +261,11 @@ class DiskUsageFormat {
             $v = [Math]::Round($bytes / $gb, 1)
             return "$($v.ToString($ci)) GB"
         }
-        $v = [Math]::Round($bytes / $mb, 1)
-        return "$($v.ToString($ci)) MB"
+        if ($bytes -ge $mb) {
+            $v = [Math]::Round($bytes / $mb, 1)
+            return "$($v.ToString($ci)) MB"
+        }
+        $v = [Math]::Round($bytes / 1024.0, 1)
+        return "$($v.ToString($ci)) KB"
     }
 }
