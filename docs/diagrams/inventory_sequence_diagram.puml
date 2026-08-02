@@ -50,7 +50,7 @@ note right of Presenter: Elevation-gated: de-elevated, a pending\nintent is writ
 Detail -> Disk: PrepareDiskScan("PC-01")
 Disk --> Detail: worker args (TopN)
 Detail -> Job: queue DiskScan job
-note right of Detail: Worker deploys wiztree64.exe,\nMFT-scans C:, copies folders.json back.
+note right of Detail: Worker deploys wiztree64.exe, MFT-scans C:,\ntrims the ranked export to the top rows on the target,\ncopies that small CSV back and caches top-N JSON.
 
 == PumpJobs(): DiskScan job completes -> CompleteDiskScan(job) ==
 Detail -> Disk: ParseDiskUsage("PC-01")

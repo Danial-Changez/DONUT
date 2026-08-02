@@ -784,6 +784,19 @@ Describe "WorkerServices" {
         }
     }
 
+    Context "BuildScanCommand" {
+        It "trims the size-ranked export on the target so only top rows cross SMB" {
+            $s = [ExecutionService]::BuildScanCommand(12)
+            # The trim's correctness leans on the export arriving size-descending.
+            $s | Should -Match '/sortby=1'
+            # 12 rows + the banner/header/volume-root margin the parser skips.
+            $s | Should -Match '-TotalCount 20'
+            $s | Should -Match 'folders-top\.csv'
+            # The ~40 MB full export must not be left on the fleet machine.
+            $s | Should -Match 'Remove-Item .+folders\.csv'
+        }
+    }
+
     Context "BuildDeleteCommand" {
         It "clears contents (not the folder) and injection-proofs paths" {
             $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp\a", "C:\o'brien"))

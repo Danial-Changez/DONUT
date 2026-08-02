@@ -594,8 +594,9 @@ class ExecutionService {
             "$hostName-inventory.json")
     }
 
-    # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the CSV
-    # back. The only place DONUT pushes a file TO the target; the exe stays for reuse.
+    # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the
+    # remotely-trimmed top-rows CSV back. The only place DONUT pushes a file TO the
+    # target; the exe stays for reuse.
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
 
@@ -613,13 +614,16 @@ class ExecutionService {
         $this.DeployWizTree($ip)
         $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree done in $($sw.ElapsedMilliseconds) ms.")
 
+        $topN = 12
+        if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
+
         $sw.Restart()
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) start.")
-        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand(), 'DonutDisk', 20)
+        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand($topN), 'DonutDisk', 20)
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
 
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
-        $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
+        $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $topN)
         return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
     }
 
@@ -711,12 +715,10 @@ foreach (`$t in `$targets) {
 "@
     }
 
-    # Parses the (large) WizTree CSV on the pool thread and writes a compact top-N
-    # JSON, so the UI thread only reads a tiny file (a raw parse there froze the UI).
-    [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [hashtable]$options) {
-        $topN = 12
-        if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
-
+    # Parses the copied-back top-rows CSV on the pool thread and writes a compact
+    # top-N JSON, so the UI thread only reads a tiny file (a raw parse there froze
+    # the UI, back when the full export crossed SMB).
+    [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [int]$topN) {
         $jsonPath = Join-Path $this.LocalReportsDir "$hostName-folders.json"
         if (-not (Test-Path $csvPath)) { return $jsonPath }
 
@@ -754,18 +756,27 @@ foreach (`$t in `$targets) {
         }
     }
 
-    # The headless WizTree command: fast MFT scan of C:, folders only, size-sorted CSV.
+    # The headless WizTree command: fast MFT scan of C:, folders only, size-sorted
+    # CSV. /sortby=1 is size DESCENDING, so the export's first rows are the top N;
+    # the trim keeps them (plus a margin for the banner/header/volume-root lines the
+    # parser skips) and only that small file ever crosses SMB - the full export ran
+    # ~40 MB per scan. TotalCount never reads past the kept lines, so the trim is
+    # instant on the target, and the big export is deleted rather than left behind.
     # Isolated here so a pure-PowerShell fallback would be a single-method swap.
-    static [string] BuildScanCommand() {
-        return @'
+    static [string] BuildScanCommand([int]$topN) {
+        $keep = [Math]::Max($topN, 1) + 8
+        return @"
 & 'C:\temp\DONUT\wiztree64.exe' "C:" /export="C:\temp\DONUT\folders.csv" /admin=1 /exportfolders=1 /exportfiles=0 /sortby=1 /exportmaxdepth=4 | Out-Null
-'@
+Get-Content 'C:\temp\DONUT\folders.csv' -TotalCount $keep | Set-Content 'C:\temp\DONUT\folders-top.csv'
+Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
+"@
     }
 
-    # WizTree always exports the fixed name folders.csv; only the local copy is
-    # host-qualified.
+    # The remote script trims the size-ranked export to folders-top.csv; only the
+    # local copy is host-qualified. A missing remote file (failed scan) surfaces
+    # here, same as it did when the full export was the artifact.
     [string] CopyDiskUsageArtifact([string] $hostName) {
-        return $this.CopyBackArtifact($hostName, 'folders.csv', "$hostName-folders.csv")
+        return $this.CopyBackArtifact($hostName, 'folders-top.csv', "$hostName-folders.csv")
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {

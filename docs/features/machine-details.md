@@ -37,7 +37,8 @@ updates to a nearly-full disk.
 
 :::note
 WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there about
-licensing); the scan deploys it to the target, parses the CSV export, and cleans up.
+licensing); the scan deploys it to the target, trims the size-ranked CSV export to
+the top rows on the target (so only kilobytes cross the network), and cleans up.
 :::
 
 ## Clearing folder contents
