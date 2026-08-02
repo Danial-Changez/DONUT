@@ -191,7 +191,6 @@ class InventoryPresenter {
     # Clears the current selection and returns the detail pane to its empty state.
     [void] ClearSelection() {
         $this.Home.SelectedHost = $null
-        $this.UpdateOverviewTiles()
     }
 
     # Sets the detail-header subtitle (the resolved IP) on the host's view-model.
@@ -223,14 +222,6 @@ class InventoryPresenter {
         if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
         $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName))
     }
-
-    # Re-renders the overview strip (e.g. after a job changes pending-update counts).
-    [void] RefreshOverview() {
-        $this.UpdateOverviewTiles()
-    }
-
-    # No-op: the overview strip is fully binding-driven; kept for existing callers.
-    [void] UpdateOverviewTiles() { }
 
     # Appends a job-output line to the host's buffer and, when selected, the detail log.
     [void] AppendLog([string]$hostName, [string]$text) {

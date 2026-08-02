@@ -130,7 +130,6 @@ class HomePresenter : AsyncJobPresenter {
 
     # Hosts that still need a manual reboot after an apply
     [System.Collections.Generic.List[string]] $ManualRebootQueue
-    [int] $TotalJobsInBatch
 
     # Runs queued behind a reachability re-check (see .NOTES); CompleteResolve starts
     # or drops them - never left queued silently.
@@ -182,7 +181,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.Rows = @{}
         $this.HomeVm = [HomeViewModel]::new()   # bound to the view; owns the machine collection
         $this.ManualRebootQueue = [List[string]]::new()
-        $this.TotalJobsInBatch = 0
 
         $presenter = $this
         $this.Timer = [DispatcherTimer]::new()
@@ -471,7 +469,6 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $this.ManualRebootQueue.Clear()
-        $this.TotalJobsInBatch = $idleHosts.Count
         foreach ($hostName in $idleHosts) {
             $this.StartProcess($hostName)
         }
@@ -597,7 +594,6 @@ class HomePresenter : AsyncJobPresenter {
             else {
                 $this.Detail.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
                 if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age - results are current.") }
-                $this.Detail.RefreshOverview()
             }
             return
         }
@@ -631,7 +627,6 @@ class HomePresenter : AsyncJobPresenter {
                     $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
                 $this.RefreshCardStatus($job)
-                $this.Detail.RefreshOverview()
                 # Apply is destructive: run the identity check in parallel to gate it.
                 if ($command -eq 'applyUpdates') { $this.Resolution.StartVerifyName($hostName) }
             }
@@ -810,10 +805,8 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # End of tick: refresh fleet counts and, once the batch drains, persist the
-    # coalesced recents in one write.
+    # End of tick: once the batch drains, persist the coalesced recents in one write.
     [void] AfterPump() {
-        $this.Detail.RefreshOverview()
         if ($this.ActiveJobs.Count -eq 0) {
             $this.Store.FlushSave()
         }
@@ -1156,7 +1149,6 @@ class HomePresenter : AsyncJobPresenter {
 
     hidden [void] FinishRemoval() {
         $this.UpdateEmptyHint()
-        $this.Detail.RefreshOverview()
         $this.Store.FlushSave()
     }
 
