@@ -516,13 +516,14 @@ class ExecutionService {
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         $startedUtc = [datetime]::UtcNow
         $nextReportUtc = $startedUtc.AddSeconds(30)
-        while (-not $p.HasExited) {
+        # WaitForExit(ms) sleeps AND returns the instant the process exits, so a job
+        # never pays up to 1.5 s of dead latency the old sleep-then-recheck loop cost.
+        while (-not $p.WaitForExit(1500)) {
             if ([datetime]::UtcNow -gt $deadline) {
                 # Best-effort: it may already be exiting, or we may lack rights to kill it.
                 try { $p.Kill($true) } catch { }
                 throw [RemoteTimeoutException]::new($target, $operation, $maxMinutes)
             }
-            Start-Sleep -Milliseconds 1500
             if ($null -ne $onTick) { & $onTick }
             # Heartbeat: the remote process is still alive - the wait isn't the wedge.
             if ([datetime]::UtcNow -ge $nextReportUtc) {
@@ -531,7 +532,7 @@ class ExecutionService {
                 $nextReportUtc = [datetime]::UtcNow.AddSeconds(30)
             }
         }
-        $p.WaitForExit()   # flush the exit code after HasExited flips
+        $p.WaitForExit()   # flush async output/exit code after the timed wait returns true
         $exitCode = [int]$p.ExitCode
         if ($exitCode -lt 0) {
             throw [RemoteProcessStartException]::new($target, $operation, $exitCode)
