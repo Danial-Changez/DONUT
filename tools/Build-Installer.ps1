@@ -14,12 +14,16 @@
     MSI ProductVersion (x.y.z). SelfUpdateService compares this DisplayVersion
     against GitHub release tags, so use the release's version.
 
+.PARAMETER SkipSigning
+    Build unsigned even when a signing certificate is available.
+
 .EXAMPLE
-    pwsh -File tools\Build-Installer.ps1 -Version 1.4.0
+    pwsh -File tools\Build-Installer.ps1 -Version 2.0.0
 #>
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string] $Version
+    [string] $Version,
+    [switch] $SkipSigning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,4 +60,47 @@ if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE.
 
 $msi = Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.msi' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+# --- Signing (Set-AuthenticodeSignature cannot sign compound documents like MSI,
+# so this needs signtool; it bootstraps from the Windows SDK BuildTools NuGet
+# package into tools\.cache on first use, same pattern as ReportGenerator). ---
+$cert = if (-not $SkipSigning) {
+    Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
+        Where-Object Subject -eq 'CN=Danial Changez' |
+        Sort-Object NotAfter -Descending | Select-Object -First 1
+}
+if ($cert) {
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse `
+        -Filter signtool.exe -ErrorAction SilentlyContinue |
+        Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+    if (-not $signtool) {
+        $toolDir = Join-Path $repo 'tools\.cache\signtool'
+        $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+        if (-not $signtool) {
+            Write-Host 'Fetching signtool (first run only)...' -ForegroundColor Cyan
+            $nupkg = Join-Path $env:TEMP 'sdk-buildtools.nupkg.zip'
+            Invoke-WebRequest 'https://www.nuget.org/api/v2/package/Microsoft.Windows.SDK.BuildTools' `
+                -OutFile $nupkg
+            Expand-Archive $nupkg -DestinationPath $toolDir -Force
+            Remove-Item $nupkg
+            $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe |
+                Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+        }
+    }
+    Write-Host "Signing as $($cert.Subject) ($($cert.Thumbprint))..." -ForegroundColor Cyan
+    # Timestamp so the signature outlives the certificate; retry untimestamped when
+    # the TSA is unreachable (an offline build should still produce a signed MSI).
+    & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /td SHA256 `
+        /tr 'http://timestamp.digicert.com' $msi.FullName
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'Timestamped signing failed (TSA unreachable?); signing without a timestamp.'
+        & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 $msi.FullName
+        if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE." }
+    }
+}
+else {
+    Write-Warning 'No CN=Danial Changez code-signing certificate in Cert:\CurrentUser\My - MSI is unsigned.'
+}
+
 Write-Host "MSI built: $($msi.FullName)" -ForegroundColor Green
