@@ -14,10 +14,10 @@ configuration, and native `SYSTEM` execution.
 ## Transport
 
 - **Encapsulation:** `ExecutionService` wraps the `PsExec` calls; `NetworkProbe`
-  handles the pre-run checks (DNS, reverse-DNS, RPC), isolating network logic
-  from execution.
+  handles the pre-run checks (DNS, RPC), isolating network logic from execution.
 - **PsExec arguments:** `-s` (SYSTEM), `-h` (elevated), `-accepteula`, with
-  `pwsh -NoProfile -NonInteractive -c` for clean remote execution.
+  `pwsh -NoProfile -NonInteractive -EncodedCommand` for clean remote execution
+  (base64 sidesteps psexec quoting hazards; see below).
 - **`-i` defaults to the caller's session, not the console.** The psexec docs say
   "if no session is specified the process runs in the console session";
   field-verified otherwise (2026-07-27): called from a SYSTEM scheduled task,
@@ -81,7 +81,7 @@ which the run settles Unconfirmed.
 
 **Note:** concurrent psexec sessions sharing one PSEXESVC hang when the first
 ends and deletes the service, so each job family runs under its own `-r` service
-name (DonutDcu / DonutDisk / DonutProbe).
+name (DonutDcu / DonutDisk / DonutProbe / DonutDelete).
 
 **Note:** UNC and CIM operations have no usable timeout, so every share/WMI touch
 is gated by a bounded port probe first (RPC 135 for psexec/CIM, SMB 445 for

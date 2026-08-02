@@ -1,7 +1,7 @@
 # Remote-lab diagnostics: runs ONLY on the private mirror (donut-lab), where the
 # self-hosted runner on the domain test machine is registered. On the public
 # repo this workflow stays inert - no runner carries these labels there, and no
-# pull_request trigger may ever be added (see docs/development/remote-lab.md).
+# pull_request trigger may ever be added (see docs/development/testing.md).
 name: Remote lab diagnostics
 
 on:

@@ -44,9 +44,6 @@ Workers run as isolated child processes. This resolved the DC-warm/scan saga:
   [LogLine](./ui-and-threading.md) carrying the stream's severity, and the
   `DcuProgress` parser drives the progress bar as before. Stderr is drained on a
   `ReadToEndAsync` task so a full pipe cannot wedge the child.
-- Classes are not automatically available in new runspaces: the required class
-  modules (`Models`, `Services`) are explicitly loaded into each runspace before
-  execution.
 - **`ExecutionService` split (deferred):** the worker-side god-class carries ~6
   concerns; the agreed target decomposition is PsExecTransport / DcuPhases /
   InventoryProbe / DiskPhases / ResolvePhase / ArtifactCopy. Deferred because its
