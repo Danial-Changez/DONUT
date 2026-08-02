@@ -79,22 +79,30 @@
                                         ToolTip="Minimize">
                                     <Path Style="{DynamicResource controlButtonIcon}"
                                           Width="13"
+                                          StrokeThickness="1.08"
                                           Data="{DynamicResource Minimize}" />
                                 </Button>
                                 <!-- Docs / tour / settings as one named cluster so the tour's
-                                     last step can spotlight all three at once. -->
+                                     last step can spotlight all three at once. Pinned LTR:
+                                     the tour transforms this panel's (0,0) to overlay space,
+                                     and under the inherited RTL that lands on the top-RIGHT
+                                     corner, drawing the spotlight one cluster-width off.
+                                     Children are pre-reversed so the visual order matches
+                                     the RTL siblings (gear innermost, docs outermost). -->
                                 <StackPanel x:Name="panelHelpButtons"
-                                            Orientation="Horizontal">
-                                    <!-- Docs opens the online documentation in the default browser. -->
-                                    <Button x:Name="btnDocs"
-                                            Command="{Binding OpenDocsCommand}"
+                                            Orientation="Horizontal"
+                                            FlowDirection="LeftToRight">
+                                    <!-- Gear opens the settings overlay (the only config entry point). -->
+                                    <Button x:Name="btnSettings"
+                                            Command="{Binding OpenSettingsCommand}"
                                             Style="{DynamicResource controlButton}"
                                             Tag="{DynamicResource Primary}"
-                                            ToolTip="Open the documentation">
+                                            ToolTip="Settings">
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
-                                              Data="{DynamicResource File}" />
+                                              StrokeThickness="1.17"
+                                              Data="{DynamicResource Config}" />
                                     </Button>
                                     <!-- Help replays the guided tour. -->
                                     <Button x:Name="btnHelp"
@@ -105,18 +113,20 @@
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
+                                              StrokeThickness="1.17"
                                               Data="{DynamicResource Help}" />
                                     </Button>
-                                    <!-- Gear opens the settings overlay (the only config entry point). -->
-                                    <Button x:Name="btnSettings"
-                                            Command="{Binding OpenSettingsCommand}"
+                                    <!-- Docs opens the online documentation in the default browser. -->
+                                    <Button x:Name="btnDocs"
+                                            Command="{Binding OpenDocsCommand}"
                                             Style="{DynamicResource controlButton}"
                                             Tag="{DynamicResource Primary}"
-                                            ToolTip="Settings">
+                                            ToolTip="Open the documentation">
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
-                                              Data="{DynamicResource Config}" />
+                                              StrokeThickness="1.17"
+                                              Data="{DynamicResource File}" />
                                     </Button>
                                 </StackPanel>
                             </StackPanel>
@@ -396,10 +406,11 @@
                                         Padding="0"
                                         ToolTip="Copy the temporary password">
                                     <Path Data="{DynamicResource Copy}"
-                                          Fill="{DynamicResource SecondaryForeground}"
+                                          Style="{DynamicResource lucideIcon}"
+                                          Stroke="{DynamicResource SecondaryForeground}"
                                           Width="13"
                                           Height="13"
-                                          Stretch="Uniform" />
+                                          StrokeThickness="1.08" />
                                 </Button>
                             </ContentControl>
                             <ContentControl Grid.Column="2"
@@ -421,10 +432,11 @@
                                         Padding="0"
                                         ToolTip="Show a QR code of the temporary password">
                                     <Path Data="{DynamicResource QrCode}"
-                                          Fill="{DynamicResource SecondaryForeground}"
+                                          Style="{DynamicResource lucideIcon}"
+                                          Stroke="{DynamicResource SecondaryForeground}"
                                           Width="14"
                                           Height="14"
-                                          Stretch="Uniform" />
+                                          StrokeThickness="1.17" />
                                 </Button>
                             </ContentControl>
                         </Grid>

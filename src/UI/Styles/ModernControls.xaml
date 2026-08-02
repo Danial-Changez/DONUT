@@ -176,8 +176,9 @@
                 Value="1" />
         <Setter Property="Height"
                 Value="32" />
+        <!-- One space of inset, not a gutter - review called the old 10 too airy. -->
         <Setter Property="Padding"
-                Value="10,0" />
+                Value="4,0" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
         <!-- Stretch so a width-less field fills its card instead of collapsing to
