@@ -48,6 +48,10 @@ class TrayPresenter {
         [void]$this.Menu.Items.Add([ToolStripSeparator]::new())
         [void]$this.Menu.Items.Add('Exit', $null,
             { param($s, $e) $presenter.ExitApp() }.GetNewClosure())
+        # App-themed menu (WinForms defaults to the office-blue gradient). Guarded:
+        # the helper is compiled C#, absent only on a dev session that skipped it.
+        $theme = 'Donut.Interop.TrayTheme' -as [type]
+        if ($theme) { $theme::Apply($this.Menu) }
         $this.Icon.ContextMenuStrip = $this.Menu
 
         # Left-click restores; right-click opens the menu (WinForms default).

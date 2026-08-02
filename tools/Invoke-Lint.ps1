@@ -41,7 +41,7 @@ $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
 
 # Runtime-compiled C# types the static analyzer can't resolve (see .DESCRIPTION).
 $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
-'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager'
+'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager|Donut\.Interop\.TrayTheme'
 
 # One analyzer invocation for the whole list (piped: -Path only takes a single
 # string) - the per-call setup cost made the old per-file loop ~9x slower.

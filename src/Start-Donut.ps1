@@ -136,6 +136,27 @@ try {
         Add-Type -Path "$PSScriptRoot\Launcher\HotkeyManager.cs" -ReferencedAssemblies $refs
     }
 
+    # Tray-menu theming (Donut.Interop.TrayTheme): the app palette for the one WinForms
+    # surface WPF styles can't reach. Prod compiles it into Donut.Launcher (guard skips).
+    if (-not ('Donut.Interop.TrayTheme' -as [type])) {
+        Add-Type -AssemblyName System.Windows.Forms
+        # Facades load lazily; touch one type from each so the path resolution below
+        # can see them. CancelEventArgs/Handler live in different facades - the menu
+        # Opening hook needs both.
+        [void][System.Drawing.Color]
+        [void][System.ComponentModel.CancelEventArgs]
+        [void][System.ComponentModel.CancelEventHandler]
+        [void][System.ComponentModel.Component]
+        $refs = @(
+            Get-RuntimeAssemblyPath 'System.Windows.Forms'
+            Get-RuntimeAssemblyPath 'System.Drawing.Primitives'
+            Get-RuntimeAssemblyPath 'System.ComponentModel.Primitives'
+            Get-RuntimeAssemblyPath 'System.ComponentModel.TypeConverter'
+            Get-RuntimeAssemblyPath 'System.ComponentModel'
+        )
+        Add-Type -Path "$PSScriptRoot\Launcher\TrayTheme.cs" -ReferencedAssemblies $refs
+    }
+
     . "$PSScriptRoot\Scripts\DonutApp.ps1"
 }
 catch {
