@@ -129,12 +129,8 @@ class HostResolver : RemoteJobService {
 
     # Runspace-warm job: a no-op whose only effect is loading the worker module graph
     # into the pool runspace it lands on, so later concurrent jobs never cold-load.
-    [hashtable] PrepareWarmRunspace() {
-        return $this.PrepareWarmRunspace('')
-    }
-
-    # Tagged variant: $tag rides in HostName so every breadcrumb the warm pass logs
-    # carries a per-shell identity ("[warm-3] Worker up: ...").
+    # $tag rides in HostName so every breadcrumb the warm pass logs carries a
+    # per-shell identity ("[warm-3] Worker up: ...").
     [hashtable] PrepareWarmRunspace([string]$tag) {
         return $this.BuildWorkerArgs($tag, 'Resolve', @{ Mode = 'WarmRunspace' })
     }
