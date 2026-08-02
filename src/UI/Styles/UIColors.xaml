@@ -94,9 +94,6 @@
     <Color x:Key="GroupBoxBackgroundColor"> #14FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground"
                      Color="{StaticResource GroupBoxBackgroundColor}" />
-    <Color x:Key="ThrottleLimitColor"> #F87171</Color>
-    <SolidColorBrush x:Key="ThrottleLimit"
-                     Color="{StaticResource ThrottleLimitColor}" />
     <!-- ============================================================
          Arcane shadcn semantic tokens (dark theme, oklch -> sRGB).
          Used by the button variant styles in ButtonStyles.xaml so the

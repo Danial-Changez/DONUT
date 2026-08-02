@@ -318,7 +318,7 @@
                     </Grid.ColumnDefinitions>
                     <!-- Clear checkbox (themed ModernCheckBox - violet when ticked): only on
                          clearable folders; two-way bound so the presenter reads the selection. -->
-                    <CheckBox Grid.Column="0" Style="{DynamicResource ModernCheckBox}" Margin="0,0,6,0"
+                    <CheckBox Grid.Column="0" Style="{DynamicResource ModernCheckBox}" Margin="0,0,3,0"
                               IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                               Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
                               ToolTip="Clear this folder's contents" />
