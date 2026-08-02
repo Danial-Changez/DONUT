@@ -143,39 +143,23 @@ Describe "AppConfig" {
         }
     }
 
-    Context "GetCommandArgs / SetCommandArg" {
+    Context "GetCommandArgs" {
         It "Should return args for existing command" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+
             $args = $config.GetCommandArgs('scan')
-            
+
             $args | Should -Not -BeNullOrEmpty
             $args.ContainsKey('silent') | Should -Be $true
         }
 
         It "Should return empty hashtable for non-existent command" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+
             $args = $config.GetCommandArgs('nonExistentCommand')
-            
+
             $args | Should -BeOfType [hashtable]
             $args.Count | Should -Be 0
-        }
-
-        It "Should set command arg for existing command" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
-            $config.SetCommandArg('scan', 'silent', $true)
-            
-            $config.GetCommandArgs('scan').silent | Should -Be $true
-        }
-
-        It "Should create command structure when setting arg for new command" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
-            $config.SetCommandArg('newCommand', 'newArg', 'newValue')
-            
-            $config.GetCommandArgs('newCommand').newArg | Should -Be 'newValue'
         }
     }
 

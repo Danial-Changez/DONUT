@@ -174,18 +174,6 @@ class AppConfig {
         return @{}
     }
 
-    [void] SetCommandArg([string]$command, [string]$argName, [object]$value) {
-        if ($null -eq $this.Settings) { $this.Settings = @{} }
-        if (-not $this.Settings.ContainsKey('commands')) { $this.Settings['commands'] = @{} }
-        if (-not $this.Settings['commands'].ContainsKey($command)) {
-            $this.Settings['commands'][$command] = @{ args = @{} }
-        }
-        if (-not $this.Settings['commands'][$command].ContainsKey('args')) {
-            $this.Settings['commands'][$command]['args'] = @{}
-        }
-        $this.Settings['commands'][$command]['args'][$argName] = $value
-    }
-
     # AD forests for the Home live-finder. Tolerates the JSON round-trip
     # (Object[]/strings) and falls back to the org defaults when absent/blank.
     [string[]] GetDomains() {
