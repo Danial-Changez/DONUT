@@ -38,14 +38,16 @@
         <Files Directory="AppFolder"
                Include="$(var.StageDir)\**" />
 
-        <!-- Start Menu shortcut; HKLM keypath (perMachine) keeps ICE quiet. -->
+        <!-- Start Menu shortcut. ICE treats ProgramMenuFolder as user-profile data
+             even in a per-machine package, so the keypath must be HKCU (the
+             canonical WiX shortcut pattern). -->
         <StandardDirectory Id="ProgramMenuFolder">
             <Component Id="StartMenuShortcut">
                 <Shortcut Id="DonutShortcut"
                           Name="DONUT"
                           Target="[AppFolder]DONUT.exe"
                           WorkingDirectory="AppFolder" />
-                <RegistryValue Root="HKLM"
+                <RegistryValue Root="HKCU"
                                Key="Software\Bakery\DONUT"
                                Name="Installed"
                                Type="integer"

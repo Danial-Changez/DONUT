@@ -5,6 +5,9 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
     <PropertyGroup>
         <OutputName>DONUT</OutputName>
+        <!-- x64 package: without this, harvested components default to 32-bit and
+             ICE80 rejects every one of them under ProgramFiles64Folder. -->
+        <InstallerPlatform>x64</InstallerPlatform>
         <!-- Populated by tools\Build-Installer.ps1. -->
         <DonutVersion Condition="'$(DonutVersion)' == ''">0.0.0</DonutVersion>
         <StageDir Condition="'$(StageDir)' == ''">obj\stage</StageDir>

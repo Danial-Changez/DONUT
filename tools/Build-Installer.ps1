@@ -40,6 +40,13 @@ Copy-Item $publish.FullName $stage -Recurse
 Get-ChildItem $stage -Recurse -Filter '*.pdb' | Remove-Item
 Rename-Item (Join-Path $stage 'Donut.Launcher.exe') 'DONUT.exe'
 
+# WiX writes the .msi before ICE validation runs, so a failed build can leave a
+# stale artifact behind that a later run would report as freshly built (the output
+# may sit under a culture subfolder, hence the recursive sweep).
+if (Test-Path (Join-Path $repo 'installer\bin')) {
+    Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.msi' | Remove-Item -Force
+}
+
 Write-Host "Building the MSI..." -ForegroundColor Cyan
 # Quoted as one token: the checkout path may carry spaces ("VS Programs"), and an
 # unquoted -p value truncates at the first one.
