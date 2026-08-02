@@ -20,6 +20,9 @@ public static class TrayTheme
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private static readonly Color Surface = Color.FromArgb(0x12, 0x12, 0x12);
     private static readonly Color Hover = Color.FromArgb(0x27, 0x27, 0x2A);
     private static readonly Color Border = Color.FromArgb(0x2B, 0x2B, 0x2B);
@@ -43,6 +46,11 @@ public static class TrayTheme
             catch (DllNotFoundException) { }
             catch (EntryPointNotFoundException) { }
         };
+        // Opened from the taskbar's overflow flyout, the FLYOUT holds foreground; when
+        // it auto-dismisses, no deactivation ever reaches the menu and it floats
+        // orphaned (the old NotifyIcon menu bug). Foregrounding the menu itself makes
+        // click-away and focus loss dismiss it like every other tray menu.
+        menu.Opened += (s, e) => SetForegroundWindow(menu.Handle);
     }
 
     private sealed class DonutColorTable : ProfessionalColorTable
