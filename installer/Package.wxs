@@ -6,15 +6,15 @@
      InstallLocation for those same readers. The launcher self-extracts its app
      tree beside the exe on first elevated run - the MSI ships binaries only. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-    <!-- UpgradeCode: PLACEHOLDER. If machines have DONUT installed from the
-         original (out-of-repo) MSI, this MUST be replaced with that MSI's
-         UpgradeCode before shipping, or upgrades will install side-by-side
-         duplicates. Read it from any old DONUT*.msi, then delete this warning
-         (Build-Installer.ps1 nags until the placeholder changes). -->
+    <!-- UpgradeCode is the original SAPIEN PowerShell Studio pipeline's
+         (DONUT.psproj.psbuild, recovered from git history at ed314c0^), so this
+         MSI major-upgrades every existing install. Never change it. The last
+         SAPIEN-shipped ProductVersion was 1.0.3 - releases from this project
+         must version higher or MSI upgrade logic will refuse them. -->
     <Package Name="DONUT"
              Manufacturer="Bakery"
              Version="$(var.Version)"
-             UpgradeCode="7f0be0f2-91a1-4c3c-a382-1f24290d9dc0"
+             UpgradeCode="FD0DF01A-1A35-454C-AF08-5BE6B458C6A7"
              Scope="perMachine">
         <MajorUpgrade DowngradeErrorMessage="A newer version of DONUT is already installed." />
         <MediaTemplate EmbedCab="yes" />

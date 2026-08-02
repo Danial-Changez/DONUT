@@ -40,13 +40,6 @@ Copy-Item $publish.FullName $stage -Recurse
 Get-ChildItem $stage -Recurse -Filter '*.pdb' | Remove-Item
 Rename-Item (Join-Path $stage 'Donut.Launcher.exe') 'DONUT.exe'
 
-if (Select-String -Path (Join-Path $repo 'installer\Package.wxs') `
-        -Pattern '7f0be0f2-91a1-4c3c-a382-1f24290d9dc0' -Quiet) {
-    Write-Warning ('Package.wxs still carries the PLACEHOLDER UpgradeCode. If machines have ' +
-        'DONUT installed from the original MSI, this build will NOT upgrade them - it will ' +
-        'install side by side. Replace the UpgradeCode with the original MSI''s first.')
-}
-
 Write-Host "Building the MSI..." -ForegroundColor Cyan
 # Quoted as one token: the checkout path may carry spaces ("VS Programs"), and an
 # unquoted -p value truncates at the first one.
