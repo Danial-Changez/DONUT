@@ -7,7 +7,7 @@ Describe "LogLine" {
         It "stamps the line with HH:mm:ss and carries the severity" {
             $l = [LogLine]::Donut([LogSeverity]::Info, "Starting Scan for PC-1...")
             $l.Stamp | Should -Match '^\d{2}:\d{2}:\d{2}$'
-            $l.StampText | Should -Be "$($l.Stamp)  "
+            $l.StampText | Should -Be "$($l.Stamp) "
             $l.Severity | Should -Be ([LogSeverity]::Info)
             $l.Text | Should -Be "Starting Scan for PC-1..."
         }

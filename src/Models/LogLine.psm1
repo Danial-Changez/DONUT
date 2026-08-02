@@ -27,7 +27,7 @@ class LogLine {
     [LogSeverity] $Severity = [LogSeverity]::Info
     [string] $Stamp = ''         # 'HH:mm:ss' local; '' for separator lines
     [string] $Text = ''
-    [string] $StampText = ''     # display twin of Stamp: 'HH:mm:ss  ' (or '')
+    [string] $StampText = ''     # display twin of Stamp: 'HH:mm:ss ' (or '')
     [string] $DisplayText = ''   # Tag + Text, precomputed for the XAML Run binding
 
     # dcu-cli outputLog prefix: "[2026-07-02 15:15:43] : message" (":" optional).
@@ -46,7 +46,7 @@ class LogLine {
         $l.Severity = $severity
         $l.Text = if ($null -ne $text) { $text } else { '' }
         $l.Stamp = if ($l.Text) { $stamp } else { '' }
-        $l.StampText = if ($l.Stamp) { "$($l.Stamp)  " } else { '' }
+        $l.StampText = if ($l.Stamp) { "$($l.Stamp) " } else { '' }
         $l.DisplayText = ([LogLine]::Tag($severity)) + $l.Text
         return $l
     }
