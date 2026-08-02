@@ -34,11 +34,4 @@ static class EmbeddedAssets
         ms.Position = 0;
         return Image.FromStream(ms);
     }
-
-    /// <summary>Loads an embedded icon, or null if absent.</summary>
-    public static Icon? LoadIcon(string logicalName)
-    {
-        using Stream? s = Open(logicalName);
-        return s is null ? null : new Icon(s);
-    }
 }
