@@ -7,23 +7,6 @@
          text = the 400-shade accent, 11px semibold. Pair a Badge* Border
          with its Badge*Text TextBlock.
          ============================================================ -->
-    <Style x:Key="BadgeViolet"
-           TargetType="Border">
-        <Setter Property="CornerRadius" Value="8.4" />
-        <Setter Property="Height" Value="20" />
-        <Setter Property="Padding" Value="8,0" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintViolet}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
-    </Style>
-    <Style x:Key="BadgeVioletText"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource AccentPurple}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
     <Style x:Key="BadgeGreen"
            TargetType="Border">
         <Setter Property="CornerRadius" Value="8.4" />
@@ -56,23 +39,6 @@
         <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource AccentYellow}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="BadgeRed"
-           TargetType="Border">
-        <Setter Property="CornerRadius" Value="8.4" />
-        <Setter Property="Height" Value="20" />
-        <Setter Property="Padding" Value="8,0" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{DynamicResource TintRed}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintRedBorder}" />
-    </Style>
-    <Style x:Key="BadgeRedText"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource AccentRed}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style x:Key="BadgeMuted"
