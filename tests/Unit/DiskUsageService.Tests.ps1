@@ -59,21 +59,19 @@ Describe "DiskUsageService" {
     }
 
     Context "ParseDiskUsage" {
-        It "parses the worker's top-N JSON into a typed report" {
-            $json = @{
-                scannedAt = '2026-08-01T12:00:00Z'
-                folders   = @(
-                    @{ path = 'C:\Games'; sizeBytes = 4294967296 },
-                    @{ path = 'C:\Temp'; sizeBytes = 1048576 })
-            } | ConvertTo-Json -Depth 4
-            Set-Content -Path (Join-Path $script:reportsDir 'DUHOST-folders.json') -Value $json
+        It "parses the worker's top-rows CSV into a typed report (volume root dropped)" {
+            Set-Content -Path (Join-Path $script:reportsDir 'DUHOST-folders.csv') -Value @'
+"File Name","Size","Allocated","Modified","Attributes","Files","Folders"
+"C:\",5368709120,5368709120,2026-08-01,16,0,2
+"C:\Games\",4294967296,4294967296,2026-08-01,16,0,0
+"C:\Temp\",1048576,1048576,2026-08-01,16,0,0
+'@
 
             $report = $script:service.ParseDiskUsage('DUHOST')
 
             Should-NotBeNull $report
-            $report.ScannedAt | Should-Be '2026-08-01T12:00:00.0000000Z'
             $report.Folders.Count | Should-Be 2
-            $report.Folders[0].Path | Should-Be 'C:\Games'
+            $report.Folders[0].Path | Should-Be 'C:\Games\'
             $report.Folders[0].SizeBytes | Should-Be 4294967296
         }
 
@@ -81,10 +79,13 @@ Describe "DiskUsageService" {
             Should-BeNull $script:service.ParseDiskUsage('NOFILE')
         }
 
-        It "returns null for a corrupt report instead of throwing" {
-            Set-Content -Path (Join-Path $script:reportsDir 'BAD-folders.json') -Value '{ nope'
+        It "returns an empty report for a corrupt file instead of throwing" {
+            Set-Content -Path (Join-Path $script:reportsDir 'BAD-folders.csv') -Value 'not a wiztree export'
 
-            Should-BeNull $script:service.ParseDiskUsage('BAD')
+            $report = $script:service.ParseDiskUsage('BAD')
+
+            Should-NotBeNull $report
+            $report.Folders.Count | Should-Be 0
         }
     }
 }

@@ -623,8 +623,7 @@ class ExecutionService {
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
 
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
-        $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $topN)
-        return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
+        return @{ FoldersPath = $csvPath }
     }
 
     # Clears the contents of the operator-selected folders on the target as SYSTEM (psexec),
@@ -713,26 +712,6 @@ foreach (`$t in `$targets) {
     Clear-Tree `$p
 }
 "@
-    }
-
-    # Parses the copied-back top-rows CSV on the pool thread and writes a compact
-    # top-N JSON, so the UI thread only reads a tiny file (a raw parse there froze
-    # the UI, back when the full export crossed SMB).
-    [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [int]$topN) {
-        $jsonPath = Join-Path $this.LocalReportsDir "$hostName-folders.json"
-        if (-not (Test-Path $csvPath)) { return $jsonPath }
-
-        try {
-            # Stream line-by-line: a -Raw read of a full-drive export caused gen-2
-            # GCs that suspended the UI mid-scan (see DiskUsage.psm1).
-            $report = [WizTreeCsv]::ParseTopFoldersFromFile($csvPath, $topN)
-            $report.ToHashtable() | ConvertTo-Json -Depth 5 |
-                Set-Content -Path $jsonPath -Encoding UTF8
-        }
-        catch {
-            $this.Logger.LogException("[$hostName] Failed to parse WizTree CSV", $_)
-        }
-        return $jsonPath
     }
 
     # Copies wiztree64.exe to the target's working dir (only when not already
