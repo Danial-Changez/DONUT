@@ -74,9 +74,16 @@ class RemoteJobService {
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
-                # UI-thread deep clone of the live config: a worker enumerating a
-                # table the UI mutates can spin forever on a corrupted bucket chain.
-                Settings   = [AppConfig]::DeepClone($this.Config.Settings)
+                # Only the keys workers read (BuildDcuArgs/GetCommandArgs, GetDebugLogging,
+                # GetRecoveryWindowMinutes) - the worker's AppConfig merges defaults for the
+                # rest. recentHosts, with its cached inventory/diskUsage payloads, never
+                # rides. commands stays a deep clone, same rule as Settings before it: no
+                # live hashtable may cross the runspace boundary.
+                Settings   = @{
+                    commands              = [AppConfig]::DeepClone($this.Config.Settings['commands'])
+                    debugLogging          = $this.Config.GetDebugLogging()
+                    recoveryWindowMinutes = $this.Config.GetRecoveryWindowMinutes()
+                }
                 # The effective debug state (the setting or the -DebugLog session override).
                 DebugLog   = $this.Logger.DebugEnabled
             }

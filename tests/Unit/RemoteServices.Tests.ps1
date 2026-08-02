@@ -412,36 +412,54 @@ Describe "RemoteServices" {
             $result.Arguments.ReportsDir | Should -Be $config.ReportsPath
         }
 
-        It "Should send a config Settings snapshot so the worker need not re-read config.json" {
+        It "Should send the config keys workers read so the worker need not re-read config.json" {
             $probe = [MockNetworkProbe]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
-                activeCommand = "applyUpdates"
+                recoveryWindowMinutes = 45
             })
             $service = [RemoteUpdateService]::new($cfg, $probe, $null)
 
             $result = $service.PrepareScanForUpdates("TestHost")
 
-            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+            $result.Arguments.Settings.recoveryWindowMinutes | Should -Be 45
+            $result.Arguments.Settings.commands.scan.args.ContainsKey('silent') | Should -BeTrue
             # A SNAPSHOT, never the live reference: the worker deep-enumerates this
             # hashtable off-thread, and enumerating a live table the UI thread is
             # writing can corrupt it and spin forever (a silent pure-CPU wedge).
-            [object]::ReferenceEquals($result.Arguments.Settings, $cfg.Settings) |
+            [object]::ReferenceEquals($result.Arguments.Settings.commands, $cfg.Settings.commands) |
                 Should -BeFalse -Because (
-                "jobs must carry a UI-thread deep clone of Settings, not the live " +
-                "reference the UI keeps mutating")
+                "jobs must carry a UI-thread deep clone of the command table, not the " +
+                "live reference the UI keeps mutating")
+        }
+
+        It "Should NOT ship the recents store (or other UI-only keys) to workers" {
+            # recentHosts carries up to 50 cached inventory/diskUsage payloads; no worker
+            # reads it, and shipping it cost a UI-thread deep clone + a ~100 KB JSON
+            # serialize per job.
+            $probe = [MockNetworkProbe]::new()
+            $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
+                recentHosts   = @(@{ host = 'HOST-1'; inventory = @{ model = 'X' } })
+                activeCommand = "applyUpdates"
+            })
+            $service = [RemoteUpdateService]::new($cfg, $probe, $null)
+
+            $settings = $service.PrepareScanForUpdates("TestHost").Arguments.Settings
+
+            $settings.ContainsKey('recentHosts') | Should -BeFalse
+            $settings.ContainsKey('activeCommand') | Should -BeFalse
         }
 
         It "Should carry Settings on apply-phase arguments too" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
-                activeCommand = "applyUpdates"
+                recoveryWindowMinutes = 45
             })
             $service = [RemoteUpdateService]::new($cfg, $probe, $matcher)
 
             $result = $service.PrepareApplyUpdates("TestHost", @{})
 
-            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+            $result.Arguments.Settings.recoveryWindowMinutes | Should -Be 45
         }
 
         It "Should carry the logger's effective debug state as the DebugLog arg" {
