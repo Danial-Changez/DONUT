@@ -12,12 +12,11 @@ using module ".\DriverMatchingService.psm1"
 .DESCRIPTION
     RemoteJobService is the shared base: it builds the RemoteWorker.ps1 argument
     hashtable (BuildWorkerArgs) and owns the log-then-throw policy for typed
-    remote failures (Fail). ScanService prepares a DCU scan; RemoteUpdateService
-    prepares an update scan/apply and parses the resulting update report into
-    typed DcuUpdate rows (driver-matched, urgency-sorted) for the detail pane.
-    The subclasses only prepare and parse off the UI thread - the worker
-    does the network I/O, gating each phase's transport itself (bounded RPC/SMB
-    port probes).
+    remote failures (Fail). RemoteUpdateService prepares a DCU scan or apply and
+    parses the resulting update report into typed DcuUpdate rows
+    (driver-matched, urgency-sorted) for the detail pane. The subclasses only
+    prepare and parse off the UI thread - the worker does the network I/O,
+    gating each phase's transport itself (bounded RPC/SMB port probes).
 
 .NOTES
     InventoryService, DiskUsageService and HostResolver also subclass
@@ -85,21 +84,6 @@ class RemoteJobService {
     }
 }
 
-# Handles remote host scanning
-class ScanService : RemoteJobService {
-
-    ScanService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
-
-    ScanService([AppConfig] $config, [NetworkProbe] $probe,
-        [LogService] $logger) : base($config, $probe, $logger) {}
-
-    # Builds the worker args only (no network) - the worker asserts reachability on the
-    # pool thread, so the UI thread never blocks on an offline/slow host.
-    [hashtable] PrepareScan([string]$hostName) {
-        return $this.BuildWorkerArgs($hostName, "Scan", @{})
-    }
-}
-
 # Handles scanning for and applying updates on remote hosts
 class RemoteUpdateService : RemoteJobService {
     [DriverMatchingService] $DriverMatcher
@@ -117,6 +101,8 @@ class RemoteUpdateService : RemoteJobService {
         $this.DriverMatcher = $matcher
     }
 
+    # Builds the worker args only (no network) - the worker asserts reachability on the
+    # pool thread, so the UI thread never blocks on an offline/slow host.
     [hashtable] PrepareScanForUpdates([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }

@@ -89,7 +89,6 @@ class HomePresenter : AsyncJobPresenter {
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
-    [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
     # Duck-typed MainPresenter back-ref for the elevation gate (a typed import would be a
@@ -165,7 +164,6 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.NetworkProbe = $networkProbe
         $this.Logger = $networkProbe.Logger
-        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $this.Logger)
         $this.DriverMatcher = [DriverMatchingService]::new($this.Logger)
         $this.UpdateService = [RemoteUpdateService]::new(
             $config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
@@ -605,7 +603,7 @@ class HomePresenter : AsyncJobPresenter {
         try {
             $jobParams = switch ($command) {
                 'scan' {
-                    @{ Type = 'Scan'; Prep = $this.ScanService.PrepareScan($hostName) }
+                    @{ Type = 'Scan'; Prep = $this.UpdateService.PrepareScanForUpdates($hostName) }
                 }
                 'applyUpdates' {
                     $this.Detail.AppendLog($hostName, "Phase 1: Scanning for updates...")
