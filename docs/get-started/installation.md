@@ -36,18 +36,18 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
 5. **Add two Defender exclusions**:
    - Open **Virus & threat protection → Manage settings → Add or remove exclusions**.
    - Click **Add an exclusion**, choose **Folder**, and add each of:
-     - `C:\Program Files\Bakery\DONUT` — the installed launcher.
-     - `C:\ProgramData\DONUT` — the app tree the launcher unpacks and **actually runs
-       from**, plus the shared data root.
+     - `C:\Program Files\Bakery\DONUT` — the installed launcher **and the app tree it
+       unpacks beside itself and actually runs from**.
+     - `C:\ProgramData\DONUT` — the shared data root (config, logs, reports).
 
 :::caution[Why the exclusions?]
 DONUT isn't digitally signed (yet), so Defender may quarantine it on sight. Both are
 scoped to DONUT's own folders.
 
-The second one is also the one that costs you time if you skip it: `Donut.Launcher.exe`
-self-extracts `src\` to `C:\ProgramData\DONUT\app` and runs PowerShell from there, so
-every launch reads that whole tree. Unexcluded, each file is scanned on first touch —
-worst at sign-in, when nothing is cached yet.
+The first one is also the one that costs you time if you skip it: `Donut.Launcher.exe`
+self-extracts its PowerShell tree to an `app\` folder beside the exe and runs from
+there, so every launch reads that whole tree. Unexcluded, each file is scanned on
+first touch — worst at sign-in, when nothing is cached yet.
 :::
 
 :::note[Running from source?]

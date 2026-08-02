@@ -147,14 +147,17 @@ static class Program
         catch (InvalidOperationException) { /* exited between the lookup and the wait */ }
     }
 
-    // Self-extracts the embedded app tree to a stable, world-readable dir, verified per file
-    // by SHA-256 (rewriting only missing/changed/tampered ones); returns the root path.
+    // Self-extracts the embedded app tree BESIDE the exe, verified per file by SHA-256
+    // (rewriting only missing/changed/tampered ones); returns the root path. Beside the
+    // exe means Program Files under an MSI install - NTFS admin-only write, the right
+    // home for code (data stays in ProgramData\DONUT\data) - and a user-writable folder
+    // for a portable run. The tree only changes when this exe changes (an upgrade, which
+    // is elevated), so the normal refresh is elevated too; a de-elevated launch against
+    // a stale tree gets the start-as-admin-once guidance below.
     static string ExtractEmbeddedApp()
     {
         var asm = typeof(Program).Assembly;
-        string root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "DONUT", "app");
+        string root = Path.Combine(AppContext.BaseDirectory, "app");
 
         // Serialize concurrent launches so two instances don't write the same files.
         using var mtx = new Mutex(false, "Global\\DonutAppExtract");
@@ -200,12 +203,21 @@ static class Program
                 catch (UnauthorizedAccessException ex)
                 {
                     throw new UnauthorizedAccessException(
-                        $"Could not refresh the app tree at {root}.\n\n" +
-                        "It was written by an elevated run and this one is not elevated. " +
-                        "Start DONUT as administrator once to update it.", ex);
+                        $"Could not write the app tree at {root}.\n\n" +
+                        "This run is not elevated and the install folder is admin-only. " +
+                        "Start DONUT as administrator once to create or update it.", ex);
                 }
             }
             PruneUnknown(root, keep);
+
+            // One-time cleanup: earlier builds extracted to ProgramData - a world-readable
+            // copy of the code this ACL-protected tree supersedes. Best-effort.
+            string legacy = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "DONUT", "app");
+            try { if (Directory.Exists(legacy)) Directory.Delete(legacy, true); }
+            catch { /* in use or de-elevated; the next elevated run gets it */ }
+
             return root;
         }
         finally { if (owned) mtx.ReleaseMutex(); }
