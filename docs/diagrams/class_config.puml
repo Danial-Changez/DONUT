@@ -19,8 +19,6 @@ package "Donut.Core" #102A20 {
         +LogWarning(message): void
         +LogDebug(message): void
         +LogException(message, errorRecord): void
-        +LogStructured(level, eventName, fields): void
-        +GetRecentLogs(count): string[]
         +{static} Coalesce(logger): LogService
     }
     class NullLogService extends LogService
@@ -28,12 +26,6 @@ package "Donut.Core" #102A20 {
     class TimeFormat {
         +{static} Relative(when): string
         +{static} ParseIso(value): datetime
-    }
-
-    enum ElevationState {
-        NotRequired
-        Satisfied
-        RelaunchRequired
     }
 
     class DonutPaths {
@@ -48,9 +40,7 @@ package "Donut.Core" #102A20 {
         +{static} IsSystem(): bool
         +{static} CurrentIdentityName(): string
         +{static} InteractiveUser(): string
-        +{static} Classify(actionNeedsAdmin, isElevated): ElevationState
     }
-    ElevationContext ..> ElevationState
     DonutPaths ..> ElevationContext
 
     class ElevationRelaunch {

@@ -14,10 +14,6 @@ package "Donut.Services" #221634 {
         #BuildWorkerArgs(host, jobType, options): Hashtable
     }
 
-    class ScanService {
-        +PrepareScan(host): Hashtable
-    }
-
     class RemoteUpdateService {
         +DriverMatcher: DriverMatchingService
         +PrepareScanForUpdates(host): Hashtable
@@ -86,7 +82,6 @@ package "Donut.Services" #221634 {
         +DetectBrand(manufacturer): string
         +FindBestDriverMatch(updateName, installedDrivers): object
         +CompareVersions(installed, update): Hashtable
-        +FormatMatchResult(match, name, version): string
     }
 }
 
@@ -95,7 +90,6 @@ package "Donut.Core" #102A20 {
         +ResolveHost(hostname): IPAddress
         +ResolveWith(hostname, dc): IPAddress
         +ResolveComputerName(ip): string
-        +CheckReverseDNS(ip, expectedName): bool
         +IsRpcAvailable(hostname): bool
         +IsSmbAvailable(hostname): bool
         +IsOnline(hostname): bool
@@ -261,13 +255,11 @@ package "Donut.Models" #15233B {
     }
 }
 
-RemoteJobService <|-- ScanService
 RemoteJobService <|-- RemoteUpdateService
 RemoteJobService <|-- HostResolver
 RemoteJobService <|-- InventoryService
 RemoteJobService <|-- DiskUsageService
 
-ScanService --> ExecutionService
 RemoteUpdateService --> ExecutionService
 RemoteUpdateService --> DriverMatchingService
 InventoryService --> ExecutionService

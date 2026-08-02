@@ -4,7 +4,7 @@ title Scan a Machine (async, non-blocking)
 actor User
 participant "HomeView" as View
 participant "HomePresenter" as Presenter
-participant "ScanService" as Scan
+participant "RemoteUpdateService" as Scan
 participant "AsyncJob" as Job
 participant "RunspacePool" as Pool
 participant "ExecutionService" as Exec
@@ -23,7 +23,7 @@ else Scan < 24h old and report cached
     Presenter -> Presenter: RecentScanIsFresh() = true
     note right of Presenter: ScanCacheDecision.IsFresh()\nToast "results are current" — no job queued.
 else Needs a fresh scan
-    Presenter -> Scan: PrepareScan("PC-01")
+    Presenter -> Scan: PrepareScanForUpdates("PC-01")
     activate Scan
     Scan -> Scan: BuildWorkerArgs("PC-01", "Scan", {})
     Scan --> Presenter: worker args (no network on UI thread)
