@@ -58,7 +58,9 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <!-- Control button icon -->
+    <!-- Control button icon. FlowDirection is pinned LTR: the control bar's button
+         stack is RightToLeft (the dock-right idiom) and Paths inherit it, which
+         mirrors every glyph - only the asymmetric ones (the tour's ?) show it. -->
     <Style x:Key="controlButtonIcon"
            TargetType="Path">
         <Setter Property="Width"
@@ -67,6 +69,8 @@
                 Value="10" />
         <Setter Property="Stretch"
                 Value="Uniform" />
+        <Setter Property="FlowDirection"
+                Value="LeftToRight" />
         <Setter Property="Fill"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
     </Style>

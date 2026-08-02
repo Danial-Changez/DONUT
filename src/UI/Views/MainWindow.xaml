@@ -81,39 +81,44 @@
                                           Width="13"
                                           Data="{DynamicResource Minimize}" />
                                 </Button>
-                                <!-- Docs opens the online documentation in the default browser. -->
-                                <Button x:Name="btnDocs"
-                                        Command="{Binding OpenDocsCommand}"
-                                        Style="{DynamicResource controlButton}"
-                                        Tag="{DynamicResource Primary}"
-                                        ToolTip="Open the documentation">
-                                    <Path Style="{DynamicResource controlButtonIcon}"
-                                          Width="14"
-                                          Height="14"
-                                          Data="{DynamicResource File}" />
-                                </Button>
-                                <!-- Help replays the guided tour. -->
-                                <Button x:Name="btnHelp"
-                                        Command="{Binding OpenTourCommand}"
-                                        Style="{DynamicResource controlButton}"
-                                        Tag="{DynamicResource Primary}"
-                                        ToolTip="Take a quick tour">
-                                    <Path Style="{DynamicResource controlButtonIcon}"
-                                          Width="14"
-                                          Height="14"
-                                          Data="{DynamicResource Help}" />
-                                </Button>
-                                <!-- Gear opens the settings overlay (the only config entry point). -->
-                                <Button x:Name="btnSettings"
-                                        Command="{Binding OpenSettingsCommand}"
-                                        Style="{DynamicResource controlButton}"
-                                        Tag="{DynamicResource Primary}"
-                                        ToolTip="Settings">
-                                    <Path Style="{DynamicResource controlButtonIcon}"
-                                          Width="14"
-                                          Height="14"
-                                          Data="{DynamicResource Config}" />
-                                </Button>
+                                <!-- Docs / tour / settings as one named cluster so the tour's
+                                     last step can spotlight all three at once. -->
+                                <StackPanel x:Name="panelHelpButtons"
+                                            Orientation="Horizontal">
+                                    <!-- Docs opens the online documentation in the default browser. -->
+                                    <Button x:Name="btnDocs"
+                                            Command="{Binding OpenDocsCommand}"
+                                            Style="{DynamicResource controlButton}"
+                                            Tag="{DynamicResource Primary}"
+                                            ToolTip="Open the documentation">
+                                        <Path Style="{DynamicResource controlButtonIcon}"
+                                              Width="14"
+                                              Height="14"
+                                              Data="{DynamicResource File}" />
+                                    </Button>
+                                    <!-- Help replays the guided tour. -->
+                                    <Button x:Name="btnHelp"
+                                            Command="{Binding OpenTourCommand}"
+                                            Style="{DynamicResource controlButton}"
+                                            Tag="{DynamicResource Primary}"
+                                            ToolTip="Take a quick tour">
+                                        <Path Style="{DynamicResource controlButtonIcon}"
+                                              Width="14"
+                                              Height="14"
+                                              Data="{DynamicResource Help}" />
+                                    </Button>
+                                    <!-- Gear opens the settings overlay (the only config entry point). -->
+                                    <Button x:Name="btnSettings"
+                                            Command="{Binding OpenSettingsCommand}"
+                                            Style="{DynamicResource controlButton}"
+                                            Tag="{DynamicResource Primary}"
+                                            ToolTip="Settings">
+                                        <Path Style="{DynamicResource controlButtonIcon}"
+                                              Width="14"
+                                              Height="14"
+                                              Data="{DynamicResource Config}" />
+                                    </Button>
+                                </StackPanel>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal"
                                         VerticalAlignment="Center">
@@ -209,8 +214,6 @@
                             </UniformGrid>
                         </Border>
                         <Button HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Height="36"
                                 Command="{Binding CloseSettingsCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
@@ -261,9 +264,9 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- Header: one 48px row - the X keeps its flush 50x36 corner pad
-                         (pinned Top), while the title centers in the taller row so it
-                         clears the card's top edge instead of hugging it. -->
+                    <!-- Header: one 48px row - the X's flush corner pad fills it, and the
+                         title centers in it so it clears the card's top edge instead of
+                         hugging it. -->
                     <Grid Grid.Row="0"
                           Height="48">
                         <TextBlock Style="{DynamicResource TextPaneTitle}"
@@ -275,8 +278,6 @@
                                  FontWeight="Normal"
                                  Foreground="{DynamicResource TitleTextTertiary}" /></TextBlock>
                         <Button HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Height="36"
                                 Command="{Binding CloseResetCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
@@ -495,8 +496,6 @@
                                    HorizontalAlignment="Left"
                                    Margin="24,10,56,10" />
                         <Button HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Height="36"
                                 Command="{Binding CloseQrCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"

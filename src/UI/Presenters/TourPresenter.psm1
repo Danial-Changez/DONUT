@@ -242,7 +242,9 @@ class TourPresenter {
             'mode' { return $this.HomeElement('btnMode') }
             'list' { return $this.HomeElement('MachinePanel') }
             'detail' { return $this.HomeElement('DetailPane') }
-            'settings' { return $this.Window.FindName('btnSettings') }
+            # The docs / tour / settings cluster, not just the gear: the step's copy
+            # names all three, so the spotlight frames all three.
+            'settings' { return $this.Window.FindName('panelHelpButtons') }
             default { return $null }
         }
         return $null
