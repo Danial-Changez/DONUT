@@ -45,12 +45,6 @@ Describe "LogService" {
             $logger.LogFilePath | Should -Be $expectedPath
         }
 
-        It "Should initialize SyncRoot for thread safety" {
-            $logger = [LogService]::new($script:testLogDir)
-            
-            $logger.SyncRoot | Should -Not -BeNullOrEmpty
-        }
-
         It "Should not fail if directory already exists" {
             $logger1 = [LogService]::new($script:testLogDir)
             $logger2 = [LogService]::new($script:testLogDir)
@@ -130,77 +124,18 @@ Describe "LogService" {
         }
     }
 
-    Context "GetRecentLogs" {
-        It "Should return empty array when no logs exist" {
-            $emptyLogDir = Join-Path $script:tempDir "EmptyLogs_$(Get-Random)"
-            New-Item -Path $emptyLogDir -ItemType Directory -Force | Out-Null
-            $logger = [LogService]::new($emptyLogDir)
-            # Don't write any logs
-            
-            # Remove the log file if it was created
-            Remove-Item -Path $logger.LogFilePath -Force -ErrorAction SilentlyContinue
-            
-            $logs = $logger.GetRecentLogs(10)
-            
-            $logs.Count | Should -Be 0
-            
-            # Cleanup
-            Remove-Item -Path $emptyLogDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        It "Should return specified number of recent logs" {
-            $logger = [LogService]::new($script:testLogDir)
-            
-            1..10 | ForEach-Object { $logger.LogInfo("Message $_") }
-            
-            $logs = $logger.GetRecentLogs(5)
-            
-            $logs.Count | Should -Be 5
-            $logs[-1] | Should -BeLike "*Message 10*"
-        }
-
-        It "Should return all logs if count exceeds total" {
-            $logger = [LogService]::new($script:testLogDir)
-            
-            1..3 | ForEach-Object { $logger.LogInfo("Message $_") }
-            
-            $logs = $logger.GetRecentLogs(100)
-            
-            $logs.Count | Should -Be 3
-        }
-
-        It "Should return logs in chronological order" {
-            $logger = [LogService]::new($script:testLogDir)
-            
-            $logger.LogInfo("First")
-            $logger.LogInfo("Second")
-            $logger.LogInfo("Third")
-            
-            $logs = $logger.GetRecentLogs(3)
-            
-            $logs[0] | Should -BeLike "*First*"
-            $logs[1] | Should -BeLike "*Second*"
-            $logs[2] | Should -BeLike "*Third*"
-        }
-    }
-
     Context "Thread Safety" {
-        It "Should have a valid SyncRoot object" {
-            $logger = [LogService]::new($script:testLogDir)
-            
-            $logger.SyncRoot | Should -BeOfType [System.Object]
-        }
-
         It "Should handle concurrent writes without error" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             # Write multiple logs quickly (simulating concurrent access)
             1..20 | ForEach-Object {
                 $logger.LogInfo("Concurrent message $_")
             }
-            
-            $logs = $logger.GetRecentLogs(20)
+
+            $logs = Get-Content -Path $logger.LogFilePath -Tail 20
             $logs.Count | Should -Be 20
+            $logs[-1] | Should -BeLike "*Concurrent message 20*"
         }
     }
 
@@ -285,26 +220,6 @@ Describe "LogService" {
         }
     }
 
-    Context "LogStructured" {
-        It "Should emit a pipe-delimited event with sorted key=value fields" {
-            $logger = [LogService]::new($script:testLogDir)
-
-            $logger.LogStructured("INFO", "RESOLVE", @{ host = "PC-01"; server = "DC-02"; result = "OK" })
-
-            $line = Get-Content -Path $logger.LogFilePath -Tail 1
-            $line | Should -Match "\[INFO\] RESOLVE\|host=PC-01\|result=OK\|server=DC-02$"
-        }
-
-        It "Should emit just the event name when fields are null" {
-            $logger = [LogService]::new($script:testLogDir)
-
-            $logger.LogStructured("WARN", "NO_FIELDS", $null)
-
-            $line = Get-Content -Path $logger.LogFilePath -Tail 1
-            $line | Should -Match "\[WARN\] NO_FIELDS$"
-        }
-    }
-
     Context "NullLogService" {
         It "Should be assignable to a LogService dependency" {
             $logger = [NullLogService]::new()
@@ -320,12 +235,6 @@ Describe "LogService" {
             { $logger.LogException("ignored", $null) } | Should -Not -Throw
 
             $logger.LogFilePath | Should -BeNullOrEmpty
-        }
-
-        It "Should return an empty array from GetRecentLogs" {
-            $logger = [NullLogService]::new()
-
-            $logger.GetRecentLogs(10).Count | Should -Be 0
         }
     }
 }

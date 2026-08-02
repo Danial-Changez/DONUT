@@ -118,7 +118,7 @@ class NetworkProbe {
         try {
             $ip = $this.ResolveViaServer($hostName, $server)
             if ($null -ne $ip) {
-                $this.Logger.LogStructured("DEBUG", "DNS_RESOLVE", @{ host = $hostName; server = $server; ip = $ip.ToString() })
+                $this.Logger.LogDebug("DNS_RESOLVE|host=$hostName|ip=$ip|server=$server")
                 return $ip
             }
             $this.Logger.LogError("DNS resolution for '$hostName' via domain controller '$server' returned no address.")
