@@ -274,15 +274,12 @@ class AppConfig {
         return $val.Trim()
     }
 
-    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case)
-    # by parse, everything else to the supplied default.
+    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case,
+    # trimmed - TryParse's own contract) by parse, everything else to the default.
     hidden static [bool] AsBool([object]$value, [bool]$default) {
         if ($value -is [bool]) { return $value }
-        if ($value -is [string]) {
-            $t = $value.Trim()
-            if ($t -match '^(?i:true)$') { return $true }
-            if ($t -match '^(?i:false)$') { return $false }
-        }
+        $parsed = $false
+        if ($value -is [string] -and [bool]::TryParse($value, [ref]$parsed)) { return $parsed }
         return $default
     }
 
