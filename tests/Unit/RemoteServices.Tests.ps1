@@ -12,14 +12,12 @@ class MockNetworkProbe : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [IPAddress] $ResolveHostResult = [IPAddress]::Parse("127.0.0.1")
-    [bool] $ReverseDnsResult = $true
 
     MockNetworkProbe() {}
 
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [IPAddress] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
-    [bool] CheckReverseDNS([IPAddress]$ip, [string]$hostName) { return $this.ReverseDnsResult }
 }
 
 Describe "RemoteServices" {

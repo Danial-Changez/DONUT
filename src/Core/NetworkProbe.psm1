@@ -13,14 +13,14 @@ using module ".\LogService.psm1"
     reachable one is used as the DNS server for all subsequent lookups.
 
     Resolution is fail-hard: if no domain controller can be discovered or reached,
-    ResolveHost / CheckReverseDNS log an [ERROR] and return $null/$false rather
-    than silently falling back to the local resolver.
+    ResolveHost logs an [ERROR] and returns $null rather than silently falling
+    back to the local resolver.
 
 .NOTES
     The raw AD/DNS calls are isolated in overridable seam methods
-    (QueryDomainControllers, ResolveViaServer, ResolvePtrViaServer,
-    TestServerOnline) so the discovery/selection logic can be unit-tested off a
-    domain by subclassing this type and faking those seams.
+    (QueryDomainControllers, ResolveViaServer, TestServerOnline) so the
+    discovery/selection logic can be unit-tested off a domain by subclassing
+    this type and faking those seams.
 #>
 class NetworkProbe {
     [LogService] $Logger
@@ -147,27 +147,6 @@ class NetworkProbe {
         catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
             return $null
-        }
-    }
-
-    [bool] CheckReverseDNS([IPAddress]$ip, [string]$expectedHostName) {
-        $server = $this.GetActiveDomainController()
-        if ([string]::IsNullOrWhiteSpace($server)) {
-            $this.Logger.LogError("Reverse DNS check failed for '$ip': no active domain controller available.")
-            return $false
-        }
-
-        try {
-            $resolvedName = $this.ResolvePtrViaServer($ip, $server)
-            if ([string]::IsNullOrWhiteSpace($resolvedName)) {
-                $this.Logger.LogWarning("Reverse DNS for '$ip' via domain controller '$server' returned no name.")
-                return $false
-            }
-            return $resolvedName -like "*$expectedHostName*"
-        }
-        catch {
-            $this.Logger.LogException("Reverse DNS check for '$ip' via domain controller '$server' failed", $_)
-            return $false
         }
     }
 
@@ -325,16 +304,6 @@ class NetworkProbe {
         $aRecord = $records | Where-Object { $_.IPAddress } | Select-Object -First 1
         if ($null -ne $aRecord) {
             return [IPAddress]::Parse($aRecord.IPAddress)
-        }
-        return $null
-    }
-
-    # Resolves the PTR (reverse) record for an IP using the given DNS server.
-    hidden [string] ResolvePtrViaServer([IPAddress]$ip, [string]$server) {
-        $records = Resolve-DnsName -Name $ip.ToString() -Server $server -Type PTR -ErrorAction Stop
-        $ptr = $records | Where-Object { $_.NameHost } | Select-Object -First 1
-        if ($null -ne $ptr) {
-            return $ptr.NameHost
         }
         return $null
     }

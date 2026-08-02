@@ -11,7 +11,6 @@ class FakeNetworkProbe : NetworkProbe {
     [string[]] $DnsDCs = @()
     [hashtable] $OnlineMap = @{}     # server -> bool
     [hashtable] $ForwardMap = @{}    # hostname -> ip string
-    [hashtable] $PtrMap = @{}        # ip string -> ptr name
     [int] $QueryCount = 0
     [int] $LdapQueryCount = 0
     [int] $DnsQueryCount = 0
@@ -48,12 +47,6 @@ class FakeNetworkProbe : NetworkProbe {
         if ($this.ForwardMap.ContainsKey($hostName)) {
             return [IPAddress]::Parse($this.ForwardMap[$hostName])
         }
-        return $null
-    }
-
-    hidden [string] ResolvePtrViaServer([IPAddress]$ip, [string]$server) {
-        $key = $ip.ToString()
-        if ($this.PtrMap.ContainsKey($key)) { return $this.PtrMap[$key] }
         return $null
     }
 
@@ -249,35 +242,6 @@ Describe "NetworkProbe" {
             $probe = [FakeNetworkProbe]::new($logger)
             $probe.ThrowOnName = $true
             $probe.ResolveComputerName("10.0.0.5") | Should -Be ''
-            $logger.HasLevel("ERROR") | Should -Be $true
-        }
-    }
-
-    Context "CheckReverseDNS" {
-        It "Should return true when the PTR record matches the expected host" {
-            $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1")
-            $probe.OnlineMap = @{ "DC1" = $true }
-            $probe.PtrMap = @{ "10.0.0.5" = "PC-01.contoso.local" }
-
-            $probe.CheckReverseDNS([IPAddress]::Parse("10.0.0.5"), "PC-01") | Should -Be $true
-        }
-
-        It "Should return false when the PTR record does not match" {
-            $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1")
-            $probe.OnlineMap = @{ "DC1" = $true }
-            $probe.PtrMap = @{ "10.0.0.5" = "PC-99.contoso.local" }
-
-            $probe.CheckReverseDNS([IPAddress]::Parse("10.0.0.5"), "PC-01") | Should -Be $false
-        }
-
-        It "Should fail hard (false + ERROR) when no domain controller is available" {
-            $logger = [CapturingLogService]::new()
-            $probe = [FakeNetworkProbe]::new($logger)
-            $probe.DCs = @()
-
-            $probe.CheckReverseDNS([IPAddress]::Parse("10.0.0.5"), "PC-01") | Should -Be $false
             $logger.HasLevel("ERROR") | Should -Be $true
         }
     }
