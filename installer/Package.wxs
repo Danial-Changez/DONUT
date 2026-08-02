@@ -1,0 +1,57 @@
+<!-- DONUT's MSI. The layout and identity mirror what the app itself expects:
+     ProductName contains "DONUT" and Manufacturer contains "Bakery" (the
+     Uninstall-key match criteria in InstallWorker.ps1 / SelfUpdateService), the
+     exe installs as bin\x64\DONUT\DONUT.exe under InstallLocation (the path
+     InstallWorker relaunches after an update), and ARPINSTALLLOCATION records
+     InstallLocation for those same readers. The launcher self-extracts its app
+     tree beside the exe on first elevated run - the MSI ships binaries only. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <!-- UpgradeCode: PLACEHOLDER. If machines have DONUT installed from the
+         original (out-of-repo) MSI, this MUST be replaced with that MSI's
+         UpgradeCode before shipping, or upgrades will install side-by-side
+         duplicates. Read it from any old DONUT*.msi, then delete this warning
+         (Build-Installer.ps1 nags until the placeholder changes). -->
+    <Package Name="DONUT"
+             Manufacturer="Bakery"
+             Version="$(var.Version)"
+             UpgradeCode="7f0be0f2-91a1-4c3c-a382-1f24290d9dc0"
+             Scope="perMachine">
+        <MajorUpgrade DowngradeErrorMessage="A newer version of DONUT is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- InstallWorker / SelfUpdateService read InstallLocation from the ARP key. -->
+        <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="BakeryFolder" Name="Bakery">
+                <Directory Id="INSTALLFOLDER" Name="DONUT">
+                    <Directory Id="BinFolder" Name="bin">
+                        <Directory Id="X64Folder" Name="x64">
+                            <Directory Id="AppFolder" Name="DONUT" />
+                        </Directory>
+                    </Directory>
+                </Directory>
+            </Directory>
+        </StandardDirectory>
+
+        <!-- The staged publish output (exe already renamed DONUT.exe, pdb dropped). -->
+        <Files Directory="AppFolder"
+               Include="$(var.StageDir)\**" />
+
+        <!-- Start Menu shortcut; HKLM keypath (perMachine) keeps ICE quiet. -->
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Component Id="StartMenuShortcut">
+                <Shortcut Id="DonutShortcut"
+                          Name="DONUT"
+                          Target="[AppFolder]DONUT.exe"
+                          WorkingDirectory="AppFolder" />
+                <RegistryValue Root="HKLM"
+                               Key="Software\Bakery\DONUT"
+                               Name="Installed"
+                               Type="integer"
+                               Value="1"
+                               KeyPath="yes" />
+            </Component>
+        </StandardDirectory>
+    </Package>
+</Wix>

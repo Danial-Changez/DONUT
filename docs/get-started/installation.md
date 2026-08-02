@@ -31,7 +31,9 @@ description: Prerequisites and install steps - PsTools, .NET Desktop, the MSI, a
    [dotnet.microsoft.com](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 4. **Install DONUT** — the MSI is published under the repo's
-   [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases).
+   [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases). (Maintainers
+   build it from the repo: `pwsh -File tools\Build-Installer.ps1 -Version <x.y.z>` —
+   plain `dotnet` is the only prerequisite; the WiX SDK restores itself.)
 
 5. **Add two Defender exclusions**:
    - Open **Virus & threat protection → Manage settings → Add or remove exclusions**.
