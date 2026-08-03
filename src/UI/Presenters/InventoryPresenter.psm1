@@ -54,6 +54,9 @@ class InventoryPresenter {
     [Button] $FindFoldersButton
 
     [hashtable] $LogBuffers   # hostname -> List[LogLine] of accumulated job-log lines
+    # hostname(lower) -> DiskUsageReport, parsed once per session from the scan's CSV in
+    # reports\. The CSV is the persistent store; config carries no per-machine scan data.
+    hidden [hashtable] $DiskReports = @{}
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail ListBox
     hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder selection cascade
     # A probe fresher than this is reused instead of re-gathered (non-forced calls).
@@ -174,11 +177,16 @@ class InventoryPresenter {
         # Fill the Available Updates card from the last scan's report on disk (if any), so a
         # completed/cached scan shows without re-running. Read-only: selecting never re-scans.
         [void]$this.Home.RenderUpdatesFromReport($hostName)
-        # Same-instance re-applies are skipped, so re-selecting keeps the folder tree's
-        # expansion state.
-        $cachedDisk = if ($null -ne $rc) { $rc.DiskUsage } else { $null }
+        # Folder data comes from the scan's CSV in reports\, memoized per session so a
+        # re-select re-applies the same instance (skipped by ApplyFolders, keeping the
+        # folder tree's expansion state).
+        $diskKey = $hostName.ToLowerInvariant()
+        if (-not $this.DiskReports.ContainsKey($diskKey)) {
+            $parsed = $this.DiskUsageService.ParseDiskUsage($hostName)
+            if ($null -ne $parsed) { $this.DiskReports[$diskKey] = $parsed }
+        }
         $rowVm = $this.Home.GetRow($hostName)
-        if ($rowVm) { $rowVm.ApplyFolders($cachedDisk) }
+        if ($rowVm) { $rowVm.ApplyFolders($this.DiskReports[$diskKey]) }
 
         # Reflect any known verdict now; the PrefetchIp above updates it when it lands.
         $this.Home.RenderReachability($hostName)
@@ -444,7 +452,7 @@ class InventoryPresenter {
             return
         }
 
-        $this.Store.UpsertDiskUsage($hostName, $report)
+        $this.DiskReports[$hostName.ToLowerInvariant()] = $report
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
         if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
 

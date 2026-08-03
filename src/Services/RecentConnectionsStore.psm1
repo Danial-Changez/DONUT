@@ -1,7 +1,6 @@
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\RecentConnection.psm1"
 using module "..\Models\MachineInventory.psm1"
-using module "..\Models\DiskUsage.psm1"
 using module "..\Core\TimeFormat.psm1"
 
 <#
@@ -56,7 +55,7 @@ class RecentConnectionsStore {
         $this.CacheValid = $false
     }
 
-    # The six-key "never run" entry shape shared by Touch/UpsertInventory/UpsertDiskUsage/SeedFrom.
+    # The six-key "never run" entry shape shared by Touch/UpsertInventory/SeedFrom.
     hidden static [hashtable] NewBlankEntry([string]$name) {
         return @{
             hostname       = $name
@@ -98,11 +97,11 @@ class RecentConnectionsStore {
             rebootRequired = [bool]$rebootRequired
         }
 
-        # Carry over what a run does not change (cached inventory/disk-usage,
-        # lastTouched); replacing the entry without these silently loses the caches.
+        # Carry over what a run does not change (cached inventory, lastTouched);
+        # replacing the entry without these silently loses the caches.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
-            foreach ($k in @('inventory', 'diskUsage', 'lastTouched')) {
+            foreach ($k in @('inventory', 'lastTouched')) {
                 if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
             }
         }
@@ -150,21 +149,6 @@ class RecentConnectionsStore {
         $entry = $this.FindEntry($name)
         if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
         $entry['owner'] = $owner
-        $this.CommitFront($entry, $name)
-    }
-
-    # Merges a fresh "biggest folders" scan onto the host's entry without touching
-    # its scan/apply status fields. Mirrors UpsertInventory.
-    [void] UpsertDiskUsage([string]$hostname, [DiskUsageReport]$report) {
-        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
-        if ($null -eq $report) { return }
-        $name = $hostname.Trim()
-
-        $entry = $this.FindEntry($name)
-        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
-
-        $entry['diskUsage'] = $report.ToHashtable()
-
         $this.CommitFront($entry, $name)
     }
 

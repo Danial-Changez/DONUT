@@ -1,4 +1,3 @@
-using module "..\Core\TimeFormat.psm1"
 
 <#
 .SYNOPSIS
@@ -11,29 +10,14 @@ using module "..\Core\TimeFormat.psm1"
     path-containment tree builder (DiskUsageTree / FolderTreeNode), and size
     formatting (DiskUsageFormat). WPF-free so the parse/format logic is
     unit-tested and the presenter just renders it. Mirrors the MachineInventory /
-    InventoryFormat pure-helper pattern, including the ToHashtable / FromHashtable
-    round-trip used to cache the result on the recents store.
+    InventoryFormat pure-helper pattern. The report is never serialized: the
+    scan's CSV in reports\ is its persistent form, parsed on demand.
 #>
 
 # One folder and its on-disk size.
 class FolderUsage {
     [string] $Path = ''
     [long]   $SizeBytes = 0
-
-    static [FolderUsage] FromHashtable([hashtable]$h) {
-        $f = [FolderUsage]::new()
-        if ($null -eq $h) { return $f }
-        $f.Path = [string]$h['path']
-        $f.SizeBytes = [FolderUsage]::AsLong($h['sizeBytes'])
-        return $f
-    }
-
-    [hashtable] ToHashtable() {
-        return @{
-            path      = $this.Path
-            sizeBytes = $this.SizeBytes
-        }
-    }
 
     hidden static [long] AsLong([object]$v) {
         if ($null -eq $v) { return 0 }
@@ -47,30 +31,6 @@ class FolderUsage {
 class DiskUsageReport {
     [string]        $ScannedAt = ''     # ISO8601 UTC when the scan was parsed
     [FolderUsage[]] $Folders = @()
-
-    static [DiskUsageReport] FromHashtable([hashtable]$h) {
-        $r = [DiskUsageReport]::new()
-        if ($null -eq $h) { return $r }
-        $r.ScannedAt = [TimeFormat]::NormalizeStamp($h['scannedAt'])
-        $list = [System.Collections.Generic.List[FolderUsage]]::new()
-        foreach ($item in @($h['folders'])) {
-            if ($null -eq $item) { continue }
-            $list.Add([FolderUsage]::FromHashtable([hashtable]$item))
-        }
-        $r.Folders = $list.ToArray()
-        return $r
-    }
-
-    # Flattens to a plain hashtable (folders as an array of hashtables) so it can
-    # be cached in the recents store and round-trip through ConvertTo/FromJson.
-    [hashtable] ToHashtable() {
-        $arr = @()
-        foreach ($f in $this.Folders) { $arr += $f.ToHashtable() }
-        return @{
-            scannedAt = $this.ScannedAt
-            folders   = $arr
-        }
-    }
 }
 
 # Pure parser for WizTree's CSV export - STREAMING, one line at a time: -Raw on a

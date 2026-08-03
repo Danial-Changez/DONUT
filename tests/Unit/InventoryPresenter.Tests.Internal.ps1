@@ -31,7 +31,6 @@ class FakeRow {
 class FakeStore {
     [hashtable] $Inventories = @{}
     [void] UpsertInventory([string]$h, [MachineInventory]$inv) { $this.Inventories[$h] = $inv }
-    [void] UpsertDiskUsage([string]$h, [object]$r) {}
 }
 
 class FakeResolver {

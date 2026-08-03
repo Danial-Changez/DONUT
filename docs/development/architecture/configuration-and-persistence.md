@@ -35,7 +35,9 @@ Where DONUT keeps its state and how settings flow through the app.
 
 - The recents store (`RecentConnectionsStore` over `RecentConnection`) persists
   per-host outcomes (last status, job type, update count, reboot flag, cached
-  inventory and disk usage) into `config.json`, capped and de-duplicated.
+  inventory) into `config.json`, capped and de-duplicated. Disk-usage scans are
+  deliberately not in it: the scan's CSV in `reports\` is their store, parsed on
+  select and memoized for the session.
 - Logs land in `%ProgramData%\DONUT\data\logs\` - `Donut.log` for the app plus one
   `<hostname>.log` copied back per remote run. The logging rules themselves
   (lock-free appends, debug gate, provenance stamp) are on
@@ -43,9 +45,13 @@ Where DONUT keeps its state and how settings flow through the app.
 
 ## Self-update seams
 
-- `SelfUpdateService` owns the GitHub Device Flow, release download, hash
-  verification, and MSI apply; `LoginPresenter`/`UpdatePresenter` drive it.
-  Device Flow tokens are DPAPI-protected (CurrentUser).
+- `SelfUpdateService` owns the release discovery, download, hash verification,
+  and MSI apply; `UpdatePresenter` drives it. The default Owner/Repo is the
+  public upstream and is queried anonymously - no sign-in exists on that path.
+  Only when the repo refuses (a private fork: 404 anonymous, or 401 on a dead
+  token) does `LoginPresenter` run the GitHub Device Flow, once; tokens are
+  DPAPI-protected (CurrentUser). A fork points Owner/Repo at itself and sets
+  `ClientId` to its own GitHub App.
 - `InstallWorker.ps1` stays a standalone script (not a class) in `src/Scripts/`
   so `SelfUpdateService` can copy it to the data root and run it
   independently for updates/rollbacks; the copy is hash-gated (SHA-256).

@@ -178,25 +178,3 @@ Describe "DiskUsageTree.BuildNested" {
         ([DiskUsageTree]::BuildNested(@())).Count | Should -Be 0
     }
 }
-
-Describe "DiskUsageReport round-trip" {
-    It "survives ToHashtable -> FromHashtable" {
-        $r = [WizTreeCsv]::ParseTopFolders(@'
-"File Name","Size","Allocated","Modified","Attributes","Files","Folders"
-"C:\Users\",53687091200,53687091200,2026-06-28,16,200000,15000
-"C:\Windows\",32212254720,32212254720,2026-06-28,16,180000,20000
-'@, 12)
-
-        $back = [DiskUsageReport]::FromHashtable($r.ToHashtable())
-        $back.ScannedAt | Should -Be $r.ScannedAt
-        $back.Folders.Count | Should -Be 2
-        $back.Folders[0].Path | Should -Be 'C:\Users\'
-        $back.Folders[0].SizeBytes | Should -Be 53687091200
-        $back.Folders[1].Path | Should -Be 'C:\Windows\'
-    }
-
-    It "FromHashtable tolerates null" {
-        $r = [DiskUsageReport]::FromHashtable($null)
-        $r.Folders.Count | Should -Be 0
-    }
-}
