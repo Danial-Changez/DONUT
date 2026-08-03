@@ -143,7 +143,7 @@ A total alone cannot separate the directory from the machinery around it, so eac
 logs the four spans that sum to it:
 
 ```
-AD search forest-d.local 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
+AD search forest-d 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
 ```
 
 | Span | Covers | A large value points at |

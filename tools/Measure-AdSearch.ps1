@@ -61,7 +61,7 @@
     Times every configured forest with the default prefixes.
 
 .EXAMPLE
-    pwsh -File tools\Measure-AdSearch.ps1 -Domains forest-d.local -Prefix 'dan' -Iterations 5
+    pwsh -File tools\Measure-AdSearch.ps1 -Domains fabrikam.local -Prefix 'dan' -Iterations 5
     Focuses the slow forest.
 #>
 [CmdletBinding()]

@@ -47,8 +47,8 @@ the others. The catch logged a warning and moved on, but `AdSearchWorker.ps1` co
 service with a **null logger**, so `LogService.Coalesce` turned that warning into a no-op:
 an unreachable forest produced no log line, no error, and zero rows. It read exactly like a
 forest that matched nothing, which is how a **misspelt forest name went unnoticed** - the
-default said `forest-b.contoso.com` when the directory is `forest-b.contosogroup.com`, and one
-quarter of every search had been quietly returning nothing.
+configured list carried a stale spelling of one forest's DNS name, and one quarter of every
+search had been quietly returning nothing.
 
 - `ActiveDirectoryService.LastErrors` records each failure as `<domain>: <reason>` and is
   reset at the top of every `Search`, so a recovered forest stops reporting.
@@ -117,7 +117,7 @@ measurement.
 An earlier version of this page credited the residual per-forest time to forest latency.
 Measurement says otherwise, and the gap is large:
 
-| | prod | forest-b | forest-c | forest-d |
+| | forest-a | forest-b | forest-c | forest-d |
 |---|---|---|---|---|
 | LDAP alone (`Measure-AdSearch.ps1`) | ~90ms | ~105ms | ~90ms | ~205ms |
 | What `Donut.log` recorded for the same search | 337ms | - | 378-444ms | 539-601ms |
@@ -127,10 +127,10 @@ That leaves roughly **250-390ms per forest per search that is not the directory*
 and it was not the directory or the pool - it was the dropdown re-rendering per forest:
 
 ```
-AD search prod.contoso.com  'dan': 392ms (queue  59, search 246, rows 61, notice  65), 16 hit(s)
-AD search forest-b...       'dan': 643ms (queue  65, search 236, rows 46, notice 297), 10 hit(s)
-AD search forest-c.local   'dan': 736ms (queue  78, search 231, rows 32, notice 395),  6 hit(s)
-AD search forest-d.local    'dan': 857ms (queue 133, search 204, rows  2, notice 518), 10 hit(s)
+AD search forest-a  'dan': 392ms (queue  59, search 246, rows 61, notice  65), 16 hit(s)
+AD search forest-b  'dan': 643ms (queue  65, search 236, rows 46, notice 297), 10 hit(s)
+AD search forest-c  'dan': 736ms (queue  78, search 231, rows 32, notice 395),  6 hit(s)
+AD search forest-d  'dan': 857ms (queue 133, search 204, rows  2, notice 518), 10 hit(s)
 ```
 
 Add each row's `queue + search + rows` and all four workers finished within **27ms of each
@@ -147,8 +147,9 @@ script's because `Measure-AdSearch.ps1` times `UserFilter` alone while the app s
 Fixed since: the dropdown renders once per poll tick, the poll and debounce raises were
 reverted, and `AD dropdown render` now logs its own cost so the next claim is checkable.
 
-Do not re-quote the old per-forest figures (`forest-b` ~167 / `prod` ~331 / `forest-c` ~394 /
-`forest-d` ~578). They were taken while `forest-b` was misconfigured and answering nothing, and with
-the 150ms poll adding up to a tick of measurement error to every one of them.
+Do not re-quote the old per-forest figures (`forest-b` ~167 / `forest-a` ~331 / `forest-c`
+~394 / `forest-d` ~578). They were taken while `forest-b` was misconfigured and answering
+nothing, and with the 150ms poll adding up to a tick of measurement error to every one of
+them.
 
 The dropdown still renders each forest as it lands, so a slow forest delays only its own rows.

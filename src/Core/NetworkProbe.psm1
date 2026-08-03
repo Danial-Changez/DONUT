@@ -312,4 +312,40 @@ class NetworkProbe {
     hidden [bool] TestServerOnline([string]$server) {
         return $this.IsOnline($server)
     }
+
+    # --- First-run org discovery (results persist to config; the repo ships no
+    #     organization names) ---
+
+    # The AD domains the finder should search: this machine's own domain plus
+    # every trust partner (domain and forest trusts). Best-effort - off a domain
+    # this returns @() and the finder searches nothing until config names domains.
+    [string[]] DiscoverSearchDomains() {
+        $found = [System.Collections.Generic.List[string]]::new()
+        try {
+            Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
+            $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+            $found.Add($domain.Name)
+            foreach ($t in @($domain.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
+            foreach ($t in @($domain.Forest.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
+        }
+        catch {
+            $this.Logger.LogDebug("Search-domain discovery unavailable: $($_.Exception.Message)")
+        }
+        return @($found | Where-Object { $_ } | Select-Object -Unique)
+    }
+
+    # The SCCM management point this client reports to - the best available guess
+    # for the AdminService (SMS Provider) host; config-editable when they differ.
+    # Best-effort: no SCCM client -> ''.
+    [string] DiscoverSiteServer() {
+        try {
+            $auth = Get-CimInstance -Namespace 'root\ccm' -ClassName 'SMS_Authority' -ErrorAction Stop |
+                Select-Object -First 1
+            return [string]$auth.CurrentManagementPoint
+        }
+        catch {
+            $this.Logger.LogDebug("Site-server discovery unavailable: $($_.Exception.Message)")
+            return ''
+        }
+    }
 }

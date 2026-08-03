@@ -130,6 +130,32 @@ try {
 
     $logger.LogInfo("Preparing self-update + main window.")
     $networkProbe = [NetworkProbe]::new($logger)
+
+    # First run in a new environment: the repo ships nothing org-specific, so the
+    # finder's search domains (own domain + trust partners) and the Lens's SCCM
+    # host (the client's management point) are discovered from the machine itself
+    # and persisted to config.json. Later runs - and operator edits - read config.
+    $discovered = $false
+    if (-not $global:AppConfig.GetDomains()) {
+        $domains = @($networkProbe.DiscoverSearchDomains())
+        if ($domains) {
+            $global:AppConfig.SetSetting('domains', $domains)
+            $logger.LogInfo("Discovered search domains: $($domains -join ', ')")
+            $discovered = $true
+        }
+        else {
+            $logger.LogWarning('No search domains discovered (off-domain?); the finder searches nothing until config names them.')
+        }
+    }
+    if (-not $global:AppConfig.GetAdminServiceHost()) {
+        $site = $networkProbe.DiscoverSiteServer()
+        if ($site) {
+            $global:AppConfig.SetSetting('adminServiceHost', $site)
+            $logger.LogInfo("Discovered SCCM management point: $site")
+            $discovered = $true
+        }
+    }
+    if ($discovered) { $configManager.SaveConfig($global:AppConfig) }
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
 
