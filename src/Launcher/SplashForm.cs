@@ -30,6 +30,10 @@ public sealed class SplashForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
         TopMost = true;
+        // All bounds below are designed at 96 DPI; without this anchor WinForms has no
+        // base to scale them from, so on a scaled laptop display the fonts grow but the
+        // label boxes don't and the status text clips.
+        AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.FromArgb(0x0A, 0x0A, 0x0A);
         ClientSize = new Size(420, 300);

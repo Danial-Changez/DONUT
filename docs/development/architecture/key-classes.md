@@ -31,7 +31,7 @@ consumes the result and exposes it to the bindings.
 | `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99!` — no ambiguous glyphs, trailing special from `!#$%+=`) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / model + serial from SCCM hardware inventory / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting. The agent-side query lives in `src/Scripts/LensAgent.Common.ps1` (`Resolve-Lens`). `PersonLens.FromError` builds an empty lens carrying one failure, so a caller that never got a bundle can still show a reason |
 | `PendingIntent` (+ `GatedAction`) | The action a de-elevated DONUT was asked to run, carried across the elevation restart. Untrusted input by construction: it holds only an action kind and host names, `FromJson` matches the action against the enum names (not `[enum]::TryParse`, which accepts a numeric string), and `DeleteFolders` is never resumable |
-| `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory + disk usage); the persisting store is a Service |
+| `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
 ## Core (`src/Core/`)

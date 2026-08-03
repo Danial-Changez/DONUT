@@ -72,8 +72,6 @@ class LoginPresenter {
 
         $this.LoginSuccess = $false
 
-        $this.LoadImages()
-
         # Shown from the worker STA thread; force it to the front once rendered so it does
         # not open hidden behind other windows (see MainPresenter for the same pattern).
         $this.LoginWindow.Add_ContentRendered({
@@ -86,40 +84,6 @@ class LoginPresenter {
 
         $this.LoginWindow.ShowDialog() | Out-Null
         return $this.LoginSuccess
-    }
-
-    [void] LoadImages() {
-        $assetsPath = Join-Path (Split-Path $this.Resources.SourceRoot -Parent) "assets\Images"
-
-        $bgPath = Join-Path $assetsPath "background.jpeg"
-        if (Test-Path $bgPath) {
-            $bgBrush = $this.LoginWindow.FindName("Background")
-            if ($bgBrush) {
-                $uri = [Uri]::new($bgPath)
-                $image = [System.Windows.Media.Imaging.BitmapImage]::new($uri)
-                $bgBrush.ImageSource = $image
-            }
-        }
-
-        $logoPath = Join-Path $assetsPath "logo yellow arrow.png"
-        if (Test-Path $logoPath) {
-            $logo = $this.LoginWindow.FindName("LoginLogo")
-            if ($logo) {
-                $uri = [Uri]::new($logoPath)
-                $logo.Source = [System.Windows.Media.Imaging.BitmapImage]::new($uri)
-            }
-        }
-
-        $ghPath = Join-Path $assetsPath "GitHub.png"
-        if (Test-Path $ghPath) {
-            $btn = $this.LoginWindow.FindName("btnGitHubAuth")
-            if ($btn) {
-                $uri = [Uri]::new($ghPath)
-                $image = [System.Windows.Media.Imaging.BitmapImage]::new($uri)
-                $brush = [System.Windows.Media.ImageBrush]::new($image)
-                $btn.Background = $brush
-            }
-        }
     }
 
     [void] StartAuthFlow() {

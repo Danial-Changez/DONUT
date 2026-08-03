@@ -9,10 +9,6 @@
     <Color x:Key="PrimaryBackgroundColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackground"
                      Color="{StaticResource PrimaryBackgroundColor}" />
-    <Color x:Key="LoginBackgroundDarkColor"> #09090B</Color>
-    <Color x:Key="LoginBackgroundColor"> #121214</Color>
-    <SolidColorBrush x:Key="LoginBackground"
-                     Color="{StaticResource LoginBackgroundColor}" />
     <!-- Window borders are the neutral PanelBorder hairline (the violet gradient ramp
          was removed as ornament - colour stays reserved for status + primary actions). -->
     <!-- Button/Accent Colors. Status accents follow Arcane's dark recipe: the visible

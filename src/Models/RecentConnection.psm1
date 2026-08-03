@@ -1,5 +1,4 @@
 using module ".\MachineInventory.psm1"
-using module ".\DiskUsage.psm1"
 
 <#
 .SYNOPSIS
@@ -8,9 +7,10 @@ using module ".\DiskUsage.psm1"
 .DESCRIPTION
     Entries live in AppConfig.Settings['recentHosts'] as plain hashtables so they
     round-trip cleanly through ConfigManager's JSON. This pure Model is the typed
-    view of one entry (status, counts, cached inventory + disk usage); the
-    upsert/seed/cap/sort + persistence logic lives in
-    Services\RecentConnectionsStore (Models do no I/O).
+    view of one entry (status, counts, cached inventory); the upsert/seed/cap/sort
+    + persistence logic lives in Services\RecentConnectionsStore (Models do no
+    I/O). Disk-usage data is deliberately absent: the scan's CSV in reports\ is
+    its store, config stays settings-only.
 #>
 class RecentConnection {
     [string] $Hostname
@@ -22,7 +22,6 @@ class RecentConnection {
     [bool]   $RebootRequired
     [string] $Owner           # SCCM primary user's display name; cached, looked up once
     [MachineInventory] $Inventory   # cached probe result, or $null when never probed
-    [DiskUsageReport]  $DiskUsage   # cached "biggest folders" scan, or $null when never run
 
     static [RecentConnection] FromHashtable([hashtable]$h) {
         $rc = [RecentConnection]::new()
@@ -36,9 +35,6 @@ class RecentConnection {
         $rc.Owner          = [string]$h['owner']
         if ($null -ne $h['inventory']) {
             $rc.Inventory = [MachineInventory]::FromHashtable([hashtable]$h['inventory'])
-        }
-        if ($null -ne $h['diskUsage']) {
-            $rc.DiskUsage = [DiskUsageReport]::FromHashtable([hashtable]$h['diskUsage'])
         }
         return $rc
     }
