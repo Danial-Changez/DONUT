@@ -1,5 +1,8 @@
 <h1> DONUT </h1>
 
+[![CI](https://github.com/Danial-Changez/DONUT/actions/workflows/ci.yml/badge.svg)](https://github.com/Danial-Changez/DONUT/actions/workflows/ci.yml)
+[![Docs](https://github.com/Danial-Changez/DONUT/actions/workflows/docs.yml/badge.svg)](https://github.com/Danial-Changez/DONUT/actions/workflows/docs.yml)
+
 DONUT is a fleet management app for Dell workstations. It searches Active Directory for machines and people, runs remote driver scans and updates through Dell Command Update, inspects hardware and storage, and looks up a user's devices and BitLocker recovery keys. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [architecture overview](docs/development/architecture/overview.md) describes how it is built.
 
 **Full documentation lives at <https://danial-changez.github.io/DONUT/>** — feature guides, the `config.json` reference, and the architecture pages, built from [`docs/`](docs/README.md).

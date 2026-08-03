@@ -66,7 +66,14 @@ if ($results) {
 
 if ($FailOn -ne 'None') {
     $order = @{ Information = 1; Warning = 2; Error = 3 }
-    $gate = $results | Where-Object { $order[[string]$_.Severity] -ge $order[$FailOn] }
+    # The gate skips what the listing above skips: layout rules are accepted style
+    # debt, and the remaining TypeNotFound hits are cross-module class references
+    # the analyzer can't resolve because it parses each file without its
+    # `using module` graph. Both stay visible in the summary; neither is a defect.
+    $nonGating = @('PSAvoidTrailingWhitespace', 'PSAvoidLongLines', 'TypeNotFound')
+    $gate = $results | Where-Object {
+        $order[[string]$_.Severity] -ge $order[$FailOn] -and $_.RuleName -notin $nonGating
+    }
     if ($gate) {
         Write-Host "FAIL: $($gate.Count) finding(s) at or above severity '$FailOn'." -ForegroundColor Red
         exit 1

@@ -1,0 +1,51 @@
+# The app gate: format, lint, tests, launcher build - each one a repo script
+# (tools/) so CI and a local run are the same command. Docs and the site have
+# their own pipelines (docs.yml, web-check.yml); the lab harness is
+# diagnostics.yml. Test suite needs Windows: WPF tests run STA.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['web/**', 'docs/**']
+  pull_request:
+    paths-ignore: ['web/**', 'docs/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install PowerShell modules
+        shell: pwsh
+        run: |
+          Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+              Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          }
+
+      - name: Format check
+        shell: pwsh
+        run: ./tools/Invoke-Format.ps1 -Check
+
+      - name: Lint
+        shell: pwsh
+        run: ./tools/Invoke-Lint.ps1 -FailOn Warning
+
+      - name: Tests
+        shell: pwsh
+        run: ./tools/Invoke-Tests.ps1
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build launcher
+        run: dotnet build DONUT.sln -c Release
