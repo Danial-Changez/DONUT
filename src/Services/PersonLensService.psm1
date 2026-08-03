@@ -1,5 +1,7 @@
 using module "..\Core\ElevationContext.psm1"
 using module "..\Core\LogService.psm1"
+using module "..\Core\DonutPaths.psm1"
+using module "..\Core\WorkerProcess.psm1"
 using module "..\Models\PersonLens.psm1"
 
 <#
@@ -146,11 +148,8 @@ class PersonLensService {
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
             if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
 
-            $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            if (-not $explorer) { return 'no interactive desktop session to de-elevate into.' }
-            $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner
-            $interactiveUser = "$($owner.Domain)\$($owner.User)"
+            $interactiveUser = [ElevationContext]::InteractiveUser()
+            if (-not $interactiveUser) { return 'no interactive desktop session to de-elevate into.' }
 
             # Cold start: replace any previous instance and rebuild the exchange dir.
             [PersonLensService]::SweepStaleExchanges(15)
@@ -162,30 +161,13 @@ class PersonLensService {
 
             # Strip the inherited ACL (ProgramData grants all local users read!) down to
             # SYSTEM / Administrators / the interactive user - bundles hold BitLocker keys.
-            try {
-                $acl = Get-Acl $dir
-                $acl.SetAccessRuleProtection($true, $false)
-                $system = [System.Security.Principal.SecurityIdentifier]::new(
-                    [System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
-                $admins = [System.Security.Principal.SecurityIdentifier]::new(
-                    [System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
-                foreach ($who in @($system, $admins, $interactiveUser)) {
-                    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-                            $who, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-                }
-                Set-Acl -Path $dir -AclObject $acl
-            }
-            catch {
-                return "could not secure the exchange folder for ${interactiveUser}: $($_.Exception.Message)"
-            }
+            $aclError = [DonutPaths]::Secure($dir)
+            if ($aclError) { return $aclError }
 
             # Session key: the agent encrypts every payload with it for its lifetime.
             [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
 
-            # Resolve pwsh.exe via PATH: $PID isn't accessible in a class method, and the
-            # production host is Donut.Launcher.exe anyway. PowerShell 7 is a prerequisite.
-            $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
-            $pwshPath = if ($cmd) { [string]$cmd.Source } else { '' }
+            $pwshPath = [WorkerProcess]::FindPwsh()
             if (-not $pwshPath) { return 'could not resolve pwsh.exe to run the de-elevated agent.' }
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id

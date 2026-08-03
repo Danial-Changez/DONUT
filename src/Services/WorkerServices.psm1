@@ -516,13 +516,14 @@ class ExecutionService {
         $deadline = [datetime]::UtcNow.AddMinutes($maxMinutes)
         $startedUtc = [datetime]::UtcNow
         $nextReportUtc = $startedUtc.AddSeconds(30)
-        while (-not $p.HasExited) {
+        # WaitForExit(ms) sleeps AND returns the instant the process exits, so a job
+        # never pays up to 1.5 s of dead latency the old sleep-then-recheck loop cost.
+        while (-not $p.WaitForExit(1500)) {
             if ([datetime]::UtcNow -gt $deadline) {
                 # Best-effort: it may already be exiting, or we may lack rights to kill it.
                 try { $p.Kill($true) } catch { }
                 throw [RemoteTimeoutException]::new($target, $operation, $maxMinutes)
             }
-            Start-Sleep -Milliseconds 1500
             if ($null -ne $onTick) { & $onTick }
             # Heartbeat: the remote process is still alive - the wait isn't the wedge.
             if ([datetime]::UtcNow -ge $nextReportUtc) {
@@ -531,7 +532,7 @@ class ExecutionService {
                 $nextReportUtc = [datetime]::UtcNow.AddSeconds(30)
             }
         }
-        $p.WaitForExit()   # flush the exit code after HasExited flips
+        $p.WaitForExit()   # flush async output/exit code after the timed wait returns true
         $exitCode = [int]$p.ExitCode
         if ($exitCode -lt 0) {
             throw [RemoteProcessStartException]::new($target, $operation, $exitCode)
@@ -593,8 +594,9 @@ class ExecutionService {
             "$hostName-inventory.json")
     }
 
-    # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the CSV
-    # back. The only place DONUT pushes a file TO the target; the exe stays for reuse.
+    # Deploys the bundled WizTree, runs a fast MFT folder scan as SYSTEM, copies the
+    # remotely-trimmed top-rows CSV back. The only place DONUT pushes a file TO the
+    # target; the exe stays for reuse.
     [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
         $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
 
@@ -612,14 +614,16 @@ class ExecutionService {
         $this.DeployWizTree($ip)
         $this.Logger.LogInfo("[$ip] DiskScan: DeployWizTree done in $($sw.ElapsedMilliseconds) ms.")
 
+        $topN = 12
+        if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
+
         $sw.Restart()
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) start.")
-        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand(), 'DonutDisk', 20)
+        $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand($topN), 'DonutDisk', 20)
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
 
         $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
-        $jsonPath = $this.ParseAndCacheFolders($device.HostName, $csvPath, $options)
-        return @{ FoldersPath = $csvPath; FoldersJson = $jsonPath }
+        return @{ FoldersPath = $csvPath }
     }
 
     # Clears the contents of the operator-selected folders on the target as SYSTEM (psexec),
@@ -710,28 +714,6 @@ foreach (`$t in `$targets) {
 "@
     }
 
-    # Parses the (large) WizTree CSV on the pool thread and writes a compact top-N
-    # JSON, so the UI thread only reads a tiny file (a raw parse there froze the UI).
-    [string] ParseAndCacheFolders([string]$hostName, [string]$csvPath, [hashtable]$options) {
-        $topN = 12
-        if ($null -ne $options -and $options.TopN) { $topN = [int]$options.TopN }
-
-        $jsonPath = Join-Path $this.LocalReportsDir "$hostName-folders.json"
-        if (-not (Test-Path $csvPath)) { return $jsonPath }
-
-        try {
-            # Stream line-by-line: a -Raw read of a full-drive export caused gen-2
-            # GCs that suspended the UI mid-scan (see DiskUsage.psm1).
-            $report = [WizTreeCsv]::ParseTopFoldersFromFile($csvPath, $topN)
-            $report.ToHashtable() | ConvertTo-Json -Depth 5 |
-                Set-Content -Path $jsonPath -Encoding UTF8
-        }
-        catch {
-            $this.Logger.LogException("[$hostName] Failed to parse WizTree CSV", $_)
-        }
-        return $jsonPath
-    }
-
     # Copies wiztree64.exe to the target's working dir (only when not already
     # present, so repeat scans skip the ~2 MB transfer).
     [void] DeployWizTree([string]$ip) {
@@ -753,18 +735,64 @@ foreach (`$t in `$targets) {
         }
     }
 
-    # The headless WizTree command: fast MFT scan of C:, folders only, size-sorted CSV.
+    # The headless WizTree command: fast MFT scan of C:, folders only. The export is
+    # TREE-ordered (depth-first; /sortby=1 only orders siblings), so a head trim
+    # walks down the one biggest branch instead of ranking the drive - the loop
+    # below streams the whole export once and keeps the cap largest rows. Size sits
+    # directly after the quoted path (column order: File Name, Size, Allocated, ...)
+    # and a Windows path can never contain a quote, so IndexOf('",') splits without
+    # CSV parsing; winners keep their original text, so the controller-side parser
+    # stays the quoting authority. Only those rows cross SMB (~KB, was ~40 MB) and
+    # the full export is deleted, not left behind. A /filter=">=size" export was
+    # considered and rejected: whether it filters on folder AGGREGATE size is
+    # undocumented, and it returns short lists on low-usage disks.
     # Isolated here so a pure-PowerShell fallback would be a single-method swap.
-    static [string] BuildScanCommand() {
-        return @'
+    static [string] BuildScanCommand([int]$topN) {
+        # +1: the volume-root row always wins a slot and the local parser drops it.
+        $cap = [Math]::Max($topN, 1) + 1
+        return @"
 & 'C:\temp\DONUT\wiztree64.exe' "C:" /export="C:\temp\DONUT\folders.csv" /admin=1 /exportfolders=1 /exportfiles=0 /sortby=1 /exportmaxdepth=4 | Out-Null
-'@
+`$head = [Collections.Generic.List[string]]::new()
+`$sizes = [Collections.Generic.List[long]]::new()
+`$rows = [Collections.Generic.List[string]]::new()
+`$min = [long]::MaxValue
+`$inData = `$false
+foreach (`$line in [IO.File]::ReadLines('C:\temp\DONUT\folders.csv')) {
+    if (-not `$inData) {
+        `$head.Add(`$line)
+        if (`$line -match 'File Name') { `$inData = `$true }
+        elseif (`$head.Count -ge 16) { break }
+        continue
+    }
+    `$q = `$line.IndexOf('",')
+    if (`$q -lt 1) { continue }
+    `$size = 0L
+    if (-not [long]::TryParse(`$line.Substring(`$q + 2).Split(',')[0], [ref]`$size)) { continue }
+    if (`$rows.Count -lt $cap) {
+        `$sizes.Add(`$size)
+        `$rows.Add(`$line)
+        if (`$size -lt `$min) { `$min = `$size }
+        continue
+    }
+    if (`$size -le `$min) { continue }
+    `$evict = 0
+    for (`$i = 1; `$i -lt `$sizes.Count; `$i++) { if (`$sizes[`$i] -lt `$sizes[`$evict]) { `$evict = `$i } }
+    `$sizes[`$evict] = `$size
+    `$rows[`$evict] = `$line
+    `$min = [long]::MaxValue
+    foreach (`$s in `$sizes) { if (`$s -lt `$min) { `$min = `$s } }
+}
+`$order = if (`$rows.Count -gt 0) { 0..(`$rows.Count - 1) | Sort-Object { `$sizes[`$_] } -Descending } else { @() }
+[IO.File]::WriteAllLines('C:\temp\DONUT\folders-top.csv', [string[]](@(`$head) + @(foreach (`$i in `$order) { `$rows[`$i] })))
+Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
+"@
     }
 
-    # WizTree always exports the fixed name folders.csv; only the local copy is
-    # host-qualified.
+    # The remote script trims the size-ranked export to folders-top.csv; only the
+    # local copy is host-qualified. A missing remote file (failed scan) surfaces
+    # here, same as it did when the full export was the artifact.
     [string] CopyDiskUsageArtifact([string] $hostName) {
-        return $this.CopyBackArtifact($hostName, 'folders.csv', "$hostName-folders.csv")
+        return $this.CopyBackArtifact($hostName, 'folders-top.csv', "$hostName-folders.csv")
     }
 
     [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {

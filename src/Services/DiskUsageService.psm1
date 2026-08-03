@@ -10,11 +10,11 @@ using module ".\RemoteServices.psm1"
 
 .DESCRIPTION
     A WizTree MFT scan that runs on the remote host (deployed and executed by the
-    worker's RunDiskScanPhase), exports a folder CSV which is copied back and
-    parsed into a [DiskUsageReport]. Mirrors InventoryService - subclasses
-    RemoteJobService, reusing BuildWorkerArgs. Heavier than
-    the inventory probe, so it is triggered on demand rather than on every
-    scan/apply.
+    worker's RunDiskScanPhase), exports a folder CSV whose N largest rows are
+    selected on the target before the copy-back, then parsed into a
+    [DiskUsageReport]. Mirrors InventoryService - subclasses RemoteJobService,
+    reusing BuildWorkerArgs. Heavier than the inventory probe, so it is triggered
+    on demand rather than on every scan/apply.
 #>
 class DiskUsageService : RemoteJobService {
 
@@ -35,20 +35,13 @@ class DiskUsageService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "DeleteFolders", @{ Paths = $paths })
     }
 
-    # Reads the compact top-N JSON the worker wrote (the heavy CSV parse already ran on
-    # the pool thread), so this is cheap on the dispatcher. $null when missing/unparseable.
+    # Reads the top-rows CSV the worker copied back (already just the N+1 largest
+    # rows, selected on the target) into a typed report - small enough to parse on
+    # the dispatcher. $null when no scan has run; a corrupt file parses to an
+    # empty report, which callers treat the same.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {
-        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-folders.json"
-        if (-not (Test-Path $reportPath)) { return $null }
-
-        try {
-            $raw = Get-Content -Path $reportPath -Raw
-            $h = $raw | ConvertFrom-Json -AsHashtable
-            return [DiskUsageReport]::FromHashtable([hashtable]$h)
-        }
-        catch {
-            $this.Logger.LogException("Failed to parse disk-usage report for $hostName", $_)
-            return $null
-        }
+        $csvPath = Join-Path $this.Config.ReportsPath "$hostName-folders.csv"
+        if (-not (Test-Path $csvPath)) { return $null }
+        return [WizTreeCsv]::ParseTopFoldersFromFile($csvPath, $this.Config.GetFolderScanCount())
     }
 }

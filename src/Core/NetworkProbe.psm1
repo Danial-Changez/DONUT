@@ -13,14 +13,14 @@ using module ".\LogService.psm1"
     reachable one is used as the DNS server for all subsequent lookups.
 
     Resolution is fail-hard: if no domain controller can be discovered or reached,
-    ResolveHost / CheckReverseDNS log an [ERROR] and return $null/$false rather
-    than silently falling back to the local resolver.
+    ResolveHost logs an [ERROR] and returns $null rather than silently falling
+    back to the local resolver.
 
 .NOTES
     The raw AD/DNS calls are isolated in overridable seam methods
-    (QueryDomainControllers, ResolveViaServer, ResolvePtrViaServer,
-    TestServerOnline) so the discovery/selection logic can be unit-tested off a
-    domain by subclassing this type and faking those seams.
+    (QueryDomainControllers, ResolveViaServer, TestServerOnline) so the
+    discovery/selection logic can be unit-tested off a domain by subclassing
+    this type and faking those seams.
 #>
 class NetworkProbe {
     [LogService] $Logger
@@ -118,7 +118,7 @@ class NetworkProbe {
         try {
             $ip = $this.ResolveViaServer($hostName, $server)
             if ($null -ne $ip) {
-                $this.Logger.LogStructured("DEBUG", "DNS_RESOLVE", @{ host = $hostName; server = $server; ip = $ip.ToString() })
+                $this.Logger.LogDebug("DNS_RESOLVE|host=$hostName|ip=$ip|server=$server")
                 return $ip
             }
             $this.Logger.LogError("DNS resolution for '$hostName' via domain controller '$server' returned no address.")
@@ -147,27 +147,6 @@ class NetworkProbe {
         catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
             return $null
-        }
-    }
-
-    [bool] CheckReverseDNS([IPAddress]$ip, [string]$expectedHostName) {
-        $server = $this.GetActiveDomainController()
-        if ([string]::IsNullOrWhiteSpace($server)) {
-            $this.Logger.LogError("Reverse DNS check failed for '$ip': no active domain controller available.")
-            return $false
-        }
-
-        try {
-            $resolvedName = $this.ResolvePtrViaServer($ip, $server)
-            if ([string]::IsNullOrWhiteSpace($resolvedName)) {
-                $this.Logger.LogWarning("Reverse DNS for '$ip' via domain controller '$server' returned no name.")
-                return $false
-            }
-            return $resolvedName -like "*$expectedHostName*"
-        }
-        catch {
-            $this.Logger.LogException("Reverse DNS check for '$ip' via domain controller '$server' failed", $_)
-            return $false
         }
     }
 
@@ -329,18 +308,44 @@ class NetworkProbe {
         return $null
     }
 
-    # Resolves the PTR (reverse) record for an IP using the given DNS server.
-    hidden [string] ResolvePtrViaServer([IPAddress]$ip, [string]$server) {
-        $records = Resolve-DnsName -Name $ip.ToString() -Server $server -Type PTR -ErrorAction Stop
-        $ptr = $records | Where-Object { $_.NameHost } | Select-Object -First 1
-        if ($null -ne $ptr) {
-            return $ptr.NameHost
-        }
-        return $null
-    }
-
     # Reports whether a server is reachable (used to pick an active DC).
     hidden [bool] TestServerOnline([string]$server) {
         return $this.IsOnline($server)
+    }
+
+    # --- First-run org discovery (results persist to config; the repo ships no
+    #     organization names) ---
+
+    # The AD domains the finder should search: this machine's own domain plus
+    # every trust partner (domain and forest trusts). Best-effort - off a domain
+    # this returns @() and the finder searches nothing until config names domains.
+    [string[]] DiscoverSearchDomains() {
+        $found = [System.Collections.Generic.List[string]]::new()
+        try {
+            Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
+            $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+            $found.Add($domain.Name)
+            foreach ($t in @($domain.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
+            foreach ($t in @($domain.Forest.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
+        }
+        catch {
+            $this.Logger.LogDebug("Search-domain discovery unavailable: $($_.Exception.Message)")
+        }
+        return @($found | Where-Object { $_ } | Select-Object -Unique)
+    }
+
+    # The SCCM management point this client reports to - the best available guess
+    # for the AdminService (SMS Provider) host; config-editable when they differ.
+    # Best-effort: no SCCM client -> ''.
+    [string] DiscoverSiteServer() {
+        try {
+            $auth = Get-CimInstance -Namespace 'root\ccm' -ClassName 'SMS_Authority' -ErrorAction Stop |
+                Select-Object -First 1
+            return [string]$auth.CurrentManagementPoint
+        }
+        catch {
+            $this.Logger.LogDebug("Site-server discovery unavailable: $($_.Exception.Message)")
+            return ''
+        }
     }
 }

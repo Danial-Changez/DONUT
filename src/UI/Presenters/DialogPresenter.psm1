@@ -1,6 +1,7 @@
 using namespace System.Windows
 using namespace Donut.Mvvm
 using module '..\..\Services\ResourceService.psm1'
+using module '..\..\Core\ViewLoader.psm1'
 using module '..\ViewModels\DialogViewModel.psm1'
 
 <#
@@ -28,14 +29,8 @@ class DialogPresenter {
     }
 
     hidden [void] Initialize() {
-        $xamlPath = Join-Path $this.Resources.SourceRoot "UI\Views\DialogWindow.xaml"
-        if (-not (Test-Path $xamlPath)) { throw "DialogWindow.xaml not found at $xamlPath" }
-
         try {
-            $reader = [System.Xml.XmlReader]::Create($xamlPath)
-            $this.Window = [System.Windows.Markup.XamlReader]::Load($reader)
-            $reader.Close()
-
+            $this.Window = [ViewLoader]::Load($this.Resources.SourceRoot, "UI\Views\DialogWindow.xaml")
             $this.Resources.ApplyResourcesToWindow($this.Window)
 
             # Handlers must close over $self (see .NOTES) or the buttons silently die.

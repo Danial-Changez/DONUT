@@ -11,7 +11,7 @@ using module ".\DonutPaths.psm1"
 
 .NOTES
     The filesystem touch points are isolated in overridable seam methods
-    (PathExists, ReadLines), mirroring NetworkProbe / SystemInfoService, so
+    (PathExists, ReadLines), mirroring NetworkProbe, so
     path-selection and parsing can be exercised off-disk by subclassing this type
     and faking those seams. ReadHosts returns a trimmed, blank-free string[].
 #>

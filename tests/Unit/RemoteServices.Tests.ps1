@@ -12,14 +12,12 @@ class MockNetworkProbe : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
     [IPAddress] $ResolveHostResult = [IPAddress]::Parse("127.0.0.1")
-    [bool] $ReverseDnsResult = $true
 
     MockNetworkProbe() {}
 
     [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
     [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
     [IPAddress] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
-    [bool] CheckReverseDNS([IPAddress]$ip, [string]$hostName) { return $this.ReverseDnsResult }
 }
 
 Describe "RemoteServices" {
@@ -39,18 +37,18 @@ Describe "RemoteServices" {
         Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Context "ScanService" {
+    Context "Scan preparation" {
         It "Should initialize correctly" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
             $service | Should -Not -BeNullOrEmpty
         }
 
         It "PrepareScan should return correct arguments (no network on the UI thread)" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
-            $result = $service.PrepareScan("TestHost")
+            $result = $service.PrepareScanForUpdates("TestHost")
 
             # Pester assertions
             $result.ScriptPath | Should -Match "Scripts\\RemoteWorker.ps1$"
@@ -63,9 +61,9 @@ Describe "RemoteServices" {
             # reachability is asserted later by the worker on the runspace pool.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
-            { $service.PrepareScan("OfflineHost") } | Should -Not -Throw
+            { $service.PrepareScanForUpdates("OfflineHost") } | Should -Not -Throw
         }
     }
 
@@ -373,7 +371,7 @@ Describe "RemoteServices" {
     Context "Logging" {
         It "Should default to a no-op logger when constructed without one" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
             $service.Logger | Should -Not -BeNullOrEmpty
         }
@@ -387,9 +385,9 @@ Describe "RemoteServices" {
             
             $emptyConfig = [AppConfig]::new($emptyDir, (Join-Path $emptyDir "Logs"), (Join-Path $emptyDir "Reports"), @{})
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($emptyConfig, $probe)
+            $service = [RemoteUpdateService]::new($emptyConfig, $probe, $null)
 
-            { $service.PrepareScan("TestHost") } | Should -Throw "*RemoteWorker script not found*"
+            { $service.PrepareScanForUpdates("TestHost") } | Should -Throw "*RemoteWorker script not found*"
 
             # Cleanup
             Remove-Item -Path $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -397,65 +395,83 @@ Describe "RemoteServices" {
 
         It "Should include SourceRoot in arguments" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
-            $result = $service.PrepareScan("TestHost")
+            $result = $service.PrepareScanForUpdates("TestHost")
             
             $result.Arguments.SourceRoot | Should -Be $config.SourceRoot
         }
 
         It "Should include LogsDir and ReportsDir in arguments" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
-            $result = $service.PrepareScan("TestHost")
+            $result = $service.PrepareScanForUpdates("TestHost")
 
             $result.Arguments.LogsDir | Should -Be $config.LogsPath
             $result.Arguments.ReportsDir | Should -Be $config.ReportsPath
         }
 
-        It "Should send a config Settings snapshot so the worker need not re-read config.json" {
+        It "Should send the config keys workers read so the worker need not re-read config.json" {
             $probe = [MockNetworkProbe]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
-                activeCommand = "applyUpdates"
+                recoveryWindowMinutes = 45
             })
-            $service = [ScanService]::new($cfg, $probe)
+            $service = [RemoteUpdateService]::new($cfg, $probe, $null)
 
-            $result = $service.PrepareScan("TestHost")
+            $result = $service.PrepareScanForUpdates("TestHost")
 
-            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+            $result.Arguments.Settings.recoveryWindowMinutes | Should -Be 45
+            $result.Arguments.Settings.commands.scan.args.ContainsKey('silent') | Should -BeTrue
             # A SNAPSHOT, never the live reference: the worker deep-enumerates this
             # hashtable off-thread, and enumerating a live table the UI thread is
             # writing can corrupt it and spin forever (a silent pure-CPU wedge).
-            [object]::ReferenceEquals($result.Arguments.Settings, $cfg.Settings) |
+            [object]::ReferenceEquals($result.Arguments.Settings.commands, $cfg.Settings.commands) |
                 Should -BeFalse -Because (
-                "jobs must carry a UI-thread deep clone of Settings, not the live " +
-                "reference the UI keeps mutating")
+                "jobs must carry a UI-thread deep clone of the command table, not the " +
+                "live reference the UI keeps mutating")
+        }
+
+        It "Should NOT ship the recents store (or other UI-only keys) to workers" {
+            # recentHosts carries up to 50 cached inventory/diskUsage payloads; no worker
+            # reads it, and shipping it cost a UI-thread deep clone + a ~100 KB JSON
+            # serialize per job.
+            $probe = [MockNetworkProbe]::new()
+            $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
+                recentHosts   = @(@{ host = 'HOST-1'; inventory = @{ model = 'X' } })
+                activeCommand = "applyUpdates"
+            })
+            $service = [RemoteUpdateService]::new($cfg, $probe, $null)
+
+            $settings = $service.PrepareScanForUpdates("TestHost").Arguments.Settings
+
+            $settings.ContainsKey('recentHosts') | Should -BeFalse
+            $settings.ContainsKey('activeCommand') | Should -BeFalse
         }
 
         It "Should carry Settings on apply-phase arguments too" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
-                activeCommand = "applyUpdates"
+                recoveryWindowMinutes = 45
             })
             $service = [RemoteUpdateService]::new($cfg, $probe, $matcher)
 
             $result = $service.PrepareApplyUpdates("TestHost", @{})
 
-            $result.Arguments.Settings.activeCommand | Should -Be "applyUpdates"
+            $result.Arguments.Settings.recoveryWindowMinutes | Should -Be 45
         }
 
         It "Should carry the logger's effective debug state as the DebugLog arg" {
             $probe = [MockNetworkProbe]::new()
-            $service = [ScanService]::new($config, $probe)
+            $service = [RemoteUpdateService]::new($config, $probe, $null)
 
             # Constructed without a logger -> NullLogService, whose class default is
             # verbose; the arg mirrors whatever the injected logger's gate says.
-            $service.PrepareScan("TestHost").Arguments.DebugLog | Should -BeTrue
+            $service.PrepareScanForUpdates("TestHost").Arguments.DebugLog | Should -BeTrue
 
             $service.Logger.DebugEnabled = $false
-            $service.PrepareScan("TestHost").Arguments.DebugLog | Should -BeFalse
+            $service.PrepareScanForUpdates("TestHost").Arguments.DebugLog | Should -BeFalse
         }
 
         It "Should carry an Options snapshot, never the live reference" {

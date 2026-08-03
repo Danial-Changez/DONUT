@@ -81,7 +81,7 @@ Describe "ActiveDirectoryService.Search" {
     It "aggregates computers + users across all forests and maps fields" {
         $svc = [FakeAdService]::new(@('d1', 'd2'), $null)
         $svc.UserRows['d1'] = @(New-UserRow 'sarah' 'sarah.test@contoso.com' 'Sarah Test' $true)
-        $svc.UserRows['d2'] = @(New-UserRow 'sam2'  'sam2@forest-b'                      'Sam Two'    $false)
+        $svc.UserRows['d2'] = @(New-UserRow 'sam2'  'sam2@fabrikam'                      'Sam Two'    $false)
         $svc.ComputerRows['d1'] = @(New-CompRow 'WS-014')
 
         $r = @($svc.Search('sar'))

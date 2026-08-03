@@ -20,8 +20,8 @@ up).
 | `throttleLimit` | int, `8` | How many machines run concurrently on the runspace pool |
 | `folderScanCount` | int, `12` | How many largest folders the on-demand [storage scan](../features/machine-details.md#storage-scan-biggest-folders) returns (top-N by size) |
 | `recoveryWindowMinutes` | int, `30` | After a network drop mid-run, how long DONUT keeps trying to reconnect and resume the log tail before settling the row as *Unconfirmed* |
-| `domains` | string[], org forests | The AD forests the [finder](../features/ad-finder.md) searches; each is queried independently |
-| `adminServiceHost` | string, org SMS Provider | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup |
+| `domains` | string[], discovered | The AD forests the [finder](../features/ad-finder.md) searches; each is queried independently. Empty on first run, DONUT discovers them from the machine's own domain plus its trust partners and persists the result here |
+| `adminServiceHost` | string, discovered | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup. Empty on first run, DONUT persists the local SCCM client's management point; edit it when the SMS Provider is a different box |
 | `startWithWindows` | bool, `false` | Register the logon scheduled task, which starts DONUT as you at your normal rights ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
 | `runAsAdmin` | bool, **`true`** | Elevate DONUT at launch. On by default, and the only key here that falls back to `true` on a missing or corrupt value: remote work authenticates as the process, so a de-elevated DONUT is the console user, who has no rights on fleet targets. Turning it off applies at the next launch; turning it on relaunches through UAC now. **Two things do not follow it:** a tray/autostart launch never elevates (a prompt at the sign-in screen), and a declined prompt never rewrites the key |
@@ -76,5 +76,5 @@ up).
 }
 ```
 
-(`domains` and `adminServiceHost` default to the org's forests and SMS Provider and
-are omitted above; override them in Settings or here if your environment differs.)
+(`domains` and `adminServiceHost` are discovered on first run and persisted - they are
+omitted above; override them here if discovery guessed wrong for your environment.)

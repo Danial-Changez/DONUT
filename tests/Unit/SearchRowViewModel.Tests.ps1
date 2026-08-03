@@ -26,10 +26,10 @@ Describe "SearchRowViewModel" {
     It "falls back to SamAccountName and appends the locked suffix for a locked user" {
         $vm = [SearchRowViewModel]::FromResult([pscustomobject]@{
             Kind = 'User'; UserPrincipalName = ''; SamAccountName = 'jdoe'
-            DisplayName = ''; Domain = 'forest-c.local'; LockedOut = $true
+            DisplayName = ''; Domain = 'fabrikam.local'; LockedOut = $true
         })
         $vm.Primary   | Should -Be 'jdoe  (locked)'   # ASCII, never an emoji (coding style)
-        $vm.Secondary | Should -Be 'forest-c.local'   # blank display name dropped from the join
+        $vm.Secondary | Should -Be 'fabrikam.local'   # blank display name dropped from the join
         $vm.CanUnlock | Should -BeTrue
     }
 

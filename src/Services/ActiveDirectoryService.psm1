@@ -1,6 +1,10 @@
 using module "..\Core\LogService.psm1"
 using module "..\Models\AdSearchResult.psm1"
 
+# Loaded once at import, not per QueryDirectory call - that seam sits on the
+# finder's per-keystroke hot path.
+Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
+
 <#
 .SYNOPSIS
     Live AD search (computers + users) across forests, plus account unlock.
@@ -154,7 +158,6 @@ class ActiveDirectoryService {
     # DirectorySearcher (not the AD module) keeps this fast and RSAT-free.
     hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter,
         [string[]]$props, [int]$max) {
-        Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
         $entry = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
         $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
         try {

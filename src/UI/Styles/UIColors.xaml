@@ -6,20 +6,10 @@
     <!-- Primary/Secondary Background Colors -->
     <!-- Arcane background = oklch(0.145 0 0) = #0A0A0A (true near-black) -->
     <Color x:Key="PrimaryBackgroundDarkColor"> #0A0A0A</Color>
-    <SolidColorBrush x:Key="PrimaryBackgroundDark"
-                     Color="{StaticResource PrimaryBackgroundDarkColor}" />
     <Color x:Key="PrimaryBackgroundColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackground"
                      Color="{StaticResource PrimaryBackgroundColor}" />
-    <Color x:Key="SecondaryBackgroundDarkColor"> #0D0D0D</Color>
-    <SolidColorBrush x:Key="SecondaryBackgroundDark"
-                     Color="{StaticResource SecondaryBackgroundDarkColor}" />
-    <Color x:Key="SecondaryBackgroundColor"> #0A0A0A</Color>
-    <SolidColorBrush x:Key="SecondaryBackground"
-                     Color="{StaticResource SecondaryBackgroundColor}" />
     <Color x:Key="LoginBackgroundDarkColor"> #09090B</Color>
-    <SolidColorBrush x:Key="LoginBackgroundDark"
-                     Color="{StaticResource LoginBackgroundDarkColor}" />
     <Color x:Key="LoginBackgroundColor"> #121214</Color>
     <SolidColorBrush x:Key="LoginBackground"
                      Color="{StaticResource LoginBackgroundColor}" />
@@ -30,15 +20,6 @@
     <Color x:Key="AccentPurpleColor"> #8E51FF</Color>
     <SolidColorBrush x:Key="AccentPurple"
                      Color="{StaticResource AccentPurpleColor}" />
-    <Color x:Key="AccentPurpleHoverColor"> #A78BFA</Color>
-    <SolidColorBrush x:Key="AccentPurpleHover"
-                     Color="{StaticResource AccentPurpleHoverColor}" />
-    <Color x:Key="AccentPinkColor"> #F472B6</Color>
-    <SolidColorBrush x:Key="AccentPink"
-                     Color="{StaticResource AccentPinkColor}" />
-    <Color x:Key="AccentBlueColor"> #60A5FA</Color>
-    <SolidColorBrush x:Key="AccentBlue"
-                     Color="{StaticResource AccentBlueColor}" />
     <Color x:Key="AccentYellowColor"> #FBBF24</Color>
     <SolidColorBrush x:Key="AccentYellow"
                      Color="{StaticResource AccentYellowColor}" />
@@ -59,9 +40,6 @@
     <Color x:Key="AccentBlueLightColor"> #93C5FD</Color>
     <SolidColorBrush x:Key="AccentBlueLight"
                      Color="{StaticResource AccentBlueLightColor}" />
-    <Color x:Key="AccentPinkLightColor"> #F9A8D4</Color>
-    <SolidColorBrush x:Key="AccentPinkLight"
-                     Color="{StaticResource AccentPinkLightColor}" />
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
@@ -113,15 +91,9 @@
     <SolidColorBrush x:Key="PanelBorder"
                      Color="{StaticResource PanelBorderColor}" />
     <!-- Misc Colors -->
-    <Color x:Key="LoginBoxColor"> #33000000</Color>
-    <SolidColorBrush x:Key="LoginBox"
-                     Color="{StaticResource LoginBoxColor}" />
     <Color x:Key="GroupBoxBackgroundColor"> #14FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground"
                      Color="{StaticResource GroupBoxBackgroundColor}" />
-    <Color x:Key="ThrottleLimitColor"> #F87171</Color>
-    <SolidColorBrush x:Key="ThrottleLimit"
-                     Color="{StaticResource ThrottleLimitColor}" />
     <!-- ============================================================
          Arcane shadcn semantic tokens (dark theme, oklch -> sRGB).
          Used by the button variant styles in ButtonStyles.xaml so the
@@ -153,9 +125,6 @@
     <Color x:Key="SurfaceMutedColor"> #262626</Color>
     <SolidColorBrush x:Key="SurfaceMuted"
                      Color="{StaticResource SurfaceMutedColor}" />
-    <Color x:Key="SurfaceMutedForegroundColor"> #A1A1A1</Color>
-    <SolidColorBrush x:Key="SurfaceMutedForeground"
-                     Color="{StaticResource SurfaceMutedForegroundColor}" />
     <!-- Scrollbar thumb at rest: visible enough to be discoverable on near-black
          (the old #27272A was nearly invisible); brightens further on hover/drag. -->
     <Color x:Key="ScrollThumbColor"> #3F3F46</Color>
@@ -165,12 +134,6 @@
     <Color x:Key="DestructiveColor"> #FF6467</Color>
     <SolidColorBrush x:Key="Destructive"
                      Color="{StaticResource DestructiveColor}" />
-    <Color x:Key="DestructiveHoverColor"> #F2484C</Color>
-    <SolidColorBrush x:Key="DestructiveHover"
-                     Color="{StaticResource DestructiveHoverColor}" />
-    <Color x:Key="DestructiveForegroundColor"> #FAFAFA</Color>
-    <SolidColorBrush x:Key="DestructiveForeground"
-                     Color="{StaticResource DestructiveForegroundColor}" />
     <!-- input oklch(1 0 0 / 15%) = translucent white (slightly stronger than border) -->
     <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
     <SolidColorBrush x:Key="InputBorder"
@@ -248,12 +211,6 @@
     <Color x:Key="TintAmberBorderColor"> #4DF59E0B</Color>
     <SolidColorBrush x:Key="TintAmberBorder"
                      Color="{StaticResource TintAmberBorderColor}" />
-    <Color x:Key="TintAmberHoverColor"> #33F59E0B</Color>
-    <SolidColorBrush x:Key="TintAmberHover"
-                     Color="{StaticResource TintAmberHoverColor}" />
-    <Color x:Key="TintAmberBorderHoverColor"> #66F59E0B</Color>
-    <SolidColorBrush x:Key="TintAmberBorderHover"
-                     Color="{StaticResource TintAmberBorderHoverColor}" />
     <Color x:Key="TintRedColor"> #1AEF4444</Color>
     <SolidColorBrush x:Key="TintRed"
                      Color="{StaticResource TintRedColor}" />
@@ -271,22 +228,6 @@
     <Color x:Key="FocusRingColor"> #998022FE</Color>
     <SolidColorBrush x:Key="FocusRing"
                      Color="{StaticResource FocusRingColor}" />
-    <!-- Indigo (Arcane "scan" tone, indigo-500 #6366F1; text = indigo-300 #A5B4FC) -->
-    <Color x:Key="AccentIndigoColor"> #A5B4FC</Color>
-    <SolidColorBrush x:Key="AccentIndigo"
-                     Color="{StaticResource AccentIndigoColor}" />
-    <Color x:Key="TintScanColor"> #1A6366F1</Color>
-    <SolidColorBrush x:Key="TintScan"
-                     Color="{StaticResource TintScanColor}" />
-    <Color x:Key="TintScanBorderColor"> #4D6366F1</Color>
-    <SolidColorBrush x:Key="TintScanBorder"
-                     Color="{StaticResource TintScanBorderColor}" />
-    <Color x:Key="TintScanHoverColor"> #336366F1</Color>
-    <SolidColorBrush x:Key="TintScanHover"
-                     Color="{StaticResource TintScanHoverColor}" />
-    <Color x:Key="TintScanBorderHoverColor"> #666366F1</Color>
-    <SolidColorBrush x:Key="TintScanBorderHover"
-                     Color="{StaticResource TintScanBorderHoverColor}" />
     <!-- Sky (info tone, sky-500 #0EA5E9; text shade is AccentCyan = sky-400) -->
     <Color x:Key="TintSkyColor"> #1A0EA5E9</Color>
     <SolidColorBrush x:Key="TintSky"
@@ -294,10 +235,4 @@
     <Color x:Key="TintSkyBorderColor"> #4D0EA5E9</Color>
     <SolidColorBrush x:Key="TintSkyBorder"
                      Color="{StaticResource TintSkyBorderColor}" />
-    <Color x:Key="TintSkyHoverColor"> #330EA5E9</Color>
-    <SolidColorBrush x:Key="TintSkyHover"
-                     Color="{StaticResource TintSkyHoverColor}" />
-    <Color x:Key="TintSkyBorderHoverColor"> #660EA5E9</Color>
-    <SolidColorBrush x:Key="TintSkyBorderHover"
-                     Color="{StaticResource TintSkyBorderHoverColor}" />
 </ResourceDictionary>

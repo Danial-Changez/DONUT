@@ -6,12 +6,8 @@
 Describe "tools scripts parse cleanly" {
 
     It "<name> has no parse errors" -ForEach @(
-        @{ name = 'Invoke-DiagnosticRun.ps1' }
-        @{ name = 'Get-DonutRunspaceStacks.ps1' }
-        @{ name = 'Diagnose-LensAgent.ps1' }
-        @{ name = 'Invoke-Tests.ps1' }
-        @{ name = 'Import-PinnedPester.ps1' }
-        @{ name = 'Generate-CoverageReport.ps1' }
+        Get-ChildItem "$PSScriptRoot\..\..\tools" -Filter '*.ps1' |
+            ForEach-Object { @{ name = $_.Name } }
     ) {
         $path = Join-Path (Resolve-Path "$PSScriptRoot\..\..\tools").Path $name
         Test-Path $path | Should -BeTrue

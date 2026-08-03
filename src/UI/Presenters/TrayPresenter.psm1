@@ -8,9 +8,11 @@ using module "..\..\Core\LogService.psm1"
 
 .DESCRIPTION
     Creates the tray NotifyIcon on the WPF UI thread (whose dispatcher pumps its
-    messages), surfaces the main window on left-click or the "Open" menu item, and
-    exits the app via "Exit". Also polls a cross-instance event so a second launch
-    foregrounds the running instance instead of starting a rival window.
+    messages), surfaces the main window on left-click or the "Open" menu item,
+    deep-links "Settings" (surface + overlay) and "Logs" (Explorer on the logs
+    folder), and exits the app via "Exit". Also polls a cross-instance event so a
+    second launch foregrounds the running instance instead of starting a rival
+    window.
 
 .NOTES
     Holds the MainPresenter as [object] (not [MainPresenter]) so MainPresenter can
@@ -46,8 +48,17 @@ class TrayPresenter {
         [void]$this.Menu.Items.Add('Open', $null,
             { param($s, $e) $presenter.ShowMainWindow() }.GetNewClosure())
         [void]$this.Menu.Items.Add([ToolStripSeparator]::new())
+        [void]$this.Menu.Items.Add('Settings', $null,
+            { param($s, $e) $presenter.OpenSettingsFromTray() }.GetNewClosure())
+        [void]$this.Menu.Items.Add('Logs', $null,
+            { param($s, $e) $presenter.OpenLogsFolder() }.GetNewClosure())
+        [void]$this.Menu.Items.Add([ToolStripSeparator]::new())
         [void]$this.Menu.Items.Add('Exit', $null,
             { param($s, $e) $presenter.ExitApp() }.GetNewClosure())
+        # App-themed menu (WinForms defaults to the office-blue gradient). Guarded:
+        # the helper is compiled C#, absent only on a dev session that skipped it.
+        $theme = 'Donut.Interop.TrayTheme' -as [type]
+        if ($theme) { $theme::Apply($this.Menu) }
         $this.Icon.ContextMenuStrip = $this.Menu
 
         # Left-click restores; right-click opens the menu (WinForms default).
@@ -127,6 +138,23 @@ class TrayPresenter {
                     'Remote actions will ask for them, and granting one restarts DONUT elevated for the rest of the session.')
             }
         }
+    }
+
+    # Tray "Settings": surface the window first (the overlay lives inside it), then open.
+    [void] OpenSettingsFromTray() {
+        $this.ShowMainWindow()
+        try { $this.Main.OpenSettings() }
+        catch { $this.Logger.LogException("Open settings from tray failed", $_) }
+    }
+
+    # Tray "Logs": Explorer on the folder Donut.log and the worker logs land in - the
+    # first ask in any support ticket, reachable without surfacing the window.
+    [void] OpenLogsFolder() {
+        try {
+            $path = $this.Main.Config.LogsPath
+            if ($path -and (Test-Path $path)) { Start-Process -FilePath $path }
+        }
+        catch { $this.Logger.LogException("Open logs folder failed", $_) }
     }
 
     # Hotkey toggle: minimise DONUT when it's already up front, otherwise surface it (so

@@ -41,9 +41,9 @@ $ErrorActionPreference = 'Stop'
 # match); returns its product code / install location / version, or $null if absent.
 function Get-DONUTUninstallInfo {
     $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
-    $subKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
-
     if (-not (Test-Path $path)) { return $null }
+
+    $subKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
     foreach ($subKey in $subKeys) {
         try {
             $app = Get-ItemProperty -Path $subKey.PSPath -ErrorAction SilentlyContinue
@@ -159,11 +159,19 @@ try {
     if ($ProcessNameToClose) {
         Stop-DonutProcessGracefully -Name $ProcessNameToClose -TimeoutSeconds $CloseTimeoutSeconds
     }
+    # $info is $null on a box with no registered install (first install, portable
+    # run) - Join-Path's mandatory -Path would throw under EAP=Stop and abort the
+    # whole update, so the relaunch path stays optional.
     $info = Get-DONUTUninstallInfo
-    $exePath = Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
+    $exePath = if ($info -and $info.InstallLocation) {
+        Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
+    }
+    else { $null }
 
     # A rollback uninstalls the newer build first so the older MSI installs clean.
-    if ($Rollback) {
+    # With nothing registered there is nothing to uninstall; fall through to the
+    # plain install of the older MSI.
+    if ($Rollback -and $info) {
         $unExit = Invoke-MsiUninstall -ProdCode $info.ProductCode -Passive:$Passive
         if (@(0, 3010, 1605) -notcontains $unExit) {
             Show-UpdateError "DONUT rollback failed (code $unExit). It may need a manual reinstall."
@@ -190,7 +198,7 @@ try {
         }
     }
 
-    if (Test-Path $exePath) {
+    if ($exePath -and (Test-Path $exePath)) {
         try {
             Start-Process -FilePath $exePath
         }

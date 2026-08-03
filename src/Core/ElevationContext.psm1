@@ -7,22 +7,8 @@
     call site ever asked. With the manifest on asInvoker the app can run as the
     standard console user, and remote work needs the operator's admin token: psexec
     and remote CIM both authenticate as the process. This is the one place that
-    reads the token, plus the pure rule the UI gates on.
-
-.NOTES
-    Classify takes the elevation state as a parameter rather than reading it, so the
-    decision is unit-testable off Windows; IsElevated is the only Win32 touch point
-    and is deliberately trivial. Callers pass [ElevationContext]::IsElevated() in.
-    Compare results against a named ElevationState member, never truthiness.
+    reads the token; the UI gates on IsElevated directly.
 #>
-
-# Whether a given action can proceed right now. RelaunchRequired is the only state
-# that costs the user a UAC prompt, and only once: elevating restarts the whole UI.
-enum ElevationState {
-    NotRequired
-    Satisfied
-    RelaunchRequired
-}
 
 class ElevationContext {
 
@@ -65,17 +51,5 @@ class ElevationContext {
             # "no interactive session", which is the same degraded path.
             return $null
         }
-    }
-
-    # The verdict the UI gates on: can this action run now, and if not, why not.
-    static [ElevationState] Classify([bool]$actionNeedsAdmin, [bool]$isElevated) {
-        if (-not $actionNeedsAdmin) { return [ElevationState]::NotRequired }
-        if ($isElevated) { return [ElevationState]::Satisfied }
-        return [ElevationState]::RelaunchRequired
-    }
-
-    # Convenience for call sites with nothing to fake: reads the token, then classifies.
-    static [ElevationState] Classify([bool]$actionNeedsAdmin) {
-        return [ElevationContext]::Classify($actionNeedsAdmin, [ElevationContext]::IsElevated())
     }
 }

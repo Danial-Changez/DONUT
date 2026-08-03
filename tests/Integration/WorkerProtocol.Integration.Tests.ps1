@@ -58,7 +58,7 @@ Describe "Worker child-process protocol (real RemoteWorker.ps1)" {
     }
 
     It "surfaces a worker failure as a Failed verdict, not a hang or a throw" {
-        $prep = ([ScanService]::new($script:config, $script:probe)).PrepareScan('donut-proto-no-such-host-99')
+        $prep = ([RemoteUpdateService]::new($script:config, $script:probe, $null)).PrepareScanForUpdates('donut-proto-no-such-host-99')
 
         $job = [AsyncJob]::new('donut-proto-no-such-host-99', 'Scan')
         $job.Start((& $script:normalize $prep.ScriptPath), $prep.Arguments, '')

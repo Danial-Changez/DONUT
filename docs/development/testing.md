@@ -186,8 +186,8 @@ when a regression has no obvious first-bad commit:
 Generate a visual HTML coverage report from the project root:
 
 ```powershell
-tools/Generate-CoverageReport.ps1                     # JaCoCo XML (default)
-tools/Generate-CoverageReport.ps1 -Format Cobertura   # Cobertura XML instead
+tools/Invoke-Tests.ps1 -Coverage                     # JaCoCo XML (default)
+tools/Invoke-Tests.ps1 -Coverage -Format Cobertura   # Cobertura XML instead
 ```
 
 What it does:

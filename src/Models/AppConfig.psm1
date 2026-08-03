@@ -26,10 +26,14 @@ class AppConfig {
         # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
         recoveryWindowMinutes = 30
         # AD forests searched by the Home live-finder (separate forests; each is
-        # queried independently). Editable; these are the org defaults.
-        domains               = @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
+        # queried independently). Empty = discovered on first run from the
+        # machine's own domain plus its trust partners, then persisted to
+        # config.json (DonutApp startup) - the repo ships no organization names.
+        domains               = @()
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
-        adminServiceHost      = 'sccm01.contoso.com'
+        # Empty = discovered on first run from the local SCCM client's management
+        # point, then persisted; editable when the SMS Provider is a different box.
+        adminServiceHost      = ''
         # Start elevated at logon (scheduled task), hide the X into the tray, and the
         # global show/restore hotkey. All opt-in; blank hotkey disables it.
         startWithWindows      = $false
@@ -174,20 +178,9 @@ class AppConfig {
         return @{}
     }
 
-    [void] SetCommandArg([string]$command, [string]$argName, [object]$value) {
-        if ($null -eq $this.Settings) { $this.Settings = @{} }
-        if (-not $this.Settings.ContainsKey('commands')) { $this.Settings['commands'] = @{} }
-        if (-not $this.Settings['commands'].ContainsKey($command)) {
-            $this.Settings['commands'][$command] = @{ args = @{} }
-        }
-        if (-not $this.Settings['commands'][$command].ContainsKey('args')) {
-            $this.Settings['commands'][$command]['args'] = @{}
-        }
-        $this.Settings['commands'][$command]['args'][$argName] = $value
-    }
-
     # AD forests for the Home live-finder. Tolerates the JSON round-trip
-    # (Object[]/strings) and falls back to the org defaults when absent/blank.
+    # (Object[]/strings). Empty until first-run discovery persists them - the
+    # finder searches nothing rather than guessing at an organization.
     [string[]] GetDomains() {
         $val = $this.GetSetting('domains', $null)
         if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
@@ -195,14 +188,15 @@ class AppConfig {
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($list.Count -gt 0) { return $list }
         }
-        return @('prod.contoso.com', 'forest-b.contosogroup.com', 'forest-c.local', 'forest-d.local')
+        return @()
     }
 
-    # SCCM AdminService host for the user Lens device lookup. Falls back to the org default.
+    # SCCM AdminService host for the user Lens device lookup. Empty until
+    # first-run discovery persists it.
     [string] GetAdminServiceHost() {
         $val = [string]$this.GetSetting('adminServiceHost', $null)
         if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
-        return 'sccm01.contoso.com'
+        return ''
     }
 
     [int] GetThrottleLimit() {
@@ -286,15 +280,12 @@ class AppConfig {
         return $val.Trim()
     }
 
-    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case)
-    # by parse, everything else to the supplied default.
+    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case,
+    # trimmed - TryParse's own contract) by parse, everything else to the default.
     hidden static [bool] AsBool([object]$value, [bool]$default) {
         if ($value -is [bool]) { return $value }
-        if ($value -is [string]) {
-            $t = $value.Trim()
-            if ($t -match '^(?i:true)$') { return $true }
-            if ($t -match '^(?i:false)$') { return $false }
-        }
+        $parsed = $false
+        if ($value -is [string] -and [bool]::TryParse($value, [ref]$parsed)) { return $parsed }
         return $default
     }
 

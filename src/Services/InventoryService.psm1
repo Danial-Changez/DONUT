@@ -12,7 +12,7 @@ using module ".\RemoteServices.psm1"
     Builds a small self-contained pwsh probe script that runs on the remote host
     (via the worker's PsExec path) and writes laptop-troubleshooting facts as
     JSON, which are copied back and parsed into a [MachineInventory]. Mirrors
-    ScanService - subclasses RemoteJobService, reusing BuildWorkerArgs.
+    RemoteUpdateService - subclasses RemoteJobService, reusing BuildWorkerArgs.
 #>
 class InventoryService : RemoteJobService {
 

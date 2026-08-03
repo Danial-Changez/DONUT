@@ -10,7 +10,8 @@ DONUT is built to live in the background between fleet runs.
 The tray icon is always present while DONUT runs:
 
 - **Left-click** shows or hides the main window.
-- **Right-click** opens the menu (Open / Exit).
+- **Right-click** opens the menu: Open, Settings (surfaces the window with the
+  settings overlay open), Logs (Explorer on the logs folder), Exit.
 - With **Close to tray** enabled in [Settings](./settings.md), the window's X hides
   to the tray instead of exiting (a one-time balloon explains this the first time).
 

@@ -159,7 +159,7 @@ Describe "HostResolver" {
 
         It "PrepareWarmRunspace tags a no-op Resolve job in WarmRunspace mode" {
             $r = New-Resolver
-            $prep = $r.PrepareWarmRunspace()
+            $prep = $r.PrepareWarmRunspace("")
             $prep.Arguments.JobType      | Should -Be "Resolve"
             $prep.Arguments.Options.Mode | Should -Be "WarmRunspace"
             $prep.Arguments.HostName     | Should -Be ""

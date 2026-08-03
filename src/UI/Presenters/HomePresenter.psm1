@@ -17,7 +17,6 @@ using module "..\..\Core\HostListSource.psm1"
 using module "..\..\Core\ViewLoader.psm1"
 using module "..\..\Services\RemoteServices.psm1"
 using module "..\..\Services\DriverMatchingService.psm1"
-using module "..\..\Services\SystemInfoService.psm1"
 using module ".\DialogPresenter.psm1"
 using module ".\ToastService.psm1"
 using module "..\ViewModels\HostViewModel.psm1"
@@ -90,7 +89,6 @@ class HomePresenter : AsyncJobPresenter {
     [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
-    [ScanService] $ScanService
     [RemoteUpdateService] $UpdateService
     [DialogPresenter] $DialogPresenter
     # Duck-typed MainPresenter back-ref for the elevation gate (a typed import would be a
@@ -131,7 +129,6 @@ class HomePresenter : AsyncJobPresenter {
 
     # Hosts that still need a manual reboot after an apply
     [System.Collections.Generic.List[string]] $ManualRebootQueue
-    [int] $TotalJobsInBatch
 
     # Runs queued behind a reachability re-check (see .NOTES); CompleteResolve starts
     # or drops them - never left queued silently.
@@ -167,7 +164,6 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.NetworkProbe = $networkProbe
         $this.Logger = $networkProbe.Logger
-        $this.ScanService = [ScanService]::new($config, $this.NetworkProbe, $this.Logger)
         $this.DriverMatcher = [DriverMatchingService]::new($this.Logger)
         $this.UpdateService = [RemoteUpdateService]::new(
             $config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
@@ -183,7 +179,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.Rows = @{}
         $this.HomeVm = [HomeViewModel]::new()   # bound to the view; owns the machine collection
         $this.ManualRebootQueue = [List[string]]::new()
-        $this.TotalJobsInBatch = 0
 
         $presenter = $this
         $this.Timer = [DispatcherTimer]::new()
@@ -472,7 +467,6 @@ class HomePresenter : AsyncJobPresenter {
         }
 
         $this.ManualRebootQueue.Clear()
-        $this.TotalJobsInBatch = $idleHosts.Count
         foreach ($hostName in $idleHosts) {
             $this.StartProcess($hostName)
         }
@@ -598,7 +592,6 @@ class HomePresenter : AsyncJobPresenter {
             else {
                 $this.Detail.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
                 if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age - results are current.") }
-                $this.Detail.RefreshOverview()
             }
             return
         }
@@ -610,7 +603,7 @@ class HomePresenter : AsyncJobPresenter {
         try {
             $jobParams = switch ($command) {
                 'scan' {
-                    @{ Type = 'Scan'; Prep = $this.ScanService.PrepareScan($hostName) }
+                    @{ Type = 'Scan'; Prep = $this.UpdateService.PrepareScanForUpdates($hostName) }
                 }
                 'applyUpdates' {
                     $this.Detail.AppendLog($hostName, "Phase 1: Scanning for updates...")
@@ -632,7 +625,6 @@ class HomePresenter : AsyncJobPresenter {
                     $jobParams.Prep.TempConfigPath)
                 $this.ActiveJobs.Add($job)
                 $this.RefreshCardStatus($job)
-                $this.Detail.RefreshOverview()
                 # Apply is destructive: run the identity check in parallel to gate it.
                 if ($command -eq 'applyUpdates') { $this.Resolution.StartVerifyName($hostName) }
             }
@@ -811,10 +803,8 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # End of tick: refresh fleet counts and, once the batch drains, persist the
-    # coalesced recents in one write.
+    # End of tick: once the batch drains, persist the coalesced recents in one write.
     [void] AfterPump() {
-        $this.Detail.RefreshOverview()
         if ($this.ActiveJobs.Count -eq 0) {
             $this.Store.FlushSave()
         }
@@ -1157,7 +1147,6 @@ class HomePresenter : AsyncJobPresenter {
 
     hidden [void] FinishRemoval() {
         $this.UpdateEmptyHint()
-        $this.Detail.RefreshOverview()
         $this.Store.FlushSave()
     }
 

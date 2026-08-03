@@ -195,80 +195,8 @@ class FolderTreeNode {
 # Pure helper arranging a flat, size-ranked folder list into a tree by path containment
 # (deepest listed prefix = parent; no ancestor = root). Static, WPF-free, tested.
 class DiskUsageTree {
-    static [FolderTreeNode[]] Build([FolderUsage[]]$folders) {
-        $items = @($folders |
-                Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
-        if ($items.Count -eq 0) { return @() }
-
-        # parent[i] = index of the deepest other item whose path is a prefix of items[i].
-        $parent = @{}
-        for ($i = 0; $i -lt $items.Count; $i++) {
-            $best = -1; $bestLen = -1
-            for ($j = 0; $j -lt $items.Count; $j++) {
-                if ($i -eq $j) { continue }
-                $p = $items[$j].Path
-                if ($p.Length -lt $items[$i].Path.Length -and
-                    $items[$i].Path.StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase) -and
-                    $p.Length -gt $bestLen) {
-                    $best = $j; $bestLen = $p.Length
-                }
-            }
-            $parent[$i] = $best
-        }
-
-        # Precompute each item's depth (length of its ancestor chain) and display
-        # label (segment below its parent), so traversal only carries the index.
-        $depth = @{}; $label = @{}
-        for ($i = 0; $i -lt $items.Count; $i++) {
-            $d = 0; $cur = $parent[$i]
-            while ($cur -ge 0) { $d++; $cur = $parent[$cur] }
-            $depth[$i] = $d
-            $pIdx = $parent[$i]
-            $lbl = if ($pIdx -ge 0) { $items[$i].Path.Substring($items[$pIdx].Path.Length) }
-            else { $items[$i].Path }
-            if ([string]::IsNullOrEmpty($lbl)) { $lbl = $items[$i].Path }
-            $label[$i] = $lbl
-        }
-
-        # children[parentIndex] = ordered child indices (-1 key holds the roots).
-        $children = @{}
-        for ($i = 0; $i -lt $items.Count; $i++) {
-            $k = $parent[$i]
-            if (-not $children.ContainsKey($k)) {
-                $children[$k] = [System.Collections.Generic.List[int]]::new()
-            }
-            $children[$k].Add($i)
-        }
-
-        # DFS from the roots, preserving input (size-ranked) order.
-        $out = [System.Collections.Generic.List[FolderTreeNode]]::new()
-        $stack = [System.Collections.Generic.Stack[int]]::new()
-        $roots = if ($children.ContainsKey(-1)) { $children[-1] }
-        else { [System.Collections.Generic.List[int]]::new() }
-        for ($r = $roots.Count - 1; $r -ge 0; $r--) { $stack.Push($roots[$r]) }
-
-        while ($stack.Count -gt 0) {
-            $idx = $stack.Pop()
-            $item = $items[$idx]
-
-            $node = [FolderTreeNode]::new()
-            $node.Path = $item.Path
-            $node.SizeBytes = $item.SizeBytes
-            $node.Depth = $depth[$idx]
-            $node.Label = $label[$idx]
-            $out.Add($node)
-
-            if ($children.ContainsKey($idx)) {
-                $kids = $children[$idx]
-                for ($c = $kids.Count - 1; $c -ge 0; $c--) { $stack.Push($kids[$c]) }
-            }
-        }
-
-        return $out.ToArray()
-    }
-
-    # Same containment logic as Build, but returns the root nodes with their Children
-    # populated (size-ranked order preserved at every level) for a real TreeView render.
+    # Returns the root nodes with their Children populated (size-ranked order
+    # preserved at every level) for a real TreeView render.
     static [FolderTreeNode[]] BuildNested([FolderUsage[]]$folders) {
         $items = @($folders |
                 Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
@@ -322,8 +250,9 @@ class DiskUsageTree {
 
 # Pure formatting for the big-folders list rows. Static, WPF-free, tested.
 class DiskUsageFormat {
-    # Human-readable size: GB at >= 1 GB, otherwise MB (1 decimal, InvariantCulture).
-    # Reuses the 1024^3 GB convention from InventoryFormat.DiskFreeLabel.
+    # Human-readable size: GB at >= 1 GB, MB at >= 1 MB, otherwise KB - never a
+    # "0 MB" row (1 decimal, InvariantCulture). Reuses the 1024^3 GB convention
+    # from InventoryFormat.DiskFreeLabel.
     static [string] SizeLabel([long]$bytes) {
         $ci = [System.Globalization.CultureInfo]::InvariantCulture
         $gb = 1073741824.0   # 1024^3
@@ -332,7 +261,11 @@ class DiskUsageFormat {
             $v = [Math]::Round($bytes / $gb, 1)
             return "$($v.ToString($ci)) GB"
         }
-        $v = [Math]::Round($bytes / $mb, 1)
-        return "$($v.ToString($ci)) MB"
+        if ($bytes -ge $mb) {
+            $v = [Math]::Round($bytes / $mb, 1)
+            return "$($v.ToString($ci)) MB"
+        }
+        $v = [Math]::Round($bytes / 1024.0, 1)
+        return "$($v.ToString($ci)) KB"
     }
 }

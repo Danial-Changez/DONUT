@@ -1,0 +1,16 @@
+<!-- MSI authoring for DONUT, built with the WiX SDK via plain `dotnet build`
+     (the SDK restores from NuGet; nothing to install). Do not build this project
+     directly - run tools\Build-Installer.ps1, which publishes the launcher,
+     stages/renames the payload and passes StageDir/DonutVersion in. -->
+<Project Sdk="WixToolset.Sdk/5.0.2">
+    <PropertyGroup>
+        <OutputName>DONUT</OutputName>
+        <!-- x64 package: without this, harvested components default to 32-bit and
+             ICE80 rejects every one of them under ProgramFiles64Folder. -->
+        <InstallerPlatform>x64</InstallerPlatform>
+        <!-- Populated by tools\Build-Installer.ps1. -->
+        <DonutVersion Condition="'$(DonutVersion)' == ''">0.0.0</DonutVersion>
+        <StageDir Condition="'$(StageDir)' == ''">obj\stage</StageDir>
+        <DefineConstants>Version=$(DonutVersion);StageDir=$(StageDir)</DefineConstants>
+    </PropertyGroup>
+</Project>

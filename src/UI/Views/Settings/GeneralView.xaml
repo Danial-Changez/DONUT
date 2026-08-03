@@ -105,33 +105,17 @@
             <TextBlock Text="Throttle limit - machines run at once"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,0,0,8" />
-            <StackPanel Orientation="Horizontal">
-                <Path Data="{DynamicResource Rocket}"
-                      Fill="{DynamicResource ThrottleLimit}"
-                      Width="16"
-                      Height="16"
-                      Stretch="Uniform"
-                      Margin="0,0,8,0"
-                      VerticalAlignment="Center" />
-                <TextBox x:Name="throttleLimit"
-                         Width="120"
-                         Style="{DynamicResource ModernTextBox}" />
-            </StackPanel>
+            <TextBox x:Name="throttleLimit"
+                     Width="120"
+                     HorizontalAlignment="Left"
+                     Style="{DynamicResource ModernTextBox}" />
             <TextBlock Text="Folders to scan - largest folders returned"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,16,0,8" />
-            <StackPanel Orientation="Horizontal">
-                <Path Data="{DynamicResource DriverLibrary}"
-                      Fill="{DynamicResource ThrottleLimit}"
-                      Width="16"
-                      Height="16"
-                      Stretch="Uniform"
-                      Margin="0,0,8,0"
-                      VerticalAlignment="Center" />
-                <TextBox x:Name="folderScanCount"
-                         Width="120"
-                         Style="{DynamicResource ModernTextBox}" />
-            </StackPanel>
+            <TextBox x:Name="folderScanCount"
+                     Width="120"
+                     HorizontalAlignment="Left"
+                     Style="{DynamicResource ModernTextBox}" />
         </StackPanel>
     </Border>
     <!-- Diagnostics: verbose logging opt-in (off by default; applies live, incl. workers). -->

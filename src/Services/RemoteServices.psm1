@@ -12,12 +12,11 @@ using module ".\DriverMatchingService.psm1"
 .DESCRIPTION
     RemoteJobService is the shared base: it builds the RemoteWorker.ps1 argument
     hashtable (BuildWorkerArgs) and owns the log-then-throw policy for typed
-    remote failures (Fail). ScanService prepares a DCU scan; RemoteUpdateService
-    prepares an update scan/apply and parses the resulting update report into
-    typed DcuUpdate rows (driver-matched, urgency-sorted) for the detail pane.
-    The subclasses only prepare and parse off the UI thread - the worker
-    does the network I/O, gating each phase's transport itself (bounded RPC/SMB
-    port probes).
+    remote failures (Fail). RemoteUpdateService prepares a DCU scan or apply and
+    parses the resulting update report into typed DcuUpdate rows
+    (driver-matched, urgency-sorted) for the detail pane. The subclasses only
+    prepare and parse off the UI thread - the worker does the network I/O,
+    gating each phase's transport itself (bounded RPC/SMB port probes).
 
 .NOTES
     InventoryService, DiskUsageService and HostResolver also subclass
@@ -75,28 +74,20 @@ class RemoteJobService {
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
-                # UI-thread deep clone of the live config: a worker enumerating a
-                # table the UI mutates can spin forever on a corrupted bucket chain.
-                Settings   = [AppConfig]::DeepClone($this.Config.Settings)
+                # Only the keys workers read (BuildDcuArgs/GetCommandArgs, GetDebugLogging,
+                # GetRecoveryWindowMinutes) - the worker's AppConfig merges defaults for the
+                # rest. recentHosts, with its cached inventory/diskUsage payloads, never
+                # rides. commands stays a deep clone, same rule as Settings before it: no
+                # live hashtable may cross the runspace boundary.
+                Settings   = @{
+                    commands              = [AppConfig]::DeepClone($this.Config.Settings['commands'])
+                    debugLogging          = $this.Config.GetDebugLogging()
+                    recoveryWindowMinutes = $this.Config.GetRecoveryWindowMinutes()
+                }
                 # The effective debug state (the setting or the -DebugLog session override).
                 DebugLog   = $this.Logger.DebugEnabled
             }
         }
-    }
-}
-
-# Handles remote host scanning
-class ScanService : RemoteJobService {
-
-    ScanService([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
-
-    ScanService([AppConfig] $config, [NetworkProbe] $probe,
-        [LogService] $logger) : base($config, $probe, $logger) {}
-
-    # Builds the worker args only (no network) - the worker asserts reachability on the
-    # pool thread, so the UI thread never blocks on an offline/slow host.
-    [hashtable] PrepareScan([string]$hostName) {
-        return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }
 }
 
@@ -117,6 +108,8 @@ class RemoteUpdateService : RemoteJobService {
         $this.DriverMatcher = $matcher
     }
 
+    # Builds the worker args only (no network) - the worker asserts reachability on the
+    # pool thread, so the UI thread never blocks on an offline/slow host.
     [hashtable] PrepareScanForUpdates([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }

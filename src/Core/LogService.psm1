@@ -3,24 +3,22 @@
     Thread-safe leveled file logger, plus a NullLogService no-op.
 
 .DESCRIPTION
-    Writes [INFO]/[WARN]/[ERROR]/[DEBUG] lines to a per-run log file under a lock,
-    with exception and structured-event helpers. NullLogService is the no-op used
-    when a collaborator is constructed without a logger; Coalesce returns the
-    given logger or a NullLogService so callers never null-check. DEBUG is gated
-    by DebugEnabled (composition points set it from the 'debugLogging' setting or
-    the Start-Donut -DebugLog session override; the class default stays verbose
+    Writes [INFO]/[WARN]/[ERROR]/[DEBUG] lines to a per-run log file, with an
+    exception helper. NullLogService is the no-op used when a collaborator is
+    constructed without a logger; Coalesce returns the given logger or a
+    NullLogService so callers never null-check. DEBUG is gated by DebugEnabled
+    (composition points set it from the 'debugLogging' setting or the
+    Start-Donut -DebugLog session override; the class default stays verbose
     so tests and diagnostic tools see everything).
 #>
 class LogService {
     [string] $LogFilePath
-    [System.Object] $SyncRoot
     # Gates LogDebug only - INFO/WARN/ERROR always flow.
     [bool] $DebugEnabled = $true
 
     # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
     # Does not bind a file path; WriteLog must be overridden by the derived type.
     LogService() {
-        $this.SyncRoot = [System.Object]::new()
     }
 
     LogService([string]$logDirectory) {
@@ -28,7 +26,6 @@ class LogService {
             New-Item -Path $logDirectory -ItemType Directory -Force | Out-Null
         }
         $this.LogFilePath = Join-Path $logDirectory "Donut.log"
-        $this.SyncRoot = [System.Object]::new()
     }
 
     # Returns the supplied logger, or a NullLogService no-op when $null - collapses the
@@ -65,19 +62,6 @@ class LogService {
         $this.WriteLog("ERROR", "$message | $detail")
     }
 
-    # Emits a structured, pipe-delimited entry: "<event>|key=value|key=value".
-    # Field keys are sorted so the output is deterministic and machine-parseable.
-    [void] LogStructured([string]$level, [string]$eventName, [hashtable]$fields) {
-        $parts = [System.Collections.Generic.List[string]]::new()
-        $parts.Add($eventName)
-        if ($null -ne $fields) {
-            foreach ($key in ($fields.Keys | Sort-Object)) {
-                $parts.Add("$key=$($fields[$key])")
-            }
-        }
-        $this.WriteLog($level, ($parts -join '|'))
-    }
-
     # Lock-free atomic append (Append mode + ReadWrite sharing, one line per Write):
     # logging must never block the app (architecture/runspaces-and-workers: logging).
     [void] WriteLog([string]$level, [string]$message) {
@@ -97,14 +81,6 @@ class LogService {
         }
     }
 
-    [string[]] GetRecentLogs([int]$count) {
-        # Reads open the file shared; no need to hold the write mutex (a torn tail line
-        # in a live view is acceptable, a blocked reader is not).
-        if (Test-Path $this.LogFilePath) {
-            return Get-Content -Path $this.LogFilePath -Tail $count
-        }
-        return @()
-    }
 }
 
 # Null-object logger: the safe default when no logger is injected. Every write is
@@ -113,6 +89,4 @@ class NullLogService : LogService {
     NullLogService() : base() {}
 
     [void] WriteLog([string]$level, [string]$message) { }
-
-    [string[]] GetRecentLogs([int]$count) { return @() }
 }

@@ -15,12 +15,19 @@ threading rules and the UI-side job flows.
 ## Threading rules
 
 - **Polling, not marshalling:** state changes (`ScanStarted`, `ScanCompleted`,
-  log lines) update a thread-safe state object/queue; a single `DispatcherTimer`
-  drains it on the UI thread in batches. DONUT does **not** use
+  log lines) update a thread-safe state object/queue; `DispatcherTimer` ticks
+  drain it on the UI thread in batches. DONUT does **not** use
   `Dispatcher.Invoke`/`BeginInvoke` for this - flooding the dispatcher with
-  per-event invocations was a freeze source.
-- The shared job pump lives in `AsyncJobPresenter.PumpJobs` (a ~200 ms tick);
-  `HomePresenter` routes each job kind's polled output and completion.
+  per-event invocations was a freeze source. (One deliberate exception:
+  `TourPresenter` queues a single `BeginInvoke` at `Loaded` priority so a tour
+  step positions after layout.)
+- Three poll loops share that rule: the job pump in
+  `AsyncJobPresenter.PumpJobs` (a ~200 ms tick; `HomePresenter` routes each job
+  kind's polled output and completion), `FinderPresenter`'s own timers for its
+  interactive pool jobs (deliberately never the pump - see the note at the top
+  of that file), and `MainPresenter.RunOnPool`/`ReapPoolJobs` for one-shot
+  shell work. Feature timers (tray, toasts, watchdog, deferred warms) follow
+  the same pattern.
 
 ## The terminal log
 
@@ -41,13 +48,12 @@ threading rules and the UI-side job flows.
   1. Temporary scan config, then the scan phase runs remotely.
   2. Copy the report XML; gather remote driver/app data via PsExec.
   3. Brand-based matching (`DriverMatchingService`).
-  4. Per-host confirmation popup (skip apply if not confirmed); skip apply when
-     no updates (a scan's DCU 500 short-circuits with "No updates found").
-  5. Copy the updates list to the clipboard.
-- **Manual reboot detection:** parse log lines for reboot-required vs
-  auto-reboot; surface a completion popup listing machines needing manual
-  reboot. Pre-seed the manual-reboot list when config disables automatic reboot
-  (`reboot`/`forceRestart`).
-- **Multi-device safety prompt:** if ApplyUpdates is enabled and multiple hosts
-  are queued, show a single confirmation listing all targets before enqueueing
-  runspaces.
+  4. Copy the updates list to the clipboard, then confirm before the apply
+     phase; skip apply when no updates (a scan's DCU 500 short-circuits with
+     "No updates found").
+- **Manual reboot detection:** the worker reports `RebootRequired` in its
+  result (backed by a `*-reboot-required.flag` file in reports), and the host
+  gets a per-host toast plus card status; `ManualRebootQueue` tracks the batch.
+- **Multi-device safety prompt:** a Run all consents **once** for the whole
+  batch - a single confirmation listing all targets before enqueueing
+  (`BatchApplyHosts` then skips the per-host dialog).

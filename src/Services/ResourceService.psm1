@@ -70,6 +70,34 @@ class ResourceService {
     hidden [void] LoadStylesInto([ResourceDictionary]$targetDictionary) {
         $stylesPath = Join-Path $this.SourceRoot 'UI\Styles'
 
+        # Hosted by the launcher, the dictionaries come from the embedded copy (the
+        # xaml never touches disk); a dev run reads the checkout files. Either way
+        # BaseUri stays a Styles FILE path: the dictionaries' relative font
+        # references (./Fonts/...) resolve against it, and the ttfs ARE on disk.
+        $assets = 'Donut.Launcher.EmbeddedAssets' -as [type]
+        if ($assets) {
+            $names = @($assets::List('src/UI/Styles/') |
+                    Where-Object { $_ -like '*.xaml' } | Sort-Object)
+            foreach ($logical in $names) {
+                try {
+                    $leaf = [System.IO.Path]::GetFileName($logical)
+                    $context = [System.Windows.Markup.ParserContext]::new()
+                    $context.BaseUri = [Uri]::new((Join-Path $stylesPath $leaf))
+                    # Assigned before the try: a try-only assignment reads as unassigned
+                    # to the class runtime ("Variable is not assigned in the method").
+                    $dict = $null
+                    $stream = $assets::Open($logical)
+                    try { $dict = [System.Windows.Markup.XamlReader]::Load($stream, $context) }
+                    finally { $stream.Dispose() }
+                    $targetDictionary.MergedDictionaries.Add($dict)
+                }
+                catch {
+                    $this.Logger.LogException("Failed to load style dictionary $logical", $_)
+                }
+            }
+            return
+        }
+
         if (-not (Test-Path $stylesPath)) {
             $this.Logger.LogWarning("Styles folder not found at $stylesPath")
             return

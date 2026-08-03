@@ -41,7 +41,6 @@ package "Donut.UI.Presenters" #2B1A12 {
     }
 
     class HomePresenter extends AsyncJobPresenter {
-        -ScanService: ScanService
         -UpdateService: RemoteUpdateService
         -Resolver: HostResolver
         -Store: RecentConnectionsStore
@@ -343,25 +342,6 @@ package "Donut.Models (UI mappers)" #15233B {
     }
 }
 
-package "Donut.Services" #221634 {
-    class SystemInfo {
-        +Hostname: string
-        +IPv4: string
-        +Domain: string
-        +DomainJoined: bool
-        +DomainController: string
-        +DcReachable: bool
-        +HasBattery: bool
-        +BatteryPercent: int
-        +Charging: bool
-    }
-
-    class SystemInfoService {
-        +Gather(): SystemInfo
-        +{static} BatteryLabel(hasBattery, percent, charging): string
-    }
-}
-
 ObservableObject <|-- HomeViewModel
 ObservableObject <|-- HostViewModel
 ObservableObject <|-- ToastViewModel
@@ -395,7 +375,6 @@ HomePresenter --> ResolutionCoordinator
 HomePresenter --> ToastService
 HomePresenter ..> FleetCardStatus
 HomePresenter ..> MachineListShaper
-HomePresenter ..> SystemInfoService
 FinderPresenter ..> HomePresenter : duck-typed back-ref
 InventoryPresenter ..> HomePresenter : duck-typed back-ref
 ResolutionCoordinator ..> HomePresenter : duck-typed back-ref
@@ -413,6 +392,5 @@ PersonLensViewModel --> LensDeviceViewModel
 ToastService --> ToastViewModel
 DialogPresenter --> DialogViewModel
 LoginPresenter --> LoginViewModel
-SystemInfoService ..> SystemInfo
 
 @enduml

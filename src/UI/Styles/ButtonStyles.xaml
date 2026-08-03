@@ -58,7 +58,12 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <!-- Control button icon -->
+    <!-- Control button icon: a Lucide stroke outline taking the button's Foreground.
+         Thickness scales with size (Lucide native weight = size/12; instances that
+         raise Width raise StrokeThickness with it). FlowDirection is pinned LTR:
+         the control bar's button stack is RightToLeft (the dock-right idiom) and
+         Paths inherit it, which mirrors every glyph - only the asymmetric ones
+         (the tour's ?) show it. -->
     <Style x:Key="controlButtonIcon"
            TargetType="Path">
         <Setter Property="Width"
@@ -67,7 +72,19 @@
                 Value="10" />
         <Setter Property="Stretch"
                 Value="Uniform" />
+        <Setter Property="FlowDirection"
+                Value="LeftToRight" />
         <Setter Property="Fill"
+                Value="{x:Null}" />
+        <Setter Property="StrokeThickness"
+                Value="0.85" />
+        <Setter Property="StrokeStartLineCap"
+                Value="Round" />
+        <Setter Property="StrokeEndLineCap"
+                Value="Round" />
+        <Setter Property="StrokeLineJoin"
+                Value="Round" />
+        <Setter Property="Stroke"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
     </Style>
         <!-- Circular image button: hit area is the circle only -->
@@ -115,47 +132,9 @@
     <!-- ============================================================
          Arcane button system (ported from getarcaneapp/arcane at its real
          14px root scale). Shared: rounded-lg (8.4), h-9 (32), px-4 (14),
-         text-sm (12.5), font-medium, disabled opacity 0.5. Solid violet is
-         reserved for main CTAs; actions use the tinted variants below.
+         text-sm (12.5), font-medium, disabled opacity 0.5. CTAs and
+         destructive actions use the ButtonTint* variants below.
          ============================================================ -->
-    <!-- default: bg-primary text-primary-foreground hover:bg-primary/90 -->
-    <Style x:Key="ButtonPrimary"
-           TargetType="Button">
-        <Setter Property="Background" Value="{DynamicResource Primary}" />
-        <Setter Property="Foreground" Value="{DynamicResource PrimaryForeground}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="Padding" Value="14,0" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="8.4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryHover}" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
     <!-- secondary: bg-secondary text-secondary-foreground hover:bg-secondary/80 -->
     <Style x:Key="ButtonSecondary"
            TargetType="Button">
@@ -299,13 +278,18 @@
                               Width="9"
                               Height="9"
                               Stretch="Uniform"
+                              StrokeThickness="0.75"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              FlowDirection="LeftToRight"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center"
-                              Fill="{TemplateBinding Foreground}" />
+                              Stroke="{TemplateBinding Foreground}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="glyph" Property="Fill" Value="{DynamicResource Destructive}" />
+                            <Setter TargetName="glyph" Property="Stroke" Value="{DynamicResource Destructive}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Opacity" Value="0.85" />
@@ -314,44 +298,6 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="glyph" Property="Opacity" Value="0.35" />
                             <Setter Property="Cursor" Value="Arrow" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-    <!-- destructive: bg-destructive text-white hover:bg-destructive/90 -->
-    <Style x:Key="ButtonDestructive"
-           TargetType="Button">
-        <Setter Property="Background" Value="{DynamicResource Destructive}" />
-        <Setter Property="Foreground" Value="{DynamicResource DestructiveForeground}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="Padding" Value="14,0" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="8.4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource DestructiveHover}" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -475,47 +421,6 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintGreenHover}" />
                             <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintGreenBorderHover}" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="bd" Property="Opacity" Value="0.5" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-    <Style x:Key="ButtonTintInfo"
-           TargetType="Button">
-        <Setter Property="Background" Value="{DynamicResource TintSky}" />
-        <Setter Property="Foreground" Value="{DynamicResource AccentCyan}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource TintSkyBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Height" Value="32" />
-        <Setter Property="Padding" Value="14,0" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8.4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TintSkyHover}" />
-                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TintSkyBorderHover}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Opacity" Value="0.85" />

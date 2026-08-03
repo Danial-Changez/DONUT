@@ -44,9 +44,6 @@ Workers run as isolated child processes. This resolved the DC-warm/scan saga:
   [LogLine](./ui-and-threading.md) carrying the stream's severity, and the
   `DcuProgress` parser drives the progress bar as before. Stderr is drained on a
   `ReadToEndAsync` task so a full pipe cannot wedge the child.
-- Classes are not automatically available in new runspaces: the required class
-  modules (`Models`, `Services`) are explicitly loaded into each runspace before
-  execution.
 - **`ExecutionService` split (deferred):** the worker-side god-class carries ~6
   concerns; the agreed target decomposition is PsExecTransport / DcuPhases /
   InventoryProbe / DiskPhases / ResolvePhase / ArtifactCopy. Deferred because its
@@ -146,7 +143,7 @@ A total alone cannot separate the directory from the machinery around it, so eac
 logs the four spans that sum to it:
 
 ```
-AD search forest-d.local 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
+AD search forest-d 'dan': 539ms (queue 18, search 205, rows 3, notice 313), 10 hit(s)
 ```
 
 | Span | Covers | A large value points at |
@@ -405,4 +402,8 @@ Only the warm shells + the DC warm touch the pool at boot:
   line by line on the pool thread; the earlier `-Raw` + `-split` +
   `ConvertFrom-Csv` pass materialized a giant string, a line array, and a
   `PSObject` per row, and the resulting gen-2 GCs suspended the UI thread right
-  as a disk scan finished.
+  as a disk scan finished. The target itself now streams the export once and
+  keeps only the N largest rows (the export is tree-ordered, so a simple head
+  trim would walk one big branch - see `BuildScanCommand`); the ~40 MB full
+  export never crosses SMB, and the streaming parser stays as the quoting
+  authority over whatever arrives.

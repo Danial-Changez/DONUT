@@ -1,0 +1,65 @@
+# Tag vX.Y.Z -> build the MSI (unsigned by design until a sanctioned
+# certificate exists) and publish it on a GitHub release with its sha256.
+# workflow_dispatch is the dry run: same build, artifact only, no release.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Dry run - build the MSI as an artifact only (x.y.z)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build MSI
+        id: build
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'push') {
+              '${{ github.ref_name }}'.TrimStart('v')
+          } else {
+              '${{ inputs.version }}'
+          }
+          ./tools/Build-Installer.ps1 -Version $version -SkipSigning
+          $msi = Get-ChildItem installer/bin -Recurse -Filter DONUT.msi | Select-Object -First 1
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory $dist | Out-Null
+          Copy-Item $msi.FullName (Join-Path $dist 'DONUT.msi')
+          $hash = (Get-FileHash (Join-Path $dist 'DONUT.msi') -Algorithm SHA256).Hash.ToLower()
+          "$hash  DONUT.msi" | Set-Content (Join-Path $dist 'DONUT.msi.sha256') -NoNewline
+          "dist=$dist" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DONUT-msi
+          path: ${{ steps.build.outputs.dist }}
+
+      - name: Publish release
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' `
+              (Join-Path '${{ steps.build.outputs.dist }}' 'DONUT.msi') `
+              (Join-Path '${{ steps.build.outputs.dist }}' 'DONUT.msi.sha256') `
+              --title 'DONUT ${{ github.ref_name }}' --generate-notes --verify-tag

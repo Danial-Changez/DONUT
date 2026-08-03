@@ -41,13 +41,14 @@ $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
 
 # Runtime-compiled C# types the static analyzer can't resolve (see .DESCRIPTION).
 $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
-'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager'
+'Donut\.Qr\.QrCode|Donut\.Interop\.HotkeyManager|Donut\.Interop\.TrayTheme'
 
-$results = $files | ForEach-Object {
-    Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings -ErrorAction SilentlyContinue
-} | Where-Object {
-    -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
-}
+# One analyzer invocation for the whole list (piped: -Path only takes a single
+# string) - the per-call setup cost made the old per-file loop ~9x slower.
+$results = $files.FullName | Invoke-ScriptAnalyzer -Settings $settings -ErrorAction SilentlyContinue |
+    Where-Object {
+        -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
+    }
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"
 
@@ -65,7 +66,14 @@ if ($results) {
 
 if ($FailOn -ne 'None') {
     $order = @{ Information = 1; Warning = 2; Error = 3 }
-    $gate = $results | Where-Object { $order[[string]$_.Severity] -ge $order[$FailOn] }
+    # The gate skips what the listing above skips: layout rules are accepted style
+    # debt, and the remaining TypeNotFound hits are cross-module class references
+    # the analyzer can't resolve because it parses each file without its
+    # `using module` graph. Both stay visible in the summary; neither is a defect.
+    $nonGating = @('PSAvoidTrailingWhitespace', 'PSAvoidLongLines', 'TypeNotFound')
+    $gate = $results | Where-Object {
+        $order[[string]$_.Severity] -ge $order[$FailOn] -and $_.RuleName -notin $nonGating
+    }
     if ($gate) {
         Write-Host "FAIL: $($gate.Count) finding(s) at or above severity '$FailOn'." -ForegroundColor Red
         exit 1

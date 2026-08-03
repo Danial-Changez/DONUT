@@ -1,0 +1,59 @@
+<!-- DONUT's MSI. The layout and identity mirror what the app itself expects:
+     ProductName contains "DONUT" and Manufacturer contains "Bakery" (the
+     Uninstall-key match criteria in InstallWorker.ps1 / SelfUpdateService), the
+     exe installs as bin\x64\DONUT\DONUT.exe under InstallLocation (the path
+     InstallWorker relaunches after an update), and ARPINSTALLLOCATION records
+     InstallLocation for those same readers. The launcher self-extracts its app
+     tree beside the exe on first elevated run - the MSI ships binaries only. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <!-- UpgradeCode is the original SAPIEN PowerShell Studio pipeline's
+         (DONUT.psproj.psbuild, recovered from git history at ed314c0^), so this
+         MSI major-upgrades every existing install. Never change it. The last
+         SAPIEN-shipped ProductVersion was 1.0.3 - releases from this project
+         must version higher or MSI upgrade logic will refuse them. -->
+    <Package Name="DONUT"
+             Manufacturer="Bakery"
+             Version="$(var.Version)"
+             UpgradeCode="FD0DF01A-1A35-454C-AF08-5BE6B458C6A7"
+             Scope="perMachine">
+        <MajorUpgrade DowngradeErrorMessage="A newer version of DONUT is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- InstallWorker / SelfUpdateService read InstallLocation from the ARP key. -->
+        <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="BakeryFolder" Name="Bakery">
+                <Directory Id="INSTALLFOLDER" Name="DONUT">
+                    <Directory Id="BinFolder" Name="bin">
+                        <Directory Id="X64Folder" Name="x64">
+                            <Directory Id="AppFolder" Name="DONUT" />
+                        </Directory>
+                    </Directory>
+                </Directory>
+            </Directory>
+        </StandardDirectory>
+
+        <!-- The staged publish output (exe already renamed DONUT.exe, pdb dropped). -->
+        <Files Directory="AppFolder"
+               Include="$(var.StageDir)\**" />
+
+        <!-- Start Menu shortcut. ICE treats ProgramMenuFolder as user-profile data
+             even in a per-machine package, so the keypath must be HKCU (the
+             canonical WiX shortcut pattern). -->
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Component Id="StartMenuShortcut">
+                <Shortcut Id="DonutShortcut"
+                          Name="DONUT"
+                          Target="[AppFolder]DONUT.exe"
+                          WorkingDirectory="AppFolder" />
+                <RegistryValue Root="HKCU"
+                               Key="Software\Bakery\DONUT"
+                               Name="Installed"
+                               Type="integer"
+                               Value="1"
+                               KeyPath="yes" />
+            </Component>
+        </StandardDirectory>
+    </Package>
+</Wix>

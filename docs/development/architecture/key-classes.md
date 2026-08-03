@@ -48,11 +48,11 @@ consumes the result and exposes it to the bindings.
 | `HostListSource` | Resolves and reads the bundled host list (e.g. `WSID.txt`) |
 | `TimeFormat` | Pure time helpers: relative labels (`2m ago`) + ISO8601 parse (`ParseIso`, blank → MinValue) |
 | `BuildProvenance` | Startup provenance stamp: logs the running build's git SHA/version + runtime facts so field logs identify exactly which build produced them |
-| `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with exception + structured helpers and a `NullLogService` no-op. `DEBUG` is gated by `DebugEnabled` (the `debugLogging` setting / `-DebugLog` override); other levels always flow |
+| `LogService` | Thread-safe leveled logging (`[INFO]/[WARN]/[ERROR]/[DEBUG]`) to file, with an exception helper and a `NullLogService` no-op. `DEBUG` is gated by `DebugEnabled` (the `debugLogging` setting / `-DebugLog` override); other levels always flow |
 | `ViewLoader` | The one runtime XAML loader (`XamlReader.Load` with stream-dispose so files never stay locked; throws on missing). Page loads wrap it in catch-and-null; `HomePresenter.ComposeRegions` calls it bare so a broken region fails the boot loudly. Each returned root owns its file's namescope |
 | `DispatcherWatchdog` | **Permanent diagnostic:** a `DispatcherTimer` that logs when the UI thread stalls past a threshold, with GC-generation deltas to fingerprint the cause (loader-lock vs blocking GC). Pinned the 2026-07 freeze class; kept because it costs one timer and is the first evidence line for any future stall |
 | `DonutPaths` | Resolves the one machine-wide data root (`%ProgramData%\DONUT\data`) and its config / logs / reports folders, plus the ACL that lets an elevated and a de-elevated instance share it. Replaces the per-account `%LOCALAPPDATA%` layout, which split into two stores once the UI could run as a different user |
-| `ElevationContext` (+ `ElevationState`) | The one place that reads the process token: `IsElevated` (Administrators group), `IsSystem` (the narrower service-token question), `CurrentIdentityName`. `Classify` is the pure rule the UI gates on, returning `NotRequired` / `Satisfied` / `RelaunchRequired`; it takes the elevation state as a parameter so the decision is testable off Windows |
+| `ElevationContext` | The one place that reads the process token: `IsElevated` (Administrators group), `IsSystem` (the narrower service-token question), `CurrentIdentityName`, `InteractiveUser` (who owns the desktop, never who DONUT runs as). The UI gates on `IsElevated` directly |
 
 ## Services (`src/Services/`)
 
@@ -63,8 +63,7 @@ the network I/O.
 | Class | Purpose |
 |-------|---------|
 | `ExecutionService` (`WorkerServices.psm1`) | Remote PsExec execution, DCU CLI invocation, per-phase dispatch (resolve/scan/apply/inventory/disk/delete), artifact copy |
-| `ScanService` (`RemoteServices.psm1`) | Prepare scan operations |
-| `RemoteUpdateService` (`RemoteServices.psm1`) | Prepare update scan/apply; parse + count the update report and build the detail pane's typed `DcuUpdate` rows (driver-matched, urgency-sorted) |
+| `RemoteUpdateService` (`RemoteServices.psm1`) | Prepare DCU scan/apply; parse + count the update report and build the detail pane's typed `DcuUpdate` rows (driver-matched, urgency-sorted) |
 | `InventoryService` | Prepare + parse the per-machine CIM inventory probe |
 | `DiskUsageService` | Prepare + parse the on-demand WizTree "biggest folders" scan |
 | `HostResolver` | Start-early IP-resolution cache (warm the active DC, prefetch on select); builds worker args for both lanes (`PrepareResolve` classic, `PrepareResolveFast` slim child) |
@@ -74,7 +73,6 @@ the network I/O.
 | `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the `DONUT-<console user>` scheduled task (register / update / unregister / stale-sweep) against the toggle. One lane - the logon trigger and the principal are both the console user, at `RunLevel Highest`, so an admin console account starts elevated with no logon-time UAC prompt (on a non-admin account it degrades to the standard token and DONUT elevates on demand). Failures surface their real reason via `LastFailure` |
 | `PendingIntentStore` | Persists the one gated click that asked for elevation and claims it back once after the restart. `Take` deletes the file before returning, so a note fires at most once; the filesystem touch points are overridable seams |
 | `RecentConnectionsStore` | Persists the "recent machines" entries in `AppConfig.Settings['recentHosts']`: upsert/seed/cap/sort + coalesced saves through the config manager |
-| `SystemInfoService` | Local machine facts (identity, domain, battery) for the title bar |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
 | `ResourceService` | XAML resource dictionary loading |
 
