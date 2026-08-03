@@ -29,26 +29,54 @@ class UpdatePresenter {
         $this.Dialog = [DialogPresenter]::new($resources)
     }
 
-    # Runs sign-in (if needed) + the update check/prompt. Called after the main window is
-    # already built + pool-warmed (see DonutApp), so it only gates showing it.
+    # Runs the update check/prompt. Called after the main window is already built +
+    # pool-warmed (see DonutApp), so it only gates showing it.
+    #
+    # Anonymous-first: the public upstream answers without auth, so the default
+    # install never sees a sign-in. Only when the repo refuses (a private fork:
+    # 401/403/404) does the device-flow login appear, once, and the check retries
+    # with the stored token from then on.
     [void] CheckAndPrompt() {
         $localVer = $this.Service.GetLocalVersion()
         $token = $this.Service.GetStoredToken()
 
-        if ([string]::IsNullOrEmpty($token)) {
+        $release = $null
+        try {
+            $release = $this.Service.GetLatestRelease($token)
+        }
+        catch {
+            $status = 0
+            try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+            # GitHub answers 404 for a private repo asked anonymously (a fork) and
+            # 401 for a dead stored token - both mean "sign in fixes this". A 403
+            # is the anonymous rate limit and offline throws without a status;
+            # neither is fixable by auth, so those never prompt.
+            $promptable = ($status -eq 404 -and [string]::IsNullOrEmpty($token)) -or
+            ($status -eq 401)
+            if (-not $promptable) {
+                $this.Logger.LogException("Update check failed", $_)
+                return
+            }
+
             $loginPresenter = [LoginPresenter]::new($this.Service, $this.Resources)
             if (-not $loginPresenter.ShowLogin()) {
                 $this.Logger.LogInfo("Login cancelled or failed.")
                 return
             }
             $token = $this.Service.GetStoredToken()
+            try {
+                $release = $this.Service.GetLatestRelease($token)
+            }
+            catch {
+                $this.Logger.LogException("Update check failed after sign-in", $_)
+                return
+            }
         }
 
         try {
-            $release = $this.Service.GetLatestRelease($token)
             if (-not $release) { return }
 
-            $remoteVer = [version]$release.tag_name
+            $remoteVer = [version]$release.tag_name.TrimStart('v')
 
             if ($remoteVer -ne $localVer) {
                 $this.ShowUpdateWindow($release, $localVer, $remoteVer)
@@ -98,7 +126,7 @@ class UpdatePresenter {
             }
 
             $localVer = $this.Service.GetLocalVersion()
-            $remoteVer = [version]$Release.tag_name
+            $remoteVer = [version]$Release.tag_name.TrimStart('v')
             $isRollback = ($localVer -gt $remoteVer)
 
             $this.Service.ApplyUpdate($msiPath, $isRollback, $this.Resources.SourceRoot)

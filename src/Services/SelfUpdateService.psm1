@@ -3,19 +3,23 @@
     Self-updates the DONUT application from GitHub Releases.
 
 .DESCRIPTION
-    Authenticates via a GitHub App device flow (DPAPI-encrypted token), discovers
-    the latest release, downloads and SHA-256 verifies the MSI, and hands off to
-    InstallWorker.ps1 to install or roll back. Compares the installed version to
-    the release tag to decide update vs. rollback vs. no-op.
+    Discovers the latest release, downloads and SHA-256 verifies the MSI, and
+    hands off to InstallWorker.ps1 to install or roll back. Compares the
+    installed version to the release tag to decide update vs. rollback vs. no-op.
+
+    The default Owner/Repo is the public upstream, which answers anonymously -
+    no sign-in involved. An org running a private fork points Owner/Repo at the
+    fork and sets ClientId to its own GitHub App; the device flow (DPAPI-stored
+    token) then authenticates every request.
 #>
 using module "..\Core\DonutPaths.psm1"
 using module "..\Core\LogService.psm1"
 
 class SelfUpdateService {
-    [string]$ClientId = 'Your Github App Client ID'
+    [string]$ClientId = 'Your Github App Client ID'   # only needed for a private fork
     [string]$Scope = 'repo read:packages'
     [string]$TokenFile
-    [string]$Owner = 'dania-net'
+    [string]$Owner = 'Danial-Changez'
     [string]$Repo = 'DONUT'
     [LogService]$Logger
 
@@ -123,12 +127,17 @@ class SelfUpdateService {
 
     # --- Release management ---
 
+    # Accept header plus Authorization only when a token exists: the public
+    # upstream answers anonymously, a private fork needs the device-flow token.
+    hidden static [hashtable] Headers([string]$Token, [string]$Accept) {
+        $h = @{ Accept = $Accept }
+        if (-not [string]::IsNullOrEmpty($Token)) { $h['Authorization'] = "token $Token" }
+        return $h
+    }
+
     [PSCustomObject] GetLatestRelease([string]$Token) {
-        $headers = @{
-            Authorization = "token $Token"
-            Accept        = "application/vnd.github.v3+json"
-        }
         $uri = "https://api.github.com/repos/$($this.Owner)/$($this.Repo)/releases/latest"
+        $headers = [SelfUpdateService]::Headers($Token, 'application/vnd.github.v3+json')
         return Invoke-RestMethod -Uri $uri -Headers $headers
     }
 
@@ -145,10 +154,7 @@ class SelfUpdateService {
         if (-not (Test-Path $DestDir)) { New-Item -ItemType Directory -Path $DestDir | Out-Null }
 
         $destPath = Join-Path $DestDir $Asset.name
-        $headers = @{
-            Authorization = "token $Token"
-            Accept        = "application/octet-stream"
-        }
+        $headers = [SelfUpdateService]::Headers($Token, 'application/octet-stream')
 
         Invoke-RestMethod -Uri $Asset.url -Headers $headers -OutFile $destPath
         return $destPath
