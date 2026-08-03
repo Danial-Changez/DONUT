@@ -65,11 +65,6 @@ try {
     $global:AppConfig = $configManager.LoadConfig()
     Update-Splash 18 'Loading configuration'
 
-    foreach ($folder in @("logs", "reports")) {
-        $path = Join-Path (Split-Path $configManager.ConfigPath -Parent) $folder
-        if (-not (Test-Path $path)) { New-Item -Path $path -ItemType Directory -Force | Out-Null }
-    }
-
     # Central logger (logs directory is guaranteed by ConfigManager). Injected
     # into the collaborators that support it so runtime errors are recorded.
     $logger = [LogService]::new($configManager.LogsPath)
