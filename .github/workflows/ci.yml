@@ -1,7 +1,8 @@
 # The app gate: format, lint, tests, launcher build - each one a repo script
 # (tools/) so CI and a local run are the same command. Docs and the site have
-# their own pipelines (docs.yml, web-check.yml); the lab harness is
-# diagnostics.yml. Test suite needs Windows: WPF tests run STA.
+# their own pipelines (docs.yml, web-check.yml); the remote-lab harness
+# (tools/Invoke-DiagnosticRun.ps1) is manual-only - see
+# docs/development/testing.md. Test suite needs Windows: WPF tests run STA.
 name: CI
 
 on:
