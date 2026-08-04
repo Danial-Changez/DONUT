@@ -31,7 +31,7 @@ consumes the result and exposes it to the bindings.
 | `TempPassword` | Crypto-random phone-readable temp passwords (`Xxxxx-Xxxxx-99!` — no ambiguous glyphs, trailing special from `!#$%+=`) for the reset overlay, plus the plaintext→SecureString bridge (`ToSecure`) the lint rules require |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs (a person's directory facts + their devices with OS / last domain logon / model + serial from SCCM hardware inventory / BitLocker keys) parsed from the lookup's JSON bundle, plus pure "last seen" formatting. The agent-side query lives in `src/Scripts/LensAgent.Common.ps1` (`Resolve-Lens`). `PersonLens.FromError` builds an empty lens carrying one failure, so a caller that never got a bundle can still show a reason |
 | `PendingIntent` (+ `GatedAction`) | The action a de-elevated DONUT was asked to run, carried across the elevation restart. Untrusted input by construction: it holds only an action kind and host names, `FromJson` matches the action against the enum names (not `[enum]::TryParse`, which accepts a numeric string), and `DeleteFolders` is never resumable |
-| `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, cached inventory); the persisting store is a Service |
+| `RecentConnection` | Typed view of one persisted "recent machine" entry backing the Home list (status, counts, owner); the persisting store is a Service |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
 ## Core (`src/Core/`)
@@ -72,7 +72,7 @@ the network I/O.
 | `DriverMatchingService` | Brand-based driver/update matching with category support |
 | `StartupTaskService` | Start-with-Windows: builds the launch spec, reconciles the `DONUT-<console user>` scheduled task (register / update / unregister / stale-sweep) against the toggle. One lane - the logon trigger and the principal are both the console user, at `RunLevel Highest`, so an admin console account starts elevated with no logon-time UAC prompt (on a non-admin account it degrades to the standard token and DONUT elevates on demand). Failures surface their real reason via `LastFailure` |
 | `PendingIntentStore` | Persists the one gated click that asked for elevation and claims it back once after the restart. `Take` deletes the file before returning, so a note fires at most once; the filesystem touch points are overridable seams |
-| `RecentConnectionsStore` | Persists the "recent machines" entries in `AppConfig.Settings['recentHosts']`: upsert/seed/cap/sort + coalesced saves through the config manager |
+| `RecentConnectionsStore` | Persists the "recent machines" entries in `config\recents.json` (its own file - config.json stays settings-only): upsert/seed/cap-on-write/sort + coalesced saves, plus the one-time `recentHosts` migration out of config.json |
 | `SelfUpdateService` | GitHub releases, token management, MSI verification |
 | `ResourceService` | XAML resource dictionary loading |
 

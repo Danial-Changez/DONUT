@@ -10,10 +10,9 @@ The Home list is DONUT's center: one row per machine, newest action first.
 - Type hostnames in the search bar — separated by commas or new lines — and press
   Enter (or click **Add**). Each becomes a row and gets an inventory probe; adding
   never scans or applies on its own.
-- Or pick a computer from the [AD finder dropdown](./ad-finder.md). When your text
-  matches a machine-name pattern (e.g. `CAP-…`, `B1234…`, `WVD…` — editable via
-  [`machineNamePatterns`](../configuration/config-reference.md)) the dropdown
-  pre-selects **"Add ‹name› as a machine"** so Enter does the obvious thing.
+- Or pick a computer from the [AD finder dropdown](./ad-finder.md). Enter acts on
+  real results only — the top-ranked computer when any matched, else the top
+  user — so a prefix like `CAP-` adds an actual machine, never a junk card.
 
 ## Running
 

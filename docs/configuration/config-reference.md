@@ -27,7 +27,7 @@ up).
 | `runAsAdmin` | bool, **`true`** | Elevate DONUT at launch. On by default, and the only key here that falls back to `true` on a missing or corrupt value: remote work authenticates as the process, so a de-elevated DONUT is the console user, who has no rights on fleet targets. Turning it off applies at the next launch; turning it on relaunches through UAC now. **Two things do not follow it:** a tray/autostart launch never elevates (a prompt at the sign-in screen), and a declined prompt never rewrites the key |
 | `globalHotkey` | string, `"Ctrl+Alt+D"` | Global show/restore hotkey; blank disables it |
 | `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
-| `machineNamePatterns` | string[], `^CAP-`, `^B[0-9]{4}`, `^WVD` | Regex patterns that mark search text as a machine name (vs. a person), so the finder pre-selects "Add as a machine". Edit as naming conventions change |
+| `activeDomainController` | string, discovered | The live domain controller the last DC warm-up picked; read at startup so resolution starts without waiting on AD discovery, rewritten whenever the warm lands on a different DC |
 | `hasSeenTour` | bool, `false` | Set once the first-run [guided tour](../get-started/first-launch.md#the-guided-tour) is shown or skipped; the `?` button replays regardless |
 | `debugLogging` | bool, `false` | Verbose `[DEBUG]` breadcrumbs in `Donut.log` (job/worker/resolve tracing). INFO/WARN/ERROR always flow; applies live and to every worker child. `Start-Donut -DebugLog` forces it on for one session without persisting |
 | `commands` | object | Per-command DCU argument maps — see the [DCU command reference](./dcu-commands.md) |
@@ -45,7 +45,6 @@ up).
   "runAsAdmin": true,
   "globalHotkey": "Ctrl+Alt+D",
   "openSettingsShortcut": "Ctrl+,",
-  "machineNamePatterns": ["^CAP-", "^B[0-9]{4}", "^WVD"],
   "hasSeenTour": true,
   "commands": {
     "scan": {
@@ -76,5 +75,21 @@ up).
 }
 ```
 
-(`domains` and `adminServiceHost` are discovered on first run and persisted - they are
-omitted above; override them here if discovery guessed wrong for your environment.)
+(`domains`, `adminServiceHost` and `activeDomainController` are discovered and
+persisted - they are omitted above; override them here if discovery guessed wrong
+for your environment.)
+
+## What config.json deliberately does NOT hold
+
+config.json is settings only. Runtime state lives beside it in the data root:
+
+- **Machine list** (`config\recents.json`) - the Home list's per-host entries
+  (last run, status, owner, operator-touch recency), capped at 50, written by
+  the app as jobs settle. Delete it to reset the list; the `WSID.txt` seed (if
+  present) repopulates it on the next launch.
+- **Inventory** (`reports\<host>-inventory.json`) and **disk usage**
+  (`reports\<host>-folders.csv`) - each probe/scan overwrites its host's file;
+  the UI reads these on demand.
+
+Older builds cached all of this inside config.json; the first launch of a
+current build migrates the machine list out and drops the rest automatically.

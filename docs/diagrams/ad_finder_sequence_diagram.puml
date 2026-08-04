@@ -74,5 +74,5 @@ Presenter -> OwnerWorker: ResolveOwners(machines) ->\nBeginInvoke(-OwnerOf batch
 note right of Presenter: HomePresenter asks once for every listed\nmachine missing an owner; one in-flight\nbatch (OwnerJob), reaped on the Lens poll\ntick (ReapOwners).
 OwnerWorker --> Presenter: (async) owners bundle (machine -> owner)
 Presenter -> User: owner chip on each card\n(HostViewModel.SetOwner)
-note right of Presenter: Owners persist via\nRecentConnectionsStore.UpsertOwner ->\nConfigManager.SaveConfig (config.json),\nsaves coalesced by DeferSave.
+note right of Presenter: Owners persist via\nRecentConnectionsStore.UpsertOwner\n(config\\recents.json),\nsaves coalesced by DeferSave.
 @enduml

@@ -82,11 +82,11 @@ package "Donut.Services" #221634 {
     class RecentConnectionsStore {
         +{static} Cap: int
         +DeferSave: bool
-        +Upsert(host, status, jobType, count, reboot): void
+        +{static} DefaultPath(): string
+        +{static} MigrateFromConfig(config, mgr, path, logger): void
+        +Upsert(host, status, jobType, count): void
         +Touch(host): void
-        +UpsertInventory(host, inv): void
         +UpsertOwner(host, owner): void
-        +UpsertDiskUsage(host, report): void
         +Remove(host): void
         +SeedFrom(hosts): void
         +GetAll(): RecentConnection[]
@@ -94,6 +94,10 @@ package "Donut.Services" #221634 {
         +Count(): int
         +FlushSave(): void
     }
+    note bottom of RecentConnectionsStore
+        Backed by config\recents.json (its own file,
+        capped on write) - config.json is settings only.
+    end note
 
     class PendingIntentStore {
         +Logger: LogService
@@ -155,10 +159,7 @@ package "Donut.Models" #15233B {
         +LastStatus: string
         +LastJobType: string
         +UpdateCount: int
-        +RebootRequired: bool
         +Owner: string
-        +Inventory: MachineInventory
-        +DiskUsage: DiskUsageReport
         +{static} FromHashtable(h): RecentConnection
     }
 

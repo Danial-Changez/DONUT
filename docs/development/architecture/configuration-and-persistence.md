@@ -12,8 +12,9 @@ Where DONUT keeps its state and how settings flow through the app.
 ## Configuration
 
 - **One machine-wide data root:** `DonutPaths` resolves `%ProgramData%\DONUT\data`, and
-  `config.json`, `WSID.txt`, the GitHub token, logs and reports all hang off it, so they
-  persist across updates and reinstalls. It is deliberately not `%LOCALAPPDATA%`: that is
+  `config.json`, `recents.json`, `WSID.txt`, the GitHub token, logs and reports all hang
+  off it, so they persist across updates and reinstalls. It is deliberately not
+  `%LOCALAPPDATA%`: that is
   per-account, and a de-elevated UI with privileged work under a different account would
   otherwise keep two of everything. `ConfigManager` reads/writes through that root and
   secures it on the run that creates it (SYSTEM, Administrators, the interactive user).
@@ -34,10 +35,13 @@ Where DONUT keeps its state and how settings flow through the app.
 ## Persistence and logging
 
 - The recents store (`RecentConnectionsStore` over `RecentConnection`) persists
-  per-host outcomes (last status, job type, update count, reboot flag, cached
-  inventory) into `config.json`, capped and de-duplicated. Disk-usage scans are
-  deliberately not in it: the scan's CSV in `reports\` is their store, parsed on
-  select and memoized for the session.
+  per-host outcomes (last status, job type, update count, owner, operator-touch
+  recency) into `config\recents.json` - its own file, capped at 50 on write and
+  de-duplicated, so config.json stays settings-only and job traffic never
+  rewrites it. A one-time migration lifts legacy `recentHosts` entries out of
+  config.json on the first launch. Per-machine probe data is deliberately not
+  in it: the inventory JSON and the disk-scan CSV in `reports\` are its stores,
+  parsed on demand and memoized for the session (`InventoryPresenter`).
 - Logs land in `%ProgramData%\DONUT\data\logs\` - `Donut.log` for the app plus one
   `<hostname>.log` copied back per remote run. The logging rules themselves
   (lock-free appends, debug gate, provenance stamp) are on

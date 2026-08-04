@@ -115,7 +115,7 @@ else fresh Online
     RemoteTimeoutException instead of a forever-Running job that blocks
     the single-flight guard.
   end note
-  J --> P : CompleteInventory -> Store.UpsertInventory -> card
+  J --> P : CompleteInventory -> memoize reports\ JSON -> card
 end
 
 == Phase 3 — Run (scan / apply), "from where left off" ==
@@ -232,7 +232,7 @@ alt job Failed
   P -> R : InvalidateResolved (drop IP + PrefetchIp) — the re-probe\nconfirms the offline or self-corrects a transient
   P -> P : ShowError toast
 end
-P -> P : SettleHost -> Store.Upsert(status, updateCount, reboot)
+P -> P : SettleHost -> Store.Upsert(status, updateCount) [recents.json]
 note over P #1F1F26
   Card state: Completed(green) / RebootRequired(yellow) /
   ConnectionLost(amber "Unconfirmed") / Offline(grey) / Failed(red).
