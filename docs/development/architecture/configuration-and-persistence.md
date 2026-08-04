@@ -57,7 +57,7 @@ Where DONUT keeps its state and how settings flow through the app.
   DPAPI-protected (CurrentUser). A fork points Owner/Repo at itself and sets
   `ClientId` to its own GitHub App.
 - `InstallWorker.ps1` stays a standalone script (not a class) in `src/Scripts/`
-  so `SelfUpdateService` can copy it to the data root and run it
-  independently for updates/rollbacks; the copy is hash-gated (SHA-256).
+  so `SelfUpdateService` can copy it to the data root and run it independently
+  for updates/rollbacks (the MSI it installs is SHA-256-verified first).
 - `StartupTaskService` reconciles the start-with-Windows scheduled task from the
   same config seam (`Apply-StartupTask.ps1` applies it out of process).

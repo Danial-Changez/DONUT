@@ -7,6 +7,9 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embedded exe icon: the taskbar, Alt-Tab, Start Menu shortcut and Windows
+         search all read it - without it every surface shows the default .NET logo. -->
+    <ApplicationIcon>..\..\assets\Images\donut icon48x48.ico</ApplicationIcon>
     <!-- Roots for the embedded app tree, relative to this project in src\Launcher\. -->
     <DonutSrcDir>$(MSBuildProjectDirectory)\..</DonutSrcDir>
     <DonutRepoRoot>$(MSBuildProjectDirectory)\..\..</DonutRepoRoot>
