@@ -316,17 +316,34 @@ class NetworkProbe {
     # --- First-run org discovery (results persist to config; the repo ships no
     #     organization names) ---
 
-    # The AD domains the finder should search: this machine's own domain plus
-    # every trust partner (domain and forest trusts). Best-effort - off a domain
-    # this returns @() and the finder searches nothing until config names domains.
+    # The AD domains the finder should search: every domain in this machine's
+    # forest plus every trust partner (domain and forest trusts). Best-effort -
+    # off a domain this returns @() and the finder searches nothing until config
+    # names domains.
     [string[]] DiscoverSearchDomains() {
         $found = [System.Collections.Generic.List[string]]::new()
         try {
             Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
             $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
-            $found.Add($domain.Name)
+            # The whole forest, not just the joined domain: child domains
+            # (home.test.ca under test.ca) hold their own users and are not
+            # trust partners, so trust enumeration alone never finds them.
+            foreach ($d in @($domain.Forest.Domains)) { $found.Add([string]$d.Name) }
             foreach ($t in @($domain.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
-            foreach ($t in @($domain.Forest.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
+            foreach ($t in @($domain.Forest.GetAllTrustRelationships())) {
+                $found.Add([string]$t.TargetName)
+                # A forest trust names only the partner's root domain; expand to
+                # its child domains when reachable (the root alone otherwise).
+                try {
+                    $ctx = [System.DirectoryServices.ActiveDirectory.DirectoryContext]::new(
+                        'Forest', [string]$t.TargetName)
+                    $partner = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ctx)
+                    foreach ($d in @($partner.Domains)) { $found.Add([string]$d.Name) }
+                }
+                catch {
+                    $this.Logger.LogDebug("Trusted forest '$($t.TargetName)' not expandable: $($_.Exception.Message)")
+                }
+            }
         }
         catch {
             $this.Logger.LogDebug("Search-domain discovery unavailable: $($_.Exception.Message)")

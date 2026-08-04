@@ -25,9 +25,9 @@ class AppConfig {
         # How long a run keeps trying to reconnect + resume after a network drop (either
         # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
         recoveryWindowMinutes = 30
-        # AD forests searched by the Home live-finder (separate forests; each is
-        # queried independently). Empty = discovered on first run from the
-        # machine's own domain plus its trust partners, then persisted to
+        # AD domains searched by the Home live-finder (each queried
+        # independently). Empty = discovered on first run from the machine's
+        # forest (every domain in it) plus its trust partners, then persisted to
         # config.json (DonutApp startup) - the repo ships no organization names.
         domains               = @()
         # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.

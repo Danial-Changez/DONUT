@@ -127,7 +127,7 @@ try {
     $networkProbe = [NetworkProbe]::new($logger)
 
     # First run in a new environment: the repo ships nothing org-specific, so the
-    # finder's search domains (own domain + trust partners) and the Lens's SCCM
+    # finder's search domains (own forest + trust partners) and the Lens's SCCM
     # host (the client's management point) are discovered from the machine itself
     # and persisted to config.json. Later runs - and operator edits - read config.
     $discovered = $false
