@@ -10,7 +10,6 @@ using module "..\..\Models\LogLine.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\PendingIntent.psm1"
 using module "..\..\Core\AsyncJob.psm1"
-using module "..\..\Core\DonutPaths.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
@@ -1226,13 +1225,6 @@ class HomePresenter : AsyncJobPresenter {
         # hashtable wrapped in the invoke collection - unwrap it.
         foreach ($item in @($job.Result)) {
             if ($null -ne $item -and $item.RebootRequired) { $needsReboot = $true; break }
-        }
-
-        # Fallback: a reboot-required marker file, in case a future remote step writes one.
-        $rebootFlagPath = Join-Path ([DonutPaths]::ReportsDir()) "$($job.HostName)-reboot-required.flag"
-        if (Test-Path $rebootFlagPath) {
-            $needsReboot = $true
-            Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue
         }
 
         if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {

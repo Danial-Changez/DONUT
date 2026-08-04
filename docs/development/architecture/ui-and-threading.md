@@ -52,8 +52,8 @@ threading rules and the UI-side job flows.
      phase; skip apply when no updates (a scan's DCU 500 short-circuits with
      "No updates found").
 - **Manual reboot detection:** the worker reports `RebootRequired` in its
-  result (backed by a `*-reboot-required.flag` file in reports), and the host
-  gets a per-host toast plus card status; `ManualRebootQueue` tracks the batch.
+  result, and the host gets a per-host toast plus card status;
+  `ManualRebootQueue` tracks the batch.
 - **Multi-device safety prompt:** a Run all consents **once** for the whole
   batch - a single confirmation listing all targets before enqueueing
   (`BatchApplyHosts` then skips the per-host dialog).

@@ -157,11 +157,8 @@ Describe "ResolutionCoordinator" {
             $script:fakeHome.DeferredWarmReasons.Count | Should -Be 1
         }
 
-        It "does not re-save the config when only the controller ORDER changed" {
-            # AD discovery order is nondeterministic; an order-only diff used to trigger
-            # a full config re-serialization on the dispatcher right as the warm landed.
+        It "does not re-save the config when the active DC is unchanged" {
             $script:config.Settings['activeDomainController'] = 'DC01'
-            $script:config.Settings['domainControllers'] = @('DC02', 'DC01')
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
             $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
@@ -171,16 +168,16 @@ Describe "ResolutionCoordinator" {
             $script:cfgMgr.SaveCount | Should -Be 0
         }
 
-        It "still saves when the controller SET changed" {
-            $script:config.Settings['activeDomainController'] = 'DC01'
-            $script:config.Settings['domainControllers'] = @('DC01', 'DC02')
+        It "never persists the controller list - only the active DC is config state" {
+            # 'domainControllers' was written but never read back; the warm re-discovers
+            # the list every launch, so persisting it was pure config noise.
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
             $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03') })
 
             $script:coord.CompleteResolve($job)
 
-            $script:cfgMgr.SaveCount | Should -Be 1
+            $script:config.Settings.ContainsKey('domainControllers') | Should -BeFalse
         }
     }
 
