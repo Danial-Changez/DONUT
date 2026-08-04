@@ -167,8 +167,13 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateService = [RemoteUpdateService]::new(
             $config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
-        $this.Store = [RecentConnectionsStore]::new($config, $configManager)
-        # Coalesce config.json writes: mutations mark pending, flushed once per drained batch.
+        # Machine-list state lives in config\recents.json (config.json is settings
+        # only); the one-time migration moves any legacy recentHosts out of config.
+        [RecentConnectionsStore]::MigrateFromConfig(
+            $config, $configManager, [RecentConnectionsStore]::DefaultPath(), $this.Logger)
+        $this.Store = [RecentConnectionsStore]::new(
+            [RecentConnectionsStore]::DefaultPath(), $this.Logger)
+        # Coalesce recents.json writes: mutations mark pending, flushed once per drained batch.
         $this.Store.DeferSave = $true
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
@@ -847,7 +852,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.UpdateService.CountUpdates($this.UpdateService.ParseUpdateReport($job.HostName))
         }
 
-        $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
+        $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount)
 
         # Consume the queue entry so a later run can't inherit a stale reboot flag.
         if ($reboot) { [void]$this.ManualRebootQueue.Remove($job.HostName) }
