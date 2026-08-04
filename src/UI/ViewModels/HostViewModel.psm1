@@ -159,10 +159,6 @@ class HostViewModel : ObservableObject {
         $this.RenderDot()
         $this.ApplyChip()
         $this.ApplySubtitle()
-
-        # Populate the overview strip from the cached record so selecting the row shows its
-        # facts immediately (no re-probe needed).
-        if ($null -ne $rc.Inventory) { $this.ApplyInventory($rc.Inventory) }
         $this.RefreshShape()
     }
 

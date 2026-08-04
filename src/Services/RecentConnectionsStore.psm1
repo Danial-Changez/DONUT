@@ -1,6 +1,5 @@
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\RecentConnection.psm1"
-using module "..\Models\MachineInventory.psm1"
 using module "..\Core\TimeFormat.psm1"
 
 <#
@@ -55,7 +54,7 @@ class RecentConnectionsStore {
         $this.CacheValid = $false
     }
 
-    # The six-key "never run" entry shape shared by Touch/UpsertInventory/SeedFrom.
+    # The six-key "never run" entry shape shared by Touch/UpsertOwner/SeedFrom.
     hidden static [hashtable] NewBlankEntry([string]$name) {
         return @{
             hostname       = $name
@@ -97,11 +96,13 @@ class RecentConnectionsStore {
             rebootRequired = [bool]$rebootRequired
         }
 
-        # Carry over what a run does not change (cached inventory, lastTouched,
-        # owner); replacing the entry without these silently loses the caches.
+        # Carry over what a run does not change (lastTouched, owner); replacing
+        # the entry without these silently loses the caches. A legacy 'inventory'
+        # blob is deliberately NOT carried: reports\ is the inventory store now,
+        # so old config entries shed it on their next settle.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
-            foreach ($k in @('inventory', 'lastTouched', 'owner')) {
+            foreach ($k in @('lastTouched', 'owner')) {
                 if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
             }
         }
@@ -118,23 +119,6 @@ class RecentConnectionsStore {
         $entry = $this.FindEntry($name)
         if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
         $entry['lastTouched'] = [datetime]::UtcNow.ToString('o')
-
-        $this.CommitFront($entry, $name)
-    }
-
-    # Merges a fresh inventory probe onto the host's entry without touching its
-    # scan/apply status fields; stamps the probe time for "last probed ...".
-    [void] UpsertInventory([string]$hostname, [MachineInventory]$inv) {
-        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
-        if ($null -eq $inv) { return }
-        $name = $hostname.Trim()
-
-        $entry = $this.FindEntry($name)
-        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
-
-        $invHash = $inv.ToHashtable()
-        $invHash['probedAt'] = [datetime]::UtcNow.ToString('o')
-        $entry['inventory'] = $invHash
 
         $this.CommitFront($entry, $name)
     }

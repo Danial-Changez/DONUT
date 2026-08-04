@@ -1,5 +1,4 @@
 using module "..\..\src\Models\AppConfig.psm1"
-using module "..\..\src\Models\MachineInventory.psm1"
 using module "..\..\src\Models\RecentConnection.psm1"
 using module "..\..\src\Services\RecentConnectionsStore.psm1"
 
@@ -30,7 +29,6 @@ Describe "RecentConnectionsStore" {
             $all.Count | Should -Be 1
             $all[0].LastStatus | Should -Be "Failed"
             $all[0].UpdateCount | Should -Be 3
-            $all[0].RebootRequired | Should -Be $true
         }
 
         It "Persists into AppConfig.Settings['recentHosts'] as plain hashtables" {
@@ -100,17 +98,16 @@ Describe "RecentConnectionsStore" {
     }
 
     Context "Upsert carry-over (a run must not lose the caches)" {
-        It "Keeps the cached inventory across a later Upsert" {
-            $inv = [MachineInventory]::new()
-            $inv.Model = "Latitude 5440"
-            $script:store.UpsertInventory("PC-1", $inv)
+        It "Sheds a legacy inventory blob on the next settle (reports\ is the store)" {
+            $entry = @{ hostname = 'PC-1'; lastSeen = ''; lastStatus = ''; lastJobType = ''
+                updateCount = 0; inventory = @{ model = 'Latitude 5440' }
+            }
+            $script:config.Settings['recentHosts'] = @($entry)
 
             $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
 
-            $rc = $script:store.GetByHost("PC-1")
-            $rc.Inventory | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model | Should -Be "Latitude 5440"
-            $rc.LastStatus | Should -Be "Completed"
+            $raw = @($script:config.Settings['recentHosts'])
+            $raw[0].ContainsKey('inventory') | Should -BeFalse
         }
 
         It "Keeps the lastTouched stamp across a later Upsert" {
@@ -241,55 +238,21 @@ Describe "RecentConnectionsStore" {
         }
     }
 
-    Context "Inventory cache (UpsertInventory)" {
-        BeforeEach {
-            $script:inv = [MachineInventory]::new()
-            $script:inv.Model = 'Latitude 5340'
-            $script:inv.ServiceTag = 'ABC1234'
-            $script:inv.HasBattery = $true
-            $script:inv.DesignCapacity = 50000
-            $script:inv.FullChargeCapacity = 45000
-            $script:inv.ChargePercent = 67
-        }
-
-        It "Caches inventory on a tracked host without clobbering its status" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 4, $true)
-            $script:store.UpsertInventory("PC-1", $script:inv)
-
-            $rc = $script:store.GetAll() | Where-Object { $_.Hostname -eq 'PC-1' }
-            $rc.LastStatus     | Should -Be "Completed"
-            $rc.UpdateCount    | Should -Be 4
-            $rc.RebootRequired | Should -Be $true
-            $rc.Inventory               | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model         | Should -Be 'Latitude 5340'
-            $rc.Inventory.ServiceTag    | Should -Be 'ABC1234'
-            $rc.Inventory.ProbedAt      | Should -Not -BeNullOrEmpty
-        }
-
-        It "Creates an entry when the host is not yet tracked" {
-            $script:store.UpsertInventory("NEWPC", $script:inv)
-
-            $rc = $script:store.GetAll() | Where-Object { $_.Hostname -eq 'NEWPC' }
-            $rc                 | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model | Should -Be 'Latitude 5340'
-            $rc.LastStatus      | Should -Be ''
-        }
-
-        It "Survives JSON serialize/deserialize (nested inventory round-trips)" {
+    Context "JSON round-trip (what ConfigManager.Save/Load do)" {
+        It "Survives serialize/deserialize with owner + touch intact" {
             $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
-            $script:store.UpsertInventory("PC-1", $script:inv)
+            $script:store.UpsertOwner("PC-1", "Jamie Doe")
+            $script:store.Touch("PC-1")
 
-            # Exactly what ConfigManager.Save/Load do.
             $reloaded = ($script:config.Settings | ConvertTo-Json -Depth 10) | ConvertFrom-Json -AsHashtable
             $reloadedStore = [RecentConnectionsStore]::new(
                 [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", $reloaded), $null)
 
-            $rc = $reloadedStore.GetAll() | Where-Object { $_.Hostname -eq 'PC-1' }
-            $rc.Inventory                    | Should -Not -BeNullOrEmpty
-            $rc.Inventory.ServiceTag         | Should -Be 'ABC1234'
-            $rc.Inventory.FullChargeCapacity | Should -Be 45000
-            $rc.Inventory.ChargePercent      | Should -Be 67
-            $rc.LastStatus                   | Should -Be "Completed"
+            $rc = $reloadedStore.GetByHost('PC-1')
+            $rc.LastStatus  | Should -Be "Completed"
+            $rc.UpdateCount | Should -Be 2
+            $rc.Owner       | Should -Be "Jamie Doe"
+            $rc.LastTouched | Should -Not -BeNullOrEmpty
         }
     }
 }

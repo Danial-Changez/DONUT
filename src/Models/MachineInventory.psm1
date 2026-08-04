@@ -26,7 +26,7 @@ class MachineInventory {
     [string] $ProbedAt = ''              # ISO8601 UTC when the probe ran
 
     # Builds a typed inventory from the raw hashtable parsed out of the probe's
-    # JSON (or a cached recent-connection entry). Tolerates missing/null keys.
+    # JSON in reports\ (the persistent store). Tolerates missing/null keys.
     static [MachineInventory] FromHashtable([hashtable]$h) {
         $mi = [MachineInventory]::new()
         if ($null -eq $h) { return $mi }
@@ -43,25 +43,6 @@ class MachineInventory {
         $mi.LastBootTime       = [TimeFormat]::NormalizeStamp($h['lastBootTime'])
         $mi.ProbedAt           = [TimeFormat]::NormalizeStamp($h['probedAt'])
         return $mi
-    }
-
-    # Flattens to a plain hashtable (the same shape as the probe JSON) so it can
-    # be cached in the recents store and round-trip through ConvertTo/FromJson.
-    [hashtable] ToHashtable() {
-        return @{
-            model              = $this.Model
-            serviceTag         = $this.ServiceTag
-            biosVersion        = $this.BiosVersion
-            hasBattery         = $this.HasBattery
-            designCapacity     = $this.DesignCapacity
-            fullChargeCapacity = $this.FullChargeCapacity
-            chargePercent      = $this.ChargePercent
-            charging           = $this.Charging
-            freeSpaceBytes     = $this.FreeSpaceBytes
-            totalSpaceBytes    = $this.TotalSpaceBytes
-            lastBootTime       = $this.LastBootTime
-            probedAt           = $this.ProbedAt
-        }
     }
 
     hidden static [long] AsLong([object]$v) {

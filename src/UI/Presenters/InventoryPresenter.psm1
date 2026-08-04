@@ -8,7 +8,6 @@ using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Models\DiskUsage.psm1"
 using module "..\..\Models\MachineInventory.psm1"
-using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\JobEnums.psm1"
 using module "..\..\Models\PendingIntent.psm1"
 using module "..\..\Models\RemoteError.psm1"
@@ -40,7 +39,6 @@ class InventoryPresenter {
     [HomeViewModel]    $HomeVm
     [InventoryService] $InventoryService
     [DiskUsageService] $DiskUsageService
-    [object]           $Store    # RecentConnectionsStore (shared with HomePresenter)
     [object]           $Toasts   # ToastService
     [object]           $Home     # duck-typed back-ref to HomePresenter's machine seams
 
@@ -57,6 +55,9 @@ class InventoryPresenter {
     # hostname(lower) -> DiskUsageReport, parsed once per session from the scan's CSV in
     # reports\. The CSV is the persistent store; config carries no per-machine scan data.
     hidden [hashtable] $DiskReports = @{}
+    # hostname(lower) -> MachineInventory, parsed once per session from the probe's JSON
+    # in reports\. Same pattern: the report file is the store, config stays settings-only.
+    hidden [hashtable] $Inventories = @{}
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail ListBox
     hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder selection cascade
     # A probe fresher than this is reused instead of re-gathered (non-forced calls).
@@ -68,7 +69,6 @@ class InventoryPresenter {
         [HomeViewModel] $homeVm,
         [InventoryService] $inventoryService,
         [DiskUsageService] $diskUsageService,
-        [object] $store,
         [object] $toasts,
         [object] $homePresenter
     ) {
@@ -77,7 +77,6 @@ class InventoryPresenter {
         $this.HomeVm = $homeVm
         $this.InventoryService = $inventoryService
         $this.DiskUsageService = $diskUsageService
-        $this.Store = $store
         $this.Toasts = $toasts
         $this.Home = $homePresenter
         $this.LogBuffers = @{}
@@ -171,9 +170,7 @@ class InventoryPresenter {
 
         $this.RenderHostLog($hostName)
 
-        $rc = $this.Home.GetRecord($hostName)
-        $cachedInv = if ($null -ne $rc) { $rc.Inventory } else { $null }
-        $this.PopulateDetailCards($hostName, $cachedInv, $rc)
+        $this.PopulateDetailCards($hostName, $this.GetInventory($hostName))
         # Fill the Available Updates card from the last scan's report on disk (if any), so a
         # completed/cached scan shows without re-running. Read-only: selecting never re-scans.
         [void]$this.Home.RenderUpdatesFromReport($hostName)
@@ -221,14 +218,24 @@ class InventoryPresenter {
     }
 
     # Syncs the host view-model's detail/overview bindables from its inventory.
-    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv, [RecentConnection]$rc) {
+    [void] PopulateDetailCards([string]$hostName, [MachineInventory]$inv) {
         $vm = $this.Home.GetRow($hostName)
         if ($null -eq $vm) { return }
-        $useInv = if ($null -ne $inv) { $inv }
-        elseif ($null -ne $rc) { $rc.Inventory }
-        else { $null }
-        if ($null -ne $useInv) { $vm.ApplyInventory($useInv) }
+        if ($null -ne $inv) { $vm.ApplyInventory($inv) }
         $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName))
+    }
+
+    # The session-memoized inventory for a host: the probe's JSON in reports\
+    # parsed once, refreshed in place by CompleteInventory. $null = never probed.
+    [MachineInventory] GetInventory([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return $null }
+        $key = $hostName.Trim().ToLowerInvariant()
+        if (-not $this.Inventories.ContainsKey($key)) {
+            $parsed = $this.InventoryService.ParseInventory($hostName)
+            if ($null -eq $parsed) { return $null }
+            $this.Inventories[$key] = $parsed
+        }
+        return $this.Inventories[$key]
     }
 
     # Appends a job-output line to the host's buffer and, when selected, the detail log.
@@ -361,18 +368,17 @@ class InventoryPresenter {
 
     # True when a host has no cached inventory or its last probe is older than the TTL.
     [bool] InventoryIsStale([string]$hostName) {
-        $rc = $this.Home.GetRecord($hostName)
-        if ($null -eq $rc -or $null -eq $rc.Inventory) { return $true }
-        $probed = [TimeFormat]::ParseIso($rc.Inventory.ProbedAt)
+        $inv = $this.GetInventory($hostName)
+        if ($null -eq $inv) { return $true }
+        $probed = [TimeFormat]::ParseIso($inv.ProbedAt)
         if ($probed -eq [datetime]::MinValue) { return $true }
         return (([datetime]::UtcNow - $probed) -gt $this.InventoryTtl)
     }
 
-    # Inventory job finished: parse + cache + repopulate the detail cards.
+    # Inventory job finished: parse + memoize + repopulate the detail cards.
     [void] CompleteInventory([AsyncJob]$job) {
         $hostName = $job.HostName
-        # The card may have been cleared mid-probe; persisting now would re-create a
-        # ghost recents entry - drop the result instead.
+        # The card may have been cleared mid-probe; nothing is left to paint - drop it.
         if (-not $this.Home.Rows.ContainsKey($hostName)) { return }
         $this.ShowJobProgress($hostName, $false, 0, $false)
 
@@ -388,13 +394,11 @@ class InventoryPresenter {
             return
         }
 
-        $this.Store.UpsertInventory($hostName, $inv)
+        $this.Inventories[$hostName.Trim().ToLowerInvariant()] = $inv
         $this.AppendLog($hostName, "Inventory updated.")
 
         # Push onto the view-model: updates the detail now if selected, ready if later.
-        $rc = $this.Home.GetRecord($hostName)
-        $cached = if ($null -ne $rc -and $null -ne $rc.Inventory) { $rc.Inventory } else { $inv }
-        $this.PopulateDetailCards($hostName, $cached, $rc)
+        $this.PopulateDetailCards($hostName, $inv)
     }
 
     # Re-runs a storage scan that asked for elevation, once the restart has provided it.

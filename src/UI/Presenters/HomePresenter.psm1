@@ -198,7 +198,7 @@ class HomePresenter : AsyncJobPresenter {
         # still inert - HomePresenter owns the detail controls + methods until later stages.
         $this.Detail = [InventoryPresenter]::new(
             $config, $this.Logger, $this.HomeVm, $this.InventoryService,
-            $this.DiskUsageService, $this.Store, $this.Toasts, $this)
+            $this.DiskUsageService, $this.Toasts, $this)
 
         # Split scaffold: the resolution coordinator is constructed and wired, but still
         # inert - HomePresenter owns the resolve methods until the next stages move them.
@@ -408,6 +408,10 @@ class HomePresenter : AsyncJobPresenter {
         foreach ($rc in $this.Store.GetAll()) {
             $vm = $this.EnsureRow($rc.Hostname)
             $vm.ApplyIdle($rc)
+            # Overview tiles come from the probe's report file (session-memoized),
+            # so a probed host shows its facts across restarts without a re-probe.
+            $inv = $this.Detail.GetInventory($rc.Hostname)
+            if ($inv) { $vm.ApplyInventory($inv) }
         }
         $this.UpdateEmptyHint()
     }
