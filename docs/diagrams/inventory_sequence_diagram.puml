@@ -9,7 +9,6 @@ participant "HostResolver" as Resolver
 participant "InventoryService" as Inv
 participant "DiskUsageService" as Disk
 participant "AsyncJob" as Job
-participant "RecentConnectionsStore" as Store
 
 User -> Presenter: Select machine row
 activate Presenter
@@ -39,7 +38,7 @@ Detail -> Inv: ParseInventory("PC-01")
 activate Inv
 Inv --> Detail: MachineInventory (model, battery, disk, uptime)
 deactivate Inv
-Detail -> Store: UpsertInventory("PC-01", inv)
+Detail -> Detail: memoize inv (reports\\<host>-inventory.json is the store)
 Detail -> Detail: PopulateDetailCards() -> HostViewModel.ApplyInventory()
 note right of Detail: InventoryFormat derives battery-health,\ndisk-free and uptime labels (pure, tested);\nthe overview/detail bind to SelectedMachine.*.
 
@@ -57,7 +56,7 @@ Detail -> Disk: ParseDiskUsage("PC-01")
 activate Disk
 Disk --> Detail: DiskUsageReport (ranked folders)
 deactivate Disk
-Detail -> Store: UpsertDiskUsage("PC-01", report)
+Detail -> Detail: memoize report (reports\\<host>-folders.csv is the store)
 Detail -> Detail: HostViewModel.ApplyFolders(report)
 note right of Detail: FolderNodeViewModel.FromReport() maps\nDiskUsageTree.BuildNested() to display nodes;\nthe TreeView binds SelectedMachine.Folders.
 

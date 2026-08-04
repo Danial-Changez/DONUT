@@ -237,4 +237,32 @@ Describe "LogService" {
             $logger.LogFilePath | Should -BeNullOrEmpty
         }
     }
+
+    Context "Rotate" {
+        It "rolls an oversized log to Donut.old.log and replaces the previous roll" {
+            $log = Join-Path $script:testLogDir 'Donut.log'
+            $old = Join-Path $script:testLogDir 'Donut.old.log'
+            Set-Content -Path $log -Value ('x' * 64) -NoNewline
+            Set-Content -Path $old -Value 'previous roll' -NoNewline
+
+            [LogService]::Rotate($script:testLogDir, 10)
+
+            Test-Path $log | Should -BeFalse
+            Get-Content $old -Raw | Should -BeLike 'xxx*'
+        }
+
+        It "leaves a log under the limit alone" {
+            $log = Join-Path $script:testLogDir 'Donut.log'
+            Set-Content -Path $log -Value 'small' -NoNewline
+
+            [LogService]::Rotate($script:testLogDir, 10MB)
+
+            Test-Path $log | Should -BeTrue
+            Test-Path (Join-Path $script:testLogDir 'Donut.old.log') | Should -BeFalse
+        }
+
+        It "does not throw when no log exists yet" {
+            { [LogService]::Rotate($script:testLogDir, 10MB) } | Should -Not -Throw
+        }
+    }
 }

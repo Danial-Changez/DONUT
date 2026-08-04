@@ -36,7 +36,7 @@ reinstalls never touch it:
 
 | Folder | Contents |
 |--------|----------|
-| `config\` | `config.json` (settings) and the machine list |
+| `config\` | `config.json` (settings) and `recents.json` (the machine list) |
 | `logs\` | The central `Donut.log` plus a per-host copy of each run's output log |
 | `reports\` | Scan report XMLs |
 

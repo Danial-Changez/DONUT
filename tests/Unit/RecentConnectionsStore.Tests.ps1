@@ -1,19 +1,18 @@
 using module "..\..\src\Models\AppConfig.psm1"
-using module "..\..\src\Models\MachineInventory.psm1"
 using module "..\..\src\Models\RecentConnection.psm1"
 using module "..\..\src\Services\RecentConnectionsStore.psm1"
 
 Describe "RecentConnectionsStore" {
 
     BeforeEach {
-        # Fresh in-memory config, no config manager (Save is a no-op).
-        $script:config = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", @{})
-        $script:store = [RecentConnectionsStore]::new($script:config, $null)
+        # A real file under TestDrive; a $null logger coalesces to the no-op.
+        $script:path = Join-Path $TestDrive "recents_$(Get-Random).json"
+        $script:store = [RecentConnectionsStore]::new($script:path, $null)
     }
 
     Context "Upsert" {
         It "Inserts a new host with a fresh lastSeen" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
 
             $all = $script:store.GetAll()
             $all.Count | Should -Be 1
@@ -23,42 +22,79 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Replaces an existing host (case-insensitive) rather than duplicating" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
-            $script:store.Upsert("pc-1", "Failed", "UpdateApply", 3, $true)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
+            $script:store.Upsert("pc-1", "Failed", "UpdateApply", 3)
 
             $all = $script:store.GetAll()
             $all.Count | Should -Be 1
             $all[0].LastStatus | Should -Be "Failed"
             $all[0].UpdateCount | Should -Be 3
-            $all[0].RebootRequired | Should -Be $true
         }
 
-        It "Persists into AppConfig.Settings['recentHosts'] as plain hashtables" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
+        It "Persists to recents.json as a JSON array of entries" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 2)
 
-            $raw = @($script:config.Settings['recentHosts'])
-            $raw.Count | Should -Be 1
-            $raw[0] -is [hashtable] | Should -Be $true
-            $raw[0]['hostname'] | Should -Be "PC-1"
+            $raw = Get-Content -LiteralPath $script:path -Raw | ConvertFrom-Json -AsHashtable
+            @($raw).Count | Should -Be 1
+            @($raw)[0]['hostname'] | Should -Be "PC-1"
+        }
+    }
+
+    Context "File round-trip (an app restart)" {
+        It "Rehydrates entries with owner + touch intact from the file" {
+            $script:store.Upsert("PC-1", "Completed", "Scan", 2)
+            $script:store.UpsertOwner("PC-1", "Jamie Doe")
+            $script:store.Touch("PC-1")
+
+            $reloaded = [RecentConnectionsStore]::new($script:path, $null)
+
+            $rc = $reloaded.GetByHost('PC-1')
+            $rc.LastStatus  | Should -Be "Completed"
+            $rc.UpdateCount | Should -Be 2
+            $rc.Owner       | Should -Be "Jamie Doe"
+            $rc.LastTouched | Should -Not -BeNullOrEmpty
+        }
+
+        It "Starts empty (without throwing) from a corrupt file" {
+            Set-Content -LiteralPath $script:path -Value '{ not valid json at all'
+
+            $reloaded = [RecentConnectionsStore]::new($script:path, $null)
+
+            $reloaded.Count() | Should -Be 0
+        }
+
+        It "Starts empty when the file does not exist yet" {
+            $script:store.Count() | Should -Be 0
+        }
+
+        It "Serializes a single entry as an array (no shape flip on reload)" {
+            $script:store.Upsert("ONLY-ONE", "Completed", "Scan", 0)
+
+            $reloaded = [RecentConnectionsStore]::new($script:path, $null)
+            $reloaded.GetAll().Count | Should -Be 1
         }
     }
 
     Context "GetAll ordering and cap" {
         It "Returns most-recently-seen first" {
-            $script:store.Upsert("OLD", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("OLD", "Completed", "Scan", 0)
             Start-Sleep -Milliseconds 10
-            $script:store.Upsert("NEW", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("NEW", "Completed", "Scan", 0)
 
             $all = $script:store.GetAll()
             $all[0].Hostname | Should -Be "NEW"
             $all[1].Hostname | Should -Be "OLD"
         }
 
-        It "Caps the returned list at the static Cap" {
+        It "Caps the STORED entries at the static Cap (the file cannot grow unbounded)" {
             for ($i = 0; $i -lt ([RecentConnectionsStore]::Cap + 10); $i++) {
-                $script:store.Upsert("PC-$i", "Completed", "Scan", 0, $false)
+                $script:store.Upsert("PC-$i", "Completed", "Scan", 0)
             }
+
             $script:store.GetAll().Count | Should -Be ([RecentConnectionsStore]::Cap)
+            # The trim happened on write, not just on read: reload and re-count.
+            $reloaded = [RecentConnectionsStore]::new($script:path, $null)
+            $reloaded.Count() | Should -Be ([RecentConnectionsStore]::Cap)
         }
     }
 
@@ -73,7 +109,7 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Does NOT stamp lastSeen on an existing entry (last run stays honest)" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
             $seenBefore = $script:store.GetByHost("PC-1").LastSeen
 
             $script:store.Touch("PC-1")
@@ -83,7 +119,7 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Orders a freshly-touched host ahead of an older-run one" {
-            $script:store.Upsert("RAN-EARLIER", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("RAN-EARLIER", "Completed", "Scan", 0)
             Start-Sleep -Milliseconds 10
             $script:store.Touch("ADDED-NOW")
 
@@ -93,40 +129,49 @@ Describe "RecentConnectionsStore" {
         It "A newer run outranks an older touch (most recent activity wins)" {
             $script:store.Touch("TOUCHED-FIRST")
             Start-Sleep -Milliseconds 10
-            $script:store.Upsert("RAN-AFTER", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("RAN-AFTER", "Completed", "Scan", 0)
 
             $script:store.GetAll()[0].Hostname | Should -Be "RAN-AFTER"
         }
     }
 
     Context "Upsert carry-over (a run must not lose the caches)" {
-        It "Keeps the cached inventory across a later Upsert" {
-            $inv = [MachineInventory]::new()
-            $inv.Model = "Latitude 5440"
-            $script:store.UpsertInventory("PC-1", $inv)
+        It "Sheds a legacy inventory blob on the next settle (reports\ is the store)" {
+            $legacy = @(@{ hostname = 'PC-1'; lastSeen = ''; lastStatus = ''; lastJobType = ''
+                    updateCount = 0; inventory = @{ model = 'Latitude 5440' }
+                })
+            ConvertTo-Json -InputObject $legacy -Depth 5 | Set-Content -LiteralPath $script:path
+            $legacyStore = [RecentConnectionsStore]::new($script:path, $null)
 
-            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
+            $legacyStore.Upsert("PC-1", "Completed", "Scan", 2)
 
-            $rc = $script:store.GetByHost("PC-1")
-            $rc.Inventory | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model | Should -Be "Latitude 5440"
-            $rc.LastStatus | Should -Be "Completed"
+            $raw = Get-Content -LiteralPath $script:path -Raw | ConvertFrom-Json -AsHashtable
+            @($raw)[0].ContainsKey('inventory') | Should -BeFalse
         }
 
         It "Keeps the lastTouched stamp across a later Upsert" {
             $script:store.Touch("PC-1")
             $touched = $script:store.GetByHost("PC-1").LastTouched
 
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
 
             $script:store.GetByHost("PC-1").LastTouched | Should -Be $touched
+        }
+
+        It "Keeps the cached owner across a later Upsert" {
+            # Owner comes from a Lens round trip; a run settling must not force a re-fetch.
+            $script:store.UpsertOwner("PC-1", "Jamie Doe")
+
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
+
+            $script:store.GetByHost("PC-1").Owner | Should -Be "Jamie Doe"
         }
     }
 
     Context "GetByHost (indexed lookup)" {
         It "Returns the entry for a known host (case-insensitive)" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
-            $script:store.Upsert("PC-2", "Failed", "UpdateApply", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 2)
+            $script:store.Upsert("PC-2", "Failed", "UpdateApply", 0)
 
             $rc = $script:store.GetByHost("pc-1")
             $rc | Should -Not -BeNullOrEmpty
@@ -135,15 +180,15 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Returns null for an unknown or blank host" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
             $script:store.GetByHost("NOPE") | Should -BeNullOrEmpty
             $script:store.GetByHost("") | Should -BeNullOrEmpty
         }
 
         It "Reflects mutations after the cache was already built (invalidation)" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 1, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 1)
             $script:store.GetByHost("PC-1").UpdateCount | Should -Be 1   # builds the cache
-            $script:store.Upsert("PC-1", "Completed", "Scan", 9, $false) # mutate -> must invalidate
+            $script:store.Upsert("PC-1", "Completed", "Scan", 9)         # mutate -> must invalidate
             $script:store.GetByHost("PC-1").UpdateCount | Should -Be 9
             $script:store.Remove("PC-1")
             $script:store.GetByHost("PC-1") | Should -BeNullOrEmpty
@@ -152,38 +197,36 @@ Describe "RecentConnectionsStore" {
 
     Context "Deferred saves (DeferSave / FlushSave)" {
         It "Does not write until FlushSave when DeferSave is on, then writes once" {
-            $script:saves = 0
-            $fakeMgr = [pscustomobject]@{}
-            $fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
-            $deferStore = [RecentConnectionsStore]::new($script:config, $fakeMgr)
-            $deferStore.DeferSave = $true
+            $script:store.DeferSave = $true
 
-            $deferStore.Upsert("PC-1", "Completed", "Scan", 0, $false)
-            $deferStore.Upsert("PC-2", "Completed", "Scan", 0, $false)
-            $script:saves | Should -Be 0    # nothing written yet
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
+            $script:store.Upsert("PC-2", "Completed", "Scan", 0)
+            Test-Path -LiteralPath $script:path | Should -BeFalse   # nothing written yet
 
-            $deferStore.FlushSave()
-            $script:saves | Should -Be 1    # coalesced into a single write
+            $script:store.FlushSave()
+            Test-Path -LiteralPath $script:path | Should -BeTrue    # coalesced single write
 
-            $deferStore.FlushSave()
-            $script:saves | Should -Be 1    # nothing pending -> no extra write
+            Remove-Item -LiteralPath $script:path
+            $script:store.FlushSave()
+            Test-Path -LiteralPath $script:path | Should -BeFalse   # nothing pending
         }
 
         It "Writes immediately when DeferSave is off (default)" {
-            $script:saves = 0
-            $fakeMgr = [pscustomobject]@{}
-            $fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
-            $immStore = [RecentConnectionsStore]::new($script:config, $fakeMgr)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
+            Test-Path -LiteralPath $script:path | Should -BeTrue
+        }
 
-            $immStore.Upsert("PC-1", "Completed", "Scan", 0, $false)
-            $script:saves | Should -Be 1
+        It "A blank path makes every write an in-memory no-op (test seam)" {
+            $memStore = [RecentConnectionsStore]::new('', $null)
+            { $memStore.Upsert("PC-1", "Completed", "Scan", 0) } | Should -Not -Throw
+            $memStore.GetByHost("PC-1") | Should -Not -BeNullOrEmpty
         }
     }
 
     Context "Remove" {
         It "Removes the named host" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
-            $script:store.Upsert("PC-2", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
+            $script:store.Upsert("PC-2", "Completed", "Scan", 0)
 
             $script:store.Remove("PC-1")
 
@@ -204,7 +247,7 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Does nothing when entries already exist" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0)
             $script:store.SeedFrom(@("PC-2", "PC-3"))
 
             $all = $script:store.GetAll()
@@ -213,74 +256,58 @@ Describe "RecentConnectionsStore" {
         }
     }
 
-    Context "AppConfig merge round-trip (regression)" {
-        It "Preserves recentHosts through a config merge rebuild" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
-
-            # Rebuild AppConfig from the merged settings, like load/worker paths do.
-            $rebuilt = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", $script:config.Settings)
-            $rebuiltStore = [RecentConnectionsStore]::new($rebuilt, $null)
-
-            $all = $rebuiltStore.GetAll()
-            $all.Count | Should -Be 1
-            $all[0].Hostname | Should -Be "PC-1"
-        }
-
-        It "Does not leak recentHosts into the static Defaults" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
-            [AppConfig]::Defaults.ContainsKey('recentHosts') | Should -Be $false
-        }
-    }
-
-    Context "Inventory cache (UpsertInventory)" {
+    Context "MigrateFromConfig (one-time config.json -> recents.json)" {
         BeforeEach {
-            $script:inv = [MachineInventory]::new()
-            $script:inv.Model = 'Latitude 5340'
-            $script:inv.ServiceTag = 'ABC1234'
-            $script:inv.HasBattery = $true
-            $script:inv.DesignCapacity = 50000
-            $script:inv.FullChargeCapacity = 45000
-            $script:inv.ChargePercent = 67
+            $script:saves = 0
+            $script:fakeMgr = [pscustomobject]@{}
+            $script:fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
         }
 
-        It "Caches inventory on a tracked host without clobbering its status" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 4, $true)
-            $script:store.UpsertInventory("PC-1", $script:inv)
+        It "Imports legacy entries minus the per-machine blobs and strips the config keys" {
+            $config = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", @{
+                    recentHosts       = @(@{ hostname = 'PC-1'; lastSeen = ''; lastStatus = 'Completed'
+                            lastJobType = 'Scan'; updateCount = 2; owner = 'Jamie Doe'
+                            rebootRequired = $false; inventory = @{ model = 'Latitude' }
+                        })
+                    domainControllers = @('DC01')
+                })
 
-            $rc = $script:store.GetAll() | Where-Object { $_.Hostname -eq 'PC-1' }
-            $rc.LastStatus     | Should -Be "Completed"
-            $rc.UpdateCount    | Should -Be 4
-            $rc.RebootRequired | Should -Be $true
-            $rc.Inventory               | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model         | Should -Be 'Latitude 5340'
-            $rc.Inventory.ServiceTag    | Should -Be 'ABC1234'
-            $rc.Inventory.ProbedAt      | Should -Not -BeNullOrEmpty
+            [RecentConnectionsStore]::MigrateFromConfig($config, $script:fakeMgr, $script:path, $null)
+
+            $config.Settings.ContainsKey('recentHosts') | Should -BeFalse
+            $config.Settings.ContainsKey('domainControllers') | Should -BeFalse
+            $script:saves | Should -Be 1
+
+            $migrated = [RecentConnectionsStore]::new($script:path, $null)
+            $rc = $migrated.GetByHost('PC-1')
+            $rc.LastStatus | Should -Be 'Completed'
+            $rc.Owner | Should -Be 'Jamie Doe'
+            $raw = Get-Content -LiteralPath $script:path -Raw | ConvertFrom-Json -AsHashtable
+            @($raw)[0].ContainsKey('inventory') | Should -BeFalse
+            @($raw)[0].ContainsKey('rebootRequired') | Should -BeFalse
         }
 
-        It "Creates an entry when the host is not yet tracked" {
-            $script:store.UpsertInventory("NEWPC", $script:inv)
+        It "An existing recents file wins over the legacy config entries" {
+            $script:store.Upsert("KEEP-ME", "Completed", "Scan", 0)
+            $config = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", @{
+                    recentHosts = @(@{ hostname = 'LEGACY-PC' })
+                })
 
-            $rc = $script:store.GetAll() | Where-Object { $_.Hostname -eq 'NEWPC' }
-            $rc                 | Should -Not -BeNullOrEmpty
-            $rc.Inventory.Model | Should -Be 'Latitude 5340'
-            $rc.LastStatus      | Should -Be ''
+            [RecentConnectionsStore]::MigrateFromConfig($config, $script:fakeMgr, $script:path, $null)
+
+            $after = [RecentConnectionsStore]::new($script:path, $null)
+            $after.GetByHost('KEEP-ME') | Should -Not -BeNullOrEmpty
+            $after.GetByHost('LEGACY-PC') | Should -BeNullOrEmpty
+            $config.Settings.ContainsKey('recentHosts') | Should -BeFalse   # keys still removed
         }
 
-        It "Survives JSON serialize/deserialize (nested inventory round-trips)" {
-            $script:store.Upsert("PC-1", "Completed", "Scan", 2, $false)
-            $script:store.UpsertInventory("PC-1", $script:inv)
+        It "Is a no-op on an already-clean config (no file, no save)" {
+            $config = [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", @{})
 
-            # Exactly what ConfigManager.Save/Load do.
-            $reloaded = ($script:config.Settings | ConvertTo-Json -Depth 10) | ConvertFrom-Json -AsHashtable
-            $reloadedStore = [RecentConnectionsStore]::new(
-                [AppConfig]::new("C:\Src", "C:\Logs", "C:\Reports", $reloaded), $null)
+            [RecentConnectionsStore]::MigrateFromConfig($config, $script:fakeMgr, $script:path, $null)
 
-            $rc = $reloadedStore.GetAll() | Where-Object { $_.Hostname -eq 'PC-1' }
-            $rc.Inventory                    | Should -Not -BeNullOrEmpty
-            $rc.Inventory.ServiceTag         | Should -Be 'ABC1234'
-            $rc.Inventory.FullChargeCapacity | Should -Be 45000
-            $rc.Inventory.ChargePercent      | Should -Be 67
-            $rc.LastStatus                   | Should -Be "Completed"
+            Test-Path -LiteralPath $script:path | Should -BeFalse
+            $script:saves | Should -Be 0
         }
     }
 }

@@ -75,10 +75,9 @@ class RemoteJobService {
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
                 # Only the keys workers read (BuildDcuArgs/GetCommandArgs, GetDebugLogging,
-                # GetRecoveryWindowMinutes) - the worker's AppConfig merges defaults for the
-                # rest. recentHosts, with its cached inventory/diskUsage payloads, never
-                # rides. commands stays a deep clone, same rule as Settings before it: no
-                # live hashtable may cross the runspace boundary.
+                # GetRecoveryWindowMinutes) - the worker's AppConfig merges defaults for
+                # the rest. commands stays a deep clone, same rule as Settings before it:
+                # no live hashtable may cross the runspace boundary.
                 Settings   = @{
                     commands              = [AppConfig]::DeepClone($this.Config.Settings['commands'])
                     debugLogging          = $this.Config.GetDebugLogging()

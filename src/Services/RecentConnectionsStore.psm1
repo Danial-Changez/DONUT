@@ -1,6 +1,7 @@
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\RecentConnection.psm1"
-using module "..\Models\MachineInventory.psm1"
+using module "..\Core\DonutPaths.psm1"
+using module "..\Core\LogService.psm1"
 using module "..\Core\TimeFormat.psm1"
 
 <#
@@ -8,21 +9,21 @@ using module "..\Core\TimeFormat.psm1"
     Persistence service for the "recent machines" entries backing the Home list.
 
 .DESCRIPTION
-    Entries live in AppConfig.Settings['recentHosts'] as plain hashtables so they
-    round-trip cleanly through ConfigManager's ConvertTo-Json /
-    ConvertFrom-Json -AsHashtable. The store owns the upsert/seed/cap/sort logic
-    and writes through the config manager; RecentConnection (a pure Model) is the
-    typed view of one entry.
+    Entries live in config\recents.json as a plain JSON array of hashtables -
+    machine-list state stays out of config.json, which holds settings only. The
+    store owns the file plus the upsert/seed/cap/sort logic; RecentConnection (a
+    pure Model) is the typed view of one entry.
 
 .NOTES
-    The array math stays pure and testable; persistence is delegated to a
-    duck-typed config manager (typed [object] to avoid a using-module cycle
-    through Core). A $null manager makes Save() a no-op, which keeps unit tests
-    free of disk I/O.
+    The array math stays pure and testable; a blank path makes every write a
+    no-op, which keeps unit tests free of disk I/O. A corrupt or missing file
+    loads as an empty list - recency is a cache, and the WSID seed repopulates
+    it - so writes are plain Set-Content, no atomicity ceremony needed.
 #>
 class RecentConnectionsStore {
-    hidden [AppConfig] $Config
-    hidden [object]    $ConfigManager   # duck-typed; may be $null in tests
+    hidden [string] $Path         # recents.json; blank = in-memory only (tests)
+    hidden [LogService] $Logger
+    hidden [object[]] $Data       # raw entry hashtables, newest first
     static [int] $Cap = 50
 
     # Save coalescing: with DeferSave on, mutations mark PendingSave and FlushSave()
@@ -36,34 +37,82 @@ class RecentConnectionsStore {
     hidden [hashtable] $Index
     hidden [bool] $CacheValid = $false
 
-    RecentConnectionsStore([AppConfig]$config, [object]$configManager) {
-        $this.Config = $config
-        $this.ConfigManager = $configManager
-        if (-not $this.Config.Settings.ContainsKey('recentHosts') -or
-            $null -eq $this.Config.Settings['recentHosts']) {
-            $this.Config.Settings['recentHosts'] = @()
+    RecentConnectionsStore([string]$path, [LogService]$logger) {
+        $this.Path = $path
+        $this.Logger = [LogService]::Coalesce($logger)
+        $this.Data = @()
+        if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) { return }
+        try {
+            $raw = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+            $this.Data = @($raw | Where-Object { $_ -is [hashtable] })
         }
+        catch {
+            $this.Logger.LogWarning(
+                "Could not read recents file '$path' - starting empty: $($_.Exception.Message)")
+        }
+    }
+
+    static [string] DefaultPath() {
+        return (Join-Path ([DonutPaths]::ConfigDir()) 'recents.json')
+    }
+
+    # One-time config.json -> recents.json move: imports the legacy 'recentHosts'
+    # entries (minus the per-machine blobs reports\ now owns) and strips the
+    # runtime keys config no longer carries. Safe to re-run: an existing recents
+    # file wins, key removal is idempotent, and an import failure leaves config
+    # untouched so the next launch retries.
+    static [void] MigrateFromConfig([AppConfig]$config, [object]$configManager,
+        [string]$path, [LogService]$logger) {
+        if ($null -eq $config) { return }
+        $log = [LogService]::Coalesce($logger)
+
+        $legacy = @($config.Settings['recentHosts'] | Where-Object { $_ -is [hashtable] })
+        if ($legacy.Count -gt 0 -and -not (Test-Path -LiteralPath $path)) {
+            $imported = @()
+            foreach ($e in $legacy) {
+                $copy = ([hashtable]$e).Clone()
+                $copy.Remove('inventory')
+                $copy.Remove('rebootRequired')
+                $imported += $copy
+            }
+            try {
+                ConvertTo-Json -InputObject $imported -Depth 5 |
+                    Set-Content -LiteralPath $path -Encoding UTF8
+                $log.LogInfo("Moved $($imported.Count) recent host(s) from config.json to '$path'.")
+            }
+            catch {
+                $log.LogException("Recents migration could not write '$path'", $_)
+                return
+            }
+        }
+
+        $removed = $false
+        foreach ($k in @('recentHosts', 'domainControllers')) {
+            if ($config.Settings.ContainsKey($k)) { $config.Settings.Remove($k); $removed = $true }
+        }
+        if ($removed -and $null -ne $configManager) { $configManager.SaveConfig($config) }
     }
 
     # Raw stored entries as a plain array of hashtables.
     hidden [object[]] Entries() {
-        return @($this.Config.Settings['recentHosts'])
+        return @($this.Data)
     }
 
+    # Cap on write, not just read: the persisted file must not grow unbounded.
+    # CommitFront prepends, so the acted-on entry always survives the trim.
     hidden [void] SetEntries([object[]]$entries) {
-        $this.Config.Settings['recentHosts'] = @($entries)
+        $this.Data = @($entries | Select-Object -First ([RecentConnectionsStore]::Cap))
         $this.CacheValid = $false
     }
 
-    # The six-key "never run" entry shape shared by Touch/UpsertInventory/SeedFrom.
+    # The five-key "never run" entry shape shared by Touch/UpsertOwner/SeedFrom.
     hidden static [hashtable] NewBlankEntry([string]$name) {
         return @{
-            hostname       = $name
-            lastSeen       = ''
-            lastStatus     = ''
-            lastJobType    = ''
-            updateCount    = 0
-            rebootRequired = $false
+            hostname    = $name
+            lastSeen    = ''
+            lastStatus  = ''
+            lastJobType = ''
+            updateCount = 0
         }
     }
 
@@ -83,25 +132,24 @@ class RecentConnectionsStore {
     }
 
     # Inserts or replaces (by hostname, case-insensitive) and stamps lastSeen=now.
-    [void] Upsert([string]$hostname, [string]$status, [string]$jobType,
-        [int]$updateCount, [bool]$rebootRequired) {
+    [void] Upsert([string]$hostname, [string]$status, [string]$jobType, [int]$updateCount) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
 
         $entry = @{
-            hostname       = $name
-            lastSeen       = [datetime]::UtcNow.ToString('o')
-            lastStatus     = $status
-            lastJobType    = $jobType
-            updateCount    = [int]$updateCount
-            rebootRequired = [bool]$rebootRequired
+            hostname    = $name
+            lastSeen    = [datetime]::UtcNow.ToString('o')
+            lastStatus  = $status
+            lastJobType = $jobType
+            updateCount = [int]$updateCount
         }
 
-        # Carry over what a run does not change (cached inventory, lastTouched);
-        # replacing the entry without these silently loses the caches.
+        # Carry over what a run does not change (lastTouched, owner); replacing
+        # the entry without these silently loses the caches. A legacy 'inventory'
+        # blob is deliberately NOT carried: reports\ is the inventory store now.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
-            foreach ($k in @('inventory', 'lastTouched')) {
+            foreach ($k in @('lastTouched', 'owner')) {
                 if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
             }
         }
@@ -118,23 +166,6 @@ class RecentConnectionsStore {
         $entry = $this.FindEntry($name)
         if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
         $entry['lastTouched'] = [datetime]::UtcNow.ToString('o')
-
-        $this.CommitFront($entry, $name)
-    }
-
-    # Merges a fresh inventory probe onto the host's entry without touching its
-    # scan/apply status fields; stamps the probe time for "last probed ...".
-    [void] UpsertInventory([string]$hostname, [MachineInventory]$inv) {
-        if ([string]::IsNullOrWhiteSpace($hostname)) { return }
-        if ($null -eq $inv) { return }
-        $name = $hostname.Trim()
-
-        $entry = $this.FindEntry($name)
-        if ($null -eq $entry) { $entry = [RecentConnectionsStore]::NewBlankEntry($name) }
-
-        $invHash = $inv.ToHashtable()
-        $invHash['probedAt'] = [datetime]::UtcNow.ToString('o')
-        $entry['inventory'] = $invHash
 
         $this.CommitFront($entry, $name)
     }
@@ -181,7 +212,7 @@ class RecentConnectionsStore {
     }
 
     # Typed entries, most-recent-activity first (RecencyKey; blank stamps sort oldest),
-    # capped, and cached until the next mutation so per-tick reads don't rebuild.
+    # and cached until the next mutation so per-tick reads don't rebuild.
     [RecentConnection[]] GetAll() {
         $this.EnsureCache()
         return $this.Cache
@@ -204,7 +235,8 @@ class RecentConnectionsStore {
         return $(if ($touched -gt $seen) { $touched } else { $seen })
     }
 
-    # Rebuilds the typed cache + index from the raw entries when stale.
+    # Rebuilds the typed cache + index from the raw entries when stale. The Cap here
+    # guards a hand-edited oversized file; SetEntries enforces it on every write.
     hidden [void] EnsureCache() {
         if ($this.CacheValid) { return }
         $typed = @($this.Entries() |
@@ -228,19 +260,25 @@ class RecentConnectionsStore {
 
     hidden [void] Save() {
         if ($this.DeferSave) { $this.PendingSave = $true; return }
-        $this.WriteConfig()
+        $this.WriteRecents()
     }
 
     # Writes any pending deferred save (no-op when nothing is pending). Called by the
     # UI once per drained batch / on close, so many upserts collapse to one disk write.
     [void] FlushSave() {
-        if ($this.PendingSave) { $this.WriteConfig() }
+        if ($this.PendingSave) { $this.WriteRecents() }
     }
 
-    hidden [void] WriteConfig() {
+    hidden [void] WriteRecents() {
         $this.PendingSave = $false
-        if ($null -ne $this.ConfigManager) {
-            $this.ConfigManager.SaveConfig($this.Config)
+        if ([string]::IsNullOrWhiteSpace($this.Path)) { return }
+        try {
+            # -InputObject keeps an empty/one-entry list serialized as a JSON array.
+            ConvertTo-Json -InputObject $this.Data -Depth 5 |
+                Set-Content -LiteralPath $this.Path -Encoding UTF8
+        }
+        catch {
+            $this.Logger.LogException("Could not write recents file '$($this.Path)'", $_)
         }
     }
 }

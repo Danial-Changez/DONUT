@@ -10,7 +10,6 @@ using module "..\..\Models\LogLine.psm1"
 using module "..\..\Models\RecentConnection.psm1"
 using module "..\..\Models\PendingIntent.psm1"
 using module "..\..\Core\AsyncJob.psm1"
-using module "..\..\Core\DonutPaths.psm1"
 using module "..\..\Core\NetworkProbe.psm1"
 using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\HostListSource.psm1"
@@ -168,8 +167,13 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateService = [RemoteUpdateService]::new(
             $config, $this.NetworkProbe, $this.DriverMatcher, $this.Logger)
         $this.DialogPresenter = [DialogPresenter]::new($resources)
-        $this.Store = [RecentConnectionsStore]::new($config, $configManager)
-        # Coalesce config.json writes: mutations mark pending, flushed once per drained batch.
+        # Machine-list state lives in config\recents.json (config.json is settings
+        # only); the one-time migration moves any legacy recentHosts out of config.
+        [RecentConnectionsStore]::MigrateFromConfig(
+            $config, $configManager, [RecentConnectionsStore]::DefaultPath(), $this.Logger)
+        $this.Store = [RecentConnectionsStore]::new(
+            [RecentConnectionsStore]::DefaultPath(), $this.Logger)
+        # Coalesce recents.json writes: mutations mark pending, flushed once per drained batch.
         $this.Store.DeferSave = $true
         $this.HostListSource = [HostListSource]::new($config.SourceRoot)
         $this.InventoryService = [InventoryService]::new($config, $this.NetworkProbe, $this.Logger)
@@ -199,7 +203,7 @@ class HomePresenter : AsyncJobPresenter {
         # still inert - HomePresenter owns the detail controls + methods until later stages.
         $this.Detail = [InventoryPresenter]::new(
             $config, $this.Logger, $this.HomeVm, $this.InventoryService,
-            $this.DiskUsageService, $this.Store, $this.Toasts, $this)
+            $this.DiskUsageService, $this.Toasts, $this)
 
         # Split scaffold: the resolution coordinator is constructed and wired, but still
         # inert - HomePresenter owns the resolve methods until the next stages move them.
@@ -409,6 +413,10 @@ class HomePresenter : AsyncJobPresenter {
         foreach ($rc in $this.Store.GetAll()) {
             $vm = $this.EnsureRow($rc.Hostname)
             $vm.ApplyIdle($rc)
+            # Overview tiles come from the probe's report file (session-memoized),
+            # so a probed host shows its facts across restarts without a re-probe.
+            $inv = $this.Detail.GetInventory($rc.Hostname)
+            if ($inv) { $vm.ApplyInventory($inv) }
         }
         $this.UpdateEmptyHint()
     }
@@ -844,7 +852,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.UpdateService.CountUpdates($this.UpdateService.ParseUpdateReport($job.HostName))
         }
 
-        $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount, $reboot)
+        $this.Store.Upsert($job.HostName, $status, $job.JobType, $updateCount)
 
         # Consume the queue entry so a later run can't inherit a stale reboot flag.
         if ($reboot) { [void]$this.ManualRebootQueue.Remove($job.HostName) }
@@ -1226,13 +1234,6 @@ class HomePresenter : AsyncJobPresenter {
         # hashtable wrapped in the invoke collection - unwrap it.
         foreach ($item in @($job.Result)) {
             if ($null -ne $item -and $item.RebootRequired) { $needsReboot = $true; break }
-        }
-
-        # Fallback: a reboot-required marker file, in case a future remote step writes one.
-        $rebootFlagPath = Join-Path ([DonutPaths]::ReportsDir()) "$($job.HostName)-reboot-required.flag"
-        if (Test-Path $rebootFlagPath) {
-            $needsReboot = $true
-            Remove-Item -Path $rebootFlagPath -Force -ErrorAction SilentlyContinue
         }
 
         if ($needsReboot -and -not $this.ManualRebootQueue.Contains($job.HostName)) {

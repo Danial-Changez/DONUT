@@ -402,7 +402,7 @@ class ResolutionCoordinator {
                     "controllers=$(@($item.DomainControllers).Count).")
                 if (-not [string]::IsNullOrWhiteSpace($dc)) {
                     $this.Resolver.SetActiveDc($dc)
-                    $this.PersistDomainController($dc, @($item.DomainControllers))
+                    $this.PersistDomainController($dc)
                 }
                 else {
                     $this.Logger.LogWarning("DC warm-up completed but found no reachable controller.")
@@ -465,29 +465,13 @@ class ResolutionCoordinator {
         }
     }
 
-    # Persists the active DC (and list) so the next launch resolves without waiting
-    # on AD discovery. Only writes when something changed.
-    hidden [void] PersistDomainController([string]$dc, [string[]]$list) {
+    # Persists the active DC so the next launch resolves without waiting on AD
+    # discovery. Only writes when it changed.
+    hidden [void] PersistDomainController([string]$dc) {
         if ($null -eq $this.ConfigManager) { return }
-        $changed = $false
-        if ([string]$this.Config.Settings['activeDomainController'] -ne $dc) {
-            $this.Config.Settings['activeDomainController'] = $dc
-            $changed = $true
-        }
-        if ($null -ne $list -and $list.Count -gt 0) {
-            $existing = @($this.Config.Settings['domainControllers'])
-            # Compare as sets: AD order is nondeterministic, and an order-only "change"
-            # would re-serialize the whole config on the dispatcher mid-warm-landing.
-            $before = (@($existing) | Sort-Object) -join '|'
-            $after = (@($list) | Sort-Object) -join '|'
-            if ($before -ne $after) {
-                $this.Config.Settings['domainControllers'] = @($list)
-                $changed = $true
-            }
-        }
-        if ($changed) {
-            try { $this.ConfigManager.SaveConfig($this.Config) }
-            catch { $this.Logger.LogException("Could not persist domain controller", $_) }
-        }
+        if ([string]$this.Config.Settings['activeDomainController'] -eq $dc) { return }
+        $this.Config.Settings['activeDomainController'] = $dc
+        try { $this.ConfigManager.SaveConfig($this.Config) }
+        catch { $this.Logger.LogException("Could not persist domain controller", $_) }
     }
 }

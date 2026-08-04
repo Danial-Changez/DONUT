@@ -189,12 +189,16 @@ try {
         exit 1
     }
 
-    if ($MsiPath -and (Test-Path -LiteralPath $MsiPath)) {
-        try {
-            Remove-Item -LiteralPath $MsiPath -Force -ErrorAction Stop
-        }
-        catch {
-            Write-Host "[WARN] Failed to remove MSI: $($_.Exception.Message)" -ForegroundColor Yellow
+    # The checksum stages next to the MSI (UpdatePresenter downloads both);
+    # remove the pair or the .sha256 outlives every update forever.
+    foreach ($staged in @($MsiPath, "$MsiPath.sha256")) {
+        if ($staged -and (Test-Path -LiteralPath $staged)) {
+            try {
+                Remove-Item -LiteralPath $staged -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Host "[WARN] Failed to remove $staged`: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
         }
     }
 

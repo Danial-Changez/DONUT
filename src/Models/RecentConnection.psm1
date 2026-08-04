@@ -1,16 +1,14 @@
-using module ".\MachineInventory.psm1"
-
 <#
 .SYNOPSIS
     Typed view of one persisted "recent machine" entry backing the Home list.
 
 .DESCRIPTION
-    Entries live in AppConfig.Settings['recentHosts'] as plain hashtables so they
-    round-trip cleanly through ConfigManager's JSON. This pure Model is the typed
-    view of one entry (status, counts, cached inventory); the upsert/seed/cap/sort
-    + persistence logic lives in Services\RecentConnectionsStore (Models do no
-    I/O). Disk-usage data is deliberately absent: the scan's CSV in reports\ is
-    its store, config stays settings-only.
+    Entries are plain hashtables so they round-trip cleanly through
+    ConvertTo-Json / ConvertFrom-Json -AsHashtable. This pure Model is the typed
+    view of one entry (status, counts, owner); the upsert/seed/cap/sort +
+    persistence logic lives in Services\RecentConnectionsStore (Models do no
+    I/O). Per-machine probe data is deliberately absent: the scan's CSV and the
+    inventory JSON in reports\ are its stores.
 #>
 class RecentConnection {
     [string] $Hostname
@@ -19,23 +17,17 @@ class RecentConnection {
     [string] $LastStatus      # e.g. 'Completed','Failed','RebootRequired',''
     [string] $LastJobType
     [int]    $UpdateCount
-    [bool]   $RebootRequired
     [string] $Owner           # SCCM primary user's display name; cached, looked up once
-    [MachineInventory] $Inventory   # cached probe result, or $null when never probed
 
     static [RecentConnection] FromHashtable([hashtable]$h) {
         $rc = [RecentConnection]::new()
-        $rc.Hostname       = [string]$h['hostname']
-        $rc.LastSeen       = [string]$h['lastSeen']
-        $rc.LastTouched    = [string]$h['lastTouched']
-        $rc.LastStatus     = [string]$h['lastStatus']
-        $rc.LastJobType    = [string]$h['lastJobType']
-        $rc.UpdateCount    = if ($null -ne $h['updateCount']) { [int]$h['updateCount'] } else { 0 }
-        $rc.RebootRequired = [bool]$h['rebootRequired']
-        $rc.Owner          = [string]$h['owner']
-        if ($null -ne $h['inventory']) {
-            $rc.Inventory = [MachineInventory]::FromHashtable([hashtable]$h['inventory'])
-        }
+        $rc.Hostname    = [string]$h['hostname']
+        $rc.LastSeen    = [string]$h['lastSeen']
+        $rc.LastTouched = [string]$h['lastTouched']
+        $rc.LastStatus  = [string]$h['lastStatus']
+        $rc.LastJobType = [string]$h['lastJobType']
+        $rc.UpdateCount = if ($null -ne $h['updateCount']) { [int]$h['updateCount'] } else { 0 }
+        $rc.Owner       = [string]$h['owner']
         return $rc
     }
 }

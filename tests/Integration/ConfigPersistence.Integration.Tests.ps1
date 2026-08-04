@@ -3,9 +3,10 @@ using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Services\RecentConnectionsStore.psm1"
 
 <#
-    Persistence through the REAL config.json on a redirected data root: the
-    recents/owner round trip an app restart depends on, and the corrupt-file
-    fallback. Complements ConfigManager unit tests, which stay in-memory.
+    Persistence on a redirected REAL data root: the recents/owner round trip an
+    app restart depends on (config\recents.json), the one-time config.json ->
+    recents.json migration, and the corrupt-config fallback. Complements the
+    ConfigManager + store unit tests, which stay in-memory / on TestDrive.
 #>
 Describe "Config persistence on the real data root" {
 
@@ -25,23 +26,54 @@ Describe "Config persistence on the real data root" {
         Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It "recent hosts and their owners survive an app restart" {
-        # First app run: mutate the store, which persists through ConfigManager.
+    It "recent hosts and their owners survive an app restart via recents.json" {
+        # First app run: EnsureDirectories creates config\, then the store persists.
         $manager1 = [ConfigManager]::new($script:testSourceRoot)
-        $config1 = $manager1.LoadConfig()
-        $store1 = [RecentConnectionsStore]::new($config1, $manager1)
-        $store1.Upsert('PC-ROUNDTRIP', 'Completed', 'Scan', 3, $false)
+        $manager1.LoadConfig() | Out-Null
+        $store1 = [RecentConnectionsStore]::new([RecentConnectionsStore]::DefaultPath(), $null)
+        $store1.Upsert('PC-ROUNDTRIP', 'Completed', 'Scan', 3)
         $store1.UpsertOwner('PC-ROUNDTRIP', 'PC-ROUNDTRIP (Danial C)')
         $store1.FlushSave()
 
-        # Second app run: fresh manager + store must rehydrate from config.json.
-        $manager2 = [ConfigManager]::new($script:testSourceRoot)
-        $config2 = $manager2.LoadConfig()
-        $store2 = [RecentConnectionsStore]::new($config2, $manager2)
-
+        # Second app run: a fresh store must rehydrate from config\recents.json,
+        # and config.json itself must carry no machine-list state.
+        $store2 = [RecentConnectionsStore]::new([RecentConnectionsStore]::DefaultPath(), $null)
         $row = $store2.GetByHost('PC-ROUNDTRIP')
         $row | Should -Not -BeNullOrEmpty
         $row.Owner | Should -Be 'PC-ROUNDTRIP (Danial C)'
+
+        $configFile = Get-ChildItem -Path $script:testRoot -Recurse -Filter 'config.json' |
+            Select-Object -First 1
+        (Get-Content -LiteralPath $configFile.FullName -Raw) | Should -Not -BeLike '*recentHosts*'
+    }
+
+    It "a legacy config.json migrates its recentHosts into recents.json once" {
+        # Simulate a pre-split install: recentHosts (with an inventory blob) and
+        # the never-read domainControllers list still inside config.json.
+        $manager = [ConfigManager]::new($script:testSourceRoot)
+        $config = $manager.LoadConfig()
+        $config.Settings['recentHosts'] = @(@{ hostname = 'LEGACY-PC'; lastSeen = ''
+                lastStatus = 'Completed'; lastJobType = 'Scan'; updateCount = 1
+                owner = 'Jamie Doe'; inventory = @{ model = 'Latitude' }
+            })
+        $config.Settings['domainControllers'] = @('DC01')
+        $manager.SaveConfig($config)
+        $recentsPath = [RecentConnectionsStore]::DefaultPath()
+        Remove-Item -LiteralPath $recentsPath -Force -ErrorAction SilentlyContinue
+
+        # What HomePresenter's wiring does on the next launch.
+        [RecentConnectionsStore]::MigrateFromConfig($config, $manager, $recentsPath, $null)
+        $store = [RecentConnectionsStore]::new($recentsPath, $null)
+
+        $rc = $store.GetByHost('LEGACY-PC')
+        $rc | Should -Not -BeNullOrEmpty
+        $rc.Owner | Should -Be 'Jamie Doe'
+
+        # config.json on disk is settings-only now; the blob did not ride along.
+        $reloaded = ([ConfigManager]::new($script:testSourceRoot)).LoadConfig()
+        $reloaded.Settings.ContainsKey('recentHosts') | Should -BeFalse
+        $reloaded.Settings.ContainsKey('domainControllers') | Should -BeFalse
+        (Get-Content -LiteralPath $recentsPath -Raw) | Should -Not -BeLike '*inventory*'
     }
 
     It "a corrupt config.json falls back to defaults instead of throwing" {
