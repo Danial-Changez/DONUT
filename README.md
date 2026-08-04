@@ -1,153 +1,52 @@
-<h1> DONUT </h1>
+<div align="center">
+
+<img src="assets/Images/logo yellow arrow.png" alt="DONUT" width="96" />
+
+# DONUT
+
+**Dell fleet management, from one window.**
 
 [![CI](https://github.com/Danial-Changez/DONUT/actions/workflows/ci.yml/badge.svg)](https://github.com/Danial-Changez/DONUT/actions/workflows/ci.yml)
 [![Docs](https://github.com/Danial-Changez/DONUT/actions/workflows/docs.yml/badge.svg)](https://github.com/Danial-Changez/DONUT/actions/workflows/docs.yml)
+[![Release](https://img.shields.io/github/v/release/Danial-Changez/DONUT)](https://github.com/Danial-Changez/DONUT/releases/latest)
+[![License](https://img.shields.io/github/license/Danial-Changez/DONUT)](LICENSE)
 
-DONUT is a fleet management app for Dell workstations. It searches Active Directory for machines and people, runs remote driver scans and updates through Dell Command Update, inspects hardware and storage, and looks up a user's devices and BitLocker recovery keys. Please note that the current version has been refactored from the original script-based tool into a layered OOP/MVVM structure; the [architecture overview](docs/development/architecture/overview.md) describes how it is built.
+</div>
 
-**Full documentation lives at <https://danial-changez.github.io/DONUT/>** — feature guides, the `config.json` reference, and the architecture pages, built from [`docs/`](docs/README.md).
+DONUT searches Active Directory for machines and people, runs remote driver and
+BIOS updates through Dell Command Update in parallel, inspects hardware and
+storage per machine, and looks up a user's devices and BitLocker recovery keys —
+a WPF app driven by PowerShell classes, shipped as a single self-updating MSI.
 
----
+## Documentation
 
-<h2> Table of Contents </h2>
+Everything lives at **<https://danial-changez.github.io/DONUT/>**, built from
+[`docs/`](docs/README.md):
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Usage](#usage)
-  - [Installation](#installation)
-  - [Steps to Run](#steps-to-run)
-- [Developer Guide](#developer-guide)
-  - [Getting Started](#getting-started)
-  - [Key Concepts](#key-concepts)
-- [Contributing](#contributing)
-- [Additional Notes](#additional-notes)
+- [What is DONUT?](docs/get-started/what-is-donut.md) — the tour of what it does
+- [Installation](docs/get-started/installation.md) and
+  [first launch](docs/get-started/first-launch.md)
+- [Feature guides](docs/features/) — scanning, applying updates, the AD finder,
+  the User Lens, machine details, settings
+- [`config.json` reference](docs/configuration/config-reference.md)
+- [Architecture](docs/development/architecture/overview.md) and the
+  [developer pages](docs/development/testing.md) — how it's built and tested
 
----
+## Install
 
-## Features
+Grab `DONUT.msi` from the
+[latest release](https://github.com/Danial-Changez/DONUT/releases/latest)
+(needs the
+[.NET Desktop Runtime 10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)),
+or run straight from source with nothing but PowerShell 7+:
 
-- **Fleet Updates (Dell Command Update):** Scans and applies driver and BIOS updates remotely over PsExec. One subsystem alongside the AD finder, the User Lens (user-to-device lookup), inventory and storage, and the tray and self-update features.
-- **Parallel Execution:** Uses PowerShell runspaces for parallel work, with each machine shown as a row in the Home list (the runspace pool is pre-warmed so concurrent jobs never freeze the UI). Cards are kept newest-action-first: adding a machine or running a scan/gather/storage scan moves its card to the top.
-- **Status-grouped list:** Rows group worst-first — attention (failed or reboot-needed) first, then running / online / offline — with one-click Clear completed.
-- **Guided First-Run Tour:** A spotlight tour introduces the search bar, mode toggle, machine list, detail pane, and settings on first launch; replay it anytime with the `?` button.
-- **Per-Machine Detail Panel:** Selecting a machine prefetches a lightweight inventory probe (model, Dell service tag, battery health, disk, uptime) and offers an on-demand **Storage scan** of the biggest folders on `C:` (WizTree), shown as an expandable tree.
-- **24h Scan Reuse:** A scan run within the last 24 hours is reused instead of re-scanning; it's only re-run after an apply.
-- **Live AD Finder:** The search bar searches Active Directory (computers + users) across the org's forests, and can unlock locked-out accounts inline.
-- **User Lens:** Picking a person in the finder opens a Lens in the detail pane — their directory info (UPN, email, manager, office) and their SCCM-assigned devices (OS + last domain logon, read from AD), with BitLocker recovery keys revealed on click and each device addable to the machine list. The SCCM/BitLocker lookup runs **de-elevated as your logged-on account** (DONUT itself runs elevated as an admin account, which can't read them).
-- **Dynamic Configuration:** Driven by a user-friendly JSON config (`config.json`) edited through the in-app settings dialog (gear icon).
-- **GitHub App Updates:** Authenticates via a GitHub App (Device Flow) and self-updates from the latest GitHub release (supports rollback by tag).
-- **Detailed Logging:** Per-host logs for execution outcomes and errors.
-- **DNS and Error Validation:** Validates DNS/IP before execution.
+```powershell
+pwsh -File src\Start-Donut.ps1
+```
 
----
+The [installation guide](docs/get-started/installation.md) covers target-machine
+prerequisites (dcu-cli, PsExec) and the unsigned-MSI Defender note.
 
-## Prerequisites
+## License
 
-- **PowerShell 7+** (required for parallel processing, current project runs on 7.5.2)
-- **Dell Command Update CLI (`dcu-cli.exe`)** (must be installed on each target)
-- **PsExec (Sysinternals Suite)** (for remote command execution)
-- **.NET Desktop 10.0+** (needed for WPF to run with the current packaged version)
-- **Windows Admin Access** (for remote access)
-- **GitHub App Access** (to allow your team to sign in via Device Flow and receive updates from your org's GitHub Releases)
-
----
-
-## Usage
-
-### Installation
-
-1. All [Prerequisites](#prerequisites) must be installed or acquired before using DONUT.
-2. Review Step 2 to set up PsTools, otherwise skip to Step 3 if already installed.
-   - PsTools is available at `https://learn.microsoft.com/en-us/sysinternals/downloads/pstools`.
-   - Extract the zip to **Documents**, **Downloads**, or **Desktop** (any one of these directories will suffice).
-   - Transfer the **contents** of the folder to `C:\Windows\System32`.
-3. Run the .NET Desktop SDK installer (available at `https://dotnet.microsoft.com/en-us/download/dotnet/10.0`).
-4. Install DONUT (MSI available under releases).
-5. Navigate to **Virus & Threat Protection > Manage Settings > Add or remove exclusions** (this is NOT a virus, just not digitally signed).
-6. Click **Add an exclusion**.
-7. Select **Folder**.
-8. Enter `C:\Program Files\Bakery\DONUT`.
-
-### Steps to Run
-
-1. **Launch the Application:**
-
-   - Open the app through the Start Menu.
-   - On first launch (or if the token expired), sign in with your GitHub App using the device code prompt so the updater can pull releases.
-   - Apply any updates if prompted (unless specified otherwise by the team).
-
-2. **Configure Commands:**
-
-   - Click the gear icon in the top bar to open Settings, where you select and configure DCU commands and options.
-   - For more information on "Text Option" parameters, see [DCU-CLI Documentation](https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-%7C-update-cli-commands?guid=guid-92619086-5f7c-4a05-bce2-0d560c15e8ed&lang=en-us) for more details.
-
-     **Note: If a main command is run with no options from the `Dropdown/Multi-Select Options` selected, then DCU will use the target machine's defaults.**
-
-3. **List Target Computers:**
-
-   - Enter the target hostname(s) in the search bar, separated by commas or new lines (or pick a machine from the AD finder dropdown).
-   - Click **Add** to queue them — this adds a row per machine and gathers its inventory (it does not scan or apply on its own).
-
-4. **Run and Monitor:**
-
-   - The mode pill shows the active command (**Scan** or **ApplyUpdates**); click it to cycle the mode.
-   - Click a machine's **Run** button to run the active command on just that host, or **Run all** to run it on every idle machine (Apply asks once to confirm).
-   - Progress and logs are shown in real time in each machine's row and detail panel.
-   - Manual reboot prompts and update confirmations are handled via popups in the UI.
-
-   **Note: If you disconnect from the network while updates are running, they will continue, you will just lose access to the live feed.**
-
-5. **Review Logs:**
-   - Live run progress shows in each machine's row and detail panel; there is no in-app Logs page.
-   - Logs are written to `%ProgramData%\DONUT\data\logs` — a central `Donut.log` plus a per-host copy of each run's output log (`<hostname>.log`). Open that folder to review past runs.
-
----
-
-## Developer Guide
-
-### Getting Started
-
-1. **Clone the repository** and open in VS Code or PowerShell Studio.
-2. **Install dependencies** (see [Prerequisites](#prerequisites)).
-3. **Run from source** — no MSI, exe, or Defender exclusion needed:
-
-   ```powershell
-   pwsh -File src\Start-Donut.ps1
-   ```
-
-   The script compiles the C# helpers (`ObservableObject`, `RelayCommand`, `WindowChromeHelper`, `QrCode`, `HotkeyManager`) in-process, so it needs nothing beyond PowerShell 7+. If started from Windows PowerShell 5.1 or an MTA host (e.g. right-click "Run with PowerShell"), it relaunches itself under `pwsh -Sta` automatically.
-
-   Add `-Tray` to start hidden in the system tray (`pwsh -File src\Start-Donut.ps1 -Tray`); the packaged launcher takes the equivalent `--tray`. This is what the "Start with Windows" scheduled task uses. Left-click the tray icon (or the hotkey, default `Ctrl+Alt+D`) to surface the window; a second launch just foregrounds the first instance.
-
-4. **Review configuration files** and XAML UI files in `Views/` and `Styles/`.
-5. **Package and publish updates via GitHub Releases.**
-   - Build the MSI with Visual Studio's packager (set the Product Version to your release tag).
-   - Create a GitHub release with that tag and upload the MSI asset (matches `MsiAssetPattern`, default `*.msi`).
-   - The app authenticates via your GitHub App (Device Flow), compares the installed version to the latest release tag, and self-updates or rolls back accordingly.
-
-### Key Concepts
-
-- **Runspaces:** Used for parallel remote execution, runspace management, and UI updates.
-- **WPF UI (MVVM):** Views are XAML with `DataTemplate`s and bindings; bindable state and commands live in `src/UI/ViewModels/` (PowerShell classes inheriting the C# `Donut.Mvvm.ObservableObject`/`RelayCommand` bases). Presenters remain as coordinators — they own the background jobs, timers, and dialogs, and wire the view-models. See the [architecture overview](docs/development/architecture/overview.md).
-- **Execution Policy:** Set to `Bypass` in `Startup.pss` for development and packaging convenience.
-- **GitHub App Updates:** Requests a GitHub Device Flow token, fetches the latest release, verifies the MSI SHA-256.
-
-## Contributing
-
-- **UI Changes:** Edit XAML files in `Views/` and `Styles/`; bindable state/commands live in `UI/ViewModels/`, coordination in `UI/Presenters/`.
-- **Logic Changes:** Update event logic in the respective `Core/` or `Service/` directories, with each page's supporting function(s) in its relevant module file.
-- **Deploying Changes:**
-  - Build a new MSI in PowerShell Studio (update the Product Version).
-  - Draft a GitHub release with a tag matching that version and upload the MSI asset (honor `MsiAssetPattern` if you rename it).
-  - Org admins sign in once via the GitHub App; the app will pick up the latest release on startup and prompt users to update or roll back based on the tag.
-- **Optional:**
-  - Repackage the project in PowerShell Studio with the new version (i.e., 1.0.0.4) and build the MSI.
-  - Keep a copy of the MSI on the internal file share for manual installs or recovery.
-
----
-
-## Additional Notes
-
-- **Remote Only:** Designed for remote execution; local runs can behave unexpectedly.
-
----
+[MIT](LICENSE)
