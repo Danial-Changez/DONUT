@@ -20,7 +20,7 @@ up).
 | `throttleLimit` | int, `8` | How many machines run concurrently on the runspace pool |
 | `folderScanCount` | int, `12` | How many largest folders the on-demand [storage scan](../features/machine-details.md#storage-scan-biggest-folders) returns (top-N by size) |
 | `recoveryWindowMinutes` | int, `30` | After a network drop mid-run, how long DONUT keeps trying to reconnect and resume the log tail before settling the row as *Unconfirmed* |
-| `domains` | string[], discovered | The AD forests the [finder](../features/ad-finder.md) searches; each is queried independently. Empty on first run, DONUT discovers them from the machine's own domain plus its trust partners and persists the result here |
+| `domains` | string[], discovered | The AD domains the [finder](../features/ad-finder.md) searches; each is queried independently. Empty on first run, DONUT discovers them from the machine's forest (every domain in it, child domains included) plus its trust partners and persists the result here. Clear the entry to re-discover |
 | `adminServiceHost` | string, discovered | The SCCM AdminService host used by the [User Lens](../features/user-lens.md) device lookup. Empty on first run, DONUT persists the local SCCM client's management point; edit it when the SMS Provider is a different box |
 | `startWithWindows` | bool, `false` | Register the logon scheduled task, which starts DONUT as you at your normal rights ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
