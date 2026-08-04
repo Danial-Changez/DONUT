@@ -35,6 +35,23 @@ class LogService {
         return $logger
     }
 
+    # Rolls an oversized Donut.log to Donut.old.log (replacing the previous roll).
+    # Main process only, before the logger opens: workers append mid-run and a
+    # rotation under them would tear their stream. Best-effort - a locked or
+    # missing file just skips the roll.
+    static [void] Rotate([string]$logDirectory, [long]$maxBytes) {
+        try {
+            $log = Join-Path $logDirectory 'Donut.log'
+            $file = Get-Item -LiteralPath $log -ErrorAction Stop
+            if ($file.Length -gt $maxBytes) {
+                Move-Item -LiteralPath $log -Destination (Join-Path $logDirectory 'Donut.old.log') -Force -ErrorAction Stop
+            }
+        }
+        catch {
+            # No log yet, or another process holds it open - skip this launch.
+        }
+    }
+
     [void] LogInfo([string]$message) {
         $this.WriteLog("INFO", $message)
     }

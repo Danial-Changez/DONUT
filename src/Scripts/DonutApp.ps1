@@ -67,6 +67,8 @@ try {
 
     # Central logger (logs directory is guaranteed by ConfigManager). Injected
     # into the collaborators that support it so runtime errors are recorded.
+    # Roll an oversized log first - it grows unbounded across runs otherwise.
+    [LogService]::Rotate($configManager.LogsPath, 10MB)
     $logger = [LogService]::new($configManager.LogsPath)
     # DEBUG gate: the persisted setting, or the -DebugLog session override.
     $logger.DebugEnabled = $global:AppConfig.GetDebugLogging() -or [bool]$global:DebugLogStart
