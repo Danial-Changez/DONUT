@@ -22,6 +22,11 @@
         <!-- InstallWorker / SelfUpdateService read InstallLocation from the ARP key. -->
         <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
 
+        <!-- Apps & Features / Add-Remove Programs entry icon (the exe's own icon
+             covers the taskbar and Start Menu shortcut). -->
+        <Icon Id="DonutIcon.ico" SourceFile="..\assets\Images\donut icon48x48.ico" />
+        <Property Id="ARPPRODUCTICON" Value="DonutIcon.ico" />
+
         <StandardDirectory Id="ProgramFiles64Folder">
             <Directory Id="BakeryFolder" Name="Bakery">
                 <Directory Id="INSTALLFOLDER" Name="DONUT">
