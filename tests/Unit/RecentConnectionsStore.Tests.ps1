@@ -121,6 +121,15 @@ Describe "RecentConnectionsStore" {
 
             $script:store.GetByHost("PC-1").LastTouched | Should -Be $touched
         }
+
+        It "Keeps the cached owner across a later Upsert" {
+            # Owner comes from a Lens round trip; a run settling must not force a re-fetch.
+            $script:store.UpsertOwner("PC-1", "Jamie Doe")
+
+            $script:store.Upsert("PC-1", "Completed", "Scan", 0, $false)
+
+            $script:store.GetByHost("PC-1").Owner | Should -Be "Jamie Doe"
+        }
     }
 
     Context "GetByHost (indexed lookup)" {

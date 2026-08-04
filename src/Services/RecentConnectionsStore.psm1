@@ -97,11 +97,11 @@ class RecentConnectionsStore {
             rebootRequired = [bool]$rebootRequired
         }
 
-        # Carry over what a run does not change (cached inventory, lastTouched);
-        # replacing the entry without these silently loses the caches.
+        # Carry over what a run does not change (cached inventory, lastTouched,
+        # owner); replacing the entry without these silently loses the caches.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
-            foreach ($k in @('inventory', 'lastTouched')) {
+            foreach ($k in @('inventory', 'lastTouched', 'owner')) {
                 if ($prev.ContainsKey($k)) { $entry[$k] = $prev[$k] }
             }
         }
