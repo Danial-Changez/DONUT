@@ -3,12 +3,26 @@ title: Maintaining this site
 description: How the docs site works and the everyday recipes - edit a page, add a page, update a diagram.
 ---
 
-This site is built from the markdown in the repo's `docs/` folder by
+This site is built from the markdown in `docs/` by
 [Astro Starlight](https://starlight.astro.build/) (scaffolded under `web/`) and
-deployed to GitHub Pages by the `Deploy docs site` GitHub Action on every push to
-`main` that touches `docs/` or `web/`. **For normal doc edits you never run
-anything** — the toolchain lives entirely in CI, with versions pinned by
-`web/package-lock.json`.
+deployed to GitHub Pages on every push to `main` that touches `docs/` or `web/`.
+**For normal doc edits you never run anything** — the toolchain lives in CI.
+
+## House style
+
+- **Keep user and developer docs separate.** `get-started/`, `features/`, and
+  `configuration/` tell an operator what to do; they carry no class names, no
+  `src/` paths, no internal vocabulary, no diagrams, and no maintainer
+  instructions. Everything about *how it works* lives under `development/`.
+- **Short over complete.** Short paragraphs, numbered steps for procedures, tables
+  for enumerable facts. If a paragraph runs past four sentences, it is probably a
+  list.
+- **Rules on reference pages, history in
+  [Design decisions](./decisions.md).** A dated regression, a measurement, or a
+  rejected alternative goes in the appendix; the reference page states the rule and
+  links to it.
+- Admonitions are short and reserved for warnings — not a place to park
+  explanation.
 
 ## Edit an existing page
 
@@ -87,9 +101,8 @@ npm update
 npm run build         # verify it still builds
 ```
 
-Commit `package.json` + `package-lock.json` together. If a build ever breaks after
-an update, `git checkout -- package.json package-lock.json` puts you back on the
-last known-good pin.
+Commit `package.json` + `package-lock.json` together; `git checkout --` on both
+restores the last known-good pin.
 
 ## Troubleshooting
 

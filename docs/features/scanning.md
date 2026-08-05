@@ -31,9 +31,3 @@ the [`throttleLimit`](../configuration/config-reference.md) setting).
 A scan run within the last 24 hours is considered fresh: switching to Apply Updates
 within that window reuses the report instead of re-scanning. The cache is
 invalidated after an apply. See [Applying updates](./applying-updates.md).
-
-## Under the hood
-
-![Scan sequence diagram](/diagrams/scan_sequence_diagram.svg)
-
-*Source: [`scan_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/scan_sequence_diagram.puml)*

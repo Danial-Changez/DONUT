@@ -35,17 +35,19 @@ Everything lives at **<https://danial-changez.github.io/DONUT/>**, built from
 ## Install
 
 Grab `DONUT.msi` from the
-[latest release](https://github.com/Danial-Changez/DONUT/releases/latest)
-(needs the
-[.NET Desktop Runtime 10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)),
-or run straight from source with nothing but PowerShell 7+:
+[latest release](https://github.com/Danial-Changez/DONUT/releases/latest). The
+first launch installs what the machine still needs (PsExec, PowerShell 7, RSAT AD
+tools, and WizTree for disk scans), and the .NET runtime ships inside the MSI.
+WizTree is free for personal use only, so business use needs a purchased licence.
+
+To run from source instead, with nothing but PowerShell 7+:
 
 ```powershell
 pwsh -File src\Start-Donut.ps1
 ```
 
-The [installation guide](docs/get-started/installation.md) covers target-machine
-prerequisites (dcu-cli, PsExec) and the unsigned-MSI Defender note.
+The [installation guide](docs/get-started/installation.md) covers the target-machine
+prerequisite (dcu-cli) and the unsigned-MSI Defender note.
 
 ## License
 

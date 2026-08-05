@@ -1,29 +1,51 @@
 ---
 title: Architecture overview
-description: How DONUT is built - the directory structure, the MVVM layering, and the design decisions behind the presenter seams.
+description: How DONUT is built - running from source, the directory structure, the MVVM layering, and the presenter seams.
 ---
 
-How DONUT is built: a WPF/PowerShell fleet management app for Dell workstations.
-Its subsystems are remote driver updates (Dell Command Update over PsExec), a live
+DONUT is a WPF/PowerShell fleet management app for Dell workstations. Its
+subsystems are remote driver updates (Dell Command Update over PsExec), a live
 Active Directory finder, the User Lens (a de-elevated user-to-device lookup),
 per-machine inventory and storage, and the tray, hotkey, and self-update plumbing.
-This page is the high-level view; each subsystem has its own page:
+Each subsystem has its own page:
 
-- [Runspaces and workers](./runspaces-and-workers.md) - the job pool, process
+- [Runspaces and workers](./runspaces-and-workers.md) — the job pool, process
   isolation, and the warm/staging rules.
-- [Remote execution](./remote-execution.md) - the PsExec transport and dcu-cli
+- [Remote execution](./remote-execution.md) — the PsExec transport and dcu-cli
   return-code handling.
-- [User Lens](./user-lens.md) - the de-elevated agent and its exchange.
-- [UI and threading](./ui-and-threading.md) - presenters, view-models, and the
+- [User Lens](./user-lens.md) — the de-elevated agent and its exchange.
+- [AD query rules](./ad-queries.md) — LDAP filter shapes and bounds.
+- [UI and threading](./ui-and-threading.md) — presenters, view-models, and the
   polling rules.
-- [Configuration and persistence](./configuration-and-persistence.md) - config,
-  logging, recents, and self-update.
-- [PowerShell constraints](./powershell-constraints.md) - language and packaging
+- [Elevation and autostart](./elevation.md) — the elevation model, first-run
+  setup, and the one data root.
+- [PowerShell constraints](./powershell-constraints.md) — language and packaging
   constraints the code must keep honoring.
 
 The visual counterparts are [Runtime flows](./runtime-flows.md) and
-[Key classes](./key-classes.md). Comment/layout conventions live in
-[Coding style](../coding-style.md).
+[Key classes](./key-classes.md). Conventions live in
+[Coding style](../coding-style.md); the history behind the rules is in
+[Design decisions & postmortems](../decisions.md).
+
+## Run from source
+
+Clone the repo and run:
+
+```powershell
+pwsh -File src\Start-Donut.ps1
+```
+
+The script compiles the C# helpers in-process, so it needs nothing beyond
+PowerShell 7+. Started from Windows PowerShell 5.1 or an MTA host, it relaunches
+itself under `pwsh -Sta`. `-Tray` starts hidden in the tray (the packaged launcher
+takes `--tray`); `-DebugLog` forces verbose logging for the session. Maintainers
+build the MSI with `pwsh -File tools\Build-Installer.ps1 -Version <x.y.z>` — plain
+`dotnet` is the only prerequisite; the WiX SDK restores itself.
+
+:::note
+Defender may slow or quarantine an unsigned dev build. If startup feels slow, add
+an exclusion for your checkout's `bin\Debug\...` output folder.
+:::
 
 ## Component view
 
@@ -31,203 +53,120 @@ The visual counterparts are [Runtime flows](./runtime-flows.md) and
 
 *Source: [`component_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/component_diagram.puml)*
 
-:::note
-The project began as a script-based tool and was refactored to an OOP structure,
-first to a Passive-View MVP and then to MVVM. That migration is complete; this
-document describes the result, not the plan.
-:::
-
 ## Directory structure
-
-The structure emphasizes testability and a layered UI architecture.
 
 ```text
 root/
-├── assets/                 <-- Assets
-│   ├── Images/
-│   └── Screenshots/
+├── assets/                 <-- Images and screenshots
 ├── docs/                   <-- Documentation (also the source of this site)
-├── src/                    <-- Source Code
+├── src/                    <-- Source code
 │   ├── Core/               <-- Base classes, enums, infrastructure (reusable)
 │   ├── Lib/                <-- Bundled binary dependencies (e.g. QRCoder.dll)
 │   ├── Models/             <-- Data classes (DTOs) + pure mappers
 │   ├── Services/           <-- Business logic (DONUT-specific)
 │   ├── Scripts/            <-- Standalone scripts + remote workers
-│   ├── UI/                 <-- UI Layer
-│   │   ├── Views/          <-- XAML files (shells + composed regions; Home/, Settings/)
-│   │   ├── Styles/         <-- XAML styles
-│   │   ├── ViewModels/     <-- Bindable state + commands
-│   │   ├── Presenters/     <-- Coordinators / UI services (jobs, timers, dialogs)
-│   └── Launcher/           <-- C# Launcher project (+ Donut.Mvvm base types)
-├── tests/                  <-- Pester tests
-│   ├── Unit/
-│   └── Integration/
+│   ├── UI/                 <-- Views (XAML), Styles, ViewModels, Presenters
+│   └── Launcher/           <-- C# launcher project (+ Donut.Mvvm base types)
+├── tests/                  <-- Pester tests (Unit/ and Integration/)
 ├── web/                    <-- Astro Starlight scaffold for this docs site
 ├── README.md
 └── LICENSE
 
-Runtime Data Location:
-
-%ProgramData%/DONUT/data/
-├── logs/                   <-- Runtime generated logs
-├── reports/                <-- Runtime generated reports
-├── config/                 <-- Configuration files
-└── InstallWorker.ps1       <-- Copied during update
+Runtime data: %ProgramData%\DONUT\data\  (config/, logs/, reports/)
 ```
 
-`Models`, `Services`, and `Core` separate concerns explicitly:
-
-- **Models** are pure data structures and mappers (DTOs).
-- **Services** hold DONUT-specific business logic.
-- **Core** is generic infrastructure (`NetworkProbe`, `ConfigManager`).
-
-Since `logs`, `reports`, and `config` live under `%ProgramData%\DONUT\data`, an MSI upgrade in
-`Program Files` never touches user data.
+`Models` are pure data structures and mappers; `Services` hold DONUT-specific
+business logic; `Core` is generic infrastructure. Runtime data lives outside
+`Program Files`, so an MSI upgrade never touches it.
 
 ## Architecture (MVVM)
 
-Every surface renders through data bindings: the machine list is a virtualizing
-`ListBox` of `HostViewModel`s, the detail pane and overview strip bind to
-`SelectedMachine.*`, and the folders tree, AD finder dropdown, toasts, dialogs,
-login window, settings overlay, and shell chrome all bind their own view-models.
-
-### The layers
+Every surface renders through data bindings — the machine list, detail pane,
+folders tree, finder dropdown, toasts, dialogs, login, settings, and shell chrome
+each bind their own view-models.
 
 1. **Model layer (`src/Models`, `src/Services`, `src/Core`)** — data, business
-   logic, and infrastructure.
-   - **Models**: data models and pure mappers (e.g. `AppConfig`, `FleetCardStatus`).
-   - **Services**: project-specific modules (e.g. `SelfUpdateService`).
-   - **Core**: general, reusable modules (e.g. `NetworkProbe`).
-2. **View layer (`src/UI/Views`)** — XAML: structure, layout, `DataTemplate`s, and
-   bindings. No code-behind. Pages compose from files: `HomeView.xaml` is a slot-frame
-   shell whose regions live under `Views/Home/` (ActionBar / StatCards / MachinePane /
-   DetailPane, with LensPane nested inside the detail region), loaded at startup by
-   `HomePresenter.ComposeRegions` via `ViewLoader`; the settings page composes
-   `SettingsView.xaml` + `Views/Settings/*` the same way. Every `XamlReader.Load` root
-   owns its file's namescope, so a presenter is handed its region root and cannot reach
-   into another region's names; `StaticResource` keys (converters) are declared
-   per-file, shared styles live in `UI/Styles` and resolve via `DynamicResource`.
+   logic, infrastructure.
+2. **View layer (`src/UI/Views`)** — XAML only, no code-behind. Pages compose from
+   files: `HomeView.xaml` is a slot-frame shell whose regions live under
+   `Views/Home/`, loaded by `HomePresenter.ComposeRegions` via `ViewLoader`. Every
+   `XamlReader.Load` root owns its file's namescope, so a presenter is handed its
+   region root and cannot reach into another region's names.
 3. **ViewModel layer (`src/UI/ViewModels`)** — bindable state (`ObservableObject`
-   subclasses) + `RelayCommand`s. Calls the pure Model mappers for display decisions,
-   so WPF-free logic stays unit-testable.
-4. **Presenter layer (`src/UI/Presenters`)** — coordinators/services: load views, own
-   background jobs and timers, build the view-models, wire commands, and run the
-   imperative shell work.
+   subclasses) + `RelayCommand`s; calls the pure Model mappers so WPF-free logic
+   stays unit-testable.
+4. **Presenter layer (`src/UI/Presenters`)** — coordinators: load views, own
+   background jobs and timers, build view-models, wire commands.
 
 ### The launcher embeds `src\` — installed builds need a rebuild
 
-`Donut.Launcher.csproj` embeds every `.psm1`/`.ps1`/`.xaml` under `src\` (plus images,
-fonts, and the `src\Tools` binaries) as resources, and `Program.ExtractEmbeddedApp`
-self-extracts them to `%ProgramData%\DONUT\app` (SHA-256 verified per file) before
-hosting PowerShell **in-process**. So `[Environment]::ProcessPath` is
-`Donut.Launcher.exe`, and `SourceRoot` is the extracted tree — *not* your clone.
+`Donut.Launcher.csproj` embeds every `.psm1`/`.ps1`/`.xaml` under `src\` as
+resources, and the launcher self-extracts them beside the exe before hosting
+PowerShell **in-process**. So `[Environment]::ProcessPath` is `Donut.Launcher.exe`,
+and `SourceRoot` is the extracted tree — *not* your clone.
 
 :::caution
-**Editing a `.psm1` and pulling does nothing to an installed build.** The running code
-comes from the exe's embedded copy; it changes only when `Donut.Launcher.exe` is
-rebuilt and reinstalled. To test a PowerShell-side change without rebuilding, run the
-dev path (`pwsh -File src\Start-Donut.ps1`), which loads the clone directly.
-`tools\Diagnose-StartupTask.ps1` reports which build is actually extracted.
+Editing a `.psm1` and pulling does nothing to an installed build — the running code
+changes only when `Donut.Launcher.exe` is rebuilt and reinstalled. To test a
+PowerShell-side change, run the dev path (`pwsh -File src\Start-Donut.ps1`).
 :::
 
 ### The MVVM bases
 
-PowerShell classes cannot declare CLR events, so `INotifyPropertyChanged` cannot be
-implemented natively. Two tiny C# bases (`src/Launcher/`, namespace `Donut.Mvvm`,
-compiled into `Donut.Launcher` for production and `Add-Type`-compiled by
-`Start-Donut.ps1` on the dev path) close the gap:
-
-- **`ObservableObject`** — implements `INotifyPropertyChanged`; PowerShell view-model
-  classes inherit it and call `Set(name, value)` (raises change notification only when
-  the value actually changes) or `Raise(name)`.
-- **`RelayCommand`** — a minimal `ICommand` wrapping a PowerShell scriptblock, so
-  buttons/gestures bind to commands instead of `Add_Click` wiring.
+PowerShell classes cannot declare CLR events, so two tiny C# bases
+(`src/Launcher/`, namespace `Donut.Mvvm`) close the `INotifyPropertyChanged` gap:
+**`ObservableObject`** (inherited by view-models; `Set`/`Raise`) and
+**`RelayCommand`** (a minimal `ICommand` wrapping a PowerShell scriptblock).
+Production compiles them into `Donut.Launcher`; `Start-Donut.ps1` `Add-Type`s them
+on the dev path.
 
 ### Presenters are coordinators
 
-The `*Presenter` classes keep their original names for continuity, but their role is
-**coordinator / UI-service**, not MVP passive-view presenter — bindings are the default
-render path, and presenters keep only the imperative control work MVVM sanctions.
-A rename to `*Coordinator`/`*Service` would be cosmetic churn across the UI
-layer, so the name is retained by choice (`ToastService` already carries the accurate
-suffix). The surfaces that stay deliberately imperative, each the standard MVVM answer:
+The `*Presenter` classes act as coordinators/UI-services — bindings are the default
+render path, and presenters keep only the imperative work MVVM sanctions (dialog
+lifecycles, live log appends, popup positioning, spotlight geometry, the WinForms
+`NotifyIcon`). The name is retained by choice; the rationale and the per-presenter
+list are in [Design decisions](../decisions.md#presenters-keep-their-name).
 
-- **`DialogPresenter`** is a *dialog service* — showing a modal and returning a result
-  is inherently imperative; the dialog's *content* binds a `DialogViewModel`.
-- **`MainPresenter`** keeps lazy Settings construction (the settings view builds on first
-  settings-overlay open — a startup-cost win) and the Home fade-in; the shell's
-  settings-overlay/chrome *inputs* are bound commands on `MainViewModel`.
-- **`SettingsPresenter`** keeps its data-driven form binder: every named control in a
-  command's option view maps 1:1 to a dcu-cli arg key, so a typed property per field
-  would restate the key list for no behaviour gain. Settings persist in real time —
-  there is no Save button; toggles and keybind changes write through immediately and
-  fire their side-effects (hotkey re-registration, scheduled-task reconcile).
-- **`TourPresenter`** computes spotlight/callout geometry against live control bounds —
-  measurement is inherently view-side work.
-- **`LoginPresenter`** owns the modal window lifecycle (content binds `LoginViewModel`).
-- **`InventoryPresenter`** appends to the per-host terminal and resolves detail-pane
-  seams by name — a live log append has no binding-friendly shape.
-- **`FinderPresenter`** repositions/highlights the search dropdown popup imperatively;
-  rows themselves bind `SearchRowViewModel`s.
-- **`TrayPresenter`** drives the WinForms `NotifyIcon`, which has no binding surface.
+`HomePresenter` is the largest coordinator (the `AsyncJob` pump, run/apply flow,
+machine list). Three clusters are carved off it — `FinderPresenter`,
+`InventoryPresenter`, `ResolutionCoordinator` — along one seam: duck-typed
+`[object] $Home` back-ref, the gate stays with its owner, shared objects passed by
+reference. See [Design decisions](../decisions.md#the-coordinator-seam).
 
-### Design decisions
+### Tray, hotkey, single instance
 
-`HomePresenter` is the largest coordinator because it owns the `AsyncJob` pump plus
-the run/apply flow and the machine list. Three cohesive clusters have been carved off
-it — `FinderPresenter` (AD finder + Lens), `InventoryPresenter` (detail panel +
-inventory/disk probes), and `ResolutionCoordinator` (the resolve-job lifecycle +
-runspace-pool warm) — following a consistent seam:
+- One tray icon, owned by the WPF UI thread (`TrayPresenter`), so surfacing the
+  window needs no cross-thread marshalling; dev and prod behave identically.
+- The global hotkey uses `RegisterHotKey` + a WndProc hook, never
+  `SetWindowsHookEx`/Raw Input/key-state polling — those observe the global
+  keystroke stream and trip AV/EDR keylogger heuristics.
+- Single instance via a `Local\DONUT.SingleInstance` mutex + a
+  `Local\DONUT.ShowRequest` event: a second launch signals the running instance to
+  surface and exits silently. Autostart and the elevation handshake are on
+  [Elevation and autostart](./elevation.md).
 
-- **Duck-typed back-ref.** Each coordinator is constructed with a `[object] $Home`
-  reference to `HomePresenter` and calls back through it. A *typed* `[HomePresenter]`
-  field would create a `using module` import cycle, so the back-ref is intentionally
-  `[object]`.
-- **Split the gate.** When a cluster is coupled to shared coordination state, only the
-  *execution* moves out; the gate stays with its owner. Two cases: the reachability
-  check that decides whether to probe a host stays in `HomePresenter.StartInventory`
-  while only the probe execution (`RunInventoryProbe`) moved to `InventoryPresenter`;
-  and the run/gather queue stays in `HomePresenter` while `ResolutionCoordinator`, once
-  a verdict lands, re-issues queued work through the `ReissueAfterResolve` /
-  `DropPendingRunOnResolveFailure` seam methods. This keeps the reachability queue and
-  the `AsyncJob` pump single-owned by `HomePresenter`.
-- **Shared, not owned.** `HostResolver` has call sites across resolution, run, apply,
-  and the inventory gate, so `HomePresenter` keeps the single instance and passes it to
-  `ResolutionCoordinator` by reference rather than handing over ownership.
-- **One cluster at a time.** Each extraction is a cohesive unit with its own test; the
-  remainder (pump + run/apply + shell) is the irreducible core and is left intact
-  rather than fragmented into further back-ref indirection.
+### Self-update seams
 
-### Tray, autostart, and global hotkey
-
-- **One tray icon, owned by the WPF UI thread.** `TrayPresenter` creates the
-  `NotifyIcon` on the STA UI thread whose dispatcher pumps its messages, so surfacing
-  the window needs no cross-thread marshalling. It replaces the launcher's old icon, so
-  the dev path (`Start-Donut.ps1`) and prod launcher behave identically. A hidden
-  (`-Tray` / `--tray`) start runs the message loop with no window
-  (`MainPresenter.ShowHidden`, `EnsureHandle` so the HWND exists for the hotkey) and
-  defers the sign-in/update check until the window is first surfaced.
-- **RegisterHotKey, never a keyboard hook.** The global hotkey uses
-  `Donut.Interop.HotkeyManager` (user32 `RegisterHotKey` + a WndProc `HwndSource` hook)
-  so it never observes the global keystroke stream. `SetWindowsHookEx`, key-state
-  polling, and Raw Input are deliberately avoided - they trip AV/EDR keylogger
-  heuristics. `WM_HOTKEY` arrives on the UI thread, so the PS `Pressed` handler is
-  runspace-safe like any WPF event handler.
-- **Autostart is a scheduled task, not a Run key**, triggered by the console user's logon
-  and running as that user. It, the elevation model, and the single-instance handshake
-  are covered in [Elevation and autostart](./elevation.md).
-- **Single instance via named handles.** A `Local\DONUT.SingleInstance` mutex plus a
-  `Local\DONUT.ShowRequest` auto-reset event: the launcher owns them in prod,
-  `Start-Donut.ps1` in dev, and a second launch signals the event (polled on a
-  `DispatcherTimer`) so the running instance surfaces and the newcomer exits silently.
-  The mutex is per-session, not per-token, which is why an elevation relaunch waits for
-  its predecessor to exit ([Elevation and autostart](./elevation.md)).
+- `SelfUpdateService` owns release discovery, download, hash verification, and the
+  MSI apply; `UpdatePresenter` drives it. The default Owner/Repo is queried
+  anonymously; only when the repo refuses does `LoginPresenter` run the GitHub
+  Device Flow, once — tokens are DPAPI-protected. A fork points Owner/Repo at
+  itself and sets `ClientId` to its own GitHub App.
+- `InstallWorker.ps1` stays a standalone script so `SelfUpdateService` can copy it
+  to the data root and run it independently for updates/rollbacks (the MSI is
+  SHA-256-verified first). The version compare reads the installed
+  `DisplayVersion` from the uninstall key.
+- **Publishing a release:** build the MSI with the Product Version set to the
+  release tag, then create a GitHub release with that tag and upload the MSI (it
+  must match `MsiAssetPattern`, default `*.msi`). Users are prompted on next
+  startup. A tag *older* than the installed version is offered as a rollback, so
+  re-tagging is how a bad release gets pulled.
 
 ### First-run guided tour
 
 `TourPresenter` walks `TourSteps` (pure data, unit-tested headless) one step at a
-time: four dim panels frame a spotlight "hole" over the target control, with a callout
-card beside it. It auto-runs once (`hasSeenTour` in config) and can be replayed from
-the `?` button. Targets live inside the Home regions' own namescopes, so they resolve
-through `HomePresenter.FindHomeElement` — which probes the shell and each region root —
-rather than `Window.FindName` or a single view namescope.
+time: dim panels frame a spotlight over the target control with a callout beside
+it. It auto-runs once (`hasSeenTour`) and replays from the `?` button. Targets live
+inside region namescopes, so they resolve through `HomePresenter.FindHomeElement`,
+not `Window.FindName`.

@@ -12,9 +12,7 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: [
-        // Content lives outside this project root (../docs), so bare imports in
-        // .mdx files can't walk up to our node_modules - pin the one they use.
-        // Exact match only: Starlight itself imports components/*.astro subpaths.
+        // Exact match only, because Starlight imports subpaths of this too.
         {
           find: /^@astrojs\/starlight\/components$/,
           replacement: fileURLToPath(
@@ -25,11 +23,7 @@ export default defineConfig({
     },
   },
   markdown: {
-    // The flat markdown.remarkPlugins/rehypePlugins options are deprecated; the
-    // supported path is a unified() processor. Starlight detects this processor
-    // (isUnifiedProcessor) and pushes its own plugins (asides, heading anchors,
-    // Shiki) into it, so ours composes with Starlight's rather than replacing it.
-    // gfm/smartypants are omitted, so they keep the framework defaults (on).
+    // Starlight detects a unified() processor and composes its plugins into it.
     processor: unified({
       rehypePlugins: [rehypeDocsLinks],
     }),
@@ -65,12 +59,10 @@ export default defineConfig({
         themes: ['github-dark'],
       },
       markdown: {
-        // Run Starlight's Markdown pipeline (asides, anchors) on the external
-        // docs directory, since content loads from outside src/content/docs.
+        // Needed because content loads from outside src/content/docs.
         processedDirs: ['../docs'],
       },
-      // Git-based lastUpdated and editLink are unreliable for content outside
-      // src/content/docs (known custom-location gaps), so both stay off.
+      // Both are unreliable for content outside src/content/docs.
       lastUpdated: false,
       sidebar: [
         {
@@ -111,7 +103,6 @@ export default defineConfig({
                 'development/architecture/user-lens',
                 'development/architecture/ad-queries',
                 'development/architecture/ui-and-threading',
-                'development/architecture/configuration-and-persistence',
                 'development/architecture/elevation',
                 'development/architecture/powershell-constraints',
                 'development/architecture/key-classes',
@@ -121,6 +112,7 @@ export default defineConfig({
             'development/coding-style',
             'development/testing',
             'development/ui-reference',
+            'development/decisions',
             'development/maintaining-the-site',
           ],
         },

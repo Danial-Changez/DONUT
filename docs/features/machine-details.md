@@ -3,91 +3,50 @@ title: Machine details & storage
 description: The per-machine detail pane - inventory, available updates, live logs, and the biggest-folders storage scan.
 ---
 
-Selecting a machine opens its detail pane. The data is prefetched in the background
-when the row is added or selected, so it's usually already there when you look.
+Selecting a machine opens its detail pane. The data is prefetched in the
+background, so it's usually already there when you look.
 
 ## Overview strip
 
-A lightweight CIM probe gathers the essentials — model, Dell service tag, BIOS
-version, battery health, free disk space, and uptime. The probe re-runs when stale;
-**Refresh** forces it.
+Model, Dell service tag, BIOS version, battery health, free disk space, and uptime.
+It refreshes when stale; **Refresh** forces it.
 
 ## Available updates
 
 Once any scan completes — a plain **Scan** or the scan phase of an apply — the pane
-lists each update DCU found, sorted most-urgent first: name, category, urgency badge
+lists each update DCU found, most urgent first: name, category, urgency badge
 (Urgent / Recommended / Optional), the version transition (`1.2.0 → 1.4.1`), and
-download size. Selecting a machine with a recent scan shows its results without re-running.
+download size. Selecting a machine with a recent scan shows its results without
+re-running.
 
 ## Live log
 
-While a run is active, the pane tails the remote DCU output log line by line — the
-same content that lands in `%ProgramData%\DONUT\data\logs\<hostname>.log`.
-
-Every line carries a dim `HH:mm:ss` stamp and is colour-coded by severity: errors
-red with an `[Error]` tag, warnings yellow with `[Warn]`, completed-run lines
-green, everything else the plain terminal tone. The **Copy** button in the
-terminal's corner copies the whole visible log for a ticket or a teammate.
+While a run is active, the pane tails the remote DCU output line by line. Each line
+carries a dim `HH:mm:ss` stamp and is colour-coded by severity — errors red,
+warnings yellow, completed runs green. **Copy** grabs the whole visible log for a
+ticket or a teammate.
 
 ## Storage scan (biggest folders)
 
-**Storage scan** runs WizTree headlessly on the target and shows the largest
-folders on `C:` as an expandable tree with sizes. Useful before pushing large
-updates to a nearly-full disk.
-
-:::note
-WizTree's `wiztree64.exe` is vendored under `src/Tools/` (see the note there about
-licensing); the scan deploys it to the target, selects the largest folders from
-the CSV export on the target itself (so only kilobytes cross the network), and
-cleans up.
-:::
+**Storage scan** lists the largest folders on the target's `C:` drive as an
+expandable tree with sizes. Useful before pushing large updates to a nearly-full
+disk.
 
 ## Clearing folder contents
 
-Each folder row in the tree has a checkbox. Tick the ones you want to reclaim, then
-**Clear selected** in the card header. Checking a parent checks every clearable folder
-shown under it; unchecking one child un-ticks the parent and spares that child (its
-still-ticked siblings are cleared individually) — so you can clear most of a folder
-while keeping specific subfolders. Ticking a child never selects its parent: the tree
-only shows the largest folders, and a parent holds more on disk than the rows you see.
-DONUT shows a confirmation dialog listing the folders and their combined size before
-anything is removed — the operation **clears each
-folder's contents but keeps the folder itself** (so a cache like `ccmcache` is emptied, not
-removed, and the owning service refills it). It runs as SYSTEM on the target and **cannot be
-undone**. When it finishes, the storage scan re-runs so the tree reflects the freed space.
+1. Tick the checkbox on each folder you want to reclaim. Checking a parent checks
+   every clearable folder under it; unchecking a child spares that child and keeps
+   its siblings ticked.
+2. Click **Clear selected** in the card header.
+3. Review the confirmation dialog — it lists the folders and their combined size.
+4. Confirm. When it finishes, the storage scan re-runs so the tree reflects the
+   freed space.
+
+Clearing empties each folder but keeps the folder itself, so a cache like
+`ccmcache` refills normally.
 
 :::caution
-Protected system locations are never clearable — they don't get a checkbox at all: the
-volume root, `Windows` (and everything under it, including `Installer`), `Program Files`
-/ `Program Files (x86)`, `ProgramData`, `System Volume Information`, `$Recycle.Bin`,
-`Recovery`, and the `Users` container itself (individual profiles/subfolders under it are
-clearable). The rule is enforced twice — in the UI and again inside the remote script —
-so a folder that shouldn't be touched can't be, even by mistake.
-
-The remote script additionally refuses to touch **any profile that is currently logged on**
-(the console user *and* any RDP sessions — every profile with a loaded registry hive), so an
-active user's data is never cleared even if their profile folder was selected. Stale (logged-off)
-profiles can still be cleared.
-
-A short allowlist of well-known reclaimable caches *is* clearable even though it lives under
-`Windows`: `ccmcache` (SCCM), `Temp`, `SoftwareDistribution\Download` (Windows Update),
-`Prefetch`, `Logs`, and `Downloaded Program Files`. The owning service recreates them as
-needed. To add or remove entries, edit `FolderDeletionPolicy.AllowedCaches` **and** the
-mirrored list in `ExecutionService.BuildDeleteCommand`.
-
-Because both lists are string comparisons, every path is canonicalized before they are applied —
-`..` and `.` segments are resolved, `/` is normalised, Windows' trailing dot/space stripping is
-applied, and 8.3 aliases (`PROGRA~1`) are refused. Without that, `C:\temp\..\Windows\System32`
-reads as an ordinary `temp` folder. On the target the clear also refuses a selected folder that is
-a **junction**, and never descends through one while clearing, so a link planted under an allowed
-root can't redirect the delete into the directory it points at.
-
-If the target's profile enumeration fails, the clear stops rather than proceeding without the
-logged-on-profile protection — a run that can't verify who is signed in does nothing.
+Clearing cannot be undone. Protected system locations (Windows, Program Files,
+ProgramData, the volume root) never get a checkbox, and DONUT refuses to touch the
+profile of anyone currently signed in — including active RDP sessions.
 :::
-
-## Under the hood
-
-![Inventory and storage sequence diagram](/diagrams/inventory_sequence_diagram.svg)
-
-*Source: [`inventory_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/inventory_sequence_diagram.puml)*
