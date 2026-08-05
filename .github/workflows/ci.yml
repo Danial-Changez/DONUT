@@ -30,11 +30,13 @@ jobs:
           path: ~/Documents/PowerShell/Modules
           key: psmodules-pester-6.0.1
 
-      # A cache hit makes both Install-Module calls no-ops rather than downloads.
+      # Both guarded on presence, so a cache hit skips the gallery instead of reinstalling.
       - name: Install PowerShell modules
         shell: pwsh
         run: |
-          Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -eq '6.0.1' })) {
+              Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
+          }
           if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
               Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
           }
