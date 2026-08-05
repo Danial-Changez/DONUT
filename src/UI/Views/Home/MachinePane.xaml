@@ -16,26 +16,19 @@
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
-    <!-- List header: a pane title (matching the detail pane's hostname title, 18px bold) with
-         Clear (completed) as the right-aligned action, mirroring the detail pane's
-         [title | buttons] row so the two panes read as a balanced pair (same top offset 14). -->
+    <!-- Mirrors the detail pane's [title | buttons] row so the two panes read as a pair. -->
     <Grid Grid.Row="0" Margin="14,12,14,10">
       <TextBlock Text="Machines" Style="{DynamicResource TextPaneTitle}"
                  HorizontalAlignment="Left" VerticalAlignment="Center" />
       <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
               FontSize="12" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center"
-              ToolTip="Remove settled rows" />
+              ToolTip="Remove machines that are not running" />
     </Grid>
 
-    <!-- Rows (MVVM: a virtualizing ListBox bound to HomeViewModel.Machines; each item is
-         a HostViewModel rendered by the DataTemplate below). The ListBox owns its own
-         ScrollViewer, so it is NOT wrapped in one - that is what enables virtualization. -->
+    <!-- Not wrapped in a ScrollViewer: the ListBox owns one, and that is what virtualizes. -->
     <Grid Grid.Row="1" Margin="10,0,10,10">
-      <!-- SelectedItem is NOT bound to SelectedMachine: a PS-class auto-property doesn't
-           raise PropertyChanged when WPF writes it, so the SelectedMachine.* detail/overview
-           bindings wouldn't track selection. The presenter drives HomeVm.SelectedMachine via
-           SetSelected() (which raises) from SelectionChanged instead; the ListBox's own
-           SelectedItem still owns the row highlight. -->
+      <!-- SelectedItem stays unbound: a PS-class auto-property raises no PropertyChanged when
+           WPF writes it, so the presenter calls SetSelected() from SelectionChanged instead. -->
       <ListBox x:Name="MachineList"
                ItemsSource="{Binding Machines}"
                Background="Transparent" BorderThickness="0"
@@ -49,8 +42,6 @@
           <DataTemplate>
             <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"
                     Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
-              <!-- Arcane table-row states: quiet resting row, violet-tinted hover,
-                   stronger violet tint + primary edge when selected. -->
               <Border.Style>
                 <Style TargetType="Border">
                   <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
@@ -67,7 +58,7 @@
                   </Style.Triggers>
                 </Style>
               </Border.Style>
-              <!-- Double-click a row to gather fresh inventory (single click selects). -->
+              <!-- Double-click gathers fresh inventory, a single click only selects. -->
               <Border.InputBindings>
                 <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding GatherCommand}" />
               </Border.InputBindings>
@@ -86,9 +77,7 @@
                     <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
                                FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
-                    <!-- Whose machine this is, from SCCM affinity: "HOST (Danial C)". It
-                         collapses when SCCM has no primary user on record, and the tooltip
-                         (the full display name) fires only when it adds something. -->
+                    <!-- The SCCM primary user, collapsed when SCCM has none on record. -->
                     <TextBlock Text="{Binding OwnerName, StringFormat=({0})}"
                                Foreground="{DynamicResource BodyTextTertiary}"
                                FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -113,16 +102,12 @@
                              FontFamily="{DynamicResource FontMono}" FontSize="10.5"
                              TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
-                <!-- The card reads busy from the "Scanning..." chip; the live bar sits atop
-                     the detail pane's terminal (DetailProgress), not here (declutter). -->
-                <!-- Status chip = Arcane StatusBadge: rounded (not a pill), tinted
-                     fill + 30% border, 400-shade text (all VM-driven). -->
+                <!-- No progress bar here, the live one sits atop the detail pane's terminal. -->
                 <Border Grid.Column="2" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
                         Margin="16,0,8,0" Background="{Binding ChipBackground}"
                         BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                         Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
-                  <!-- Glyph + label so status reads by shape, not colour alone. Segoe UI
-                       Symbol is pinned so the symbols never fall back to tofu. -->
+                  <!-- Glyph plus label so status is not colour alone. Pinned font avoids tofu. -->
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding ChipForeground}"
                                FontFamily="{DynamicResource FontSymbol}" FontWeight="SemiBold" FontSize="11"
@@ -146,8 +131,7 @@
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"
                         Style="{DynamicResource ButtonTintSuccess}" FontSize="11" Height="32"
                         Padding="14,4" VerticalAlignment="Center" />
-                <!-- Remove this one card (a running host toasts and stays). Same clear-X
-                     recipe as the settings shortcut fields, red on hover included. -->
+                <!-- Removes one card, while a running host toasts and stays instead. -->
                 <Button Grid.Column="4" Command="{Binding RemoveCommand}"
                         Style="{DynamicResource fieldClearButton}" Margin="6,0,0,0"
                         VerticalAlignment="Center" ToolTip="Remove from the list" />
@@ -172,13 +156,13 @@
         <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
                    TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
-          <Run Text="1.  Search a machine, then Enter adds the top match." />
+          <Run Text="1.  Search a machine, Enter adds the top match." />
           <LineBreak />
-          <Run Text="2.  Paste several names to add them all at once." />
+          <Run Text="2.  Paste several names to add them at once." />
           <LineBreak />
           <Run Text="3.  Or search a person to open their Lens." />
           <LineBreak />
-          <Run Text="4.  Run (or Run all) to scan or apply updates." />
+          <Run Text="4.  Run, or Run All, to scan or apply updates." />
         </TextBlock>
       </StackPanel>
     </Grid>

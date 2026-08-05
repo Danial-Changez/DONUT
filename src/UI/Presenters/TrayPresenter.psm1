@@ -130,9 +130,9 @@ class TrayPresenter {
         if ($this.Main.PendingLimitedNotice) {
             $this.Main.PendingLimitedNotice = $false
             if ($this.Main.ToastService) {
-                $this.Main.ToastService.ShowWarning('Limited capability',
+                $this.Main.ToastService.ShowWarning('Limited Capability',
                     'DONUT started with Windows, so it is running without administrator rights. ' +
-                    'Remote actions will ask for them, and granting one restarts DONUT elevated for the rest of the session.')
+                    'Remote actions will ask for them and restart DONUT.')
             }
         }
     }
@@ -180,7 +180,7 @@ class TrayPresenter {
         $this.HintShown = $true
         try {
             $this.Icon.BalloonTipTitle = 'DONUT'
-            $this.Icon.BalloonTipText = 'DONUT is still running here - right-click to exit.'
+            $this.Icon.BalloonTipText = 'DONUT is still running here. Right-click to exit.'
             $this.Icon.ShowBalloonTip(3000)
         }
         catch { }

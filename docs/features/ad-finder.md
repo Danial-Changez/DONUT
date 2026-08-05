@@ -33,8 +33,8 @@ to add machines by name, paste a list (see [the machine list](./machine-list.md)
    survives being read aloud.
 3. Use **Copy** or **QR** beside the field to hand it over. Both stay disabled
    until a password exists.
-4. Leave **Require password change at next logon** checked unless you have a
-   reason not to, then click **Reset password**.
+4. Leave **Require Password Change at Next Logon** checked unless you have a
+   reason not to, then click **Reset Password**.
 
 Success keeps the card open — you still have to give the password to the person.
 Closing the card wipes it.

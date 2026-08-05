@@ -323,9 +323,9 @@ class MainPresenter {
                 $this.Logger.LogInfo("Global hotkey registered: $($gesture.Normalized)")
             }
             else {
-                $msg = "Hotkey $($gesture.Normalized) is unavailable (already in use) - pick another in Settings."
+                $msg = "Hotkey $($gesture.Normalized) is already in use. Pick another in Settings."
                 $this.Logger.LogWarning("$msg (Win32 error $($this.Hotkey.LastError))")
-                if ($this.ToastService) { $this.ToastService.ShowError('Global hotkey', $msg) }
+                if ($this.ToastService) { $this.ToastService.ShowError('Global Hotkey', $msg) }
             }
         }
         catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
@@ -371,7 +371,7 @@ class MainPresenter {
                 $why = if ($r.Reason) { [string]$r.Reason }
                 elseif (-not [ElevationContext]::IsElevated()) { 'DONUT is not running as administrator.' }
                 else { 'the task could not be registered.' }
-                $presenter.ToastService.ShowError('Startup task', "Could not update the startup task - $why")
+                $presenter.ToastService.ShowError('Startup Task', "Could not update the startup task: $why")
             }
         }.GetNewClosure()
 
@@ -391,8 +391,8 @@ class MainPresenter {
             # Windows has no un-elevate API, so turning it off can only apply from next launch.
             $this.Logger.LogInfo('Run-as-administrator turned off; it applies from the next launch.')
             if ($this.ToastService) {
-                $this.ToastService.ShowInfo('Run as administrator',
-                    'Turned off. DONUT will start without administrator rights next time you open it.')
+                $this.ToastService.ShowInfo('Run as Administrator',
+                    'Turned off. This takes effect the next time you open DONUT.')
             }
             return
         }
@@ -409,10 +409,10 @@ class MainPresenter {
         if (-not $dialogs) { return $false }
 
         $answer = $dialogs.ShowRememberableConfirmation(
-            'Administrator rights needed',
-            "$what needs administrator rights, because remote work runs as the DONUT process." +
-            "`n`nDONUT will restart, ask for elevation, and carry on where you left off.",
-            'Restart as administrator',
+            'Administrator Rights Needed',
+            "$what needs administrator rights." +
+            "`n`nDONUT will restart, ask for permission, and carry on where you left off.",
+            'Restart as Administrator',
             'Always run DONUT as administrator')
         if (-not $answer.Confirmed) { return $false }
 
@@ -491,13 +491,15 @@ class MainPresenter {
         if ($declined) {
             $this.Logger.LogInfo('Elevation declined at the UAC prompt; staying de-elevated.')
             if ($this.ToastService) {
-                $this.ToastService.ShowInfo('Run as administrator', 'Elevation cancelled. DONUT is still running without administrator rights.')
+                $this.ToastService.ShowInfo('Run as Administrator',
+                    'Cancelled. DONUT is still running without administrator rights.')
             }
             return
         }
         $this.Logger.LogError("Could not relaunch DONUT elevated: $reason")
         if ($this.ToastService) {
-            $this.ToastService.ShowError('Run as administrator', "Could not relaunch elevated - $reason")
+            $this.ToastService.ShowError('Run as Administrator',
+                "Could not restart with administrator rights: $reason")
         }
     }
 
@@ -640,7 +642,7 @@ class MainPresenter {
     # Pops the QR overlay for a BitLocker recovery key (the Lens path keeps this
     # 2-arg shape, and the caption prefix and hint stay its own).
     [void] ShowQr([string]$payload, [string]$caption) {
-        $this.ShowQr($payload, "BitLocker recovery key - $caption",
+        $this.ShowQr($payload, "BitLocker Recovery Key - $caption",
             'Scan to read the recovery key, then close this.')
     }
 
@@ -651,7 +653,7 @@ class MainPresenter {
         $img = $this.BuildQrImage($payload)
         if ($null -eq $img) {
             if ($this.ToastService) {
-                $this.ToastService.ShowError($caption, "Couldn't render the QR code.")
+                $this.ToastService.ShowError($caption, "Could not render the QR code.")
             }
             return
         }
@@ -707,7 +709,7 @@ class MainPresenter {
         try {
             Set-Clipboard -Value $vm.Password
             if ($this.ToastService) {
-                $this.ToastService.ShowInfo('Reset password', 'Temporary password copied.')
+                $this.ToastService.ShowInfo('Reset Password', 'Temporary password copied.')
             }
         }
         catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
@@ -716,7 +718,7 @@ class MainPresenter {
     hidden [void] OnShowPasswordQr() {
         $vm = $this.ResetVm
         if ([string]::IsNullOrWhiteSpace($vm.Password)) { return }
-        $this.ShowQr($vm.Password, "Temporary password - $($vm.DisplayName)",
+        $this.ShowQr($vm.Password, "Temporary Password - $($vm.DisplayName)",
             'Scan to read the temporary password, then close this.')
     }
 
@@ -730,8 +732,8 @@ class MainPresenter {
             $box = $this.Window.FindName('resetPasswordBox')
             if ($box) { $box.Tag = 'error' }
             if ($this.ToastService) {
-                $this.ToastService.ShowWarning('Reset password',
-                    'Use at least 8 characters (or Generate one).')
+                $this.ToastService.ShowWarning('Reset Password',
+                    'Use at least 8 characters, or select Generate.')
             }
             return
         }
@@ -749,7 +751,7 @@ class MainPresenter {
                 ChangeAtLogon = [bool]$vm.ChangeAtLogon
             }, $onDone)
         if ($this.ToastService) {
-            $this.ToastService.ShowInfo('Reset password', "Resetting $($vm.TargetSam)...")
+            $this.ToastService.ShowInfo('Reset Password', "Resetting $($vm.TargetSam)...")
         }
     }
 
@@ -762,12 +764,12 @@ class MainPresenter {
         $last = @($result)[-1]
         if ($null -ne $last -and [bool]$last) {
             $flag = $(if ($vm.ChangeAtLogon) { ' Change required at next logon.' } else { '' })
-            $this.ToastService.ShowSuccess('Reset password',
+            $this.ToastService.ShowSuccess('Reset Password',
                 "Password reset for $($vm.TargetSam).$flag")
         }
         else {
-            $this.ToastService.ShowError('Reset password',
-                "Could not reset $($vm.TargetSam) - see the log for details.")
+            $this.ToastService.ShowError('Reset Password',
+                "Could not reset $($vm.TargetSam). Open the log for details.")
         }
     }
 

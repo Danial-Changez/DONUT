@@ -452,7 +452,7 @@ class InventoryPresenter {
 
         $this.DiskReports[$hostName.ToLowerInvariant()] = $report
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found the $($report.Folders.Count) largest folders on C:.") }
 
         # Apply regardless of selection: shows now if selected, ready if selected later.
         $row = $this.Home.GetRow($hostName)
@@ -469,15 +469,15 @@ class InventoryPresenter {
         if ($null -eq $row) { return }
         $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))
         if ($selected.Count -eq 0) {
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check one or more folders to clear first.") }
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check at least one folder to clear.") }
             return
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
         $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
-            "Clear folder contents on $hostName",
-            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? The folders are kept. This runs as SYSTEM and cannot be undone.",
+            "Clear Folder Contents on $hostName",
+            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}. The folders are kept. Runs as SYSTEM and cannot be undone.",
             $list, 'Clear', $true)
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
@@ -498,7 +498,7 @@ class InventoryPresenter {
         catch {
             $this.AppendLog($hostName, "Clear could not start: $_")
             $this.Logger.LogException("Folder clear failed to start for $hostName", $_)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start clearing folders.") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start the clear.") }
             $this.ShowJobProgress($hostName, $false, 0, $false)
         }
     }
@@ -510,13 +510,13 @@ class InventoryPresenter {
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Clear failed.")
             $this.ReflectFailure($hostName, $job.FailureMessage)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clearing folders failed. Open the log for details.") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clear failed. Open the log for details.") }
             return
         }
         $count = 0
         if ($job.Result -and $job.Result.Deleted) { $count = [int]$job.Result.Deleted }
         $this.AppendLog($hostName, "Cleared $count folder(s). Re-scanning...")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s) on $hostName.") }
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s).") }
         $this.FindBigFolders($hostName)
     }
 }

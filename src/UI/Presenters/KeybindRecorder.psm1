@@ -96,7 +96,7 @@ class KeybindRecorder {
         $this.Recording = $false
         $this.CapturedKey = $null
         $this.Current = if ($value) { $value } else { '' }
-        if ($this.RecordButton) { $this.RecordButton.Content = 'Record keybind' }
+        if ($this.RecordButton) { $this.RecordButton.Content = 'Record Keybind' }
         $this.UpdateDisplay()
         if ($this.OnCommit) { & $this.OnCommit $this.Current }
     }
@@ -105,7 +105,7 @@ class KeybindRecorder {
         if (-not $this.Recording) { return }
         $this.Recording = $false
         $this.CapturedKey = $null
-        if ($this.RecordButton) { $this.RecordButton.Content = 'Record keybind' }
+        if ($this.RecordButton) { $this.RecordButton.Content = 'Record Keybind' }
         $this.UpdateDisplay()   # restores the prior value (no commit)
     }
 

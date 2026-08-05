@@ -95,12 +95,13 @@ class DialogPresenter {
 
     [bool] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
         $this.Initialize()
-        $msg = "Current: $currentVer`nNew: $newVer`n`nWould you like to update now?"
+        $msg = "Current: $currentVer`nNew: $newVer`n`nUpdate now?"
         if ($isRollback) {
-            $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
+            $msg = "Current: $currentVer`nTarget: $newVer`n`n" +
+            "This rolls DONUT back to an older version. Continue?"
         }
-        $this.Window.DataContext = $this.NewVm("Updates detected", $msg, @(),
-            'Update now', 'Later')
+        $this.Window.DataContext = $this.NewVm("Update Available", $msg, @(),
+            'Update Now', 'Later')
         return $this.ShowModal()
     }
 

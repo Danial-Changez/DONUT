@@ -147,7 +147,7 @@ class StartupTaskService {
         $this.LastFailure = $reason
         $this.Logger.LogError("Startup task update failed: $reason")
         if ($this.Toast) {
-            $this.Toast.ShowError('Startup task', "Could not update the startup task - $reason")
+            $this.Toast.ShowError('Startup Task', "Could not update the startup task: $reason")
         }
         return $false
     }

@@ -17,6 +17,44 @@ anti-pattern warnings. Rationale for the calls below lives in
    label/value hierarchy, dialog anatomy, hit-target sizes. Sanity-check new
    surfaces against Fluent's metrics before review.
 
+## Writing UI text
+
+Two capitalization schemes, chosen by what the text *is*:
+
+| Scheme | Applies to | Example |
+|---|---|---|
+| **Title Case** | Buttons, menu items, headings, pane and section titles, tab and segment names, setting labels, dialog titles | `Clear Selected`, `Run All`, `Reveal Key`, `Close to Tray` |
+| **Sentence case** | Tooltips, hint and helper text, blank-slate copy, dialog message bodies, toasts | `Clears the folder contents and keeps the folder.` |
+
+Articles and short prepositions (of, to, in, with, for, as) stay lowercase in
+Title Case unless they lead or close the label, so `Start with Windows` is already
+correct. Proper nouns and acronyms keep their own casing (DONUT, BitLocker, SCCM,
+BIOS, DCU, QR, AD). Deliberate all-caps style tokens — a `SettingsSectionLabel`
+like `DIAGNOSTICS`, or a status badge — are a visual tier rather than prose, and
+are left alone.
+
+**Prefer the shortest label that stays unambiguous.** One word beats two when the
+meaning survives, but never at the cost of a collision with another control
+visible at the same time.
+
+### Tooltips
+
+A tooltip has to earn its place:
+
+- **Delete it** when it restates the control's own visible label. A button
+  labelled `Unlock` carries no `Unlock this account` tooltip.
+- **Keep it** on an icon-only control, where it is the only affordance, and keep
+  it to a few words.
+- **Keep it** when it says something the visible text does not: the full sentence
+  behind a status pill, the OS on a Lens device row, or why a disabled control is
+  gated (`ToolTipService.ShowOnDisabled`).
+- **Keep it** when bound to the same value as truncatable text. Those reveal
+  clipped content, and WPF cannot gate them
+  ([why](./decisions.md#tooltips-on-untrimmed-text-stay-unconditional)).
+
+Whatever survives is short. Prose that needs a sentence belongs in the surface
+itself, not in a tooltip.
+
 ## Rules applied so far
 
 | Surface | Pattern | The rule |
@@ -34,7 +72,7 @@ anti-pattern warnings. Rationale for the calls below lives in
 | Dialogs (`DialogWindow`) | Modal Windows | One shared modal for confirm/alert/update. X + Esc, no minimize. Action-specific primary label ("Clear"/"Apply", never "Confirm"), 5-arg `ShowConfirmation` at every call site. Tint variants, not solid fills; `ButtonTintDestructive` for irreversible actions (folder clears, both apply confirms). The presenter builds the VM (resolving `PrimaryStyle`); the view binds it — no `FindName` style-poking. |
 | Truncatable text | Progressive Disclosure | Ellipsis (TextBlocks) or clip (`SelectableText` TextBoxes) + a tooltip bound to the same value. Copy-valuable values stay `SelectableText`. Same-value tooltips stay unconditional — WPF cannot gate them ([why](./decisions.md#tooltips-on-untrimmed-text-stay-unconditional)). A tooltip that adds nothing to a labelled button is banned. |
 | Title bar | Reduction | One 36px control bar: wordmark left at the content column's 25px inset, passive (`IsHitTestVisible=False`) so the bar stays the DragMove surface; window controls dock right. |
-| Temp-password overlay | Modal + Input Prompt/Feedback + Good Defaults | Standard overlay anatomy (48px header, title names the target, flush corner X). UPN/SAM as two `Card` tiles (person-fields pairing); password field watermarked mono with `Tag='error'` feedback under 8 chars (watermark clears on **focus**); Copy/QR disabled until a password exists; change-at-logon pre-checked. Generate left, `ButtonTintDestructive` "Reset password" right; no Close button. Success keeps the card open; closing wipes the secret. |
+| Temp-password overlay | Modal + Input Prompt/Feedback + Good Defaults | Standard overlay anatomy (48px header, title names the target, flush corner X). UPN/SAM as two `Card` tiles (person-fields pairing); password field watermarked mono with `Tag='error'` feedback under 8 chars (watermark clears on **focus**); Copy/QR disabled until a password exists; change-at-logon pre-checked. Generate left, `ButtonTintDestructive` "Reset Password" right; no Close button. Success keeps the card open; closing wipes the secret. |
 | QR overlay (BitLocker) | *(hardware constraint)* | Inverted by choice: violet modules on the dark card, 12px quiet zone. Field-gated on the hardware scanner — if it fails the scan test, revert to dark-on-light (`QrModule*` keys), don't tweak colours. |
 | Lens device card | *(no catalogue entry)* | Two lines, three tiers: model in `TitleTextPrimary` (it separates the machines), `Tag <service tag>` mono, last-seen sans, both tertiary. OS lives in the row tooltip. Collapsing separators so a missing value leaves no orphaned dot. |
 | Elevation state | Status Feedback | A standing amber `LIMITED` badge (`BadgeAmber` recipe) beside the wordmark, full sentence in the tooltip. Driven by `ElevationContext::IsElevated()`, never by `runAsAdmin` — the badge reports what the process actually got. |
@@ -50,7 +88,7 @@ hands `HostViewModel` frozen brushes — no hexes live outside `src/UI/Styles`.
   and the primary CTA earn colour because it encodes something.
 - **Decorative tints are the anti-pattern.** Secondary/utility actions use the
   neutral `ButtonSecondary` (or `ButtonOutline`/`ButtonGhost`) so they read as
-  subordinate — detail-pane header buttons, the Lens card's `Reveal key`/`QR`.
+  subordinate — detail-pane header buttons, the Lens card's `Reveal Key`/`QR`.
 - **Chrome is neutral.** Window and popup borders are the `PanelBorder` hairline.
 
 ## Popup chrome contract
@@ -71,7 +109,7 @@ reset) — shares one chrome:
   secondary. A dismiss-only "Close" button is banned: X + Esc (+ backdrop on
   overlays) already dismiss.
 - **One tint per row, marking the row's primary action** (`Run` =
-  `ButtonTintSuccess`, `Add`/`Unlock` = `ButtonTintPrimary`, `Clear selected` =
+  `ButtonTintSuccess`, `Add`/`Unlock` = `ButtonTintPrimary`, `Clear Selected` =
   `ButtonTintDestructive`). The `ButtonTint*` family **is** the CTA tier; the old
   solid `ButtonPrimary`/`ButtonDestructive` styles were removed.
 - **Overlay Esc discipline:** an overlay's Esc `KeyBinding` only fires if focus is

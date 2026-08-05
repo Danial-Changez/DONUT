@@ -12,7 +12,6 @@
   </Border.Resources>
   <!-- Three modes, switched by HomeVm.DetailMode: Empty hint / Machine detail / user Lens. -->
   <Grid Margin="14,12,14,12">
-    <!-- Empty state -->
     <TextBlock x:Name="DetailEmptyHint"
                Text="Select a machine, or search a person to open their Lens."
                Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="14"
@@ -29,7 +28,6 @@
       </TextBlock.Style>
     </TextBlock>
 
-    <!-- Content (shown when a machine is selected) -->
     <Grid x:Name="DetailContent">
       <Grid.Style>
         <Style TargetType="Grid">
@@ -43,15 +41,12 @@
       </Grid.Style>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
-        <!-- Cards + terminal are 1:1 (half/half) at the default window size; once the window
-             grows tall the cards row hits its MaxHeight and the terminal (still '*') takes all
-             the extra, so the terminal is favoured while the cards stretch to ~3-4 update
-             cards / a full folder list before capping. -->
+        <!-- MaxHeight caps the cards row so a taller window grows the terminal instead. -->
         <RowDefinition Height="*" MaxHeight="400" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- Header: host + actions. Live job progress shows on the terminal's bar below. -->
+      <!-- Job progress lives on the terminal's bar below, never in this header. -->
       <Grid Grid.Row="0" Margin="0,0,0,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
@@ -63,23 +58,20 @@
           <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
                    ToolTip="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18"
                    FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
-          <!-- IP only - probe freshness already shows on the machine card (Reduction). -->
+          <!-- IP only, since probe freshness already shows on the machine card. -->
           <TextBox x:Name="txtDetailIp" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailIp}"
                    ToolTip="{Binding SelectedMachine.DetailIp}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
         </StackPanel>
-        <!-- Neutral secondary variant (not a coloured tint): these are utility actions
-             subordinate to Run, so colour stays reserved for status + the primary action. -->
-        <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage scan"
+        <!-- Utility actions subordinate to Run, so colour stays with status and the primary. -->
+        <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage"
                 Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Width="124" Height="32" Margin="6,0,0,0" />
-        <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh info"
+        <Button x:Name="btnDetailRefresh" Grid.Column="2" Content="Refresh"
                 Style="{DynamicResource ButtonSecondary}" FontSize="12.5" Width="110" Height="32" Margin="6,0,0,0" />
       </Grid>
 
-      <!-- Row 1: available updates (left) + largest folders (right), side by side so a
-           machine's pending updates and disk usage are visible together. Each card is
-           populated independently (updates by a scan, folders by the Storage scan button),
-           scrolls on its own, and shows a hint until it has data. -->
+      <!-- Updates and disk usage sit side by side so both read at once. Each card fills
+           from its own scan, scrolls on its own, and shows a hint until it has data. -->
       <Grid Grid.Row="1" Margin="0,0,0,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="1.25*" />
@@ -87,8 +79,7 @@
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-      <!-- Available updates (populated after an apply-updates scan). Display-only; the
-           apply is gated by a separate confirm dialog. -->
+      <!-- Display only, the apply is gated by a separate confirm dialog. -->
       <Border Grid.Column="0" CornerRadius="10" Padding="14,12"
               Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
         <Grid>
@@ -96,8 +87,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
-          <!-- Header: label + a compact identity pill (full verdict in its tooltip), so
-               the safety signal stays glanceable without a full sentence eating a row. -->
+          <!-- The pill keeps the identity verdict glanceable, full sentence in its tooltip. -->
           <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
@@ -147,9 +137,8 @@
               </TextBlock>
             </Border>
           </Grid>
-          <!-- Hint until an update scan has populated the list. -->
           <TextBlock Grid.Row="1" VerticalAlignment="Top"
-                     Text="Run a scan on this machine to list its available updates."
+                     Text="Run a scan to list this machine's updates."
                      Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                      TextWrapping="Wrap">
             <TextBlock.Style>
@@ -163,8 +152,6 @@
               </Style>
             </TextBlock.Style>
           </TextBlock>
-          <!-- Populated list, shown once a scan has landed (identity now lives in the
-               header pill, not a full-width sentence, to keep the card compact). -->
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                         Visibility="{Binding SelectedMachine.HasUpdates, Converter={StaticResource BoolToVis}}">
             <ItemsControl ItemsSource="{Binding SelectedMachine.Updates}">
@@ -177,7 +164,6 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                       </Grid.RowDefinitions>
-                      <!-- Line 1: update name + urgency badge -->
                       <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition Width="*" />
@@ -187,8 +173,7 @@
                                    FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TitleTextPrimary}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                    ToolTip="{Binding Name}" />
-                        <!-- Urgency badge: Urgent=red, Recommended=sky, Optional=muted (inline
-                             so its colour varies without a BasedOn chain). -->
+                        <!-- Inline style, not BasedOn, so the badge colour can vary per urgency. -->
                         <Border Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
                                 CornerRadius="8.4" Padding="8,0" Height="20" BorderThickness="1">
                           <Border.Style>
@@ -228,7 +213,6 @@
                           </TextBlock>
                         </Border>
                       </Grid>
-                      <!-- Line 2: category + version + NEW on the left; size pinned to the card's right edge -->
                       <Grid Grid.Row="1" Margin="0,4,0,0" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition Width="*" />
@@ -259,7 +243,7 @@
         </Grid>
       </Border>
 
-      <!-- Largest folders on C: (populated on demand by the "Storage scan" button) -->
+      <!-- Fills only when the Storage button runs, never as part of a normal scan. -->
       <Border Grid.Column="2" CornerRadius="10" Padding="14,12"
               Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
         <Grid>
@@ -268,8 +252,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
           </Grid.RowDefinitions>
-          <!-- Header: label + a destructive "Clear selected" action (shown once folders are
-               populated). Red is earned here - it permanently removes the folders' contents. -->
+          <!-- Red is earned here, the action permanently removes the folders' contents. -->
           <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
@@ -277,13 +260,13 @@
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="LARGEST FOLDERS ON C:" Style="{DynamicResource MicroLabel}"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
-            <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Clear selected"
+            <Button Grid.Column="1" x:Name="btnDeleteFolders" Content="Clear Selected"
                     Style="{DynamicResource ButtonTintDestructive}" FontSize="11" Height="26" Padding="10,0"
                     Visibility="{Binding SelectedMachine.HasFolders, Converter={StaticResource BoolToVis}}"
-                    ToolTip="Permanently clear the contents of the checked folders (the folders are kept)" />
+                    ToolTip="Permanently empties the checked folders (the folders stay)" />
           </Grid>
           <TextBlock Grid.Row="1"
-                     Text="Click &quot;Storage scan&quot; to scan this machine's C: drive."
+                     Text="Click &quot;Storage&quot; to fill this list."
                      Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                      TextWrapping="Wrap">
             <TextBlock.Style>
@@ -305,19 +288,15 @@
                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <TreeView.ItemTemplate>
-                <!-- One folder row: relative label left (root rows brighter), formatted
-                     size right; children nest via the template. -->
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                   <Grid Margin="0,0,0,2">
                     <Grid.ColumnDefinitions>
-                      <!-- Auto, not fixed: a hidden checkbox collapses to 0 so protected rows
-                           sit flush against the expander instead of reserving empty space. -->
+                      <!-- Auto, not fixed: a hidden checkbox collapses to 0 so protected rows sit flush. -->
                       <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="*" />
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <!-- Clear checkbox (themed ModernCheckBox - violet when ticked): only on
-                         clearable folders; two-way bound so the presenter reads the selection. -->
+                    <!-- Shown only on clearable folders, two-way bound so the presenter reads it. -->
                     <CheckBox Grid.Column="0" Style="{DynamicResource ModernCheckBox}" Margin="0,0,3,0"
                               IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                               Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
@@ -325,9 +304,7 @@
                     <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
                       <TextBox.Style>
-                        <!-- Selectable (mirrors SelectableText), with root rows brighter.
-                             Inlined rather than BasedOn: the codebase resolves styles via
-                             DynamicResource, and BasedOn only takes StaticResource. -->
+                        <!-- Inlined rather than BasedOn on SelectableText, which needs StaticResource. -->
                         <Style TargetType="TextBox">
                           <Setter Property="IsReadOnly" Value="True" />
                           <Setter Property="IsReadOnlyCaretVisible" Value="False" />
@@ -364,7 +341,6 @@
       </Border>
       </Grid>
 
-      <!-- Live job log -->
       <Border Grid.Row="2" CornerRadius="10" Background="{DynamicResource TerminalBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
         <Grid>
           <Grid.RowDefinitions>
@@ -374,7 +350,6 @@
           <ProgressBar x:Name="DetailProgress" Grid.Row="0" Height="3" Minimum="0" Maximum="100"
                        Style="{DynamicResource ThinProgressBar}"
                        Visibility="Collapsed" Background="Transparent">
-            <!-- Arcane dash-meter fill: primary -> violet gradient -->
             <ProgressBar.Foreground>
               <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                 <GradientStop Color="{DynamicResource PrimaryColor}" Offset="0" />
@@ -382,10 +357,8 @@
               </LinearGradientBrush>
             </ProgressBar.Foreground>
           </ProgressBar>
-          <!-- Wrap + no horizontal scrollbar: the themed ScrollBar template is
-               vertical-only, so a horizontal bar renders as a stray white box.
-               A virtualized ListBox of LogLine items (chromeless, so it reads as the
-               same terminal): per-line severity color without realizing 2000 visuals. -->
+          <!-- No horizontal scrollbar: the themed ScrollBar template is vertical only, so one
+               would render as a stray white box. Virtualized so 2000 lines stay cheap. -->
           <ListBox x:Name="lstDetailLog" Grid.Row="1" Background="Transparent" BorderThickness="0"
                    Grid.IsSharedSizeScope="True"
                    FontFamily="{DynamicResource FontMono}" FontSize="12" Margin="6" IsTabStop="False"
@@ -412,13 +385,10 @@
             </ListBox.ItemContainerStyle>
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <!-- Two cells, not two Runs: a wrapped line used to reflow under the stamp.
-                     The Auto column reserves the gutter so continuations hang beside it. -->
+                <!-- Two cells, not two Runs: a wrapped line used to reflow under the stamp. -->
                 <Grid>
                   <Grid.ColumnDefinitions>
-                    <!-- Auto sizes to the stamp itself, so the gap stays exactly the one
-                         space StampText carries; the shared group keeps unstamped
-                         separator lines from collapsing it and breaking the column. -->
+                    <!-- Shared group: unstamped separator lines must not collapse the column. -->
                     <ColumnDefinition Width="Auto" SharedSizeGroup="LogStamp" />
                     <ColumnDefinition Width="*" />
                   </Grid.ColumnDefinitions>
@@ -446,10 +416,8 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <!-- Per-line rendering costs cross-line drag-selection; Copy replaces it. Glyph
-               only (the reset overlay's idiom) so it takes less of the log it floats over. -->
-          <!-- Right inset 20 keeps the pad clear of the 7px scrollbar riding the
-               list's edge (list margin 6 + bar 7 = a 13px band from the border). -->
+          <!-- Per-line rendering costs cross-line drag-selection, so Copy replaces it. -->
+          <!-- Right inset 20 clears the 7px scrollbar riding the list's edge. -->
           <Button x:Name="btnCopyLog" Grid.Row="1" Panel.ZIndex="1"
                   HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,20,0"
                   Style="{DynamicResource ButtonSecondary}" Width="28" Height="24" Padding="0"
@@ -462,8 +430,7 @@
       </Border>
     </Grid>
 
-    <!-- ===== User Lens: composed from Home/LensPane.xaml (its Person-mode
-         visibility trigger travels on the LensPanel root inside that file). ===== -->
+    <!-- User Lens from Home/LensPane.xaml, whose root owns the Person-mode trigger. -->
     <ContentControl x:Name="slotLens" Focusable="False" IsTabStop="False" />
   </Grid>
 </Border>

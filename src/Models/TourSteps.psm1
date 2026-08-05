@@ -4,9 +4,9 @@
 
 .DESCRIPTION
     Each step is one idea, spotlighting one UI element (TargetKey) with a callout. The
-    presenter maps TargetKey to a live control and positions the spotlight + callout;
-    an empty TargetKey is a centered card (the welcome). Kept short (6 steps) per the
-    Guided Tour pattern - one concept each, always escapable so it never overwhelms.
+    presenter maps TargetKey to a live control and positions the spotlight and callout,
+    and an empty TargetKey is a centered card (the welcome). Six steps per the Guided
+    Tour pattern, one concept each, always escapable so it never overwhelms.
 
 .NOTES
     Pure content/data so it can be unit-tested headless; no WPF here.
@@ -23,37 +23,37 @@ class TourSteps {
         return @(
             [TourStep]@{
                 Title     = 'Welcome to DONUT'
-                Body      = "DONUT runs Dell Command Update on your machines, remotely. Here's a 30-second tour of the essentials - skip anytime with Esc."
+                Body      = 'DONUT runs Dell Command Update on your machines remotely. This tour covers the essentials, and Esc skips it anytime.'
                 TargetKey = ''
                 Placement = 'center'
             }
             [TourStep]@{
-                Title     = 'Add machines - or find a person'
-                Body      = 'Search a machine and press Enter - the top match is added to the list (paste several names to add them all). Search a person instead and their Lens opens: their devices with model, service tag and BitLocker key, so you can tell three similar laptops apart.'
+                Title     = 'Add Machines, or Find a Person'
+                Body      = 'Search a machine and press Enter to add the top match, or paste several names at once. Search a person instead to open their Lens, with each device''s model, service tag and BitLocker key.'
                 TargetKey = 'search'
                 Placement = 'below'
             }
             [TourStep]@{
-                Title     = 'Pick a mode, then Run'
-                Body      = 'This button cycles between Scan and Apply. Pick one, then Run a single machine or Run all for the whole list.'
+                Title     = 'Pick a Mode, Then Run'
+                Body      = 'This pill switches between Scan and Apply. Pick one, then Run a single machine or Run All for the whole list.'
                 TargetKey = 'mode'
                 Placement = 'below'
             }
             [TourStep]@{
-                Title     = 'Your machines, by status'
-                Body      = "Machines you add live here, grouped worst-first - anything needing attention (failed or reboot-needed) rises to the top. Clear removes the settled ones."
+                Title     = 'Your Machines, by Status'
+                Body      = 'Machines live here, worst first, so anything failed or needing a reboot rises to the top. Clear removes the ones that are not running.'
                 TargetKey = 'list'
                 Placement = 'right'
             }
             [TourStep]@{
-                Title     = 'Inspect a machine'
-                Body      = 'Select a machine to open its detail pane - inventory, the available updates a scan found, a live log, and an on-demand storage scan of its biggest folders.'
+                Title     = 'Inspect a Machine'
+                Body      = 'Select a machine for its inventory, the updates a scan found, a live log, and Storage for its biggest folders.'
                 TargetKey = 'detail'
                 Placement = 'left'
             }
             [TourStep]@{
-                Title     = 'Settings & admin rights'
-                Body      = 'The gear opens Settings - shortcuts, startup and Run as administrator, saved as you change them. Remote work needs administrator rights: if the title bar reads LIMITED, the first fleet action asks once and restarts DONUT elevated. The page icon opens the docs, and the ? replays this tour.'
+                Title     = 'Settings and Admin Rights'
+                Body      = 'The gear opens Settings, saved as you change them. Remote work needs administrator rights, so if the title bar reads LIMITED the first fleet action asks once and restarts DONUT. The page icon opens the docs, and ? replays this tour.'
                 TargetKey = 'settings'
                 Placement = 'below'
             }

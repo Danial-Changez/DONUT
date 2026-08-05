@@ -1,17 +1,11 @@
-<!-- App icons, sourced from Lucide (https://lucide.dev) - the library the Arcane/shadcn
-     look derives from. Lucide icons are 24x24 STROKE outlines, so consumers render them
-     with Stroke (the lucideIcon style below), never Fill - a filled outline skeleton is
-     how an icon ends up looking broken. Round caps are load-bearing: Lucide draws dots
-     (the ?'s point, the QR pips) as .01-length strokes that only exist via their caps.
-
-     Adding an icon: download the SVG (https://unpkg.com/lucide-static/icons/<name>.svg)
-     and run tools\Convert-LucideIcon.ps1 -Path <name>.svg -Key <Key>; paste the line
-     here. The comment after each key names its Lucide source icon. -->
+<!-- App icons from Lucide (https://lucide.dev), which are 24x24 stroke outlines:
+     - Set Stroke and never Fill, or the outline skeleton comes out solid.
+     - Round caps are load-bearing, Lucide draws dots as .01 length strokes.
+     - Add one with tools\Convert-LucideIcon.ps1. A key's trailing comment names
+       its Lucide source icon where that differs from the key. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Base look for a Lucide Path. Consumers set Stroke (or inherit it from a
-         wrapping style), Width/Height, and scale StrokeThickness with size:
-         Lucide's native weight is 2/24, so thickness = Width / 12. -->
+    <!-- Consumers set Stroke and size, and scale StrokeThickness as Width / 12. -->
     <Style x:Key="lucideIcon"
            TargetType="Path">
         <Setter Property="Stretch"
@@ -33,13 +27,11 @@
     <Geometry x:Key="xMark">M18 6 6 18 M6,6 l12,12</Geometry>
     <!-- x -->
     <Geometry x:Key="Square">M5,3 h14 a2,2 0 0 1 2,2 v14 a2,2 0 0 1 -2,2 h-14 a2,2 0 0 1 -2,-2 v-14 a2,2 0 0 1 2,-2 z</Geometry>
-    <!-- square -->
     <Geometry x:Key="Minimize">M5 12h14</Geometry>
     <!-- minus -->
     <Geometry x:Key="Config">M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915 M9,12 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0</Geometry>
     <!-- settings -->
     <Geometry x:Key="Search">M21,21 l-4.34,-4.34 M3,11 a8,8 0 1 0 16,0 a8,8 0 1 0 -16,0</Geometry>
-    <!-- search -->
     <Geometry x:Key="Help">M2,12 a10,10 0 1 0 20,0 a10,10 0 1 0 -20,0 M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3 M12 17h.01</Geometry>
     <!-- circle-help -->
     <Geometry x:Key="File">M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z M14 2v5a1 1 0 0 0 1 1h5 M10 9H8 M16 13H8 M16 17H8</Geometry>
@@ -47,7 +39,5 @@
     <Geometry x:Key="Warning">M21.73,18 l-8,-14 a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3 M12 9v4 M12 17h.01</Geometry>
     <!-- triangle-alert -->
     <Geometry x:Key="Copy">M10,8 h10 a2,2 0 0 1 2,2 v10 a2,2 0 0 1 -2,2 h-10 a2,2 0 0 1 -2,-2 v-10 a2,2 0 0 1 2,-2 z M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2</Geometry>
-    <!-- copy -->
     <Geometry x:Key="QrCode">M4,3 h3 a1,1 0 0 1 1,1 v3 a1,1 0 0 1 -1,1 h-3 a1,1 0 0 1 -1,-1 v-3 a1,1 0 0 1 1,-1 z M17,3 h3 a1,1 0 0 1 1,1 v3 a1,1 0 0 1 -1,1 h-3 a1,1 0 0 1 -1,-1 v-3 a1,1 0 0 1 1,-1 z M4,16 h3 a1,1 0 0 1 1,1 v3 a1,1 0 0 1 -1,1 h-3 a1,1 0 0 1 -1,-1 v-3 a1,1 0 0 1 1,-1 z M21 16h-3a2 2 0 0 0-2 2v3 M21 21v.01 M12 7v3a2 2 0 0 1-2 2H7 M3 12h.01 M12 3h.01 M12 16v.01 M16 12h1 M21 12v.01 M12 21v-1</Geometry>
-    <!-- qr-code -->
 </ResourceDictionary>

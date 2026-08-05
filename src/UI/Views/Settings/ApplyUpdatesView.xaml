@@ -1,11 +1,10 @@
-<!-- Apply Updates option form: Arcane sub-cards. Control x:Names are the dcu-cli arg
-     keys the SettingsPresenter binder reads/writes; multi-select chips keep their Content. -->
+<!-- Apply Updates option form. The x:Names are the dcu-cli arg keys the SettingsPresenter
+     binder reads and writes, and each chip's Content is the arg value it stores. -->
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <StackPanel.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </StackPanel.Resources>
-    <!-- Flags -->
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
@@ -25,8 +24,7 @@
                 <TextBlock Text="Reboot"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
-            <!-- Warning shown only when Reboot is on (pure-XAML via the converter),
-                 as the themed amber status badge rather than a hand-rolled row. -->
+            <!-- Bound to the toggle, so the warning stays pure XAML with no code behind. -->
             <Border Style="{DynamicResource BadgeAmber}"
                     Height="Auto"
                     Padding="8,4"
@@ -41,7 +39,7 @@
                           Height="11"
                           StrokeThickness="0.92"
                           VerticalAlignment="Center" />
-                    <TextBlock Text="This restarts the target machine(s) automatically."
+                    <TextBlock Text="Restarts the target machines automatically."
                                Style="{DynamicResource BadgeAmberText}"
                                TextWrapping="Wrap"
                                Margin="6,0,0,0" />
@@ -51,18 +49,17 @@
                         Margin="0,0,0,10">
                 <ToggleButton x:Name="autoSuspendBitLocker"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Auto suspend BitLocker"
+                <TextBlock Text="Auto Suspend BitLocker"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="forceupdate"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Force update"
+                <TextBlock Text="Force Update"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>
     </Border>
-    <!-- Update options (multi-select chips) -->
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
@@ -92,7 +89,7 @@
                 </WrapPanel>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Device category"
+                <TextBlock Text="Device Category"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,8" />
                 <WrapPanel x:Name="updateDeviceCategory">
@@ -107,41 +104,40 @@
             </StackPanel>
         </StackPanel>
     </Border>
-    <!-- Text options -->
     <Border Style="{DynamicResource Card}">
         <StackPanel>
             <TextBlock Text="TEXT OPTIONS"
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Output log"
+                <TextBlock Text="Output Log"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="outputLog"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Catalog location"
+                <TextBlock Text="Catalog Location"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="catalogLocation"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Encrypted password"
+                <TextBlock Text="Encrypted Password"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptedPassword"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel Margin="0,0,0,10">
-                <TextBlock Text="Encrypted password file"
+                <TextBlock Text="Encrypted Password File"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptedPasswordFile"
                          Style="{DynamicResource ModernTextBox}" />
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Encryption key"
+                <TextBlock Text="Encryption Key"
                            Style="{DynamicResource SettingsFieldLabel}"
                            Margin="0,0,0,4" />
                 <TextBox x:Name="encryptionKey"

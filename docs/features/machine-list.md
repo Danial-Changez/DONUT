@@ -16,7 +16,7 @@ The Home list is DONUT's center: one row per machine, newest action first.
 
 - The **mode pill** shows the active command (**Scan** or **Apply Updates**); click
   it to cycle.
-- **Run** on a row runs the active command on that host. **Run all** runs it on
+- **Run** on a row runs the active command on that host. **Run All** runs it on
   every idle machine (Apply asks once to confirm).
 - Rows move to the top when you act on them, so current work stays visible.
 
@@ -24,7 +24,7 @@ The Home list is DONUT's center: one row per machine, newest action first.
 
 The list groups itself worst-first: machines needing attention (failed runs or a
 required reboot), then running, online, offline, and not-yet-known — alphabetical
-within each group. **Clear** removes settled rows in one click; each row's ✕
+within each group. **Clear** removes every machine that is not running; each row's ✕
 removes just that machine.
 
 ## Status stays live

@@ -99,6 +99,14 @@ scoped to the public API:
 `GenerateDocumentationFile` is intentionally off: the docs are for readers, not a
 published API surface, so CS1591 is not a build gate.
 
+## XAML (`src/UI/`)
+
+The same rule, measured across a whole `<!-- -->` span: one line, and two only for
+a file header or a comment introducing an element or a section of a resource
+dictionary. A comment restating a style's own `x:Key` earns nothing — delete it.
+The user-facing text those files carry has its own rules in
+[UI reference](./ui-reference.md#writing-ui-text).
+
 ## Formatting (automated)
 
 The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's
@@ -124,10 +132,11 @@ Document** produces identical output.
 ## Linting
 
 `tools/Invoke-Lint.ps1` runs PSScriptAnalyzer with the repo settings over `src/`,
-then sweeps **every** PowerShell and C# file in the repo for the comment-length
-rule above. PSScriptAnalyzer has no such rule and cannot parse C# at all, so
-nothing else would catch it. Run it (and `Invoke-Format.ps1 -Check`) before
-committing; new findings are fixed, not suppressed.
+then sweeps **every** PowerShell, C#, web, and XAML file in the repo for the
+comment-length rule above. PSScriptAnalyzer has no such rule and cannot parse the
+other languages at all, so nothing else would catch it. Run it (and
+`Invoke-Format.ps1 -Check`) before committing; new findings are fixed, not
+suppressed.
 
 The comment sweep starts clean and gates unconditionally, so any hit is something
 you just added. The `Invoke-StyleCheckForChange` hook applies the same rule per

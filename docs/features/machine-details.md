@@ -28,7 +28,7 @@ ticket or a teammate.
 
 ## Storage scan (biggest folders)
 
-**Storage scan** lists the largest folders on the target's `C:` drive as an
+**Storage** lists the largest folders on the target's `C:` drive as an
 expandable tree with sizes. Useful before pushing large updates to a nearly-full
 disk.
 
@@ -37,7 +37,7 @@ disk.
 1. Tick the checkbox on each folder you want to reclaim. Checking a parent checks
    every clearable folder under it; unchecking a child spares that child and keeps
    its siblings ticked.
-2. Click **Clear selected** in the card header.
+2. Click **Clear Selected** in the card header.
 3. Review the confirmation dialog — it lists the folders and their combined size.
 4. Confirm. When it finishes, the storage scan re-runs so the tree reflects the
    freed space.

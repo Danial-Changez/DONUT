@@ -327,7 +327,7 @@ class HomePresenter : AsyncJobPresenter {
             }
             else {
                 $this.Detail.AppendLog($hostName, "Machine is offline - queued run skipped.", [LogSeverity]::Warn)
-                if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - run skipped.") }
+                if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Offline, so the run was skipped.") }
             }
         }
     }
@@ -337,7 +337,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.PendingRuns.ContainsKey($hostName)) {
             $this.PendingRuns.Remove($hostName)
             $this.Detail.AppendLog($hostName, "Run not started: could not verify reachability (resolve failed).")
-            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Run not started - could not verify $hostName is reachable.") }
+            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Run not started. Could not verify the machine is reachable.") }
         }
     }
 
@@ -432,8 +432,8 @@ class HomePresenter : AsyncJobPresenter {
         if ($command -eq 'applyUpdates') {
             # Applies are irreversible (BIOS/firmware), so the modal is destructive-tinted.
             $confirmed = $this.DialogPresenter.ShowConfirmation(
-                "Apply updates",
-                "You are about to apply updates to $($idleHosts.Count) machine(s).",
+                "Apply Updates",
+                "Apply updates to $($idleHosts.Count) machine(s). BIOS and firmware installs cannot be rolled back.",
                 $idleHosts, 'Apply', $true
             )
             if (-not $confirmed) { return }
@@ -491,7 +491,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.IsRunning($hostName)) {
             # A storage scan also holds the row busy, and a silent return reads as a dead button.
             $this.Detail.AppendLog($hostName, "A job is already running for $hostName - wait for it to finish.")
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Already running - wait for the current job to finish.") }
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Already running. Wait for the current job to finish.") }
             return
         }
 
@@ -532,7 +532,7 @@ class HomePresenter : AsyncJobPresenter {
         $reach = $this.Resolver.IsHostOnline($hostName)
         if ($reach -eq 'Offline') {
             $this.Detail.AppendLog($hostName, "Machine is offline - skipping $command.", [LogSeverity]::Warn)
-            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "$hostName is offline - skipped.") }
+            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Offline, so the run was skipped.") }
             if ($row) { $row.SetReachability('Offline') }
             return
         }
@@ -560,7 +560,7 @@ class HomePresenter : AsyncJobPresenter {
             }
             else {
                 $this.Detail.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
-                if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age - results are current.") }
+                if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age, so the results are current.") }
             }
             return
         }
@@ -741,10 +741,10 @@ class HomePresenter : AsyncJobPresenter {
             $this.CheckForManualReboot($job)
             if ($this.Toasts) {
                 if ($this.ManualRebootQueue.Contains($job.HostName)) {
-                    $this.Toasts.ShowWarning($job.HostName, "Updates applied - manual reboot required.")
+                    $this.Toasts.ShowWarning($job.HostName, "Updates applied. A manual reboot is required.")
                 }
                 else {
-                    $this.Toasts.ShowSuccess($job.HostName, "Updates applied successfully.")
+                    $this.Toasts.ShowSuccess($job.HostName, "Updates applied.")
                 }
             }
         }
@@ -835,7 +835,7 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.Resolver.IdentityVerdict($hostName) -ne 'Mismatch') { return $false }
         $actual = $this.Resolver.GetVerifiedName($hostName)
         $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.", [LogSeverity]::Warn)
-        if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply aborted: address now answers as '$actual'. Re-select and retry.") }
+        if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. That address now answers as '$actual'. Re-select and retry.") }
         $this.Resolution.InvalidateResolved($hostName)
         return $true
     }
@@ -867,8 +867,8 @@ class HomePresenter : AsyncJobPresenter {
 
         # Single run: one small confirm (the list itself lives in the pane, not the dialog).
         $this.Detail.AppendLog($hostName, "Review the updates in the pane, then confirm.")
-        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply updates",
-            "Apply $($updateRows.Count) update(s) to ${hostName}? Review the list in the detail pane.",
+        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply Updates",
+            "Apply $($updateRows.Count) update(s) to ${hostName}, listed in the detail pane. BIOS and firmware installs cannot be rolled back.",
             @(), 'Apply', $true)
         if (-not $confirmed) {
             $this.Detail.AppendLog($hostName, "Cancelled by user.")
@@ -1066,7 +1066,7 @@ class HomePresenter : AsyncJobPresenter {
     [void] RemoveMachine([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName) -or -not $this.Rows.ContainsKey($hostName)) { return }
         if ($this.IsRunning($hostName)) {
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Still running - wait for the job to finish before removing.") }
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Still running. Wait for the job to finish before removing it.") }
             return
         }
         $this.RemoveRowCore($hostName)

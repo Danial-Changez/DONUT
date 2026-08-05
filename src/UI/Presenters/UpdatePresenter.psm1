@@ -137,7 +137,7 @@ class UpdatePresenter {
         catch {
             # Themed alert, not a raw MessageBox, so the failure matches the app's dialogs.
             $this.Logger.LogException("Update failed", $_)
-            $this.Dialog.ShowAlert('Update failed', "$_", @())
+            $this.Dialog.ShowAlert('Update Failed', "$_", @())
         }
     }
 }

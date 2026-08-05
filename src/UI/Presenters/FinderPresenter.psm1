@@ -501,7 +501,7 @@ class FinderPresenter {
         $stream.Clear()
         # Once per forest per session: an unreachable forest would otherwise nag per keystroke.
         if ($this.ForestsWarned.Add([string]$job.Domain) -and $this.Toasts) {
-            $this.Toasts.ShowWarning('Directory search',
+            $this.Toasts.ShowWarning('Directory Search',
                 "$($job.Domain) did not answer, so its people and machines are missing from these results.")
         }
         return $true
@@ -660,8 +660,8 @@ class FinderPresenter {
         else { [string]$r.UserPrincipalName }
 
         $confirmed = $this.DialogPresenter.ShowConfirmation(
-            "Unlock account",
-            "Unlock the locked-out account '$upn'?",
+            "Unlock Account",
+            "Unlock the locked-out account '$upn'.",
             @("$([string]$r.SamAccountName)  @  $([string]$r.Domain)"),
             'Unlock', $false
         )
@@ -679,7 +679,7 @@ class FinderPresenter {
         }
         catch {
             $this.Logger.LogException("Unlock could not start for $upn", $_)
-            if ($this.Toasts) { $this.Toasts.ShowError("Unlock failed", "Could not start unlock for $upn.") }
+            if ($this.Toasts) { $this.Toasts.ShowError("Unlock Failed", "Could not start the unlock for $upn.") }
         }
     }
 
@@ -695,8 +695,8 @@ class FinderPresenter {
             $this.DisposeJob($job.Ps)
             [void]$this.UnlockJobs.Remove($job)
             if ($this.Toasts) {
-                if ($ok) { $this.Toasts.ShowSuccess("Account unlocked", $job.Upn) }
-                else { $this.Toasts.ShowError("Unlock failed", "Could not unlock $($job.Upn) (check rights / connectivity).") }
+                if ($ok) { $this.Toasts.ShowSuccess("Account Unlocked", $job.Upn) }
+                else { $this.Toasts.ShowError("Unlock Failed", "Could not unlock $($job.Upn). Check your rights and connectivity.") }
             }
         }
         if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
@@ -862,7 +862,7 @@ class FinderPresenter {
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)
         $this.Home.UpdateEmptyHint()
-        if ($this.Toasts) { $this.Toasts.ShowInfo($wsid, "Added $wsid to the machine list.") }
+        if ($this.Toasts) { $this.Toasts.ShowInfo($wsid, "Added to the machine list.") }
     }
 
     [void] CloseSearchPopup() {

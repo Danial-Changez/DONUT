@@ -20,13 +20,13 @@ lets the target machine's DCU defaults apply.
 | Setting | What it does |
 |---|---|
 | Start with Windows | Launches DONUT hidden in the tray when you sign in — see [Tray, hotkey & autostart](./tray-hotkey-autostart.md) |
-| Close to tray | The window's X hides to the tray instead of exiting |
-| Run as administrator | On by default. Remote work needs administrator rights, so leave it on. Turning it **on** relaunches through a UAC prompt now; turning it **off** applies at the next launch. The switch shows what the running process actually is |
-| Global hotkey | Shows or restores DONUT from anywhere (default `Ctrl+Alt+D`) |
-| Settings shortcut | Toggles Settings open and closed while DONUT is focused (default `Ctrl+,`) |
-| Throttle limit | How many machines run at once (default 8) |
-| Folders to scan | How many largest folders the storage scan returns (default 12) |
-| Debug logging | Verbose breadcrumbs in `Donut.log`, off by default. Applies immediately, no restart |
+| Close to Tray | The window's X hides to the tray instead of exiting |
+| Run as Administrator | On by default. Remote work needs administrator rights, so leave it on. Turning it **on** relaunches through a UAC prompt now, and turning it **off** applies at the next launch. The switch shows what the running process actually is |
+| App Hotkey | Shows or restores DONUT from anywhere (default `Ctrl+Alt+D`) |
+| Settings Shortcut | Toggles Settings open and closed while DONUT is focused (default `Ctrl+,`) |
+| Throttle Limit | How many machines run at once (default 8) |
+| Folders to Scan | How many largest folders the storage scan returns (default 12) |
+| Debug Logging | Verbose breadcrumbs in `Donut.log`, off by default. Applies immediately, no restart |
 
 ## Recording a keybind
 

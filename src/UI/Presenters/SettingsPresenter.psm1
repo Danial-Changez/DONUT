@@ -312,7 +312,7 @@ class SettingsPresenter {
         }
         else {
             $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Throttle limit', 'Enter a whole number of 1 or more.') }
+            if ($this.Toast) { $this.Toast.ShowError('Throttle Limit', 'Enter a whole number, 1 or more.') }
         }
     }
 
@@ -326,7 +326,7 @@ class SettingsPresenter {
         }
         else {
             $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Folders to scan', 'Enter a whole number of 1 or more.') }
+            if ($this.Toast) { $this.Toast.ShowError('Folders to Scan', 'Enter a whole number, 1 or more.') }
         }
     }
 
@@ -350,7 +350,7 @@ class SettingsPresenter {
         }
         catch {
             $this.Logger.LogException('Config save failed', $_)
-            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
+            if ($this.Toast) { $this.Toast.ShowError('Save Failed', "$_") }
         }
     }
 

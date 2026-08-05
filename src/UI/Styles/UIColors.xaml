@@ -1,16 +1,14 @@
+<!-- Palette: Arcane-style zinc and violet, a shadcn-like dark theme. This file is the single
+     source for every colour, so views and code resolve keys and never literals. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Palette: Arcane-style zinc + violet (shadcn-like dark theme).
-         Near-black zinc backgrounds, zinc-900 cards, violet primary accent,
-         status colours kept for green/red/amber/sky. -->
     <!-- Primary/Secondary Background Colors -->
-    <!-- Arcane background = oklch(0.145 0 0) = #0A0A0A (true near-black) -->
+    <!-- Arcane background token oklch(0.145 0 0), a true near-black -->
     <Color x:Key="PrimaryBackgroundDarkColor"> #0A0A0A</Color>
     <Color x:Key="PrimaryBackgroundColor"> #0A0A0A</Color>
     <SolidColorBrush x:Key="PrimaryBackground"
                      Color="{StaticResource PrimaryBackgroundColor}" />
-    <!-- Window borders are the neutral PanelBorder hairline (the violet gradient ramp
-         was removed as ornament - colour stays reserved for status + primary actions). -->
+    <!-- Window borders use PanelBorder, colour stays reserved for status and actions. -->
     <!-- Button/Accent Colors. Status accents follow Arcane's dark recipe: the visible
          text/dot shade is the Tailwind 400 step (tints derive from the 500 step below). -->
     <Color x:Key="AccentPurpleColor"> #8E51FF</Color>
@@ -19,8 +17,7 @@
     <Color x:Key="AccentYellowColor"> #FBBF24</Color>
     <SolidColorBrush x:Key="AccentYellow"
                      Color="{StaticResource AccentYellowColor}" />
-    <!-- Amber-orange: a softer "attention" than red - used for the "unconfirmed"
-         connection-lost state (distinct from the yellow reboot-required). -->
+    <!-- A softer attention than red, used for the unconfirmed connection-lost state. -->
     <Color x:Key="AccentOrangeColor"> #FB923C</Color>
     <SolidColorBrush x:Key="AccentOrange"
                      Color="{StaticResource AccentOrangeColor}" />
@@ -39,13 +36,12 @@
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
-    <!-- QR: INVERTED by choice - violet-300 modules on a transparent background so the
-         code sits directly on the dark card (~10:1 vs #171717). Field-gated on the
-         hardware scanner reading inverted codes; if it fails, revert to dark-on-light
-         (modules #4C1D95, back #F5F3FF opaque) and restore the QrPlate border. -->
+    <!-- QR is inverted by choice, violet modules straight onto the dark card:
+         - Field-gated on the hardware scanner reading inverted codes.
+         - If that fails, use modules #4C1D95 on #F5F3FF and restore a plate border. -->
     <Color x:Key="QrModuleColor"> #C4B5FD</Color>
     <Color x:Key="QrModuleBackColor"> #00000000</Color>
-    <!-- Font Colors (Arcane neutral: foreground #FAFAFA, muted-foreground #A1A1A1) -->
+    <!-- Font Colors -->
     <Color x:Key="TitleTextPrimaryColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="TitleTextPrimary"
                      Color="{StaticResource TitleTextPrimaryColor}" />
@@ -58,8 +54,7 @@
     <Color x:Key="BodyTextPrimaryColor"> #A1A1A1</Color>
     <SolidColorBrush x:Key="BodyTextPrimary"
                      Color="{StaticResource BodyTextPrimaryColor}" />
-    <!-- Lightened from #737373 / #525252 to clear WCAG 1.4.3 (4.5:1) on the panels -
-         both were used for real content (subtitles, UPNs, device OS, stat subs). -->
+    <!-- Lightened from #737373 to clear WCAG 1.4.3 contrast on the panels. -->
     <Color x:Key="BodyTextSecondaryColor"> #9A9A9A</Color>
     <SolidColorBrush x:Key="BodyTextSecondary"
                      Color="{StaticResource BodyTextSecondaryColor}" />
@@ -69,8 +64,8 @@
     <Color x:Key="TerminalTextColor"> #D4D4D4</Color>
     <SolidColorBrush x:Key="TerminalText"
                      Color="{StaticResource TerminalTextColor}" />
-    <!-- Panel Colors. Arcane's card token is oklch(0.205 0 0)=#171717, rendered as
-         glass (bg-card/60 + blur over #0A0A0A); #121212 is that composite, solid. -->
+    <!-- Panel Colors -->
+    <!-- Arcane's glass card composited flat over the base background. -->
     <Color x:Key="PanelBackgroundColor"> #121212</Color>
     <SolidColorBrush x:Key="PanelBackground"
                      Color="{StaticResource PanelBackgroundColor}" />
@@ -78,7 +73,7 @@
     <Color x:Key="PanelBackgroundHoverColor"> #1E1E1E</Color>
     <SolidColorBrush x:Key="PanelBackgroundHover"
                      Color="{StaticResource PanelBackgroundHoverColor}" />
-    <!-- secondary oklch(0.274 0.006 286) = #27272A -->
+    <!-- secondary oklch(0.274 0.006 286) -->
     <Color x:Key="PanelBackgroundActiveColor"> #27272A</Color>
     <SolidColorBrush x:Key="PanelBackgroundActive"
                      Color="{StaticResource PanelBackgroundActiveColor}" />
@@ -90,24 +85,19 @@
     <Color x:Key="GroupBoxBackgroundColor"> #14FFFFFF</Color>
     <SolidColorBrush x:Key="GroupBoxBackground"
                      Color="{StaticResource GroupBoxBackgroundColor}" />
-    <!-- ============================================================
-         Arcane shadcn semantic tokens (dark theme, oklch -> sRGB).
-         Used by the button variant styles in ButtonStyles.xaml so the
-         button system matches Arcane exactly (primary = violet-600,
-         everything else neutral zinc/translucent). -->
-    <!-- primary oklch(0.541 0.281 293.009) = #8022FE (Arcane violet),
-         hover = primary/90 composited over the base background -->
+    <!-- Arcane shadcn tokens, oklch converted to sRGB, consumed by ButtonStyles.xaml. -->
+    <!-- primary oklch(0.541 0.281 293.009), hover is that at 90 percent over the base -->
     <Color x:Key="PrimaryColor"> #8022FE</Color>
     <SolidColorBrush x:Key="Primary"
                      Color="{StaticResource PrimaryColor}" />
     <Color x:Key="PrimaryHoverColor"> #7420E6</Color>
     <SolidColorBrush x:Key="PrimaryHover"
                      Color="{StaticResource PrimaryHoverColor}" />
-    <!-- primary-foreground oklch(0.969 0.016 293.756) = #F3EDFE -->
+    <!-- primary-foreground oklch(0.969 0.016 293.756) -->
     <Color x:Key="PrimaryForegroundColor"> #F3EDFE</Color>
     <SolidColorBrush x:Key="PrimaryForeground"
                      Color="{StaticResource PrimaryForegroundColor}" />
-    <!-- secondary #27272A / secondary-foreground #FAFAFA, hover = secondary/80 -->
+    <!-- Hover is the secondary token at 80 percent -->
     <Color x:Key="SecondaryColor"> #27272A</Color>
     <SolidColorBrush x:Key="Secondary"
                      Color="{StaticResource SecondaryColor}" />
@@ -117,16 +107,15 @@
     <Color x:Key="SecondaryForegroundColor"> #FAFAFA</Color>
     <SolidColorBrush x:Key="SecondaryForeground"
                      Color="{StaticResource SecondaryForegroundColor}" />
-    <!-- muted / accent oklch(0.269 0 0) = #262626 (surface accent) -->
+    <!-- muted and accent, oklch(0.269 0 0) -->
     <Color x:Key="SurfaceMutedColor"> #262626</Color>
     <SolidColorBrush x:Key="SurfaceMuted"
                      Color="{StaticResource SurfaceMutedColor}" />
-    <!-- Scrollbar thumb at rest: visible enough to be discoverable on near-black
-         (the old #27272A was nearly invisible); brightens further on hover/drag. -->
+    <!-- Bright enough to be discoverable at rest on near-black, the old #27272A was not. -->
     <Color x:Key="ScrollThumbColor"> #3F3F46</Color>
     <SolidColorBrush x:Key="ScrollThumb"
                      Color="{StaticResource ScrollThumbColor}" />
-    <!-- destructive oklch(0.704 0.191 22.216) ~= #FF6467 -->
+    <!-- destructive oklch(0.704 0.191 22.216) -->
     <Color x:Key="DestructiveColor"> #FF6467</Color>
     <SolidColorBrush x:Key="Destructive"
                      Color="{StaticResource DestructiveColor}" />
@@ -134,19 +123,13 @@
     <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
     <SolidColorBrush x:Key="InputBorder"
                      Color="{StaticResource InputBorderColor}" />
-    <!-- ============================================================
-         Font tokens. Arcane's UI face IS Montserrat; Geist Mono (embedded in
-         ./Fonts, OFL) covers code/log/technical text. Composite families fall
-         through per-glyph, so missing fonts degrade without breaking layout. -->
+    <!-- Font tokens. Geist Mono is embedded under ./Fonts (OFL) and covers code and logs.
+         Composite families fall through per glyph, so a missing font degrades quietly. -->
     <FontFamily x:Key="FontSans">Montserrat, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">./Fonts/#Geist Mono, Cascadia Mono, Consolas</FontFamily>
     <!-- Status glyphs (checkmarks, arrows) pin a symbol font so they never render as tofu. -->
     <FontFamily x:Key="FontSymbol">Segoe UI Symbol</FontFamily>
-    <!-- ============================================================
-         Arcane recipe tokens (extracted from getarcaneapp/arcane frontend).
-         Tint recipe (dark): fill = status-500 @10% (0x1A), border = @30% (0x4D);
-         hover lifts to @20% (0x33) / @40% (0x66). Visible text uses the 400
-         Accent* shades above. -->
+    <!-- Tints fill at 0x1A of the status-500 and border at 0x4D, text uses the 400 shade. -->
     <!-- Solid zinc surface: popovers, toasts, segmented-active -->
     <Color x:Key="SurfaceSolidColor"> #171717</Color>
     <SolidColorBrush x:Key="SurfaceSolid"
@@ -155,17 +138,13 @@
     <Color x:Key="InputFillColor"> #1FFFFFFF</Color>
     <SolidColorBrush x:Key="InputFill"
                      Color="{StaticResource InputFillColor}" />
-    <!-- Dim backdrop behind modal-style overlays -->
     <Color x:Key="DimBackdropColor"> #B0000000</Color>
     <SolidColorBrush x:Key="DimBackdrop"
                      Color="{StaticResource DimBackdropColor}" />
-    <!-- Terminal/log well -->
     <Color x:Key="TerminalBackgroundColor"> #0B0B0E</Color>
     <SolidColorBrush x:Key="TerminalBackground"
                      Color="{StaticResource TerminalBackgroundColor}" />
-    <!-- QR plate: stays LIGHT for scannability - never dark-theme this -->
-    <!-- List rows (Arcane table): hover = primary@10%, selected = primary@20%,
-         separator = white@4% (border/40 over the 10% hairline) -->
+    <!-- Rows tint with Primary, and the separator is the border hairline at 40 percent. -->
     <Color x:Key="RowHoverColor"> #1A8022FE</Color>
     <SolidColorBrush x:Key="RowHover"
                      Color="{StaticResource RowHoverColor}" />
@@ -219,12 +198,11 @@
     <Color x:Key="TintRedBorderHoverColor"> #66EF4444</Color>
     <SolidColorBrush x:Key="TintRedBorderHover"
                      Color="{StaticResource TintRedBorderHoverColor}" />
-    <!-- Focus ring: Arcane's ring/50 reads as a muted, darker violet (not solid
-         bright Primary). Primary @ 60% composites to a deep violet on inputs. -->
+    <!-- Muted rather than solid Primary, this is Primary at 60 percent over an input. -->
     <Color x:Key="FocusRingColor"> #998022FE</Color>
     <SolidColorBrush x:Key="FocusRing"
                      Color="{StaticResource FocusRingColor}" />
-    <!-- Sky (info tone, sky-500 #0EA5E9; text shade is AccentCyan = sky-400) -->
+    <!-- Sky info tone from sky-500, with AccentCyan as its text shade -->
     <Color x:Key="TintSkyColor"> #1A0EA5E9</Color>
     <SolidColorBrush x:Key="TintSky"
                      Color="{StaticResource TintSkyColor}" />

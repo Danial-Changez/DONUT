@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- HomeView.xaml - the Home page SHELL. Pure slot frame: each region lives in its own
-     file under Home/ (its own namescope), loaded by HomePresenter.ComposeRegions. -->
+<!-- The Home page shell, a pure slot frame. Each region lives in its own file under
+     Home/ with its own namescope, loaded by HomePresenter.ComposeRegions. -->
 <Grid
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -14,19 +14,16 @@
     <!-- Machine list + detail -->
   </Grid.RowDefinitions>
 
-  <!-- ====== Action bar: composed from Home/ActionBar.xaml (search + finder popup,
-       mode pill, Run all - the popup's ElementName refs stay inside that file). ====== -->
+  <!-- ====== Action bar: Home/ActionBar.xaml, whose ElementName refs stay in-file ====== -->
   <ContentControl x:Name="slotActionBar" Grid.Row="0" Focusable="False" IsTabStop="False" />
 
-  <!-- == Overview strip: composed from Home/StatCards.xaml (pure SelectedMachine
-       bindings; its Person-mode collapse trigger travels on the region root). == -->
+  <!-- == Overview strip: Home/StatCards.xaml, whose root carries the Person collapse == -->
   <ContentControl x:Name="slotStatCards" Grid.Row="1" Focusable="False" IsTabStop="False" />
 
   <!-- ==================== Machine list (left) + detail pane (right) ==================== -->
   <Grid Grid.Row="2">
     <Grid.ColumnDefinitions>
-      <!-- Machine list is clamped (MaxWidth): wide enough for a full 15-char name + status chip
-           + Run, while a wide/full-screen window still gives the detail pane the extra space. -->
+      <!-- Clamped so a wide window gives the extra space to the detail pane. -->
       <ColumnDefinition Width="2*" MinWidth="300" MaxWidth="460" />
       <ColumnDefinition Width="6" />
       <ColumnDefinition Width="3*" MinWidth="320" />

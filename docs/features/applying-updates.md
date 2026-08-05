@@ -9,7 +9,7 @@ always see what will be installed before anything changes.
 ## Run an apply
 
 1. Click the mode pill until it shows **Apply Updates**.
-2. Click **Run** on a machine (or **Run all** — a single confirmation lists every
+2. Click **Run** on a machine (or **Run All** — a single confirmation lists every
    target first).
 3. DONUT reuses a [fresh scan](./scanning.md#scan-results-are-reused-for-24-hours)
    (less than 24 hours old) or runs one, then shows a **per-host confirmation** with

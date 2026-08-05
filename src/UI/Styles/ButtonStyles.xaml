@@ -1,9 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Control bar button -->
     <Style x:Key="controlButton"
            TargetType="Button">
-        <!-- Normal button style -->
         <Setter Property="Width"
                 Value="50" />
         <Setter Property="Background"
@@ -23,7 +21,6 @@
             </Setter.Value>
         </Setter>
         <Style.Triggers>
-            <!-- Button style when hovering -->
             <Trigger Property="IsMouseOver"
                      Value="True">
                 <Setter Property="Background"
@@ -33,8 +30,7 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <!-- Card-corner close: the controlButton pad with its top-right rounded (9 = the
-         card's 10 minus the 1px border) so it sits flush in a radius-10 overlay card. -->
+    <!-- Radius 9 is the card's 10 minus its 1px border, so the pad sits flush in the corner. -->
     <Style x:Key="controlButtonCardClose"
            TargetType="Button">
         <Setter Property="Width" Value="50" />
@@ -58,12 +54,7 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <!-- Control button icon: a Lucide stroke outline taking the button's Foreground.
-         Thickness scales with size (Lucide native weight = size/12; instances that
-         raise Width raise StrokeThickness with it). FlowDirection is pinned LTR:
-         the control bar's button stack is RightToLeft (the dock-right idiom) and
-         Paths inherit it, which mirrors every glyph - only the asymmetric ones
-         (the tour's ?) show it. -->
+    <!-- Lucide weight is size/12, so raising Width means raising StrokeThickness with it. -->
     <Style x:Key="controlButtonIcon"
            TargetType="Path">
         <Setter Property="Width"
@@ -72,6 +63,7 @@
                 Value="10" />
         <Setter Property="Stretch"
                 Value="Uniform" />
+        <!-- Pinned LTR: the RightToLeft control bar stack would otherwise mirror the glyph. -->
         <Setter Property="FlowDirection"
                 Value="LeftToRight" />
         <Setter Property="Fill"
@@ -87,13 +79,8 @@
         <Setter Property="Stroke"
                 Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
     </Style>
-    <!-- ============================================================
-         Arcane button system (ported from getarcaneapp/arcane at its real
-         14px root scale). Shared: rounded-lg (8.4), h-9 (32), px-4 (14),
-         text-sm (12.5), font-medium, disabled opacity 0.5. CTAs and
-         destructive actions use the ButtonTint* variants below.
-         ============================================================ -->
-    <!-- secondary: bg-secondary text-secondary-foreground hover:bg-secondary/80 -->
+    <!-- Arcane button system, ported from getarcaneapp/arcane at its 14px root scale.
+         Shared: radius 8.4, height 32, padding 14, 12.5px medium, disabled opacity 0.5. -->
     <Style x:Key="ButtonSecondary"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource Secondary}" />
@@ -131,7 +118,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- outline: bg-card/60 border hover:bg-card/90 hover:text-accent-foreground -->
     <Style x:Key="ButtonOutline"
            TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
@@ -172,7 +158,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- ghost: transparent hover:bg-card/60 hover:text-accent-foreground -->
     <Style x:Key="ButtonGhost"
            TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
@@ -213,8 +198,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- In-field clear (the X inside an input). Dim and inert when there is nothing to
-         clear, destructive on hover when there is, so the affordance encodes its own state. -->
+    <!-- Dim when there is nothing to clear and destructive on hover, so it encodes its state. -->
     <Style x:Key="fieldClearButton"
            TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
@@ -252,7 +236,6 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="bd" Property="Opacity" Value="0.85" />
                         </Trigger>
-                        <!-- Nothing to clear: no hand cursor, no hover colour, just dim. -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="glyph" Property="Opacity" Value="0.35" />
                             <Setter Property="Cursor" Value="Arrow" />
@@ -262,9 +245,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Arcane secondary "pill": a filled zinc surface used for the Mode cycle button.
-         Same family as ButtonSecondary but pill-padded (14,7). Named ButtonPill because
-         it is NOT a ghost button - the real ghost variant is ButtonGhost above. -->
+    <!-- ButtonSecondary with pill padding. Not the ghost variant, ButtonGhost is that. -->
     <Style x:Key="ButtonPill"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource Secondary}" />
@@ -301,14 +282,8 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- ============================================================
-         ArcaneButton tinted action variants: tinted glass outline keyed to the
-         action's semantic color - bg {c}@10%, border {c}@30%, text = 400 shade;
-         hover lifts to @20%/@40%. Arcane uses these (not solid fills) for
-         start/stop/scan-style actions.
-         ============================================================ -->
-    <!-- Arcane outline-primary: dark violet tint with NEAR-WHITE text (not violet),
-         so the primary action reads deep/subtle rather than loud. -->
+    <!-- Tint recipe: fill at 10 percent of the status colour, border at 30, hover lifts both. -->
+    <!-- Text is near-white, not violet, so the primary action reads deep rather than loud. -->
     <Style x:Key="ButtonTintPrimary"
            TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource TintViolet}" />

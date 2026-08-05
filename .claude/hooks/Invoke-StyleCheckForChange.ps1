@@ -31,18 +31,29 @@ if (-not $filePath) { exit 0 }
 
 # The rule is repo-wide, so only build output is out of scope.
 $normalized = $filePath -replace '\\', '/'
-if ($normalized -notmatch '\.(ps1|psm1|cs|mjs|js|ts|astro)$') { exit 0 }
+if ($normalized -notmatch '\.(ps1|psm1|cs|mjs|js|ts|astro|xaml)$') { exit 0 }
 if ($normalized -match '/(bin|obj|\.cache|node_modules|dist|\.astro|\.diag)/') { exit 0 }
 if (-not (Test-Path -LiteralPath $filePath)) { exit 0 }
 
 $lines = [System.IO.File]::ReadAllLines($filePath)
-# Everything but PowerShell uses // comments and the same brace-language shapes.
-$isCs = $normalized -notmatch '\.(ps1|psm1)$'
+$isXaml = $normalized -match '\.xaml$'
+# Everything else but PowerShell uses // comments and the same brace shapes.
+$isCs = -not $isXaml -and $normalized -notmatch '\.(ps1|psm1)$'
 
 # Trailing comments (code then #) do not count, only comment-led lines form a block.
 $commentLines = [System.Collections.Generic.List[int]]::new()
 
-if ($isCs) {
+if ($isXaml) {
+    # XAML has no per-line marker, so every line of a <!-- --> span counts.
+    $open = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($open -lt 0 -and $lines[$i] -match '<!--') { $open = $i }
+        if ($open -lt 0 -or $lines[$i] -notmatch '-->') { continue }
+        $open..$i | ForEach-Object { $commentLines.Add($_ + 1) }
+        $open = -1
+    }
+}
+elseif ($isCs) {
     $inBlock = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $t = $lines[$i].Trim()
@@ -67,8 +78,9 @@ $csExempt = '^\s*(namespace|#nullable|export|import|const|function|class)|' +
 '^\s*((public|internal|sealed|static|abstract|partial)\s+)*(class|record|struct|interface|enum)\s'
 $psExempt = '^\s*(class|enum|function)\s|' +
 '^\s*(hidden\s+)?(static\s+)?(\[[\w\.\[\]]+\]\s*)?[\w-]+\s*\('
-$exemptNext = if ($isCs) { $csExempt } else { $psExempt }
-$marker = if ($isCs) { '//' } else { '#' }
+$xamlExempt = '^\s*<[A-Za-z]'
+$exemptNext = if ($isXaml) { $xamlExempt } elseif ($isCs) { $csExempt } else { $psExempt }
+$marker = if ($isXaml) { '' } elseif ($isCs) { '//' } else { '#' }
 
 # Reports the first line of every run that exceeds its own allowance.
 function Test-Run([int] $start, [int] $len) {

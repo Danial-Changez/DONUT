@@ -9,9 +9,9 @@ first-run bootstrap (`src/Launcher/Bootstrap.cs`) instead.
 | `psexec.exe` | Sysinternals forbids redistribution | Downloaded, Microsoft signature verified, installed to `System32`. Workers invoke it from `PATH`. |
 | `wiztree64.exe` | Free for personal use only. Commercial use needs a paid supporter or Enterprise code, and **bundling it into another application needs a paid Distribution License** | Downloaded, Antibody Software signature verified, staged into this folder inside the extracted app tree. |
 
-## wiztree64.exe (required for "Find big folders")
+## wiztree64.exe (required for the Storage scan)
 
-The **Find big folders** action deploys this binary to the target's
+The **Storage** action deploys this binary to the target's
 `C:\temp\DONUT\`, runs a fast MFT scan of `C:` as SYSTEM via PsExec, and copies
 the resulting `folders.csv` back to parse the largest folders.
 
