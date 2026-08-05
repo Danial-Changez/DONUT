@@ -51,8 +51,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Runs INSIDE the target process. Engine/built-in commands only: pulling a module
-# in a wedged process can hang on the very loader lock we came to observe.
+# Runs inside the target process: importing a module can hang on the loader lock we came for.
 $probeScript = {
     param([int]$BreakWaitSec)
     $lines = [System.Collections.Generic.List[string]]::new()
@@ -108,8 +107,7 @@ try {
     $ci.OpenTimeout = $TimeoutSec * 1000
     $attachRunspace = [runspacefactory]::CreateRunspace($ci)
 
-    # Never a bare Open(): a dead pipe thread in the target must time out here,
-    # not hang this probe too.
+    # Never a bare Open(): a dead pipe thread in the target must time out, not hang the probe.
     $attachRunspace.OpenAsync()
     $deadline = [datetime]::UtcNow.AddSeconds($TimeoutSec)
     while ($attachRunspace.RunspaceStateInfo.State -eq 'Opening' -and
@@ -129,8 +127,7 @@ try {
         [void]$shell.AddScript($probeScript.ToString()).AddArgument($TimeoutSec)
         $handle = $shell.BeginInvoke()
 
-        # The probe waits up to TimeoutSec per busy runspace; pools run 8-16, so
-        # bound the whole pass rather than guessing the busy count.
+        # The probe waits TimeoutSec per busy runspace, so bound the pass, not the count.
         $budgetMs = ($TimeoutSec * 18 + 30) * 1000
         if ($handle.AsyncWaitHandle.WaitOne($budgetMs)) {
             foreach ($line in $shell.EndInvoke($handle)) { $report.Add([string]$line) }

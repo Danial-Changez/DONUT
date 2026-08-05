@@ -19,6 +19,10 @@
     An offline host is a Warning (it may simply be powered off); a DNS/AD
     resolution failure or a blocked RPC port is an Error (a real connectivity or
     configuration fault that needs attention).
+
+    The transport codes in RemoteConnectionLostException.Codes do not overlap dcu-cli's
+    return-code ranges, so any of them means the transport died rather than the command
+    failing. Codes in the 5x, 59 and 123x groups mean the local side dropped.
 #>
 
 # Severity of a failure, aligned with the LogService levels.
@@ -28,7 +32,7 @@ enum ErrorLevel {
     Error
 }
 
-# Coarse, machine-readable reason for a remote failure - drives the card state.
+# Coarse, machine-readable reason for a remote failure, which drives the card state.
 enum RemoteFailureReason {
     Offline
     Unresolvable
@@ -56,7 +60,7 @@ class RemoteOperationException : System.Exception {
     }
 }
 
-# The host did not answer a reachability check - usually just powered off.
+# The host did not answer a reachability check, usually just powered off.
 class HostOfflineException : RemoteOperationException {
     HostOfflineException([string]$hostName) : base(
         "Host '$hostName' is offline or unreachable (no response to the reachability check).",
@@ -77,13 +81,12 @@ class RpcUnavailableException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::RpcUnavailable) {}
 }
 
-# A remote command (PsExec -> dcu-cli or a probe) ran but exited non-zero. Carries
-# the process exit code for diagnostics.
+# A remote command (PsExec -> dcu-cli or a probe) ran but exited non-zero.
 class RemoteExecutionException : RemoteOperationException {
     [int] $ExitCode
 
-    # Decodes the Win32 transport codes operators actually hit (psexec surfaces them
-    # as its exit code); anything else keeps the bare-number form.
+    # Decodes the Win32 transport codes operators actually hit (psexec surfaces them as
+    # its exit code). Anything else keeps the bare-number form.
     RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode) : base(
         $(switch ($exitCode) {
                 5 { "$what failed on '$hostName' (exit code 5 - access denied: the account DONUT runs as is not an admin on the target)." }
@@ -96,8 +99,7 @@ class RemoteExecutionException : RemoteOperationException {
         $this.ExitCode = $exitCode
     }
 
-    # Same, but with a decoded meaning appended (e.g. "exit code 3 - the system
-    # manufacturer is not Dell"), so a small DCU error code reads as its actual cause.
+    # Same, but with the decoded meaning appended, so a DCU error code reads as its cause.
     RemoteExecutionException([string]$hostName, [string]$what,
         [int]$exitCode, [string]$detail) : base(
         $(if ([string]::IsNullOrWhiteSpace($detail)) { "$what failed on '$hostName' (exit code $exitCode)." }
@@ -107,8 +109,8 @@ class RemoteExecutionException : RemoteOperationException {
     }
 }
 
-# The remote process (pwsh) failed to start / crashed during startup - an NTSTATUS
-# fault (e.g. 0xC0000142), not a dcu-cli exit code; often transient.
+# The remote process (pwsh) failed to start or crashed during startup: an NTSTATUS
+# fault (e.g. 0xC0000142), not a dcu-cli exit code, and often transient.
 class RemoteProcessStartException : RemoteOperationException {
     [int] $ExitCode
 
@@ -133,7 +135,7 @@ class RemoteProcessStartException : RemoteOperationException {
     }
 }
 
-# psexec's connection dropped mid-command - a Win32 transport error (233, 64, ...), not
+# psexec's connection dropped mid-command: a Win32 transport error (233, 64, ...), not
 # a dcu-cli code. Either end can drop: the target's NIC reset or the operator's Wi-Fi.
 class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
@@ -144,8 +146,7 @@ class RemoteConnectionLostException : RemoteOperationException {
         $this.ExitCode = $exitCode
     }
 
-    # The Win32 codes psexec surfaces on a mid-command drop; none collide with dcu-cli's
-    # ranges, so seeing one means the transport died. 5x/59/123x = the local side dropped.
+    # None overlap dcu-cli's ranges, so any of these means the transport died. See .NOTES.
     static [hashtable] $Codes = @{
         51   = 'ERROR_REM_NOT_LIST'
         53   = 'ERROR_BAD_NETPATH'
@@ -163,13 +164,11 @@ class RemoteConnectionLostException : RemoteOperationException {
         1236 = 'ERROR_CONNECTION_ABORTED'
     }
 
-    # True when an exit code is one of the known connection-lost transport codes.
     static [bool] IsConnectionLost([int]$exitCode) {
         return [RemoteConnectionLostException]::Codes.ContainsKey($exitCode)
     }
 
-    # Formats a transport code with its Win32 name (so "233" reads as
-    # "code 233 ERROR_PIPE_NOT_CONNECTED").
+    # Formats a transport code with its Win32 name ("233" -> "code 233 ERROR_PIPE_NOT_CONNECTED").
     static [string] Describe([int]$exitCode) {
         $name = [RemoteConnectionLostException]::Codes[$exitCode]
         if ($name) { return "code $exitCode $name" }
@@ -178,7 +177,7 @@ class RemoteConnectionLostException : RemoteOperationException {
 }
 
 # The operation ran past its watchdog and the local psexec client was killed so the worker
-# could be reclaimed (no forever-Running job); the remote process may still be running.
+# could be reclaimed. The remote process may still be running.
 class RemoteTimeoutException : RemoteOperationException {
     [int] $TimeoutMinutes
 
@@ -196,8 +195,8 @@ class DcuNotInstalledException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::DcuMissing) {}
 }
 
-# Re-derives the failure reason from a worker error message (the exception type doesn't
-# survive the runspace boundary); matches the stable phrases the exceptions above emit.
+# Re-derives the failure reason from a worker error message, since the exception type does
+# not survive the runspace boundary. Matches the stable phrases the exceptions above emit.
 class RemoteFailure {
     static [RemoteFailureReason] ReasonFromMessage([string]$message) {
         if ([string]::IsNullOrWhiteSpace($message)) { return [RemoteFailureReason]::Unknown }

@@ -30,12 +30,10 @@ class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $InteractivePool
     static [LogService] $Logger = $null
 
-    # Fixed, not throttle-derived (that is a fleet knob). Four so a whole AD search
-    # fan-out dispatches at once instead of one forest always queuing - see .NOTES.
+    # Fixed, not throttle-derived: four so a whole AD fan-out dispatches at once. See .NOTES.
     static [int] $InteractiveSize = 4
 
-    # Optionally attach a logger (the pool is managed statically, so logging is
-    # too). When unset, logging is silently skipped.
+    # Static like the pool it logs for. When unset, logging is silently skipped.
     static [void] SetLogger([LogService]$logger) {
         [RunspaceManager]::Logger = $logger
     }
@@ -46,10 +44,8 @@ class RunspaceManager {
         }
     }
 
-    # Lazy-init fallback for GetPool/GetInteractivePool when nothing configured the
-    # pool first. min = max, same invariant as the composition root: idle cleanup
-    # only disposes above the minimum, and a smaller floor lets warmed runspaces
-    # die and cold-load.
+    # Lazy-init fallback when nothing configured the pool first. min = max because idle
+    # cleanup only disposes above the minimum, so a lower floor lets warm runspaces die.
     static [void] Initialize() {
         [RunspaceManager]::Initialize(5, 5)
     }
@@ -58,8 +54,7 @@ class RunspaceManager {
         $interactive = [RunspaceManager]::InteractiveSize
         if (-not [RunspaceManager]::RunspacePool) {
             try {
-                # Pool dispatch/completion run on .NET ThreadPool threads (floor = CPU
-                # count); concurrent warm opens starve it, so raise the floor FIRST.
+                # Pool dispatch runs on ThreadPool threads, so raise the floor before opening.
                 $floor = [Math]::Max(16, ($MaxRunspaces + $interactive) * 2)
                 [void][System.Threading.ThreadPool]::SetMinThreads($floor, $floor)
                 [RunspaceManager]::Log("INFO", "ThreadPool min threads raised to $floor (worker+IOCP) so pool dispatch never starves.")
@@ -74,15 +69,13 @@ class RunspaceManager {
         }
         if (-not [RunspaceManager]::InteractivePool) {
             try {
-                # min = max here too: idle cleanup only disposes above the minimum, so a
-                # smaller floor would let warmed interactive runspaces die and cold-load.
+                # min = max here too, so warmed interactive runspaces never die and cold-load.
                 [RunspaceManager]::InteractivePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($interactive, $interactive)
                 [RunspaceManager]::InteractivePool.Open()
                 [RunspaceManager]::Log("INFO", "Interactive runspace pool opened (min=max=$interactive).")
             }
             catch {
-                # Non-fatal: GetInteractivePool falls back to the worker pool, which is
-                # how this ran before the split - degraded, but the app still starts.
+                # Non-fatal: GetInteractivePool falls back to the worker pool, degraded but alive.
                 [RunspaceManager]::Log("ERROR", "Failed to open the interactive runspace pool; interactive lookups will share the worker pool: $($_.Exception.Message)")
             }
         }

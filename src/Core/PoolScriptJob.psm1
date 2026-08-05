@@ -27,15 +27,14 @@ using module ".\LogService.psm1"
 #>
 class PoolScriptJob {
 
-    # Starts $scriptPath on the shared pool; throws on failure so each call site
-    # keeps its own catch/log/toast behavior. Returns @{ Ps; Handle; StartedAt }.
+    # Throws on failure so each call site keeps its own catch, log and toast behavior.
+    # Returns a job envelope of Ps, Handle and StartedAt.
     static [hashtable] Start([string]$scriptPath, [hashtable]$parameters) {
         $ps = [System.Management.Automation.PowerShell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetInteractivePool()
         $ps.AddCommand($scriptPath) | Out-Null
         foreach ($k in $parameters.Keys) { $ps.AddParameter($k, $parameters[$k]) | Out-Null }
-        # Stamped here rather than by the caller: a call site that stamps after Start returns
-        # loses its own dispatch cost, which is the pool queue wait worth seeing - see .NOTES.
+        # Stamped here, not by the caller: a later stamp loses the pool queue wait. See .NOTES.
         $started = [datetime]::UtcNow
         return @{ Ps = $ps; Handle = $ps.BeginInvoke(); StartedAt = $started }
     }
@@ -59,8 +58,7 @@ class PoolScriptJob {
         $log = [LogService]::Coalesce($logger)
         try {
             if ($ps.InvocationStateInfo.State -eq 'Running') {
-                # No scriptblock callback: BeginStop fires it on a runspace-less threadpool
-                # thread, where any scriptblock throws before its body runs (crashing the app).
+                # No callback: BeginStop fires it runspace-less, where any scriptblock throws.
                 $ps.BeginStop($null, $null) | Out-Null
                 $stoppingList.Add($ps)
                 return $true

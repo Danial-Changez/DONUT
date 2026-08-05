@@ -38,7 +38,6 @@ class AdSearchResult {
     }
 }
 
-# Pure helpers: LDAP filter construction + escaping + account-control bit decode.
 <#
 .SYNOPSIS
     Orders finder rows so the strongest match leads, and says how many were held back.
@@ -135,7 +134,6 @@ class AdFilter {
         return ([AdFilter]::AsInt($uacComputed) -band [AdFilter]::UF_LOCKOUT) -ne 0
     }
 
-    # Disabled state from userAccountControl.
     static [bool] IsDisabledFromUac([object]$uac) {
         return ([AdFilter]::AsInt($uac) -band [AdFilter]::UF_ACCOUNTDISABLE) -ne 0
     }

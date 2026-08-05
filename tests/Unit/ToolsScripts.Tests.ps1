@@ -19,8 +19,7 @@ Describe "tools scripts parse cleanly" {
     }
 
     It "the diagnostic harness embeds a child script that parses cleanly" {
-        # The child here-string is code too; a typo there only explodes at 2 a.m.
-        # on a lab machine. Extract and parse it.
+        # The child here-string is code too, and a typo there only surfaces on a lab machine.
         $path = Join-Path (Resolve-Path "$PSScriptRoot\..\..\tools").Path 'Invoke-DiagnosticRun.ps1'
         $raw = Get-Content $path -Raw
         $match = [regex]::Match($raw, "(?s)@'\r?\n(.*?)\r?\n'@")

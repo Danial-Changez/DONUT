@@ -19,7 +19,7 @@ class WorkerProcess {
 
     static hidden [string] $CachedPwsh
 
-    # ProcessPath is pwsh only on the dev path; launcher-hosted runs report the exe, and
+    # ProcessPath is pwsh only on the dev path. Launcher-hosted runs report the exe, and
     # spawning that forks a second DONUT the single-instance guard exits 0 (silent wedge).
     static [string] FindPwsh() {
         if (-not [string]::IsNullOrWhiteSpace([WorkerProcess]::CachedPwsh)) {
@@ -59,8 +59,7 @@ class WorkerProcess {
         }
     }
 
-    # Runs ON a pool runspace (no using-module -> no deadlock): spawns the worker child,
-    # streams its stdout LIVE into this runspace's Information stream (-> the progress bar).
+    # Runs on a pool runspace and streams the child's stdout into the Information stream.
     static [scriptblock] $Launcher = {
         param($pwshPath, $scriptPath, $argsFile, $resultFile)
         $psi = [System.Diagnostics.ProcessStartInfo]::new($pwshPath)
@@ -73,8 +72,7 @@ class WorkerProcess {
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
         $proc = [System.Diagnostics.Process]::Start($psi)
-        # Drain stderr async (a full pipe buffer would wedge the child); read stdout
-        # line-by-line so the worker's progress surfaces as it lands, not at exit.
+        # Async stderr (a full pipe wedges the child), line-by-line stdout so progress lands live.
         $errTask = $proc.StandardError.ReadToEndAsync()
         while ($null -ne ($line = $proc.StandardOutput.ReadLine())) {
             Write-Information $line
@@ -89,8 +87,8 @@ class WorkerProcess {
         [pscustomobject]@{ Result = $result; ExitCode = $proc.ExitCode; StdErr = $err }
     }
 
-    # Turns the launcher's return into a verdict: exit code 0 (and no host errors) is
-    # success; otherwise the clean stderr line is the failure message.
+    # Turns the launcher's return into a verdict: exit code 0 with no host errors is
+    # success, otherwise the clean stderr line becomes the failure message.
     static [hashtable] Interpret([object]$launcherOutput) {
         $launch = @($launcherOutput)[-1]
         if ($null -eq $launch) {
@@ -101,8 +99,7 @@ class WorkerProcess {
         $exit = [int]$launch.ExitCode
         $stderr = "$($launch.StdErr)".Trim()
         if ($exit -eq 0) {
-            # Exit 0 with no result is not success - it is the signature of the wrong
-            # child (a second launcher bowing out via the single-instance guard).
+            # Exit 0 with no result means the wrong child ran and the guard bowed out.
             if ($null -eq $launch.Result) {
                 return @{ Result = $null; Succeeded = $false; ExitCode = 0
                     FailureMessage = 'Worker exited 0 but produced no result (was the wrong executable spawned as the worker?).'

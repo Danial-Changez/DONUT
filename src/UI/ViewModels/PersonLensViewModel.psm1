@@ -31,8 +31,7 @@ class PersonLensViewModel : ObservableObject {
         $this.Devices = [ObservableCollection[object]]::new()
     }
 
-    # Devices newest-seen first: sort by parsed LastLogon (ISO8601) descending, blanks last.
-    # Only reorders when a person has multiple devices; a no-op for 0/1.
+    # Devices newest-seen first: parsed LastLogon descending, blanks last.
     hidden [object[]] SortByLastSeen([LensDevice[]]$devices) {
         return @($devices | Sort-Object -Descending -Stable -Property @{
                 Expression = {
@@ -56,8 +55,8 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('HasDevices', $false)
     }
 
-    # Applies a mid-flight PARTIAL bundle (partial 1 = directory facts, partial 2 = name-only
-    # device rows) so they paint early; the loading state stays on until Apply.
+    # Applies a mid-flight partial bundle (1 = directory facts, 2 = name-only device rows)
+    # so they paint early. The loading state stays on until Apply.
     [void] ApplyPartial([PersonLens]$lens) {
         if ($null -eq $lens -or -not $this.IsLoading) { return }
         if ($lens.Upn) { $this.Set('Upn', $lens.Upn) }

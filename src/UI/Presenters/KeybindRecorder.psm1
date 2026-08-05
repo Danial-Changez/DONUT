@@ -123,8 +123,7 @@ class KeybindRecorder {
     hidden [void] UpdateDisplay() {
         $blank = [string]::IsNullOrWhiteSpace($this.Current)
         if ($this.Display) { $this.Display.Text = if ($blank) { 'No keybind set' } else { $this.Current } }
-        # Disabled, not collapsed: the X sits inside the field, so hiding it would reflow the
-        # value text on every commit. Dim reads as "nothing to clear" without moving anything.
+        # Disabled, not collapsed: hiding the inline X would reflow the value on every commit.
         if ($this.ClearButton) { $this.ClearButton.IsEnabled = -not $blank }
     }
 

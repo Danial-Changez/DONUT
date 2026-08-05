@@ -31,7 +31,6 @@ if (-not $pester) {
     exit 1
 }
 
-# Unload any already-loaded Pester (e.g. a v5 auto-import) so two majors never
-# coexist in one session - coexistence is exactly how v3 commands shadow a run.
+# Two majors coexisting in one session is exactly how v3 commands shadow a run.
 Get-Module -Name Pester | Remove-Module -Force
 Import-Module Pester -RequiredVersion $pester.Version -Force

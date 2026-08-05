@@ -64,20 +64,15 @@ class RemoteJobService {
             Arguments      = @{
                 HostName   = $hostName
                 JobType    = $jobType
-                # Snapshot, same rule as Settings below: no live hashtable may
-                # cross the runspace boundary.
+                # No live hashtable may cross the runspace boundary.
                 Options    = if ($null -ne $options) { [AppConfig]::DeepClone($options) }
                 else { @{} }
-                # Seeded by the presenter (AttachResolvedIp) before Start. A dedicated
-                # arg, never an Options key, so it can't leak onto a dcu-cli command line.
+                # Seeded by AttachResolvedIp, never an Options key on a dcu-cli command line.
                 ResolvedIp = ''
                 SourceRoot = $this.Config.SourceRoot
                 LogsDir    = $this.Config.LogsPath
                 ReportsDir = $this.Config.ReportsPath
-                # Only the keys workers read (BuildDcuArgs/GetCommandArgs, GetDebugLogging,
-                # GetRecoveryWindowMinutes) - the worker's AppConfig merges defaults for
-                # the rest. commands stays a deep clone, same rule as Settings before it:
-                # no live hashtable may cross the runspace boundary.
+                # Only the keys workers read, since the worker's AppConfig defaults the rest.
                 Settings   = @{
                     commands              = [AppConfig]::DeepClone($this.Config.Settings['commands'])
                     debugLogging          = $this.Config.GetDebugLogging()
@@ -90,11 +85,10 @@ class RemoteJobService {
     }
 }
 
-# Handles scanning for and applying updates on remote hosts
+# Handles scanning for and applying updates on remote hosts.
 class RemoteUpdateService : RemoteJobService {
     [DriverMatchingService] $DriverMatcher
-    # Parsed-report cache: host -> @{ Ticks; Xml }, invalidated by the report file's
-    # last-write time so a fresh scan re-parses but repeated reads in one flow don't.
+    # Keyed on the report's last-write time, so a fresh scan re-parses but reads do not.
     hidden [hashtable] $ReportCache = @{}
 
     RemoteUpdateService([AppConfig] $config, [NetworkProbe] $probe,
@@ -107,8 +101,8 @@ class RemoteUpdateService : RemoteJobService {
         $this.DriverMatcher = $matcher
     }
 
-    # Builds the worker args only (no network) - the worker asserts reachability on the
-    # pool thread, so the UI thread never blocks on an offline/slow host.
+    # Builds the worker args only, with no network. The worker asserts reachability on
+    # the pool thread, so the UI thread never blocks on an offline host.
     [hashtable] PrepareScanForUpdates([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "Scan", @{})
     }
@@ -118,8 +112,7 @@ class RemoteUpdateService : RemoteJobService {
         if (-not (Test-Path $reportPath)) { return $null }
 
         try {
-            # Cache the parsed doc keyed by last-write time: repeated calls in one flow
-            # don't re-parse on the UI thread; a new scan's newer file misses the cache.
+            # Keyed on last-write time, so a new scan's newer file misses the cache.
             $ticks = (Get-Item -LiteralPath $reportPath).LastWriteTimeUtc.Ticks
             $cached = $this.ReportCache[$hostName]
             if ($null -ne $cached -and $cached.Ticks -eq $ticks) { return $cached.Xml }
@@ -138,8 +131,7 @@ class RemoteUpdateService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "Apply", $selectedUpdates)
     }
 
-    # Counts the available updates in a parsed report (0 when null/empty).
-    # Used to record how many updates a scan found on a host.
+    # Counts the available updates in a parsed report (0 when null or empty).
     [int] CountUpdates([xml]$report) {
         if ($null -eq $report) { return 0 }
         $nodes = $report.SelectNodes("//update")
@@ -147,7 +139,7 @@ class RemoteUpdateService : RemoteJobService {
         return $nodes.Count
     }
 
-    # $null = no report on disk; @() = a report with zero updates; else typed rows.
+    # Returns $null when no report is on disk, and @() when it holds zero updates.
     [array] GetUpdateRows([string]$hostName) {
         $report = $this.ParseUpdateReport($hostName)
         if (-not $report) { return $null }
@@ -155,8 +147,8 @@ class RemoteUpdateService : RemoteJobService {
         return $this.BuildUpdateRows($report)
     }
 
-    # Parses each <update>'s child elements into typed DcuUpdate rows (read explicitly - the
-    # fields are child elements, so $node.InnerText would mash them). See NodeText.
+    # Parses each <update>'s child elements into typed DcuUpdate rows. The fields are
+    # child elements, so $node.InnerText would mash them together. See NodeText.
     hidden [array] BuildUpdateRows([xml]$report) {
         $installedDrivers = $this.GetInstalledDriversFromReport($report)
         $updateRows = @()
@@ -185,8 +177,8 @@ class RemoteUpdateService : RemoteJobService {
         return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)
     }
 
-    # First child element's trimmed text (empty when absent). SelectSingleNode('name'), never
-    # $node.name - the latter collides with XmlElement.Name and returns the tag ("update").
+    # First child element's trimmed text, empty when absent. SelectSingleNode('name'),
+    # never $node.name, which collides with XmlElement.Name and returns the tag.
     hidden [string] NodeText([System.Xml.XmlNode]$node, [string]$child) {
         $c = $node.SelectSingleNode($child)
         if ($null -eq $c) { return '' }

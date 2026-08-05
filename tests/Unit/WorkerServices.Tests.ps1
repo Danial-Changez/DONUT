@@ -8,7 +8,6 @@ using module "..\..\src\Services\WorkerServices.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 using namespace System.Net
 
-# Mock NetworkProbe
 class MockNetworkProbeWorker : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
@@ -32,7 +31,7 @@ class MockNetworkProbeWorker : NetworkProbe {
     [string] ResolveComputerName([string]$ip) { return $this.ComputerNameResult }
 }
 
-# Partial Mock of ExecutionService to avoid real PsExec calls
+# Partial mock of ExecutionService so no test ever launches a real PsExec.
 class TestExecutionService : ExecutionService {
     [hashtable] $LastPsExecParams = @{}
     [hashtable] $ApplyResult = @{ Status = "Success" }
@@ -41,13 +40,11 @@ class TestExecutionService : ExecutionService {
 
     [int] $PsExecReturnCode = 0   # dcu-cli code the mock reports back (0 = clean, 1/5 = reboot)
     [int] InvokePsExec([hashtable]$params) {
-        # Capture params for verification; return the configured dcu-cli code.
         $this.LastPsExecParams = $params
         return $this.PsExecReturnCode
     }
 
-    # Canned TailAndScanLog results so RecoverByResumeTail can be driven without a network;
-    # when the queue empties, reports "reachable, no verdict yet" at the current offset.
+    # Canned TailAndScanLog results so RecoverByResumeTail can be driven without a network.
     [System.Collections.Generic.Queue[hashtable]] $TailResults = [System.Collections.Generic.Queue[hashtable]]::new()
     [int] $TailCalls = 0
     [hashtable] TailAndScanLog([string]$ip, [string]$remoteLog, [int]$seenChars) {
@@ -62,7 +59,6 @@ class TestExecutionService : ExecutionService {
         return $this.CopyRemoteArtifacts($hostName, $outputLog, $true)
     }
     [hashtable] CopyRemoteArtifacts([string]$hostName, [string]$outputLog, [bool]$copyReport) {
-        # Mock behavior: capture which log the phase asked for; return dummy paths.
         $this.LastCopiedOutputLog = $outputLog
         $this.LastCopyReport = $copyReport
         return @{ Report = "C:\Fake\Report.xml"; Log = "C:\Fake\Scan.log" }
@@ -82,8 +78,7 @@ class TestExecutionService : ExecutionService {
         return "C:\Fake\$hostName-inventory.json"
     }
 
-    # $null => triggers the psexec fallback; a hashtable => the fast CIM path.
-    # $ThrowOnGather => simulate the CIM gather blowing up.
+    # GatherResult $null takes the psexec fallback, and ThrowOnGather blows the gather up.
     [hashtable] $GatherResult = $null
     [bool] $ThrowOnGather = $false
     [hashtable] GatherRemoteInventory([string]$ip) {
@@ -103,7 +98,6 @@ Describe "WorkerServices" {
         $script:reportsDir = Join-Path $script:tempDir "Reports"
         $script:sourceRoot = $script:tempDir
         
-        # Create log directories
         if (-not (Test-Path $script:logsDir)) { New-Item -Path $script:logsDir -ItemType Directory -Force | Out-Null }
         if (-not (Test-Path $script:reportsDir)) { New-Item -Path $script:reportsDir -ItemType Directory -Force | Out-Null }
     }
@@ -221,14 +215,12 @@ Describe "WorkerServices" {
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $service.RunScanPhase([DeviceContext]::new("TestHost"))
 
-            # The BeforeEach config sets no updateDeviceCategory, so the default
-            # list is appended; it must be single-quoted (not bare commas).
+            # No configured updateDeviceCategory, so the appended default must be single-quoted.
             $service.LastPsExecParams.Arguments | Should -BeLike "*-updateDeviceCategory='audio,video,network,storage,input,chipset,others'*"
         }
 
         It "brackets the psexec launch with start/done breadcrumbs carrying the exit code" {
-            # The scan hang lives in the silent launch->wait segment; a "start" with no
-            # "done" pins it to psexec/dcu, and the exit code lands in the log.
+            # A "start" with no "done" pins the scan hang to psexec or dcu, exit code included.
             $logger = [CapturingLogService]::new()
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
@@ -271,11 +263,7 @@ Describe "WorkerServices" {
         }
     }
 
-    # NOTE: there is deliberately no worker-level reachability pre-check - running
-    # one in a fresh worker runspace (Test-Connection / DC-backed ResolveHost)
-    # stalled the host process. Each phase gates its own transport with bounded
-    # port probes (RPC-135 / SMB-445) and fails typed if the host is unreachable;
-    # connectivity is never probed on the UI thread (Prepare* builds args only).
+    # No worker-level reachability pre-check: one in a fresh runspace stalled the host process.
 
     Context "RunResolvePhase" {
         It "Warm mode returns the active DC and the DC list" {
@@ -306,8 +294,7 @@ Describe "WorkerServices" {
         It "WarmRunspace mode loads the module graph + runtime assemblies, returns the marker" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
-            # TestExecutionService no-ops WarmRuntimeAssemblies so the test never opens a
-            # real DNS/CIM session.
+            # TestExecutionService no-ops WarmRuntimeAssemblies, so no real DNS or CIM opens.
             $service = [TestExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
 
             $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'WarmRunspace' })
@@ -518,7 +505,6 @@ Describe "WorkerServices" {
             $options = @{ reboot = $true }
             $service.RunApplyPhase($device, $options)
 
-            # Arguments should contain the merged options
             $service.LastPsExecParams.Arguments | Should -Not -BeNullOrEmpty
         }
 
@@ -530,9 +516,7 @@ Describe "WorkerServices" {
             $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
             $device = [DeviceContext]::new("ApplyTestHost")
 
-            # Defense-in-depth: ResolvedIp now rides its own worker argument (not Options),
-            # but should a non-option control key ever land in Options it must NOT reach
-            # the dcu-cli line (DCU returns 105). A real option in the bag still passes.
+            # A non-option control key reaching the dcu-cli line makes DCU return 105.
             $service.RunApplyPhase($device, @{ ResolvedIp = '10.124.28.147'; reboot = $true })
 
             $service.LastPsExecParams.Arguments | Should -Not -Match 'ResolvedIp'
@@ -545,11 +529,10 @@ Describe "WorkerServices" {
             $s = [ExecutionService]::BuildRemoteDcuScript('applyUpdates',
                 '-silent -outputLog=C:\temp\DONUT\apply.log', 'C:\temp\DONUT\apply.log')
 
-            # dcu-cli is discovered ON the target (Test-Path there), not over a controller UNC.
+            # dcu-cli is discovered on the target with Test-Path, not over a controller UNC.
             $s.Contains('C:\Program Files (x86)\Dell\CommandUpdate\dcu-cli.exe') | Should -BeTrue
             $s.Contains('C:\Program Files\Dell\CommandUpdate\dcu-cli.exe')       | Should -BeTrue
             $s.Contains('Test-Path -LiteralPath')                               | Should -BeTrue
-            # The prior log is cleared remotely, and dcu-cli runs with the given args.
             $s.Contains("Remove-Item -LiteralPath 'C:\temp\DONUT\apply.log'")    | Should -BeTrue
             $s.Contains('/applyUpdates -silent -outputLog=C:\temp\DONUT\apply.log') | Should -BeTrue
             # A missing dcu-cli comes back as the sentinel, not a hung path.
@@ -563,8 +546,7 @@ Describe "WorkerServices" {
         }
 
         It "uses a not-found sentinel outside every dcu-cli and psexec transport code" {
-            # Past the driver-install range (2000-2007) so DescribeReturnCode never claims it,
-            # and not one of the connection-lost transport codes.
+            # Past the driver-install range (2000-2007) and clear of the transport codes.
             [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
             @(0, 1, 5, 64, 109, 121, 232, 233, 1236) |
                 Should -Not -Contain ([ExecutionService]::DcuNotFoundExit)
@@ -583,7 +565,7 @@ Describe "WorkerServices" {
             "[2026-07-09 15:00:00] : Installing updates (4 of 4)...`n[2026-07-09 15:00:30] : The program exited with return code: 1" |
                 Set-Content -LiteralPath $logFile -Encoding UTF8
 
-            # A local temp file stands in for the admin-share UNC path; SMB gate is mocked open.
+            # A local temp file stands in for the admin-share UNC path, SMB gate mocked open.
             $r = $service.TailAndScanLog('10.0.0.7', $logFile, 0)
             $r.Seen       | Should -BeGreaterThan 0
             $r.Code.Found | Should -BeTrue
@@ -668,7 +650,6 @@ Describe "WorkerServices" {
             
             $result = $service.CopyRemoteArtifacts("WORKSTATION01", 'C:\temp\DONUT\scan.log')
 
-            # Our mock returns fixed paths, but we validate the structure
             $result.ContainsKey('Report') | Should -Be $true
             $result.ContainsKey('Log') | Should -Be $true
         }
@@ -799,10 +780,7 @@ Describe "WorkerServices" {
         }
 
         It "selects the N largest rows across the whole export, not a head slice" {
-            # The export is TREE-ordered (depth-first; /sortby=1 only orders
-            # siblings): the first branch's small children arrive before later big
-            # siblings. A head trim shipped exactly this bug - deep near-empty
-            # folders in the result while C:\Windows never made the file.
+            # Tree-ordered export: a head trim once kept tiny folders and dropped C:\Windows.
             $dir = Join-Path $env:TEMP "DonutScanFilter_$(Get-Random)"
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
             $fixture = Join-Path $dir 'folders.csv'
@@ -824,8 +802,7 @@ Generated by WizTree 4.x (banner line)
 
                 # The ~40 MB export must not be left on the fleet machine.
                 Test-Path $fixture | Should -BeFalse
-                # End to end: the controller-side parser ranks what the target sent
-                # (volume root dropped, quoted comma path intact, no deep small rows).
+                # End to end: volume root dropped, quoted comma path intact, no deep small rows.
                 $report = [WizTreeCsv]::ParseTopFoldersFromFile($out, 3)
                 ($report.Folders | ForEach-Object { $_.Path }) | Should -Be @(
                     'C:\Users\', 'C:\Windows\', 'C:\Program Files, x86\')
@@ -853,8 +830,7 @@ Generated by WizTree 4.x (banner line)
 
         It "empties junction children as links instead of recursing through them" {
             $s = [ExecutionService]::BuildDeleteCommand(@("C:\temp"))
-            # The script's own comments name the cmdlet the guard avoids, so the negative
-            # assertion below has to run against code lines only.
+            # The script's own comments name the avoided cmdlet, so strip them before asserting.
             $code = (($s -split "`n" | Where-Object { $_.TrimStart() -notmatch '^#' }) -join "`n")
             $code | Should -Not -Match 'Remove-Item -Recurse'      # -Recurse follows reparse points on 5.1
             $code | Should -Match '\[IO\.Directory\]::Delete\(\$c\.FullName, \$false\)'

@@ -31,10 +31,8 @@ $ErrorActionPreference = 'Stop'
 if (-not $Key) { $Key = [IO.Path]::GetFileNameWithoutExtension($Path) }
 [xml]$svg = Get-Content -LiteralPath $Path -Raw
 
-# A path may open with a RELATIVE moveto ("m6 6 12 12") - legal standalone (the
-# spec reads a leading m as absolute), but wrong once several paths concatenate
-# into one Geometry: it becomes relative to the previous subpath's endpoint.
-# Rewrite "m x y <pairs>" as "M x,y l<pairs>" so every subpath starts absolute.
+# A leading relative moveto is legal standalone but wrong once paths concatenate into one
+# Geometry: it becomes relative to the previous subpath's endpoint, so rewrite it absolute.
 function ConvertTo-AbsoluteStart([string]$d) {
     $d = $d.Trim()
     if ($d -cnotmatch '^m') { return $d }

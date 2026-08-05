@@ -1,16 +1,14 @@
 using module "..\..\src\UI\Presenters\AsyncJobPresenter.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
 
-# Concrete subclass that records hook invocations so the shared PumpJobs
-# lifecycle (reverse-iterate / Poll / terminal -> complete -> cleanup -> remove)
-# can be verified without WPF or a live runspace.
+# Records hook invocations so the shared PumpJobs lifecycle can be verified without
+# WPF or a live runspace.
 class RecordingPresenter : AsyncJobPresenter {
     [System.Collections.Generic.List[string]] $Polled
     [System.Collections.Generic.List[string]] $Completed
     [int] $AfterPumpCount = 0
 
-    # Optional: a job to append the first time a given host completes (to model
-    # Home's scan -> apply transition and prove appended jobs survive the pass).
+    # Appended the first time AppendTrigger completes, modelling Home's scan to apply hop.
     [AsyncJob] $JobToAppendOnComplete = $null
     [string] $AppendTrigger = $null
 
@@ -44,8 +42,7 @@ Describe "AsyncJobPresenter" {
     BeforeAll {
         function New-TerminalJob {
             param([string]$hostName, [string]$status)
-            # AsyncJob with no Start(): Poll() no-ops because Status -ne 'Running',
-            # Cleanup() is safe because PowerShell is $null.
+            # With no Start(), Poll() no-ops off Status and Cleanup() sees a null PowerShell.
             $job = [AsyncJob]::new($hostName, 'Scan')
             $job.Status = $status
             return $job
@@ -76,11 +73,8 @@ Describe "AsyncJobPresenter" {
 
             $script:p.PumpJobs()
 
-            # Every job is polled.
             ($script:p.Polled | Sort-Object) | Should -Be @("DONE", "FAIL", "RUN")
-            # Both terminal jobs complete; the running one does not.
             ($script:p.Completed | Sort-Object) | Should -Be @("DONE", "FAIL")
-            # Only the running job remains.
             $script:p.ActiveJobs.Count | Should -Be 1
             $script:p.ActiveJobs[0].HostName | Should -Be "RUN"
         }
@@ -104,7 +98,6 @@ Describe "AsyncJobPresenter" {
 
             $script:p.PumpJobs()
 
-            # The scan completed and was removed; the appended apply survives.
             $script:p.Completed | Should -Be @("HOST")
             $script:p.ActiveJobs.Count | Should -Be 1
             $script:p.ActiveJobs[0] | Should -Be $apply
@@ -116,12 +109,11 @@ Describe "AsyncJobPresenter" {
 
             $script:p.PumpJobs()
 
-            $script:p.Polled | Should -Be @("DONE")    # still polled, so the UI keeps updating
-            $script:p.Completed.Count | Should -Be 0   # completion (which may open a dialog) deferred
-            $script:p.AfterPumpCount | Should -Be 0    # AfterPump can open a dialog too, so deferred
-            $script:p.ActiveJobs.Count | Should -Be 1  # finished job kept for a later, non-modal tick
+            $script:p.Polled | Should -Be @("DONE")    # Still polled, so the UI keeps updating.
+            $script:p.Completed.Count | Should -Be 0   # Completion may open a dialog, so deferred.
+            $script:p.AfterPumpCount | Should -Be 0    # AfterPump can open a dialog too.
+            $script:p.ActiveJobs.Count | Should -Be 1  # Kept for a later, non-modal tick.
 
-            # When the modal closes, the next pump processes it normally.
             $script:p.Modal = $false
             $script:p.PumpJobs()
             $script:p.Completed | Should -Be @("DONE")

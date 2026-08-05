@@ -18,8 +18,7 @@ using module "..\Core\TimeFormat.psm1"
     Resuming re-enters the normal code path, which re-applies every check it owns.
 #>
 
-# The user-initiated actions that need administrator rights. Names, not ordinals, cross
-# the JSON boundary: ConvertTo-Json on an enum writes the integer.
+# Administrator-gated actions. Names cross the JSON boundary: ConvertTo-Json writes ints.
 enum GatedAction {
     RunAll
     Run
@@ -32,7 +31,7 @@ enum GatedAction {
 class PendingIntent {
     [GatedAction] $Action = [GatedAction]::Run
     [string[]] $Hosts = @()
-    [string] $CreatedUtc = ''      # ISO 8601 round-trip ('o'); '' when never stamped
+    [string] $CreatedUtc = ''      # ISO 8601 round-trip ('o'), or '' when never stamped
 
     static [PendingIntent] Create([GatedAction]$action, [string[]]$hosts, [datetime]$nowUtc) {
         $intent = [PendingIntent]::new()
@@ -76,8 +75,7 @@ class PendingIntent {
         try {
             $h = $json | ConvertFrom-Json -AsHashtable -Depth 4
             if ($null -eq $h -or -not $h['action']) { return $null }
-            # Matched against the NAMES, not [enum]::TryParse: that accepts a numeric string
-            # and maps '3' onto whatever member sits at ordinal 3, undefined ones included.
+            # Not [enum]::TryParse: it accepts '3' and maps it onto whatever sits at ordinal 3.
             $name = [string]$h['action']
             $known = @([enum]::GetNames([GatedAction]) | Where-Object { $_ -ieq $name })
             if ($known.Count -ne 1) { return $null }

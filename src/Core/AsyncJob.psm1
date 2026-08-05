@@ -27,13 +27,11 @@ class AsyncJob {
     [string] $TempConfigPath
     [System.IAsyncResult] $AsyncResult
     [LogService] $Logger
-    # Child-process worker: args ride in, result rides out through temp files
-    # (isolated AppDomain per job dodges the concurrent class-load deadlock).
+    # Temp-file handoff to the child: a per-job AppDomain dodges the class-load deadlock.
     hidden [string] $ArgsFilePath
     hidden [string] $ResultFilePath
 
-    # Stall heartbeat: Poll() warns at StallWarnAfterSeconds then every repeat, with
-    # the pool free count discriminating queued-behind-starved-pool vs wedged worker.
+    # Stall heartbeat: the pool free count separates a starved pool from a wedged worker.
     [datetime] $StartedAtUtc
     hidden [datetime] $NextStallLogUtc
     hidden [int] $StallWarnAfterSeconds = 90
@@ -41,7 +39,7 @@ class AsyncJob {
     # Process-wide latch: the dispatch-starvation self-heal fires at most once.
     hidden static [bool] $ThreadPoolHealed = $false
 
-    # Test convenience only - production sites must pass the real logger, or job
+    # Test convenience only. Production sites must pass the real logger, or job
     # failures leave no trace in Donut.log (AsyncJobLoggerCoverage.Tests enforces).
     AsyncJob([string]$hostName, [JobKind]$type) {
         $this.Initialize($hostName, $type, $null)
@@ -63,8 +61,7 @@ class AsyncJob {
         $this.TempConfigPath = $tempConfigPath
 
         try {
-            # WorkerProcess owns the isolation: serialize args, spawn the child on a pool
-            # runspace via its (class-free, deadlock-proof) launcher.
+            # The launcher stays class-free so the pool runspace never deadlocks.
             $prep = [WorkerProcess]::Prepare($scriptPath, $arguments, $tempConfigPath)
             $this.ArgsFilePath = $prep.ArgsFile
             $this.ResultFilePath = $prep.ResultFile
@@ -102,8 +99,7 @@ class AsyncJob {
                 if ($this.PowerShell.HadErrors -or -not $verdict.Succeeded) {
                     $this.Status = [JobStatus]::Failed
                     $this.FailureMessage = $verdict.FailureMessage
-                    # The visible [Error] tag comes from LogLine; FailureMessage itself
-                    # stays undecorated for RemoteFailure.ReasonFromMessage.
+                    # Left undecorated so RemoteFailure.ReasonFromMessage can still match it.
                     $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, $this.FailureMessage))
                     $this.Logger.LogError("[$($this.HostName)] $($this.JobType) worker failed " +
                         "(exit $($verdict.ExitCode)): $($this.FailureMessage)")
@@ -122,8 +118,7 @@ class AsyncJob {
         }
         elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
             [datetime]::UtcNow -ge $this.NextStallLogUtc) {
-            # MinValue = the job reached Running without Start() arming the heartbeat
-            # (test doubles do this); never treat that as an instant stall.
+            # MinValue means Start() never armed the heartbeat (test doubles), not a stall.
             $this.LogStallHeartbeat()
         }
 
@@ -133,8 +128,8 @@ class AsyncJob {
         $this.DrainStream($this.PowerShell.Streams.Error, [LogSeverity]::Error)
     }
 
-    # One WARN per interval while a job neither completes nor fails - the difference
-    # between "the app just went quiet" and a log that says where the time is going.
+    # One WARN per interval while a job neither completes nor fails, so the log says
+    # where the time went instead of just going quiet.
     hidden [void] LogStallHeartbeat() {
         $elapsed = [long]([datetime]::UtcNow - $this.StartedAtUtc).TotalSeconds
         $pool = 'unknown'
@@ -160,8 +155,7 @@ class AsyncJob {
             $this.Logger.LogDebug(
                 "Stall heartbeat: shell state unreadable: $($_.Exception.Message)")
         }
-        # ThreadPool free threads: near 0 with idle runspaces = starved dispatch
-        # (jobs queued because no thread is free to hand them a runspace).
+        # Near-zero free threads with idle runspaces means dispatch itself is starved.
         $tp = 'unknown'
         $freeWorkers = -1
         try {
@@ -187,8 +181,7 @@ class AsyncJob {
     # stalls with idle runspaces and ~0 free ThreadPool threads, raise the floor once.
     hidden [void] HealThreadPoolIfStarved([int]$freeRunspaces, [int]$freeWorkers) {
         if ([AsyncJob]::ThreadPoolHealed) { return }
-        # Only idle runspaces + starved workers count; a busy-runspace stall (a slow
-        # scan) is real work, not starvation, and must not trip this.
+        # A busy-runspace stall is a slow scan doing real work, not starvation.
         if ($freeRunspaces -le 0 -or $freeWorkers -lt 0 -or $freeWorkers -gt 1) { return }
         [AsyncJob]::ThreadPoolHealed = $true
         try {
@@ -206,7 +199,7 @@ class AsyncJob {
         }
     }
 
-    # The stream a record arrived on is its severity; it was discarded here before.
+    # The stream a record arrived on is its severity, which was discarded here before.
     [void] DrainStream($stream, [LogSeverity]$severity) {
         if (-not $stream) { return }
         foreach ($item in $stream.ReadAll()) {

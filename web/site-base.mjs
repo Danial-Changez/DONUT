@@ -1,15 +1,9 @@
 // @ts-check
-// Resolve the GitHub Pages deploy URL, shared by astro.config.mjs and the
-// docs-link rehype plugin so the base lives in exactly one place.
-//
-// Precedence:
-//  1. actions/configure-pages outputs (piped in as env by the deploy workflow
-//     BEFORE the build) — the only source that knows the REAL target, including
-//     the random *.pages.github.io root that access-controlled (private)
-//     Enterprise Pages use, which is NOT <owner>.github.io/<repo>.
-//  2. GITHUB_REPOSITORY ("owner/repo") — a reasonable guess for a plain public
-//     project site when configure-pages hasn't run.
-//  3. The canonical production values, for local dev where nothing is set.
+// The one place the GitHub Pages deploy URL is resolved, in precedence order:
+// - PAGES_ORIGIN, set by configure-pages before the build. The only source that
+//   knows a private Enterprise Pages root, which is not owner.github.io/repo.
+// - GITHUB_REPOSITORY, a fair guess for a plain public project site.
+// - The production values, for local dev where nothing is set.
 const pagesOrigin = process.env.PAGES_ORIGIN;
 const slug = process.env.GITHUB_REPOSITORY;
 

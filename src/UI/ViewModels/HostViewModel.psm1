@@ -31,7 +31,7 @@ using module ".\FolderNodeViewModel.psm1"
 #>
 class HostViewModel : ObservableObject {
     [string] $HostName = ''
-    [string] $OwnerName = ''           # short owner form, e.g. "Danial C"; '' collapses the chip
+    [string] $OwnerName = ''           # short owner form, e.g. "Danial C", '' collapses the chip
     [string] $OwnerTip = ''            # full display name, only when it says more than OwnerName
     [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
@@ -50,12 +50,10 @@ class HostViewModel : ObservableObject {
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
     [object] $RemoveCommand   # RelayCommand, assigned by the coordinator (card's X)
 
-    # Machine-list sort key (maintained by RefreshShape): the Home list's CollectionView sorts
-    # on SortStatusRank (then HostName), so attention-worthy machines rise to the top.
+    # Sort key: the list's CollectionView sorts on it so attention-worthy machines rise.
     [int]    $SortStatusRank = 4
 
-    # Detail-header + overview-strip bindables: both mirror the selected machine via
-    # SelectedMachine.*, populated from inventory by ApplyInventory.
+    # Detail-header and overview bindables, mirrored via SelectedMachine.* from inventory.
     [string] $DetailTitle = ''
     [string] $DetailIp = ''   # resolved IP under the hostname (freshness lives on the card)
     [string] $OvModel = '—'
@@ -67,21 +65,18 @@ class HostViewModel : ObservableObject {
     [string] $OvBios = '—'   # current system BIOS/firmware version (from the inventory probe)
     hidden [string] $CachedIp = ''   # last resolved IP, kept across re-renders
 
-    # Largest-folders tree (bound by the detail pane's TreeView via SelectedMachine.Folders):
-    # display-ready FolderNodeViewModel roots + an emptiness flag for the hint text.
+    # Largest-folders tree: FolderNodeViewModel roots plus an emptiness flag for the hint.
     [object] $Folders = @()
     [bool]   $HasFolders = $false
     hidden [object] $FoldersSource = $null   # last-applied report, to skip no-op rebuilds
 
-    # Available-updates list (DcuUpdate[]) shown in the detail pane after an apply-updates scan.
-    # Display-only (apply is gated by a confirm dialog); HasUpdates gates the section + folders.
+    # Available-updates list (DcuUpdate[]), display-only since apply needs a confirm dialog.
     [object] $Updates = @()
     [bool]   $HasUpdates = $false
     [string] $UpdatesIdentityText = ''   # full verdict sentence (identity pill's tooltip)
-    [string] $IdentityState = 'Unknown'  # Match / Mismatch / Unknown - drives the pill
+    [string] $IdentityState = 'Unknown'  # Match / Mismatch / Unknown, which drives the pill
 
-    # Backing state for idle/reachability recomposition: the chip/subtitle are rebuilt
-    # from these whenever either the stored status or the live reachability changes.
+    # The chip and subtitle are rebuilt from these on any status or reachability change.
     hidden [string] $BaseSubtitle = 'never run'
     hidden [string] $IdleStatus = ''
     hidden [string] $Reachability = 'Unknown'
@@ -117,8 +112,8 @@ class HostViewModel : ObservableObject {
         $this.RefreshShape()
     }
 
-    # Feeds a parsed DCU percentage (0-100) into the bar. (Param name avoids colliding
-    # with the [Percent] property - a same-name param breaks assignment in PS classes.)
+    # Feeds a parsed DCU percentage (0-100) into the bar. The param name avoids the
+    # [Percent] property, since a same-name param breaks assignment in PS classes.
     [void] SetPercent([double]$pct) {
         if ($pct -lt 0) { return }
         if ($pct -gt 100) { $pct = 100 }
@@ -127,15 +122,15 @@ class HostViewModel : ObservableObject {
         $this.Set('Percent', $pct)
     }
 
-    # Shows a scan milestone beside the bar ("2/5 scanning devices"); $pct also drives the
-    # bar for percent-less jobs (a scan), or -1 leaves it alone (an apply owns its bar).
+    # Shows a scan milestone beside the bar. $pct also drives the bar for percent-less
+    # jobs, and -1 leaves it alone because an apply owns its own bar.
     [void] SetScanStep([string]$text, [double]$pct) {
         $this.Set('StepText', $text)
         if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
-    # Switches the bar to an animated indeterminate state for a phase that reports activity but
-    # no sub-percentage (a dcu-cli install), instead of leaving it frozen at the last percent.
+    # Switches the bar to indeterminate for a phase that reports activity but no
+    # sub-percentage, instead of leaving it frozen at the last percent.
     [void] SetIndeterminate() {
         $this.Set('ProgressVisible', $true)
         $this.Set('ProgressIndeterminate', $true)
@@ -162,8 +157,7 @@ class HostViewModel : ObservableObject {
         $this.RefreshShape()
     }
 
-    # Fills the overview-strip / probed bindables from an inventory probe (cached or
-    # fresh), reusing the pure InventoryFormat mappers.
+    # Fills the overview bindables from an inventory probe via the InventoryFormat mappers.
     [void] ApplyInventory([MachineInventory]$inv) {
         if ($null -eq $inv) { return }
         $this.Set('OvModel', $(if ($inv.Model) { $inv.Model } else { '—' }))
@@ -183,22 +177,20 @@ class HostViewModel : ObservableObject {
         $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
     }
 
-    # Sets the detail-header subtitle to the resolved IP (Reduction: probe freshness
-    # already shows on the machine card, so the pane doesn't repeat it).
+    # Sets the header subtitle to the resolved IP, since the card already shows freshness.
     [void] SetResolvedIp([string]$ip) {
         if (-not [string]::IsNullOrWhiteSpace($ip)) { $this.CachedIp = $ip }
         $this.Set('DetailIp', $this.CachedIp)
     }
 
-    # Recompute the list sort rank from the current running/reachability/idle state; called
-    # whenever any of those change so the CollectionView re-sorts (attention first).
+    # Recomputes the sort rank so the CollectionView re-sorts with attention first.
     hidden [void] RefreshShape() {
         $cat = [MachineListShaper]::Categorize($this.ProgressVisible, $this.Reachability, $this.IdleStatus)
         $this.Set('SortStatusRank', [MachineListShaper]::StatusRank($cat))
     }
 
-    # Rebuilds the largest-folders tree from a disk report; a re-applied same instance
-    # is skipped (TreeView keeps its expansion state), and null/empty clears to the hint.
+    # Rebuilds the largest-folders tree from a disk report. A re-applied same instance is
+    # skipped so the TreeView keeps its expansion state, and null clears to the hint.
     [void] ApplyFolders([DiskUsageReport]$report) {
         if ($null -ne $report -and [object]::ReferenceEquals($this.FoldersSource, $report)) { return }
         $this.FoldersSource = $report
@@ -222,8 +214,8 @@ class HostViewModel : ObservableObject {
 
     # --- Internal composition helpers ---
 
-    # The dot has two writers (ApplyIdle's 30s tick, SetReachability on verdicts); both
-    # flow through the list-sort mapper's precedence: attention > offline > online > idle.
+    # The dot has two writers (ApplyIdle's tick and SetReachability), so both flow through
+    # the list-sort mapper's precedence: attention, offline, online, idle.
     hidden [void] RenderDot() {
         $cat = [MachineListShaper]::Categorize($false, $this.Reachability, $this.IdleStatus)
         $key = switch ($cat) {
@@ -246,11 +238,11 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipVisible', $true)
     }
 
-    # First name + surname initial ("Danial C"); OwnerTip holds the full name only when it
-    # says more than the short form (a bare SAM does not) - see .NOTES.
+    # First name plus surname initial ("Danial C"). OwnerTip holds the full name only when
+    # it says more than the short form (a bare SAM does not). See .NOTES.
     [void] SetOwner([string]$displayName) {
         $full = ([string]$displayName).Trim()
-        # "Doe, Jane" -> first "Jane", surname "Doe"; "Jane [M.] Doe" -> first + last token.
+        # "Doe, Jane" -> first "Jane", surname "Doe". "Jane [M.] Doe" -> first + last token.
         $tokens = if ($full.Contains(',')) {
             $half = $full -split ',\s*', 2
             @(@($half[1] -split '\s+')[0], @($half[0] -split '\s+')[-1])
@@ -276,8 +268,7 @@ class HostViewModel : ObservableObject {
         }
     }
 
-    # Only rebuild the dot brush when the key actually changes (avoids brush churn, since
-    # SolidColorBrush has no value-equality).
+    # Rebuild only when the key changes, since SolidColorBrush has no value-equality.
     hidden [void] SetDotKey([string]$key) {
         if ($this.DotKey -eq $key) { return }
         $this.DotKey = $key
@@ -316,8 +307,7 @@ class HostViewModel : ObservableObject {
         return $lastStatus
     }
 
-    # Status symbol for idle rows so the chip reads by shape, not colour alone (mirrors
-    # the glyphs FleetCardStatus assigns to running rows).
+    # Status symbol so the chip reads by shape, not colour alone (mirrors FleetCardStatus).
     static [string] StatusGlyph([string]$lastStatus) {
         switch ($lastStatus) {
             'Completed' { return '✓' }
@@ -330,8 +320,7 @@ class HostViewModel : ObservableObject {
         return ''
     }
 
-    # Palette seeded once by HomePresenter.SeedRowPalette from UIColors.xaml so the
-    # accents have exactly one source; key -> @{ Brush; Tint; TintBorder }, all frozen.
+    # Seeded once from UIColors.xaml so the accents have exactly one source.
     static [hashtable] $Palette = @{}
 
     static [void] SetPalette([hashtable]$palette) {

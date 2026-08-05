@@ -34,16 +34,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# First statement on purpose: the gap back to the parent's dispatch stamp is the pool queue
-# wait plus this script's using-module compile, and neither side can see it alone.
+# First statement on purpose: the gap back to the parent's stamp is the pool queue wait.
 $startedAt = [datetime]::UtcNow
 
 $svc = [ActiveDirectoryService]::new($Domains, $null)
 $searchTimer = [System.Diagnostics.Stopwatch]::StartNew()
 $hits = $svc.Search($Prefix)
 $searchTimer.Stop()
-# The warning stream, not the pipeline: results are typed rows the caller maps, and a
-# forest that could not answer must not read as a forest that matched nothing.
+# A forest that could not answer must not read as a forest that matched nothing.
 foreach ($problem in $svc.LastErrors) { Write-Warning $problem }
 foreach ($r in $hits) {
     [PSCustomObject]@{
@@ -58,7 +56,6 @@ foreach ($r in $hits) {
         DistinguishedName = $r.DistinguishedName
     }
 }
-# Last, so the end stamp covers building the rows above. Information, not the pipeline: the
-# success stream is the typed row contract the caller maps - see .NOTES.
+# Last, so the end stamp covers building the rows above. See .NOTES.
 Write-Information -Tags 'AdTiming' -MessageData (
     "$($startedAt.Ticks) $($searchTimer.ElapsedMilliseconds) $([datetime]::UtcNow.Ticks)")

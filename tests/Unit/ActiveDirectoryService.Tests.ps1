@@ -4,11 +4,10 @@ using module "..\..\src\Services\ActiveDirectoryService.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
-# Fakes the env-coupled AD seams so the multi-domain aggregation / mapping /
-# guard logic runs entirely off a domain.
-#   UserRows/ComputerRows: domain -> hashtable[] of rows the directory "returns"
-#   FailDomains:           domains whose query throws (down/untrusted forest)
-#   Unlocks/Resets:        record each InvokeUnlock / InvokeReset call
+# Fakes the env-coupled AD seams so aggregation, mapping, and guards run entirely off a domain:
+# - UserRows and ComputerRows: rows the directory returns, keyed by domain.
+# - FailDomains: domains whose query throws, for a down or untrusted forest.
+# - Unlocks and Resets: record each InvokeUnlock and InvokeReset call.
 class FakeAdService : ActiveDirectoryService {
     [hashtable] $UserRows = @{}
     [hashtable] $ComputerRows = @{}
@@ -27,8 +26,7 @@ class FakeAdService : ActiveDirectoryService {
     hidden [hashtable[]] QueryDirectory([string]$domain, [string]$filter, [string[]]$props, [int]$max) {
         $this.QueryCount++
         if ($this.FailDomains -contains $domain) { throw "domain $domain unreachable" }
-        # The combined filter asks for computers AND users in one query, so return both;
-        # MapRow decides each row's kind from its objectCategory.
+        # The combined filter asks for computers and users at once, so return both kinds.
         $rows = @()
         if ($null -ne $this.ComputerRows[$domain]) { $rows += $this.ComputerRows[$domain] }
         if ($null -ne $this.UserRows[$domain]) { $rows += $this.UserRows[$domain] }
@@ -40,7 +38,7 @@ class FakeAdService : ActiveDirectoryService {
         if ($this.UnlockThrows) { throw "access is denied" }
     }
 
-    # Records HasPassword only - the fake must never hold the plaintext either.
+    # Records HasPassword only, the fake must never hold the plaintext either.
     hidden [void] InvokeReset([string]$sam, [string]$domain,
         [securestring]$newPassword, [bool]$changeAtLogon) {
         $this.Resets.Add(@{
@@ -97,7 +95,7 @@ Describe "ActiveDirectoryService.Search" {
 
         $comp = $r | Where-Object { $_.Kind -eq 'Computer' }
         $comp.Name | Should -Be 'WS-014'
-        $comp.SamAccountName | Should -Be 'WS-014'   # trailing '$' stripped
+        $comp.SamAccountName | Should -Be 'WS-014'   # Trailing '$' stripped.
     }
 
     It "isolates a failed forest: others still return and a WARN is logged" {
@@ -113,9 +111,7 @@ Describe "ActiveDirectoryService.Search" {
     }
 
     It "records the failed forest even with no logger, naming it and the reason" {
-        # The pool worker constructs this with a null logger, so LogWarning goes nowhere.
-        # Without LastErrors an unreachable forest is indistinguishable from an empty one,
-        # which is exactly how a misspelt forest name stayed hidden.
+        # The worker passes a null logger, so only LastErrors tells unreachable from empty.
         $svc = [FakeAdService]::new(@('d1', 'd2'), $null)
         $svc.FailDomains = @('d1')
         $svc.UserRows['d2'] = @(New-UserRow 'bob' 'bob@x' 'Bob' $false)

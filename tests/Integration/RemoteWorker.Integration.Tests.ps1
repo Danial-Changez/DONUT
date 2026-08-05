@@ -28,8 +28,7 @@ Describe "RemoteWorker legacy entry (failure contract)" {
 
     It "fails a doomed job with exit 1 and one parseable 'Worker failed:' stderr line" {
         $badHost = 'donut-legacy-no-such-host-99'
-        # ProcessStartInfo.ArgumentList quotes each argument; Start-Process joins its
-        # -ArgumentList unquoted, truncating paths with spaces (e.g. this checkout's).
+        # Start-Process joins -ArgumentList unquoted and truncates paths with spaces.
         $psi = [System.Diagnostics.ProcessStartInfo]::new([System.Environment]::ProcessPath)
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true

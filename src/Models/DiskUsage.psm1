@@ -33,8 +33,8 @@ class DiskUsageReport {
     [FolderUsage[]] $Folders = @()
 }
 
-# Pure parser for WizTree's CSV export - STREAMING, one line at a time: -Raw on a
-# full-drive export caused gen-2 GC storms that froze the UI. Static, WPF-free.
+# Pure parser for WizTree's CSV export, streaming one line at a time: -Raw on a
+# full-drive export caused gen-2 GC storms that froze the UI. Static and WPF-free.
 class WizTreeCsv {
     # Parses a WizTree export into a ranked DiskUsageReport: find the real header row
     # ("File Name"), drop the volume-root total, rank by size, cap at topN. Never throws.
@@ -45,8 +45,8 @@ class WizTreeCsv {
         finally { $reader.Dispose() }
     }
 
-    # Same parse, streamed straight off the file - the copied-back export never
-    # exists in memory as one string. Missing/unreadable file = empty report.
+    # Same parse, streamed straight off the file, so the copied-back export never
+    # exists in memory as one string. A missing or unreadable file gives an empty report.
     static [DiskUsageReport] ParseTopFoldersFromFile([string]$csvPath, [int]$topN) {
         try { $reader = [System.IO.StreamReader]::new($csvPath) }
         catch { return [WizTreeCsv]::EmptyReport() }
@@ -91,7 +91,7 @@ class WizTreeCsv {
 
                 $path = $cols[$nameIdx].Trim()
                 if ([string]::IsNullOrWhiteSpace($path)) { continue }
-                # Skip the volume root (e.g. "C:\" / "C:") - that's the whole-drive total.
+                # Skip the volume root (e.g. "C:\"), which is the whole-drive total.
                 if ($path -match '^[A-Za-z]:\\?$') { continue }
 
                 $f = [FolderUsage]::new()
@@ -101,8 +101,7 @@ class WizTreeCsv {
             }
         }
         catch {
-            # Never throws: rank whatever parsed before the fault, but say so - the
-            # warning stream reaches the job's detail-pane log when run on a worker.
+            # Never throws: rank what parsed, and the warning reaches the detail-pane log.
             Write-Warning "WizTree CSV parse stopped early: $($_.Exception.Message)"
         }
 
@@ -112,8 +111,7 @@ class WizTreeCsv {
         return $report
     }
 
-    # Minimal quote-aware CSV splitter ("" = escaped quote) - covers WizTree's format
-    # without ConvertFrom-Csv's per-row PSObject cost.
+    # Minimal quote-aware CSV splitter ("" = escaped quote), skipping ConvertFrom-Csv's cost.
     hidden static [string[]] SplitCsvLine([string]$line) {
         $fields = [System.Collections.Generic.List[string]]::new()
         $sb = [System.Text.StringBuilder]::new()
@@ -142,8 +140,7 @@ class WizTreeCsv {
     }
 }
 
-# One node in the rendered folder tree: path + size, the display label (segment relative
-# to its shown parent), indent depth, and size-ranked child folders.
+# One node in the rendered folder tree, labelled relative to its shown parent.
 class FolderTreeNode {
     [string] $Path = ''
     [string] $Label = ''
@@ -153,10 +150,9 @@ class FolderTreeNode {
 }
 
 # Pure helper arranging a flat, size-ranked folder list into a tree by path containment
-# (deepest listed prefix = parent; no ancestor = root). Static, WPF-free, tested.
+# (deepest listed prefix is the parent, no ancestor means root). Static and WPF-free.
 class DiskUsageTree {
-    # Returns the root nodes with their Children populated (size-ranked order
-    # preserved at every level) for a real TreeView render.
+    # Root nodes with Children populated, size-ranked order preserved at every level.
     static [FolderTreeNode[]] BuildNested([FolderUsage[]]$folders) {
         $items = @($folders |
                 Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Path) })
@@ -178,7 +174,6 @@ class DiskUsageTree {
             $parent[$i] = $best
         }
 
-        # One node per item (depth + label below its shown parent).
         $nodes = @()
         for ($i = 0; $i -lt $items.Count; $i++) {
             $d = 0; $cur = $parent[$i]
@@ -197,7 +192,6 @@ class DiskUsageTree {
             $nodes += $n
         }
 
-        # Attach each node under its parent (input/size order preserved); collect roots.
         $roots = [System.Collections.Generic.List[FolderTreeNode]]::new()
         for ($i = 0; $i -lt $items.Count; $i++) {
             $pIdx = $parent[$i]
@@ -210,9 +204,8 @@ class DiskUsageTree {
 
 # Pure formatting for the big-folders list rows. Static, WPF-free, tested.
 class DiskUsageFormat {
-    # Human-readable size: GB at >= 1 GB, MB at >= 1 MB, otherwise KB - never a
-    # "0 MB" row (1 decimal, InvariantCulture). Reuses the 1024^3 GB convention
-    # from InventoryFormat.DiskFreeLabel.
+    # GB at >= 1 GB, MB at >= 1 MB, otherwise KB, so no row ever reads "0 MB". Reuses
+    # the 1024^3 GB convention from InventoryFormat.DiskFreeLabel.
     static [string] SizeLabel([long]$bytes) {
         $ci = [System.Globalization.CultureInfo]::InvariantCulture
         $gb = 1073741824.0   # 1024^3

@@ -37,11 +37,10 @@ Describe "InventoryService" {
     Context "BuildProbeScript" {
         It "Targets only -Property on the battery classes (bypasses the CIM serialization crash)" {
             $script = [InventoryService]::BuildProbeScript("TestHost")
-            # Selecting a single property avoids serializing BatteryStaticData's
-            # corrupt datetime field, which crashes a full Get-CimInstance pull.
+            # One property avoids BatteryStaticData's corrupt datetime, which crashes a full pull.
             $script | Should -BeLike "*BatteryStaticData -Property DesignedCapacity*"
             $script | Should -BeLike "*BatteryFullChargedCapacity -Property FullChargedCapacity*"
-            # Stays on the modern CIM cmdlet, not the removed Get-WmiObject.
+            # Get-WmiObject is gone from PowerShell 7, so the probe must stay on CIM.
             $script | Should -Not -BeLike '*Get-WmiObject*'
         }
     }
@@ -58,8 +57,7 @@ Describe "InventoryService" {
         }
 
         It "Does NOT probe connectivity on the UI thread (the worker asserts it)" {
-            # Selecting an offline machine must not block/throw in Prepare*; the
-            # worker checks reachability on the runspace-pool thread.
+            # The worker checks reachability on the pool thread, so Prepare must not block.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
             $service = [InventoryService]::new($script:config, $probe)

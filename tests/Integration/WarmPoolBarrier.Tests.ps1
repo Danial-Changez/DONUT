@@ -24,13 +24,13 @@ using module "..\..\src\Services\HostResolver.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 # Stands in for HostResolver so WarmPool submits a stub script instead of the real
-# RemoteWorker warm pass. base($null, $null) is safe - the base ctor only stores refs.
+# RemoteWorker warm pass. base($null, $null) is safe because the ctor only stores refs.
 class StubWarmResolver : HostResolver {
     [string] $StubPath
     StubWarmResolver([string]$stubPath) : base($null, $null) {
         $this.StubPath = $stubPath
     }
-    # The coordinator calls the TAGGED arity; overriding only the 0-arg one would
+    # The coordinator calls the tagged arity, and overriding only the 0-arg one would
     # fall through to the real BuildWorkerArgs and submit the real worker.
     [hashtable] PrepareWarmRunspace([string]$tag) {
         return @{ ScriptPath = $this.StubPath; Arguments = @{} }
@@ -71,8 +71,7 @@ Describe "WarmPool barrier" {
         $f.Coordinator.WarmPool()
         $f.Log.Contains('Pre-warmed 2 of 2') | Should -BeTrue
 
-        # A job submitted right after the barrier must run - the seam that broke when
-        # parked warm shells held every runspace ("Started Resolve job." -> silence).
+        # The seam that broke: parked warm shells held every runspace and jobs went silent.
         $ps = [powershell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetPool()
         [void]$ps.AddScript('42')
@@ -84,37 +83,29 @@ Describe "WarmPool barrier" {
     }
 
     It "a lapsed barrier returns promptly, heals the pool, and reaps late warms" {
-        # The stubs outlive the 2 s barrier but finish on their own at ~8 s - the
-        # "slow, not wedged" case from the field (first-run AV/AMSI scanning pushed
-        # every warm past 30 s). The barrier must not kill them: a late finisher is
-        # still a fully warmed runspace.
+        # The "slow, not wedged" field case: a late finisher is still a fully warmed runspace.
         $f = New-BarrierFixture "Start-Sleep -Seconds 8"
         $f.Coordinator.WarmTimeoutSeconds = 2
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $f.Coordinator.WarmPool()
         $sw.Stop()
 
-        # The barrier must lapse near its deadline - it may never block on a running
-        # pipeline (Dispose/Stop on one hangs until the pipeline yields, which a
-        # wedged pipeline never does; that hang shipped once, pre-window).
+        # Dispose or Stop on a running pipeline hangs until it yields, which a wedge never does.
         $sw.Elapsed.TotalSeconds | Should -BeLessThan 20
         $f.Log.Contains('Pre-warmed 0 of 2') | Should -BeTrue
 
-        # Serial warm parks the FIRST wedged shell and STOPS (a wedged compile holds
-        # the load lock; submitting the next would only pile onto it).
+        # A wedged compile holds the load lock, so submitting the next warm would pile onto it.
         $f.Coordinator.AbandonedWarmShells.Count | Should -Be 1
 
         # Forensics: the parked shell must leave a per-shell state line naming its tag.
         $f.Log.Contains('Warm shell parked at barrier lapse: warm-1') | Should -BeTrue
         $f.Log.Contains('state=Running') | Should -BeTrue
 
-        # Self-heal: capacity grows by the parked count so real jobs never starve
-        # behind the held runspace.
+        # Self-heal: capacity grows by the parked count so real jobs never starve.
         $f.Log.Contains('Pool capacity raised to 3') | Should -BeTrue
         [RunspaceManager]::GetPool().GetMaxRunspaces() | Should -Be 3
 
-        # THE user-facing contract: a job submitted immediately after a lapsed
-        # barrier must still run, even while the parked shell holds its runspace.
+        # The user-facing contract: a job must run even while a parked shell holds its runspace.
         $ps = [powershell]::Create()
         $ps.RunspacePool = [RunspaceManager]::GetPool()
         [void]$ps.AddScript('7')
@@ -124,9 +115,7 @@ Describe "WarmPool barrier" {
         [string]$ps.EndInvoke($handle) | Should -Be '7'
         $ps.Dispose()
 
-        # Reap: when the late warms land (~8 s), the pump-driven harvest must claim
-        # them and give the raised capacity back - the raise is temporary insurance,
-        # not a permanent doubling.
+        # The raised capacity is temporary insurance, so the reap must give it back.
         foreach ($attempt in 1..90) {
             $f.Coordinator.ReapWarmShells()
             if ($f.Coordinator.AbandonedWarmShells.Count -eq 0) { break }
@@ -142,8 +131,7 @@ Describe "WarmPool barrier" {
     }
 
     It "a warm that completes with errors is counted apart and logged at ERROR" {
-        # Non-terminating errors complete the pipeline, so before the forensics this
-        # counted as a successful warm and the log showed nothing at all.
+        # Non-terminating errors complete the pipeline, so these once counted as clean warms.
         $f = New-BarrierFixture "Write-Error 'boom' -ErrorAction Continue"
         $f.Coordinator.WarmPool()
 

@@ -42,8 +42,7 @@ Describe "AsyncJob logger coverage" {
                     "(the silent-scan-wedge regression)")
             }
         }
-        # The pump presenters + resolution coordinator construct jobs; if this drops to
-        # zero the search above went blind (moved class, renamed type), not clean.
+        # If this drops to zero the search went blind (moved class, renamed type), not clean.
         $checked | Should -BeGreaterThan 0
     }
 }

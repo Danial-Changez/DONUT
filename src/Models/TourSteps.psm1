@@ -14,7 +14,7 @@
 class TourStep {
     [string] $Title
     [string] $Body
-    [string] $TargetKey    # '' = centered welcome; else a control key the presenter resolves
+    [string] $TargetKey    # '' = centered welcome, else a control key the presenter resolves
     [string] $Placement    # 'center' | 'below' | 'above' | 'right' | 'left'
 }
 

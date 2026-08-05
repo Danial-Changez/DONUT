@@ -23,7 +23,7 @@ using module "..\..\Core\LogService.psm1"
 class TourPresenter {
     hidden [object] $Window
     hidden [object] $MainVm
-    hidden [object] $Home          # HomePresenter (duck-typed: SearchBar/ModeButton/RunAllButton/MachineList)
+    hidden [object] $Home          # HomePresenter (duck-typed)
     hidden [AppConfig] $Config
     hidden [ConfigManager] $ConfigManager
     hidden [LogService] $Logger
@@ -92,8 +92,7 @@ class TourPresenter {
         $this.Steps = [TourSteps]::Build()
         $this.Index = 0
         $this.MainVm.Set('IsTourOpen', $true)
-        # Defer so the just-shown overlay has laid out. GetNewClosure captures $self; a render
-        # error is caught so it can't bubble out of Application.Run and kill startup.
+        # Defer so the overlay has laid out, and catch render errors before they kill startup.
         $self = $this
         $action = {
             try { $self.ShowStep($self.GetIndex()) }
@@ -155,7 +154,7 @@ class TourPresenter {
         $this.BodyBlock.Text = $step.Body
         $this.BtnNext.Content = if ($last) { 'Done' } else { 'Next' }
         $this.BtnBack.Visibility = if ($index -eq 0) { 'Collapsed' } else { 'Visible' }
-        # Skip is offered once, on the welcome step; after that Esc (noted there) exits.
+        # Skip is offered once, on the welcome step, and after that Esc (noted there) exits.
         $this.BtnSkip.Visibility = if ($index -eq 0) { 'Visible' } else { 'Collapsed' }
         $this.BuildDots($index)
 
@@ -193,7 +192,6 @@ class TourPresenter {
         $rw = [Math]::Min($ow - $x, $target.ActualWidth + 2 * $pad)
         $rh = [Math]::Min($oh - $y, $target.ActualHeight + 2 * $pad)
 
-        # Four panels frame the lit hole.
         $this.DimTop.Height = $y
         $this.DimBottom.Height = [Math]::Max(0, $oh - ($y + $rh))
         $this.DimLeft.Margin = [Thickness]::new(0, $y, 0, 0)
@@ -203,7 +201,6 @@ class TourPresenter {
         $this.DimRight.Height = $rh
         $this.DimRight.Width = [Math]::Max(0, $ow - ($x + $rw))
 
-        # Spotlight ring over the target.
         $this.Spotlight.Margin = [Thickness]::new($x, $y, 0, 0)
         $this.Spotlight.Width = $rw
         $this.Spotlight.Height = $rh
@@ -242,8 +239,7 @@ class TourPresenter {
             'mode' { return $this.HomeElement('btnMode') }
             'list' { return $this.HomeElement('MachinePanel') }
             'detail' { return $this.HomeElement('DetailPane') }
-            # The docs / tour / settings cluster, not just the gear: the step's copy
-            # names all three, so the spotlight frames all three.
+            # The whole help cluster, not just the gear: the step's copy names all three.
             'settings' { return $this.Window.FindName('panelHelpButtons') }
             default { return $null }
         }
@@ -268,7 +264,7 @@ class TourPresenter {
     }
 
     # Finds a named element inside the Home page. The page is a shell composing region
-    # files, each with its own namescope - FindHomeElement probes shell + every region.
+    # files, each with its own namescope, so FindHomeElement probes shell and every region.
     hidden [object] HomeElement([string]$name) {
         if ($null -eq $this.Home) { return $null }
         return $this.Home.FindHomeElement($name)

@@ -39,17 +39,13 @@ public static class TrayTheme
         menu.ForeColor = Color.FromArgb(0xFA, 0xFA, 0xFA);
         menu.Opening += (s, e) =>
         {
-            // Win11 DWM rounding on the dropdown's own window; pre-Win11 the call
-            // fails and the menu stays square - still themed, just not rounded.
+            // Pre-Win11 this call fails and the menu stays square but still themed.
             int pref = DWMWCP_ROUNDSMALL;
             try { _ = DwmSetWindowAttribute(menu.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int)); }
             catch (DllNotFoundException) { }
             catch (EntryPointNotFoundException) { }
         };
-        // Opened from the taskbar's overflow flyout, the FLYOUT holds foreground; when
-        // it auto-dismisses, no deactivation ever reaches the menu and it floats
-        // orphaned (the old NotifyIcon menu bug). Foregrounding the menu itself makes
-        // click-away and focus loss dismiss it like every other tray menu.
+        // Without this the menu floats orphaned when the taskbar flyout dismisses.
         menu.Opened += (s, e) => SetForegroundWindow(menu.Handle);
     }
 

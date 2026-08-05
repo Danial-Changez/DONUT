@@ -25,7 +25,7 @@ enum LogSeverity {
 
 class LogLine {
     [LogSeverity] $Severity = [LogSeverity]::Info
-    [string] $Stamp = ''         # 'HH:mm:ss' local; '' for separator lines
+    [string] $Stamp = ''         # 'HH:mm:ss' local, or '' for separator lines
     [string] $Text = ''
     [string] $StampText = ''     # display twin of Stamp: 'HH:mm:ss ' (or '')
     [string] $DisplayText = ''   # Tag + Text, precomputed for the XAML Run binding
@@ -34,7 +34,7 @@ class LogLine {
     hidden static [regex] $DcuStamp = [regex]::new(
         '^\[(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?\]\s*:?\s*(.*)$')
 
-    # Text tag per severity; Info/Success carry none (color + content suffice).
+    # Text tag per severity. Info and Success carry none (color and content suffice).
     static [string] Tag([LogSeverity]$severity) {
         if ($severity -eq [LogSeverity]::Error) { return '[Error] ' }
         if ($severity -eq [LogSeverity]::Warn) { return '[Warn] ' }
@@ -56,8 +56,8 @@ class LogLine {
         return [LogLine]::Build($severity, [datetime]::Now.ToString('HH:mm:ss'), $text)
     }
 
-    # A worker/stream line: a dcu-cli date-time prefix is re-stamped as HH:mm:ss (no
-    # double stamp); prefixless lines are stamped now. Classification only upgrades.
+    # A worker line: a dcu-cli date-time prefix is re-stamped as HH:mm:ss (no double
+    # stamp) and prefixless lines are stamped now. Classification only upgrades.
     static [LogLine] FromWorkerLine([string]$text, [LogSeverity]$streamSeverity) {
         # $ts/$sev, not $stamp/$severity: locals matching property names break assignment.
         $ts = [datetime]::Now.ToString('HH:mm:ss')
@@ -68,8 +68,7 @@ class LogLine {
             $body = $m.Groups[3].Value
         }
         $sev = $streamSeverity
-        # dcu error/warning WORDS only upgrade Info to Warn: dcu-cli's log lines are
-        # advisory - the return code stays the authority on job failure.
+        # Advisory only: a matched word lifts Info to Warn, but the return code decides.
         if ($sev -eq [LogSeverity]::Info -and
             $body -match '(?i)\b(error|failed|failure|warning)\b') {
             $sev = [LogSeverity]::Warn
@@ -77,8 +76,7 @@ class LogLine {
         return [LogLine]::Build($sev, $ts, $body)
     }
 
-    # Same stamp + severity, different text (e.g. a reconnect line with its marker
-    # stripped for display).
+    # Same stamp and severity, different text (a reconnect line with its marker stripped).
     [LogLine] WithText([string]$newText) {
         return [LogLine]::Build($this.Severity, $this.Stamp, $newText)
     }

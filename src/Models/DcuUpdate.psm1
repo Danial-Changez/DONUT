@@ -39,15 +39,14 @@ class DcuUpdate {
             $u.VersionText = "$currentVersion  →  $newVersion"
         }
         else {
-            # No matched installed version to diff against - show the target version alone
-            # ("(latest)" was redundant: every DCU update is the latest available).
+            # Nothing to diff against, and "(latest)" was redundant since every update is latest.
             $u.VersionText = "$newVersion"
         }
         $u.SizeText = [DcuUpdate]::FormatSize($sizeBytes)
         return $u
     }
 
-    # GB at >= 1 GB else MB (1 decimal, InvariantCulture); mirrors DiskUsageFormat.SizeLabel.
+    # GB at >= 1 GB else MB (1 decimal, InvariantCulture), mirroring DiskUsageFormat.SizeLabel.
     hidden static [string] FormatSize([long]$bytes) {
         if ($bytes -le 0) { return '' }
         $ci = [System.Globalization.CultureInfo]::InvariantCulture

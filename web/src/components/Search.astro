@@ -49,11 +49,8 @@ const quickLinks = [
 </template>
 
 <script>
-  // Inject the quick-links panel into each search dialog and mirror "has the
-  // query got text?" onto site-search[data-searching] so the CSS can swap the
-  // panel for results. Delegated from the dialog because Pagefind's input mounts
-  // asynchronously; the deferred click re-check covers its clear button, which
-  // changes the value without firing an input event.
+  // Delegated from the dialog because Pagefind's input mounts asynchronously,
+  // and the deferred re-check covers its clear button, which fires no input event.
   const template = document.querySelector<HTMLTemplateElement>('template.dw-quick-links-tpl');
   if (template) {
     for (const search of document.querySelectorAll('site-search')) {

@@ -59,8 +59,7 @@ Describe "WorkerProcess" {
             $v.FailureMessage | Should -Not -BeNullOrEmpty
         }
 
-        # A second launcher bowing out via the single-instance guard exits 0 with no
-        # result - the silent "success" that wedged every launcher-hosted worker.
+        # The single-instance guard makes a second launcher exit 0 with no result, wedging workers.
         It "reads exit 0 with no result as a FAILURE, not a silent success" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
                     Result = $null; ExitCode = 0; StdErr = ''; StdOut = '' })

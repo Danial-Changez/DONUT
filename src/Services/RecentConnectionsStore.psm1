@@ -19,22 +19,24 @@ using module "..\Core\TimeFormat.psm1"
     no-op, which keeps unit tests free of disk I/O. A corrupt or missing file
     loads as an empty list - recency is a cache, and the WSID seed repopulates
     it - so writes are plain Set-Content, no atomicity ceremony needed.
+
+    Upsert deliberately does not carry a legacy 'inventory' blob across from the
+    previous entry: reports\ is the inventory store now, and config-era per-machine
+    blobs are dropped on the first write rather than kept alive indefinitely.
 #>
 class RecentConnectionsStore {
-    hidden [string] $Path         # recents.json; blank = in-memory only (tests)
+    hidden [string] $Path         # recents.json, blank means in-memory only (tests)
     hidden [LogService] $Logger
     hidden [object[]] $Data       # raw entry hashtables, newest first
     static [int] $Cap = 50
 
-    # Save coalescing: with DeferSave on, mutations mark PendingSave and FlushSave()
-    # performs the single deferred write (the UI flushes once per drained batch).
+    # With DeferSave on, mutations only mark PendingSave and FlushSave() does the write.
     [bool]   $DeferSave = $false
     hidden [bool] $PendingSave = $false
 
-    # Cached typed view, rebuilt lazily, invalidated by any mutation (all funnel through
-    # SetEntries) - the UI reads every ~200ms tick. $Index = lower(hostname) -> entry, O(1).
+    # Cached because the UI re-reads on every 200ms tick. Any mutation invalidates it.
     hidden [RecentConnection[]] $Cache
-    hidden [hashtable] $Index
+    hidden [hashtable] $Index     # lower(hostname) -> entry, for O(1) lookup
     hidden [bool] $CacheValid = $false
 
     RecentConnectionsStore([string]$path, [LogService]$logger) {
@@ -56,11 +58,8 @@ class RecentConnectionsStore {
         return (Join-Path ([DonutPaths]::ConfigDir()) 'recents.json')
     }
 
-    # One-time config.json -> recents.json move: imports the legacy 'recentHosts'
-    # entries (minus the per-machine blobs reports\ now owns) and strips the
-    # runtime keys config no longer carries. Safe to re-run: an existing recents
-    # file wins, key removal is idempotent, and an import failure leaves config
-    # untouched so the next launch retries.
+    # One-time config.json to recents.json move. Safe to re-run: an existing recents file
+    # wins, key removal is idempotent, and a failed import leaves config for the retry.
     static [void] MigrateFromConfig([AppConfig]$config, [object]$configManager,
         [string]$path, [LogService]$logger) {
         if ($null -eq $config) { return }
@@ -144,9 +143,7 @@ class RecentConnectionsStore {
             updateCount = [int]$updateCount
         }
 
-        # Carry over what a run does not change (lastTouched, owner); replacing
-        # the entry without these silently loses the caches. A legacy 'inventory'
-        # blob is deliberately NOT carried: reports\ is the inventory store now.
+        # Replacing the entry outright silently loses these caches. See .NOTES.
         $prev = $this.FindEntry($name)
         if ($null -ne $prev) {
             foreach ($k in @('lastTouched', 'owner')) {
@@ -157,7 +154,7 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
-    # Stamps the host's last operator action so the next launch orders cards newest-
+    # Stamps the host's last operator action so the next launch orders cards newest
     # first. Deliberately leaves lastSeen alone: that means "last run" (24h scan reuse).
     [void] Touch([string]$hostname) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
@@ -183,7 +180,6 @@ class RecentConnectionsStore {
         $this.CommitFront($entry, $name)
     }
 
-    # Removes an entry by hostname.
     [void] Remove([string]$hostname) {
         if ([string]::IsNullOrWhiteSpace($hostname)) { return }
         $name = $hostname.Trim()
@@ -211,8 +207,8 @@ class RecentConnectionsStore {
         $this.Save()
     }
 
-    # Typed entries, most-recent-activity first (RecencyKey; blank stamps sort oldest),
-    # and cached until the next mutation so per-tick reads don't rebuild.
+    # Typed entries, most-recent-activity first by RecencyKey, with blank stamps sorting
+    # oldest. Cached until the next mutation so per-tick reads do not rebuild.
     [RecentConnection[]] GetAll() {
         $this.EnsureCache()
         return $this.Cache
@@ -235,8 +231,8 @@ class RecentConnectionsStore {
         return $(if ($touched -gt $seen) { $touched } else { $seen })
     }
 
-    # Rebuilds the typed cache + index from the raw entries when stale. The Cap here
-    # guards a hand-edited oversized file; SetEntries enforces it on every write.
+    # Rebuilds the typed cache and index from the raw entries when stale. The Cap here
+    # guards a hand-edited oversized file, and SetEntries enforces it on every write.
     hidden [void] EnsureCache() {
         if ($this.CacheValid) { return }
         $typed = @($this.Entries() |
@@ -263,8 +259,8 @@ class RecentConnectionsStore {
         $this.WriteRecents()
     }
 
-    # Writes any pending deferred save (no-op when nothing is pending). Called by the
-    # UI once per drained batch / on close, so many upserts collapse to one disk write.
+    # Writes any pending deferred save. The UI calls it once per drained batch and on
+    # close, so many upserts collapse to one disk write.
     [void] FlushSave() {
         if ($this.PendingSave) { $this.WriteRecents() }
     }

@@ -17,7 +17,7 @@ class RecentConnection {
     [string] $LastStatus      # e.g. 'Completed','Failed','RebootRequired',''
     [string] $LastJobType
     [int]    $UpdateCount
-    [string] $Owner           # SCCM primary user's display name; cached, looked up once
+    [string] $Owner           # SCCM primary user's display name, cached and looked up once
 
     static [RecentConnection] FromHashtable([hashtable]$h) {
         $rc = [RecentConnection]::new()

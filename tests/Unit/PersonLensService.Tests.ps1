@@ -2,7 +2,7 @@ using module "..\..\src\Services\PersonLensService.psm1"
 using module "..\..\src\Models\PersonLens.psm1"
 
 # Fakes the env-coupled de-elevation seam (RunLookupJson) so the parse wiring is testable
-# off a domain - mirrors ActiveDirectoryService's overridable-seam pattern.
+# off a domain, mirroring ActiveDirectoryService's overridable-seam pattern.
 class FakeLensService : PersonLensService {
     [string] $Json = ''
     FakeLensService([string]$json) : base('site.example', 'C:\Src') { $this.Json = $json }
@@ -132,7 +132,7 @@ Describe "PersonLensService" {
             foreach ($n in 'lens-agent', 'lens-stale', 'lens-fresh') {
                 New-Item -ItemType Directory -Path (Join-Path $root $n) -Force | Out-Null
             }
-            # Even a stale-aged agent dir survives; only per-lookup lens-* dirs sweep.
+            # Even a stale-aged agent dir survives, and only per-lookup lens-* dirs sweep.
             (Get-Item (Join-Path $root 'lens-stale')).LastWriteTime = (Get-Date).AddMinutes(-30)
             (Get-Item (Join-Path $root 'lens-agent')).LastWriteTime = (Get-Date).AddMinutes(-30)
 
@@ -185,8 +185,7 @@ Describe "PersonLensService" {
             [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), $keyIv)
             $response = '{ "sam": "U1", "devices": [] }'
 
-            # A minimal in-process agent: waits for request-<id>, then answers in the
-            # wire format (AES-256-CBC, tmp + rename) - partial first, then the result.
+            # Stands in for the agent, answering in the wire format (AES-256-CBC, tmp then rename).
             $agent = [powershell]::Create()
             [void]$agent.AddScript({
                     param($dir, $keyIv, $response)

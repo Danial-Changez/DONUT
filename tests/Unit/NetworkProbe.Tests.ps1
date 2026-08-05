@@ -109,8 +109,7 @@ Describe "NetworkProbe" {
             $probe.DnsQueryCount | Should -Be 0
         }
 
-        # The autostarted SYSTEM instance's machine account: ADWS refuses it, but the
-        # LDAP stack user search runs on works - discovery must survive on that stack.
+        # ADWS refuses the autostarted SYSTEM instance's machine account, so LDAP must work.
         It "Should fall back to LDAP when the ADWS query throws" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)

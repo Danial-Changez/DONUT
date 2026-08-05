@@ -36,21 +36,19 @@ using module "..\..\Models\JobEnums.psm1"
 class ResolutionCoordinator {
     [AppConfig]    $Config
     [LogService]   $Logger
-    [object]       $ConfigManager   # duck-typed; used to persist the active DC
+    [object]       $ConfigManager   # duck-typed, used to persist the active DC
     [object]       $Toasts          # ToastService
     [HostResolver] $Resolver        # shared with HomePresenter (not owned here)
     [object]       $Home            # duck-typed back-ref to HomePresenter's pump + seams
     [bool]         $PoolWarmed = $false   # single-shot guard for WarmPool
-    # Barrier-lapsed warm shells, parked still running as @{ Shell; Handle; Started }
-    # until ReapWarmShells harvests them (architecture/runspaces-and-workers: pool warm).
+    # Barrier-lapsed warm shells, parked still running until ReapWarmShells harvests them.
     hidden [object[]] $AbandonedWarmShells = @()
-    # WarmPool's barrier deadline; tests shrink it to drive the lapse path fast.
+    # WarmPool's barrier deadline, shrunk by tests to drive the lapse path fast.
     hidden [int] $WarmTimeoutSeconds = 30
     # Next time ReapWarmShells may dump parked-shell state lines (throttles to 1/min).
     hidden [datetime] $NextReapReportUtc = [datetime]::MinValue
 
-    # Fast-lane state: cap the concurrent slim resolve children (a paste-add must not
-    # spawn an unbounded pwsh burst), FIFO-queue the overflow, and track lane health.
+    # Fast-lane cap: a paste-add must not spawn an unbounded pwsh burst.
     hidden [int] $FastResolveCap = 4
     hidden [int] $FastResolveActive = 0
     hidden [System.Collections.Generic.Queue[string]] $PendingFastResolves = [System.Collections.Generic.Queue[string]]::new()
@@ -76,15 +74,14 @@ class ResolutionCoordinator {
         $this.Home = $homePresenter
     }
 
-    # One-time: discover and pick a live DC on the pool; cached when it completes.
+    # One-time: discover and pick a live DC on the pool, cached when it completes.
     [void] StartWarm() {
         try {
             $prep = $this.Resolver.PrepareWarm()
             $job = [AsyncJob]::new('', [JobKind]::Resolve, $this.Logger)
             $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
             $this.Home.ActiveJobs.Add($job)
-            # Free-count diagnostic: if this logs with no "Selected active domain
-            # controller" after it, free 0 = starved pool, free > 0 = the worker hung.
+            # Diagnostic: free 0 means a starved pool, free > 0 means the worker hung.
             $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
             $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
         }
@@ -93,8 +90,7 @@ class ResolutionCoordinator {
         }
     }
 
-    # Warms the pool one runspace at a time (serial is mandatory - concurrent
-    # using-module compiles deadlock; architecture/runspaces-and-workers).
+    # Warms the pool serially: concurrent using-module compiles deadlock.
     [void] WarmPool() {
         if ($this.PoolWarmed) { return }
         $this.PoolWarmed = $true
@@ -119,8 +115,7 @@ class ResolutionCoordinator {
                 foreach ($k in $prep.Arguments.Keys) {
                     $ps.AddParameter($k, $prep.Arguments[$k]) | Out-Null
                 }
-                # Wait for this shell before submitting the next - never two graph
-                # compiles in flight, or the pool deadlocks.
+                # Wait for this shell first: two graph compiles in flight deadlock the pool.
                 $handle = $ps.BeginInvoke()
                 if ($handle.AsyncWaitHandle.WaitOne($this.WarmTimeoutSeconds * 1000)) {
                     $ps.EndInvoke($handle)
@@ -138,8 +133,7 @@ class ResolutionCoordinator {
                     }
                 }
                 else {
-                    # A warm that never returns = the load lock is likely wedged; park
-                    # it (never Dispose a running pipeline) and stop piling on.
+                    # Never Dispose a running pipeline: park the wedged warm and stop piling on.
                     $this.Logger.LogWarning("Warm shell parked at barrier lapse: " +
                         $this.DescribeShell($ps, $tag, $started))
                     $this.AbandonedWarmShells += @{
@@ -159,8 +153,7 @@ class ResolutionCoordinator {
         }
 
         if ($parked -gt 0) {
-            # A parked shell holds its runspace, so raise the max so real jobs never
-            # starve behind it; ReapWarmShells returns the slack when it lands.
+            # A parked shell holds its runspace, so raise the max or real jobs starve.
             try {
                 $newMax = $pool.GetMaxRunspaces() + $parked
                 if ($pool.SetMaxRunspaces($newMax)) {
@@ -195,8 +188,7 @@ class ResolutionCoordinator {
             if ($null -ne $info.Reason) {
                 $line += " reason=$($info.Reason.GetType().Name): $($info.Reason.Message)"
             }
-            # Indexed reads only: enumerating a live stream while the worker appends
-            # is the "Collection was modified" race (architecture/runspaces-and-workers).
+            # Indexed reads only: enumerating a live stream races the worker's appends.
             $take = [Math]::Min(3, $shell.Streams.Error.Count)
             if ($take -gt 0) {
                 $errs = for ($j = 0; $j -lt $take; $j++) { "$($shell.Streams.Error[$j])" }
@@ -209,8 +201,8 @@ class ResolutionCoordinator {
         }
     }
 
-    # Pump-driven harvest of barrier-lapsed warm shells: a late finisher lands fully
-    # warmed and returns one unit of raised capacity; a wedged one parks for life.
+    # Pump-driven harvest of barrier-lapsed warm shells: a late finisher lands warmed and
+    # returns one unit of raised capacity, while a wedged one parks for life.
     [void] ReapWarmShells() {
         if ($this.AbandonedWarmShells.Count -eq 0) { return }
         $report = [datetime]::UtcNow -ge $this.NextReapReportUtc
@@ -257,13 +249,13 @@ class ResolutionCoordinator {
         $this.AbandonedWarmShells = $stillRunning
     }
 
-    # Background single-flight IP resolve; no-op until a DC is warm or the host is
-    # cached/in-flight. Fast lane (capped direct child) by default; worker path = fallback.
+    # Background single-flight IP resolve, a no-op until a DC is warm or the host is
+    # cached or in flight. The capped fast lane runs by default, worker path is the fallback.
     [void] PrefetchIp([string]$hostName) {
         if (-not $this.Resolver.NeedsResolve($hostName)) { return }
         if (-not $this.FastLaneHealthy) { $this.StartClassicResolve($hostName); return }
         if ($this.FastResolveActive -ge $this.FastResolveCap) {
-            # Latch while queued so single-flight holds; drained from CompleteResolve.
+            # Latch while queued so single-flight holds, then drain from CompleteResolve.
             $this.Resolver.MarkInFlight($hostName)
             $this.PendingFastResolves.Enqueue($hostName)
             return
@@ -282,8 +274,7 @@ class ResolutionCoordinator {
             $this.Logger.LogDebug("[$hostName] fast IP pre-resolve submitted (direct child, no pool slot).")
         }
         catch {
-            # Release the latch if the job never started, or NeedsResolve stays false
-            # forever and the host wedges.
+            # Release the latch if the job never started, or the host wedges forever.
             $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] fast IP pre-resolve could not start", $_)
         }
@@ -311,7 +302,7 @@ class ResolutionCoordinator {
         }
     }
 
-    # Starts queued fast resolves as slots free up; a lane latched off mid-queue sends
+    # Starts queued fast resolves as slots free up. A lane latched off mid-queue sends
     # the remainder down the classic path instead of dropping them.
     hidden [void] StartNextFastResolve() {
         while ($this.PendingFastResolves.Count -gt 0 -and
@@ -328,8 +319,7 @@ class ResolutionCoordinator {
         $this.PrefetchIp($hostName)
     }
 
-    # Fires the identity check (what name does the box at this IP report?) as its own
-    # pool job; its verdict gates the destructive apply.
+    # Fires the identity check as its own pool job, since its verdict gates the apply.
     [void] StartVerifyName([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($this.Resolver.GetCachedIp($hostName))) { return }
         $this.Resolver.ClearVerifiedName($hostName)
@@ -359,21 +349,18 @@ class ResolutionCoordinator {
     hidden [void] CompleteResolveCore([AsyncJob]$job, [bool]$isFast) {
         if ($job.Status -eq 'Failed') {
             if ($isFast) { $this.OnFastResolveFault($job); return }
-            # A failed resolve/warm was silent, so a DC-warm or host-resolve failure looked
-            # like nothing happened at all. Surface why (empty HostName = the startup DC warm).
+            # Surface why a resolve failed (an empty HostName is the startup DC warm).
             $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
             $this.Logger.LogWarning("$who failed: $($job.FailureMessage)")
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
-            # A dead resolve can't confirm the old verdict: drop it and paint Unknown. No
-            # auto re-probe (it churns while the DC is down); the next action re-resolves.
+            # No auto re-probe: it churns while the DC is down, so the next action re-resolves.
             if (-not [string]::IsNullOrWhiteSpace($job.HostName)) {
                 $this.Resolver.Invalidate($job.HostName)
                 $this.Home.RenderReachability($job.HostName)
             }
-            # A finished DC warm - even a failed one - ends the startup crunch: let
-            # the deferred finder/Lens warms go.
+            # Even a failed DC warm ends the startup crunch, so release the deferred warms.
             if ([string]::IsNullOrWhiteSpace($job.HostName)) {
                 $this.Home.StartDeferredWarms('DC warm-up finished (failed)')
             }
@@ -382,8 +369,7 @@ class ResolutionCoordinator {
         if ($isFast) { $this.FastFaultStreak = 0 }
         $items = @(@($job.Result) | Where-Object { $null -ne $_ })
         if ($items.Count -eq 0) {
-            # A "completed" resolve with no payload must still release the latch and
-            # the queue, or the host wedges on "Verifying..." forever.
+            # An empty payload must still release the latch, or the host wedges forever.
             $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
             $this.Logger.LogWarning("$who completed with no verdict payload - treating it as failed.")
             $this.Resolver.ClearInFlight($job.HostName)
@@ -417,7 +403,7 @@ class ResolutionCoordinator {
                 $this.Logger.LogDebug(
                     "[$hn] Resolve verdict received: ip='$newIp', online=$online.")
                 $oldIp = $this.Resolver.GetCachedIp($hn)
-                # Log only a first find or an actual change - never a same-IP TTL refresh.
+                # Log only a first find or an actual change, never a same-IP TTL refresh.
                 if (-not [string]::IsNullOrWhiteSpace($newIp) -and $oldIp -ne $newIp) {
                     if ([string]::IsNullOrWhiteSpace($oldIp)) { $this.Logger.LogInfo("[$hn] resolved IP $newIp") }
                     else { $this.Logger.LogInfo("[$hn] IP changed: $oldIp -> $newIp") }
@@ -442,8 +428,8 @@ class ResolutionCoordinator {
         }
     }
 
-    # Fast child faulted (crash/kill/timeout - no verdict): retry the host once on the
-    # classic path; 3 consecutive faults latch the lane off (worst case = pre-lane behavior).
+    # Fast child faulted with no verdict: retry the host once on the classic path, and
+    # 3 consecutive faults latch the lane off (worst case is pre-lane behaviour).
     hidden [void] OnFastResolveFault([AsyncJob]$job) {
         $hn = $job.HostName
         $this.FastFaultStreak++
@@ -465,8 +451,7 @@ class ResolutionCoordinator {
         }
     }
 
-    # Persists the active DC so the next launch resolves without waiting on AD
-    # discovery. Only writes when it changed.
+    # Persists the active DC so the next launch skips AD discovery. Writes only on change.
     hidden [void] PersistDomainController([string]$dc) {
         if ($null -eq $this.ConfigManager) { return }
         if ([string]$this.Config.Settings['activeDomainController'] -eq $dc) { return }

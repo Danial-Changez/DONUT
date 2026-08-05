@@ -25,8 +25,7 @@ class ResetPasswordViewModel : ObservableObject {
     [object] $ShowQrCommand
     [object] $ApplyCommand
 
-    # Arms the overlay for a finder user row: fills the target and re-arms the
-    # fresh defaults (empty password, checkbox back on) for every open.
+    # Arms the overlay for a finder user row, with fresh defaults on every open.
     [void] SetTarget([object]$user) {
         if ($null -eq $user) { return }
         $this.Set('TargetSam', [string]$user.SamAccountName)

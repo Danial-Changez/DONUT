@@ -33,8 +33,8 @@ class DcuProgress {
         return $value
     }
 
-    # True for a dcu-cli apply INSTALL line ("Installing updates..."). dcu emits no sub-percentage
-    # while installing, so the bar goes indeterminate here instead of freezing at download's 100%.
+    # True for a dcu-cli apply install line. dcu emits no sub-percentage while
+    # installing, so the bar goes indeterminate instead of freezing at download's 100%.
     static [bool] IsInstalling([string]$line) {
         if ([string]::IsNullOrWhiteSpace($line)) { return $false }
         return [bool]($line -match '(?i)installing\s+update')
@@ -42,13 +42,12 @@ class DcuProgress {
 
     # --- Scan-phase steps ---
 
-    # A dcu-cli scan emits no percentages but walks fixed milestone lines; mapping them
-    # to step numbers gives a real "N/5" progression instead of an anonymous spinner.
+    # A scan emits no percentages, so its fixed milestone lines become an "N/5" progression.
 
     static [int] $ScanStepCount = 5
 
-    # Maps a dcu-cli output line to its scan step (1-5; 0 = not a milestone). NOTE: the
-    # more specific "application component updates" pattern must be tested first.
+    # Maps a line to its scan step (1-5, 0 = not a milestone). The more specific
+    # "application component updates" pattern must be tested first.
     static [int] ParseScanStep([string]$line) {
         if ([string]::IsNullOrWhiteSpace($line)) { return 0 }
         if ($line -match '(?i)checking for application component updates') { return 2 }
@@ -73,8 +72,7 @@ class DcuProgress {
 
     # --- Reconnect / resume status lines ---
 
-    # The worker prefixes reconnect/resume status lines with this token so the pump can turn them
-    # into a "Reconnecting…" card (and strip it). ASCII '[r' so it never collides with a dcu line.
+    # Prefix marking a worker reconnect line, chosen so it never collides with dcu output.
     static [string] $ReconnectMarker = '[reconnect] '
 
     # True when a tailed line is one of the worker's reconnect/resume status lines. It never

@@ -119,8 +119,7 @@ try {
 }
 catch { $prov.ProvenanceNotes += "git probe failed: $($_.Exception.Message)" }
 try {
-    # Defender/AMSI signature versions + ages: the direct test for "the machine
-    # changed, not the code" (a fresh signature slowing every script compile).
+    # Signature versions and ages are the direct test for "the machine changed, not the code".
     $mp = Get-MpComputerStatus -ErrorAction Stop
     $prov.DefenderStatus = [ordered]@{
         AMServiceVersion            = "$($mp.AMServiceVersion)"
@@ -145,8 +144,7 @@ $settingsFile = Join-Path $OutDir 'pwsh-diag-settings.json'
 
 # --- Child harness script ------------------------------------------------------
 
-# Runs the pool phases in a fresh process. Restricted to the worker arguments
-# every checkout in the bisect range understands (the 64dbec8-compatible core).
+# Restricted to the worker arguments every checkout in the bisect range understands.
 $childScript = Join-Path $OutDir 'DiagHarness.ps1'
 @'
 param(
@@ -312,8 +310,7 @@ $childArgs = @(
 if ($TargetHost) { $childArgs += @('-TargetHost', $TargetHost) }
 Write-Note "child: $pwshPath (warm x$WarmCount, target='$TargetHost', disk=$($IncludeDiskScan.IsPresent))"
 
-# ProcessStartInfo.ArgumentList quotes each argument properly; Start-Process's
-# naive space-join mangles empty strings and spaced temp paths.
+# ArgumentList quotes each argument: Start-Process's space-join mangles empty and spaced ones.
 $psi = [System.Diagnostics.ProcessStartInfo]::new($pwshPath)
 foreach ($a in $childArgs) { $psi.ArgumentList.Add([string]$a) }
 $psi.UseShellExecute = $false
@@ -328,8 +325,7 @@ function Invoke-StackProbe([int]$targetPid) {
     catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
 }
 
-# Watch loop: probe as soon as the child flags a barrier lapse (the wedged
-# shells are still alive then), and enforce the overall budget.
+# Probe as soon as the child flags a barrier lapse, while the wedged shells are still alive.
 $budgetSec = $timeouts.Warm + $timeouts.Dc + $timeouts.Host + $timeouts.Disk + 90
 $watchDeadline = [datetime]::UtcNow.AddSeconds($budgetSec)
 $wedgeFlag = Join-Path $OutDir 'wedge.flag'
@@ -344,7 +340,7 @@ while (-not $proc.HasExited -and [datetime]::UtcNow -lt $watchDeadline) {
 }
 $childTimedOut = -not $proc.HasExited
 if ($childTimedOut) {
-    # Stacks FIRST, kill second - a dead process has no stacks left to read.
+    # Stacks first, kill second: a dead process has no stacks left to read.
     Write-Note "child blew its ${budgetSec}s budget - capturing stacks before killing it"
     if (-not $probed) { Invoke-StackProbe $proc.Id }
     try { $proc.Kill($true) } catch { Write-Note "child kill failed: $($_.Exception.Message)" }
@@ -394,8 +390,7 @@ if ($appLog -and (Test-Path $appLog)) {
 
 # --- Verdict evaluation --------------------------------------------------------
 
-# harness-broken: no verdict at all (the child never even wrote phase 0).
-# symptom-fail:   any executed phase incomplete/failed, or the child timed out.
+# Broken means no verdict at all, symptom means an executed phase failed or timed out.
 $verdict = if (Test-Path $verdictFile) {
     Get-Content $verdictFile -Raw | ConvertFrom-Json
 }

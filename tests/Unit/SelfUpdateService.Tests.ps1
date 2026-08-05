@@ -16,11 +16,9 @@ Describe "SelfUpdateService" {
                 token_type   = "bearer"
             }
 
-            # Test Save
             $service.SaveToken($fakeTokenData)
             Test-Path $testTokenFile | Should -Be $true
 
-            # Test Retrieve
             $retrievedToken = $service.GetStoredToken()
             $retrievedToken | Should -Be "ghp_fake_token_123"
         }
@@ -153,10 +151,8 @@ Describe "SelfUpdateService" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
 
-                # No registry match
                 Mock Test-Path { return $false } -ParameterFilter { $Path -like "*Uninstall*" }
-                
-                # Version file exists, under the shared data root
+
                 $versionFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
                 Mock Test-Path { return $true } -ParameterFilter { $Path -eq $versionFile }
                 Mock Get-Content { return "2.0.1" } -ParameterFilter { $Path -eq $versionFile }
@@ -191,7 +187,6 @@ Describe "SelfUpdateService" {
                     }
                 }
                 
-                # Fallback version file doesn't exist
                 $versionFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
                 Mock Test-Path { return $false } -ParameterFilter { $Path -eq $versionFile }
 

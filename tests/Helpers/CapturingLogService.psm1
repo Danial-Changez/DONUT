@@ -1,8 +1,7 @@
 using module "..\..\src\Core\LogService.psm1"
 
-# Shared test double: an in-memory LogService that captures entries instead of
-# writing to disk, so tests can assert on the levels/messages a unit emits.
-# Inject it wherever a [LogService] dependency is accepted.
+# In-memory LogService that captures entries instead of writing to disk, so tests
+# can assert on what a unit logged. Inject it wherever [LogService] is accepted.
 class CapturingLogService : LogService {
     [System.Collections.Generic.List[string]] $Entries
 

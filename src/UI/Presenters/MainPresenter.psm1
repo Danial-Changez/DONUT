@@ -54,12 +54,10 @@ class MainPresenter {
     [ResetPasswordViewModel] $ResetVm
     [PendingIntentStore] $IntentStore   # carries a gated click across the elevation restart
 
-    # Set true before a real exit (tray "Exit") so the close-to-tray Closing hook
-    # doesn't cancel it; a hidden boot parks the deferred sign-in/update check here.
+    # Set before a real exit (tray "Exit") so the close-to-tray hook lets the close through.
     [bool] $ExitRequested
-    [object] $PendingUpdateCheck
-    # An autostarted DONUT runs de-elevated on purpose; this says so the first time the
-    # user surfaces the window, since a toast into a hidden tray start is never seen.
+    [object] $PendingUpdateCheck   # deferred sign-in and update check parked by a hidden boot
+    # Deferred to the first window: a toast raised during a hidden tray start is never seen.
     [bool] $PendingLimitedNotice
 
     # Global-hotkey interop (Donut.Interop.HotkeyManager) and the HWND it binds to.
@@ -127,7 +125,6 @@ class MainPresenter {
 
         $this.LoadImages()
 
-        # Toast overlay, shared with sub-presenters that need notifications.
         $toastHost = $this.Window.FindName("toastHost")
         if ($toastHost) {
             $this.ToastService = [ToastService]::new($toastHost)
@@ -135,8 +132,7 @@ class MainPresenter {
 
         $this.Views = @{}
 
-        # Home is built eagerly; Settings builds lazily on first open, so
-        # startup never pays for a view the user may not open.
+        # Settings builds lazily on first open, so startup never pays for a view nobody opens.
         $homeView = $this.LoadView("HomeView.xaml")
         $this.Views['Home'] = $homeView
         if ($homeView) {
@@ -146,8 +142,7 @@ class MainPresenter {
         }
         $this.IntentStore = [PendingIntentStore]::new($this.Logger)
 
-        # Shell view-model: settings overlay + window chrome are bound commands that
-        # call back into the presenter for the imperative shell work.
+        # Chrome and overlay commands are bound, then call back for the imperative shell work.
         $presenter = $this
         $this.MainVm = [MainViewModel]::new()
         $openSettings = { param($p) $presenter.OpenSettings() }.GetNewClosure()
@@ -176,7 +171,7 @@ class MainPresenter {
         if ($this.HomePresenter -and $this.HomePresenter.Finder) {
             $this.HomePresenter.Finder.OnShowQr = $showQr
         }
-        # Reset-password overlay: built once; the finder's Reset action arms + opens it.
+        # The reset-password overlay is built once, and the finder's Reset action opens it.
         $this.ResetVm = [ResetPasswordViewModel]::new()
         $this.MainVm.ResetVm = $this.ResetVm
         $closeReset = { param($p) $presenter.CloseReset() }.GetNewClosure()
@@ -195,7 +190,7 @@ class MainPresenter {
         if ($this.HomePresenter -and $this.HomePresenter.Finder) {
             $this.HomePresenter.Finder.OnShowReset = $showReset
         }
-        # Guided tour: the ? button replays it; Esc closes it.
+        # Guided tour: the ? button replays it, and Esc closes it.
         $this.Tour = [TourPresenter]::new(
             $this.Window, $this.MainVm, $this.HomePresenter, $this.Config, $this.ConfigManager, $this.Logger)
         $openTour = { param($p) $presenter.Tour.Start() }.GetNewClosure()
@@ -210,8 +205,7 @@ class MainPresenter {
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
-        # Scope DragMove to the top control bar: wiring it to the whole borderless window made
-        # every click-drag move it, so content-area text could never be selected.
+        # On the whole borderless window, every click-drag moved it and text was unselectable.
         $controlBar = $this.Window.FindName("panelControlBar")
         if ($controlBar) {
             $controlBar.Add_MouseLeftButtonDown({
@@ -220,8 +214,7 @@ class MainPresenter {
         }
 
         $this.Window.Add_Closed({
-                # Window gone: finish the Lens-agent teardown (bounded, invisible wait), then
-                # hard-exit so the tray loop doesn't keep the process alive (locks the exe).
+                # Bounded wait so the Lens-agent teardown finishes without showing a window.
                 if ($global:LensTeardownJob) {
                     try {
                         [void]$global:LensTeardownJob.Handle.AsyncWaitHandle.WaitOne(
@@ -231,18 +224,17 @@ class MainPresenter {
                     try { $global:LensTeardownJob.Ps.Dispose() } catch { }
                     $global:LensTeardownJob = $null
                 }
-                # Release the global hotkey and remove the tray icon before the hard exit
-                # (the icon would otherwise ghost in the tray until hovered).
+                # The tray icon would otherwise ghost in the tray until hovered.
                 if ($presenter.Hotkey) { try { $presenter.Hotkey.Detach() } catch { } }
                 if ($presenter.TrayPresenter) { try { $presenter.TrayPresenter.Dispose() } catch { } }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Shutdown()
                 }
+                # The tray loop would otherwise keep the process alive and lock the exe.
                 [System.Environment]::Exit(0)
             }.GetNewClosure())
 
-        # Close-to-tray: the X hides the window instead of exiting, unless a real exit
-        # was requested (tray "Exit") or the setting is off. $_ is the CancelEventArgs.
+        # $_ is the CancelEventArgs, so cancelling the close is what hides to the tray.
         $this.Window.Add_Closing({
                 if ($presenter.Config.GetCloseToTray() -and -not $presenter.ExitRequested) {
                     $_.Cancel = $true
@@ -251,20 +243,17 @@ class MainPresenter {
                 }
             }.GetNewClosure())
 
-        # Shown from the worker STA thread, so Windows won't foreground it; the
-        # BringToFront Topmost toggle does the front-bringing on first render.
+        # Windows won't foreground a window shown from the worker STA thread, so force it.
         $this.Window.Add_ContentRendered({ $presenter.BringToFront() }.GetNewClosure())
 
-        # First-run guided tour: fires the first time the window is shown (interactive or
-        # tray-surface); hasSeenTour keeps it to once, and MaybeStartFirstRun guards re-entry.
+        # IsVisibleChanged covers both first shows: interactive and tray-surface.
         $this.Window.Add_IsVisibleChanged({
                 if ($presenter.Window.IsVisible -and $presenter.Tour) {
                     $presenter.Tour.MaybeStartFirstRun()
                 }
             }.GetNewClosure())
 
-        # Constrain maximize to the monitor work area - a WindowChrome window otherwise
-        # overflows the screen edges and covers the taskbar. Needs the HWND, so wait.
+        # WindowChrome maximize covers the taskbar unless constrained, and that needs the HWND.
         $this.Window.Add_SourceInitialized({
                 try {
                     $hwnd = [Interop.WindowInteropHelper]::new($presenter.Window).Handle
@@ -284,7 +273,7 @@ class MainPresenter {
         # Tray icon lives on this (the UI) thread and is present in both show paths.
         $this.TrayPresenter = [TrayPresenter]::new($this, $this.Logger)
 
-        # In-app keyboard shortcuts (config-driven; global hotkey attaches on SourceInitialized).
+        # In-app shortcuts only, since the global hotkey attaches on SourceInitialized.
         $this.ApplyWindowShortcuts()
 
         $this.ShowHome()
@@ -309,14 +298,13 @@ class MainPresenter {
     }
 
     # (Re)registers the global hotkey from the current config on the stored HWND. Detaches
-    # first so a Settings change swaps cleanly; a taken combo toasts and the app continues.
+    # first so a Settings change swaps cleanly, and a taken combo toasts while the app runs.
     [void] ApplyHotkey() {
         if ($this.Hwnd -eq [IntPtr]::Zero) { return }
         try {
             if ($null -eq $this.Hotkey) {
                 $this.Hotkey = [Donut.Interop.HotkeyManager]::new()
-                # Pressed fires on the UI thread (WM_HOTKEY -> WndProc), so this is safe.
-                # Toggle: surface DONUT, or minimise it when it's already up front.
+                # Pressed fires on the UI thread through WndProc, so touching the UI is safe.
                 $presenter = $this
                 $this.Hotkey.add_Pressed(
                     { param($s, $e) $presenter.TrayPresenter.ToggleMainWindow() }.GetNewClosure())
@@ -344,7 +332,7 @@ class MainPresenter {
     }
 
     # (Re)builds the window-level Open-Settings shortcut from config. In-app only (a WPF
-    # KeyBinding, not a global RegisterHotKey); a settings change re-applies it.
+    # KeyBinding, not a global RegisterHotKey), and a settings change re-applies it.
     [void] ApplyWindowShortcuts() {
         if ($null -eq $this.Window) { return }
         if ($this.SettingsKeyBinding) {
@@ -394,14 +382,13 @@ class MainPresenter {
             }, $onDone)
     }
 
-    # Relaunches DONUT under the requested elevation. Prompting comes FIRST: a declined
+    # Relaunches DONUT under the requested elevation. Prompting comes first: a declined
     # UAC must leave a fully working app, so nothing is torn down until the spawn returns.
     [void] RestartElevated() {
         $wantAdmin = [bool]$this.Config.GetRunAsAdmin()
         if ($wantAdmin -eq [ElevationContext]::IsElevated()) { return }
         if (-not $wantAdmin) {
-            # Windows has no un-elevate API, and dropping to the shell's token needs
-            # machinery this does not have yet. Take effect at the next launch.
+            # Windows has no un-elevate API, so turning it off can only apply from next launch.
             $this.Logger.LogInfo('Run-as-administrator turned off; it applies from the next launch.')
             if ($this.ToastService) {
                 $this.ToastService.ShowInfo('Run as administrator',
@@ -429,8 +416,7 @@ class MainPresenter {
             'Always run DONUT as administrator')
         if (-not $answer.Confirmed) { return $false }
 
-        # Both writes land BEFORE the spawn: a successful one closes this window, and the
-        # Closed handler hard-exits, so nothing queued after it would run.
+        # Both writes land before the spawn, because the Closed handler hard-exits the process.
         $this.IntentStore.Save([PendingIntent]::Create($action, $hosts, [datetime]::UtcNow))
         if ($answer.Remember) { $this.PersistRunAsAdmin($true) }
 
@@ -515,8 +501,8 @@ class MainPresenter {
         }
     }
 
-    # Applies the debug-logging toggle to the live logger; workers pick the effective
-    # state up per job (BuildWorkerArgs ships Logger.DebugEnabled). -DebugLog wins.
+    # Applies the debug-logging toggle to the live logger. Workers pick the effective
+    # state up per job (BuildWorkerArgs ships Logger.DebugEnabled), and -DebugLog wins.
     [void] ApplyDebugLogging() {
         $effective = $this.Config.GetDebugLogging() -or [bool]$global:DebugLogStart
         $this.Logger.DebugEnabled = $effective
@@ -524,7 +510,7 @@ class MainPresenter {
     }
 
     # Runs a pool worker script (a .ps1 whose using-module class types resolve in the
-    # runspace) and reaps it on the UI thread - no runspace-less callback (see repo notes).
+    # runspace) and reaps it on the UI thread, never from a runspace-less callback.
     hidden [void] RunOnPool([string]$scriptPath, [hashtable]$params, [object]$onDone) {
         try {
             $job = [PoolScriptJob]::Start($scriptPath, $params)
@@ -576,8 +562,8 @@ class MainPresenter {
         if ($logo -and $this.LogoImage) { $logo.Source = $this.LogoImage }
     }
 
-    # Page-level load: missing/broken views log and return null (the shell copes);
-    # region composition inside HomePresenter uses ViewLoader directly and fails loud.
+    # Page-level load: missing or broken views log and return null (the shell copes).
+    # Region composition inside HomePresenter uses ViewLoader directly and fails loud.
     [object] LoadView([string]$fileName) {
         try {
             return [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\$fileName")
@@ -597,13 +583,11 @@ class MainPresenter {
         $this.Views['Settings'] = $settingsView
         if ($settingsView) {
             $presenter = $this
-            # Real-time settings re-apply the bits that live outside the config file, each
-            # when its own control changes (the overlay closes via its X / Esc / backdrop).
+            # These re-apply the bits that live outside the config file as each control changes.
             $sideEffects = @{
                 Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
                 WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
-                # Registering a task needs an elevated token: ungated this reached
-                # Register-ScheduledTask, got access denied, and died as a single toast.
+                # Ungated, this reached Register-ScheduledTask and died on access denied.
                 StartupTask    = {
                     if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
                         $presenter.ApplyStartupTask()
@@ -612,8 +596,7 @@ class MainPresenter {
                 DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
                 RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
             }
-            # The window is the chrome root: the page segments sit in the overlay header,
-            # which is part of MainWindow, not of the settings body loaded into it.
+            # The page segments sit in MainWindow's overlay header, not in the settings body.
             $this.SettingsPresenter = [SettingsPresenter]::new(
                 $this.Config, $this.ConfigManager, $settingsView, $this.Window,
                 $this.ToastService, $sideEffects)
@@ -623,7 +606,7 @@ class MainPresenter {
         }
     }
 
-    # Home is the shell's only page; shows it with a gentle fade-in.
+    # Home is the shell's only page, shown with a gentle fade-in.
     [void] ShowHome() {
         if (-not $this.Views['Home']) { return }
         $content = $this.Controls['contentMain']
@@ -647,15 +630,15 @@ class MainPresenter {
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
     }
 
-    # The configurable shortcut opens and closes the overlay (the gear opens; Esc still closes),
-    # mirroring the global hotkey's show/hide toggle instead of only opening.
+    # The configurable shortcut opens and closes the overlay (the gear opens, Esc still
+    # closes), mirroring the global hotkey's show and hide toggle instead of only opening.
     [void] ToggleSettings() {
         if ($this.MainVm -and $this.MainVm.IsSettingsOpen) { $this.CloseSettings() }
         else { $this.OpenSettings() }
     }
 
     # Pops the QR overlay for a BitLocker recovery key (the Lens path keeps this
-    # 2-arg shape; the caption prefix and hint stay its own).
+    # 2-arg shape, and the caption prefix and hint stay its own).
     [void] ShowQr([string]$payload, [string]$caption) {
         $this.ShowQr($payload, "BitLocker recovery key - $caption",
             'Scan to read the recovery key, then close this.')
@@ -701,7 +684,7 @@ class MainPresenter {
         if ($card) { [void]$card.Focus() }
     }
 
-    # Closing wipes the secret - the temp password lives only while the card is up.
+    # Closing wipes the secret, since the temp password lives only while the card is up.
     [void] CloseReset() {
         if ($this.ResetVm) { $this.ResetVm.ClearSecrets() }
         $this.ClearResetError()
@@ -770,8 +753,8 @@ class MainPresenter {
         }
     }
 
-    # Success keeps the overlay open - the operator still has to hand the password
-    # over (copy / QR / read out); closing it is what wipes the secret.
+    # Success keeps the overlay open, since the operator still has to hand the password
+    # over (copy, QR, or read out). Closing it is what wipes the secret.
     hidden [void] OnResetDone([object]$result) {
         $vm = $this.ResetVm
         $vm.Set('IsBusy', $false)
@@ -799,8 +782,7 @@ class MainPresenter {
     # cross-thread-safe BitmapImage (ECC level Q for glare tolerance). $null on any failure.
     hidden [System.Windows.Media.ImageSource] BuildQrImage([string]$payload) {
         try {
-            # INVERTED by choice (see UIColors QrModule* for the revert recipe): violet-300
-            # modules on a transparent back so the code blends into the dark card.
+            # Inverted on purpose so the code blends into the dark card (UIColors QrModule*).
             $modules = $this.QrColorBytes('QrModuleColor', [byte[]](0xC4, 0xB5, 0xFD, 0xFF))
             $back = $this.QrColorBytes('QrModuleBackColor', [byte[]](0x00, 0x00, 0x00, 0x00))
             $png = [Donut.Qr.QrCode]::EncodePng($payload, 20, $modules, $back)
@@ -822,8 +804,7 @@ class MainPresenter {
     [void] Show() {
         if ($this.Window) {
             try {
-                # The pumpless span since the login dialog closed is dead time; without
-                # a reset the watchdog charges it to its first tick as a fake block.
+                # Without this the watchdog charges the pumpless startup span to its first tick.
                 if ($this.Watchdog) { $this.Watchdog.Reset() }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Run($this.Window)
@@ -853,8 +834,7 @@ class MainPresenter {
             return
         }
         try {
-            # Create the native HWND without showing the window (raises SourceInitialized),
-            # so the global hotkey registers even when we start straight to the tray.
+            # Raises SourceInitialized, so the hotkey registers on a straight-to-tray start.
             [void][System.Windows.Interop.WindowInteropHelper]::new($this.Window).EnsureHandle()
             # Same pumpless-span reset as Show(): don't charge startup to the first tick.
             if ($this.Watchdog) { $this.Watchdog.Reset() }

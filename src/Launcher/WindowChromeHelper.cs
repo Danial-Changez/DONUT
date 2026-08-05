@@ -15,7 +15,7 @@ namespace Donut.Interop
         private const int WM_GETMINMAXINFO = 0x0024;
         private const int MONITOR_DEFAULTTONEAREST = 0x00000002;
 
-        /// <summary>Hooks the window's WndProc; call once after the HWND exists.</summary>
+        /// <summary>Hooks the window's WndProc. Call once after the HWND exists.</summary>
         public static void ConstrainMaximize(IntPtr hwnd)
         {
             HwndSource? source = HwndSource.FromHwnd(hwnd);

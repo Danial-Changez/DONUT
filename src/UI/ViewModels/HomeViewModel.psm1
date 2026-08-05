@@ -24,12 +24,10 @@ class HomeViewModel : ObservableObject {
     [ObservableCollection[HostViewModel]] $Machines
     [HostViewModel] $SelectedMachine
 
-    # AD finder dropdown rows (headers + results, one flat list); the popup's ItemsControl
-    # binds here and the presenter repopulates per render (UI thread only, like Machines).
+    # AD finder dropdown rows, repopulated per render on the UI thread only, like Machines.
     [ObservableCollection[object]] $SearchResults
 
-    # Detail-pane mode + the Lens shown in Person mode (a PersonLensViewModel; typed
-    # [object] so this VM stays decoupled from the Lens graph - the presenter sets it).
+    # Person mode's Lens is typed [object] so this VM stays decoupled from the Lens graph.
     [string] $DetailMode = 'Empty'
     [object] $SelectedPerson
 

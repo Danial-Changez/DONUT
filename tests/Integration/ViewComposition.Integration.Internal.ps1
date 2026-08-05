@@ -1,6 +1,4 @@
-# Integration tests for view composition - requires WPF in STA mode.
-# Every view file must parse standalone (StaticResource resolves at load, in-file
-# only), and the Home shell must expose the slots + tour targets the presenters need.
+# Integration tests for view composition, which need WPF in STA mode.
 using module "..\..\src\Core\ViewLoader.psm1"
 
 BeforeDiscovery {

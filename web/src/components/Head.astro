@@ -11,9 +11,7 @@
  */
 import Default from '@astrojs/starlight/components/Head.astro';
 
-// (1) Page title alone. Starlight builds <title> into the route head array
-// (utils/head.ts); the stock <Head> renders that array, so rewriting it here -
-// before <Default/> renders - wins.
+// Rewriting the head array before <Default/> renders it is what makes this win.
 const route = Astro.locals.starlightRoute;
 const titleTag = route.head.find((tag) => tag.tag === 'title');
 if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.title;
@@ -22,8 +20,7 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
 <Default {...Astro.props} />
 
 <script>
-  // (2) Diagram lightbox. Crisp zoom by inlining the SVG and driving its viewBox
-  // (the display box stays a constant size; only the coordinate window changes).
+  // Zoom stays crisp because the SVG is inlined and only its viewBox moves.
   const MAX = 20; // deepest zoom, as a multiple of the fitted view
 
   let overlay: HTMLDivElement | null = null;
@@ -66,17 +63,15 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     document.body.style.overflow = '';
   };
 
-  // Fill most of the screen and frame the whole diagram at zoom 1. The viewBox
-  // tracks the SCREEN's (wide) aspect - not the diagram's - so a zoomed-in region
-  // spans the full width instead of staying a narrow column.
+  // The viewBox tracks the screen's aspect, not the diagram's, so a zoomed-in
+  // region spans the full width instead of staying a narrow column.
   const fitSvg = () => {
     if (!svgEl || diag.w === 0) return;
     const boxW = window.innerWidth * 0.96;
     const boxH = window.innerHeight * 0.9;
     svgEl.style.width = `${boxW}px`;
     svgEl.style.height = `${boxH}px`;
-    // Grow the diagram bounds to the box aspect (centered), so nothing is cropped
-    // at zoom 1 and every zoom level fills the box edge to edge.
+    // Growing the bounds to the box aspect stops any crop at zoom 1.
     const boxAspect = boxW / boxH;
     if (diag.w / diag.h > boxAspect) {
       vb0.w = diag.w;

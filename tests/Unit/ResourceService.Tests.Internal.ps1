@@ -1,4 +1,4 @@
-# Internal test file - loaded after WPF assemblies by ResourceService.Tests.ps1
+# Internal test file, dot-sourced by ResourceService.Tests.ps1 once WPF is loaded.
 using module "..\..\src\Services\ResourceService.psm1"
 
 Describe "ResourceService" {
@@ -7,7 +7,6 @@ Describe "ResourceService" {
         $script:tempDir = Join-Path $env:TEMP "DonutTests_ResourceService_$(Get-Random)"
         $script:stylesDir = Join-Path $script:tempDir "UI\Styles"
         
-        # Create temp directory structure
         New-Item -Path $script:stylesDir -ItemType Directory -Force | Out-Null
     }
 
@@ -40,7 +39,6 @@ Describe "ResourceService" {
 
     Context "LoadStylesInto (via reflection)" {
         BeforeEach {
-            # Create a test XAML file
             $testXamlContent = @"
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
     <SolidColorBrush x:Key="TestBrush" Color="Red" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"/>
@@ -69,10 +67,8 @@ Describe "ResourceService" {
             
             $service = [ResourceService]::new($emptyRoot)
             
-            # Service should be created without error
             $service.SourceRoot | Should -Be $emptyRoot
-            
-            # Cleanup
+
             Remove-Item -Path $emptyRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
@@ -105,8 +101,7 @@ Describe "ResourceService" {
         }
     }
 
-    # Note: LoadGlobalResources and ApplyResourcesToWindow require a running WPF Application
-    # These are better tested via integration tests with a UI context
+    # Both need a running WPF Application, so the integration suite exercises them for real.
     Context "Method Existence" {
         It "Should have LoadGlobalResources method" {
             $service = [ResourceService]::new($script:tempDir)
@@ -125,9 +120,7 @@ Describe "ResourceService" {
         It "Should have hidden LoadStylesInto method" {
             $service = [ResourceService]::new($script:tempDir)
             
-            # In PowerShell classes, 'hidden' is a visibility keyword, not a .NET access modifier
-            # The method is still public at the CLR level but marked hidden for PowerShell
-            # We verify it exists by checking all methods
+            # PowerShell 'hidden' is not a CLR access modifier, so the method is still public.
             $allMethods = $service.GetType().GetMethods()
             $methodNames = $allMethods | ForEach-Object { $_.Name }
             $methodNames | Should -Contain 'LoadStylesInto'
@@ -136,7 +129,6 @@ Describe "ResourceService" {
 
     Context "Styles Directory Detection" {
         It "Should detect XAML files in styles directory" {
-            # Create test XAML files
             $xaml1 = Join-Path $script:stylesDir "Style1.xaml"
             $xaml2 = Join-Path $script:stylesDir "Style2.xaml"
             
@@ -150,7 +142,6 @@ Describe "ResourceService" {
             $xamlFiles = Get-ChildItem -Path $stylesPath -Filter '*.xaml'
             $xamlFiles.Count | Should -BeGreaterOrEqual 2
             
-            # Cleanup
             Remove-Item -Path $xaml1 -Force -ErrorAction SilentlyContinue
             Remove-Item -Path $xaml2 -Force -ErrorAction SilentlyContinue
         }
@@ -166,10 +157,8 @@ Describe "ResourceService" {
             $txtFiles = Get-ChildItem -Path $stylesPath -Filter '*.txt'
             
             $txtFiles.Count | Should -BeGreaterOrEqual 1
-            # XAML count should not include txt files
             $xamlFiles | Where-Object { $_.Extension -eq '.txt' } | Should -BeNullOrEmpty
-            
-            # Cleanup
+
             Remove-Item -Path $txtFile -Force -ErrorAction SilentlyContinue
         }
     }

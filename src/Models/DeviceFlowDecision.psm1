@@ -47,8 +47,7 @@ class DeviceFlowDecision {
             }
         }
 
-        # Unreachable: the switch above returns for every status (default covers
-        # the rest). Present so every code path provably returns.
+        # Unreachable: the switch returns for every status. Present so every path returns.
         return [DeviceFlowDecision]::new([PollOutcome]::KeepPolling)
     }
 }

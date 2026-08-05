@@ -14,6 +14,9 @@
 .NOTES
     WPF-free and pure so it is unit-tested headless. Keep this list in sync with the server-side
     re-check in ExecutionService.BuildDeleteCommand.
+
+    AllowedCaches entries are path tails after "X:\", lowercase. A folder equal to or under
+    one of them is deletable despite the Protected blocklist.
 #>
 class FolderDeletionPolicy {
     # First-segment system directories that (with everything under them) are never deletable.
@@ -23,8 +26,7 @@ class FolderDeletionPolicy {
         '$winreagent', 'boot', 'msocache', '$sysreset'
     )
 
-    # Known safe-to-clear caches that live under an otherwise-protected root; a folder equal to
-    # or under one of these is deletable despite the blocklist (path tail after "X:\", lowercase).
+    # Safe-to-clear caches that live under an otherwise-protected root. See .NOTES.
     static [string[]] $AllowedCaches = @(
         'windows\ccmcache',                        # SCCM client package cache
         'windows\temp',                            # system temp
@@ -34,8 +36,8 @@ class FolderDeletionPolicy {
         'windows\downloaded program files'
     )
 
-    # Resolves "." / ".." and Windows' trailing dot-space stripping without touching the disk, so
-    # the lists below can't be walked around ("C:\temp\..\Windows"). $null when the path is unusable.
+    # Resolves "." / ".." and Windows' trailing dot-space stripping without touching the
+    # disk, so the lists cannot be walked around ("C:\temp\..\Windows"). $null when unusable.
     static [string] Canonicalize([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) { return $null }
         # Not [IO.Path]::GetFullPath: that is OS-relative, and this class is unit-tested headless.
@@ -45,7 +47,7 @@ class FolderDeletionPolicy {
         foreach ($raw in $p.Substring(3).Split('\')) {
             if ($raw -eq '' -or $raw -eq '.') { continue }
             if ($raw -eq '..') {
-                # Escaping above the volume root is never a real selection - refuse the whole path.
+                # Escaping above the volume root is never a real selection, so refuse the path.
                 if ($stack.Count -eq 0) { return $null }
                 $stack.RemoveAt($stack.Count - 1)
                 continue
@@ -61,7 +63,7 @@ class FolderDeletionPolicy {
     }
 
     # True when $path is safe to delete: an absolute local path, not the drive root, not the
-    # whole Users store, and not a protected system directory - unless it is a known cache above.
+    # whole Users store, and not a protected system directory unless it is a known cache.
     static [bool] IsDeletable([string]$path) {
         $p = [FolderDeletionPolicy]::Canonicalize($path)
         if (-not $p) { return $false }

@@ -56,17 +56,15 @@ param(
     [string]$ReportsDir,
     [hashtable]$Settings,
     [string]$ConfigPath,
-    # Parent's effective debug-log state (setting or session override); gates [DEBUG].
+    # Parent's effective debug-log state (setting or session override), gating [DEBUG].
     [bool]$DebugLog,
-    # Child-process path: args ride in through a JSON file (Options/Settings can't
-    # cross a command line), the result rides back through ResultFile.
+    # Options and Settings cannot cross a command line, so args ride in a JSON file.
     [string]$ArgsFile,
     [string]$ResultFile
 )
 
 $ErrorActionPreference = 'Stop'
-# Surface Write-Information (the live dcu tail lines) on stdout so the parent's
-# launcher can stream them to the UI progress bar as the scan/apply runs.
+# Surfaces the live dcu tail lines on stdout so the parent can stream them to the UI.
 $InformationPreference = 'Continue'
 
 if ($ArgsFile) {
@@ -83,12 +81,10 @@ if ($ArgsFile) {
     if ($a.ContainsKey('DebugLog')) { $DebugLog = [bool]$a.DebugLog }
 }
 
-# Carry the parent's effective debug state into the rebuilt config, so the service
-# graph (which gates from Config) honors the -DebugLog session override too.
+# The service graph gates debug from Config, so the session override must land there.
 if ($null -ne $Settings) { $Settings['debugLogging'] = [bool]$DebugLog }
 
-# First possible trace: the gap from "Started X job." to this line is the queue +
-# graph-compile time; "Started" with no "Worker up" = no runspace or stuck compile.
+# First possible trace: "Started" with no "Worker up" means no runspace or a stuck compile.
 $workerLog = $null
 try {
     if (-not [string]::IsNullOrWhiteSpace($LogsDir)) {
@@ -105,8 +101,7 @@ catch {
 }
 
 try {
-    # Prefer the UI's config snapshot, else config.json, else defaults; the source
-    # breadcrumb pins a wedge before "Config built" to the config merge itself.
+    # The source breadcrumb pins a wedge before "Config built" to the config merge itself.
     $configSource = 'defaults'
     $config = if ($Settings) {
         $configSource = 'ui snapshot'
@@ -118,7 +113,6 @@ try {
         $mgr.LoadConfig()
     }
     else {
-        # Use default config with provided paths
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, @{})
     }
     if ($null -ne $workerLog) {
@@ -128,8 +122,7 @@ try {
     $workerResult = [ExecutionService]::StartWorker($HostName, $JobType, $Options,
         $ResolvedIp, $config, $SourceRoot, $LogsDir, $ReportsDir)
 
-    # Child-process path: hand the result back through the file; in-process callers
-    # get it straight off the pipeline.
+    # Child processes take the result through the file, in-process callers off the pipeline.
     if ($ResultFile) {
         ($workerResult | ConvertTo-Json -Depth 12) |
             Set-Content -LiteralPath $ResultFile -Encoding UTF8
@@ -139,8 +132,7 @@ try {
     }
 }
 catch {
-    # Log to Donut.log, and write one clean line to stderr (no Write-Error decoration)
-    # so the parent's FailureMessage stays parseable for RemoteFailure.ReasonFromMessage.
+    # One clean stderr line, so RemoteFailure.ReasonFromMessage can still parse it.
     if ($null -ne $workerLog) {
         $workerLog.LogException("[$HostName] $JobType worker failed", $_)
     }

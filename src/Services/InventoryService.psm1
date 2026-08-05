@@ -21,15 +21,15 @@ class InventoryService : RemoteJobService {
     InventoryService([AppConfig] $config, [NetworkProbe] $probe,
         [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Returns worker args carrying the probe script (no network here - the worker gates
-    # reachability). "Inventory" is the worker token, distinct from [JobKind]::Inventory.
+    # Worker args carrying the probe script. No network here: the worker gates
+    # reachability. "Inventory" is the worker token, distinct from [JobKind]::Inventory.
     [hashtable] PrepareInventory([string]$hostName) {
         $script = [InventoryService]::BuildProbeScript($hostName)
         return $this.BuildWorkerArgs($hostName, "Inventory", @{ ScriptText = $script })
     }
 
-    # Reads the copied-back inventory JSON into a typed MachineInventory; $null when
-    # missing or unparseable (mirrors RemoteUpdateService.ParseUpdateReport).
+    # Reads the copied-back inventory JSON into a typed MachineInventory. Returns $null
+    # when missing or unparseable, mirroring RemoteUpdateService.ParseUpdateReport.
     [MachineInventory] ParseInventory([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-inventory.json"
         if (-not (Test-Path $reportPath)) { return $null }
@@ -45,8 +45,8 @@ class InventoryService : RemoteJobService {
         }
     }
 
-    # Generates the remote probe script: identity / battery / disk / uptime (each query
-    # guarded), written to <host>-inventory.json. Host name is baked in, so no parameters.
+    # Generates the remote probe script, which writes <host>-inventory.json. The host
+    # name is baked into the template, so the payload takes no parameters.
     static [string] BuildProbeScript([string]$hostName) {
         $template = @'
 $ErrorActionPreference = 'SilentlyContinue'

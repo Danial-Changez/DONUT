@@ -10,9 +10,7 @@ Describe "ElevationRelaunch" {
         }
 
         BeforeAll {
-            # The host is whatever runs the suite, so assert on the branch it selects rather
-            # than on a path only one platform produces. isPwshHost is re-set here because
-            # discovery-time variables are not visible at run time (only to -Skip).
+            # Discovery-time variables are invisible at run time, so isPwshHost is set again.
             $script:spec = [ElevationRelaunch]::BuildSpec('C:\My App\src')
             $script:isPwshHost =
             [IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) -ieq 'pwsh.exe'
@@ -24,8 +22,7 @@ Describe "ElevationRelaunch" {
         }
 
         It "tells the successor which PID to wait for" {
-            # Local\ mutex scope is per-session, so the elevated instance would collide with
-            # the de-elevated one that spawned it if it did not wait.
+            # Local\ mutex scope is per-session, so the successor would collide without the wait.
             $ownPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
             $script:spec.Arguments | Should -Match "\b$ownPid\b"
         }
@@ -48,8 +45,7 @@ Describe "ElevationRelaunch" {
 
     Context "Spawn" {
         It "reports a declined prompt as declined, not as a breakage" {
-            # 1223 is ERROR_CANCELLED. It has to stay distinguishable: a decline leaves a
-            # working de-elevated app, anything else is worth a real error.
+            # 1223 is ERROR_CANCELLED: a decline leaves a working de-elevated app, not a break.
             Mock -CommandName Start-Process -ModuleName ElevationRelaunch {
                 throw [System.ComponentModel.Win32Exception]::new(1223)
             }

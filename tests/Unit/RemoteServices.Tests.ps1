@@ -7,7 +7,6 @@ using module "..\..\src\Services\RemoteServices.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 using namespace System.Net
 
-# Mock NetworkProbe for testing
 class MockNetworkProbe : NetworkProbe {
     [bool] $IsOnlineResult = $true
     [bool] $IsRpcAvailableResult = $true
@@ -23,7 +22,6 @@ class MockNetworkProbe : NetworkProbe {
 Describe "RemoteServices" {
     
     BeforeAll {
-        # Setup
         $tempDir = Join-Path $env:TEMP "DonutTests_Remote"
         if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
         $scriptsDir = Join-Path $tempDir "Scripts"
@@ -50,15 +48,13 @@ Describe "RemoteServices" {
 
             $result = $service.PrepareScanForUpdates("TestHost")
 
-            # Pester assertions
             $result.ScriptPath | Should -Match "Scripts\\RemoteWorker.ps1$"
             $result.Arguments.HostName | Should -Be "TestHost"
             $result.Arguments.JobType | Should -Be "Scan"
         }
 
         It "PrepareScan does NOT probe connectivity (that is the worker's job, off the UI thread)" {
-            # An offline host must not make the UI-thread Prepare* block or throw;
-            # reachability is asserted later by the worker on the runspace pool.
+            # An offline host must not make the UI-thread Prepare* block or throw.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
             $service = [RemoteUpdateService]::new($config, $probe, $null)
@@ -123,7 +119,7 @@ Describe "RemoteServices" {
             $matcher = [DriverMatchingService]::new()
             $service = [RemoteUpdateService]::new($config, $probe, $matcher)
 
-            # Real DCU report shape: each field is a CHILD element, not an attribute.
+            # Real DCU report shape: each field is a child element, not an attribute.
             $testXml = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <updates>
@@ -153,11 +149,10 @@ Describe "RemoteServices" {
             $result | Should -Not -BeNullOrEmpty
             $nodes = $result.SelectNodes("//update")
             $nodes.Count | Should -Be 2
-            # Read fields via SelectSingleNode (never $node.name - it collides with XmlElement.Name).
+            # Never read $node.name, which collides with XmlElement.Name.
             $nodes[0].SelectSingleNode("name").InnerText | Should -Be "Dell Latitude 5330 System BIOS"
             $nodes[0].SelectSingleNode("urgency").InnerText | Should -Be "Urgent"
 
-            # Cleanup
             Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
         }
 
@@ -197,7 +192,6 @@ Describe "RemoteServices" {
             $matcher = [DriverMatchingService]::new()
             $service = [RemoteUpdateService]::new($config, $probe, $matcher)
 
-            # Create an invalid XML file
             $reportPath = Join-Path $script:reportsDir "BadHost-Updates.xml"
             Set-Content -Path $reportPath -Value "This is not valid XML <unclosed"
 
@@ -205,7 +199,6 @@ Describe "RemoteServices" {
             
             $result | Should -BeNullOrEmpty
 
-            # Cleanup
             Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
         }
     }
@@ -250,7 +243,7 @@ Describe "RemoteServices" {
             if (-not (Test-Path $script:rowsReportsDir)) {
                 New-Item -Path $script:rowsReportsDir -ItemType Directory -Force | Out-Null
             }
-            # Real DCU shape: update fields are CHILD elements; installed drivers are attributes.
+            # Real DCU shape: update fields are child elements, installed drivers are attributes.
             $script:rowsXml = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <updates>
@@ -346,10 +339,7 @@ Describe "RemoteServices" {
         }
     }
 
-    # The worker phases gate their own transport and throw typed failures directly;
-    # RemoteJobService.Fail is the shared log-then-throw policy they route through
-    # (ResolvedIpFor, RunInventoryPhase), so the log entry and the exception can
-    # never drift apart. Exercised directly here.
+    # Fail is the shared log-then-throw policy, so log entry and exception never drift apart.
     Context "Fail (typed failures log at their carried severity)" {
         It "Logs a Warning-level failure as WARN and returns the exception to throw" {
             $log = [CapturingLogService]::new()
@@ -379,7 +369,6 @@ Describe "RemoteServices" {
 
     Context "BuildWorkerArgs" {
         It "Should throw when RemoteWorker script is missing" {
-            # Create config pointing to empty directory
             $emptyDir = Join-Path $env:TEMP "DonutTests_Empty_$(Get-Random)"
             New-Item -Path $emptyDir -ItemType Directory -Force | Out-Null
             
@@ -389,7 +378,6 @@ Describe "RemoteServices" {
 
             { $service.PrepareScanForUpdates("TestHost") } | Should -Throw "*RemoteWorker script not found*"
 
-            # Cleanup
             Remove-Item -Path $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
         }
 
@@ -423,9 +411,7 @@ Describe "RemoteServices" {
 
             $result.Arguments.Settings.recoveryWindowMinutes | Should -Be 45
             $result.Arguments.Settings.commands.scan.args.ContainsKey('silent') | Should -BeTrue
-            # A SNAPSHOT, never the live reference: the worker deep-enumerates this
-            # hashtable off-thread, and enumerating a live table the UI thread is
-            # writing can corrupt it and spin forever (a silent pure-CPU wedge).
+            # Enumerating a live table the UI thread writes can corrupt it and spin forever.
             [object]::ReferenceEquals($result.Arguments.Settings.commands, $cfg.Settings.commands) |
                 Should -BeFalse -Because (
                 "jobs must carry a UI-thread deep clone of the command table, not the " +
@@ -433,9 +419,7 @@ Describe "RemoteServices" {
         }
 
         It "Should NOT ship the recents store (or other UI-only keys) to workers" {
-            # recentHosts carries up to 50 cached inventory/diskUsage payloads; no worker
-            # reads it, and shipping it cost a UI-thread deep clone + a ~100 KB JSON
-            # serialize per job.
+            # No worker reads recentHosts, and shipping it cost a deep clone plus ~100 KB per job.
             $probe = [MockNetworkProbe]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{
                 recentHosts   = @(@{ host = 'HOST-1'; inventory = @{ model = 'X' } })
@@ -466,8 +450,7 @@ Describe "RemoteServices" {
             $probe = [MockNetworkProbe]::new()
             $service = [RemoteUpdateService]::new($config, $probe, $null)
 
-            # Constructed without a logger -> NullLogService, whose class default is
-            # verbose; the arg mirrors whatever the injected logger's gate says.
+            # No logger means NullLogService, whose class default is verbose.
             $service.PrepareScanForUpdates("TestHost").Arguments.DebugLog | Should -BeTrue
 
             $service.Logger.DebugEnabled = $false
@@ -475,8 +458,7 @@ Describe "RemoteServices" {
         }
 
         It "Should carry an Options snapshot, never the live reference" {
-            # Same rule as Settings: apply's selected-updates table is UI state, and
-            # a worker enumerating a live table the UI mutates can spin forever.
+            # Same rule as Settings: a worker enumerating a live UI table can spin forever.
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
             $cfg = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{})

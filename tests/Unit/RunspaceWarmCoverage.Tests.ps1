@@ -50,9 +50,7 @@ Describe "Runspace warm coverage" {
     }
 
     It "the barrier never runs a superset graph warm" {
-        # 8 concurrent superset warms (AD + Lens graph + binary module imports per
-        # runspace) contend the process-wide module-analysis/loader locks and blew
-        # the barrier on real hardware ("Pre-warmed 0 of 8", every feature starved).
+        # 8 concurrent superset warms contend the loader locks and blew the barrier. See header.
         Test-Path (Join-Path $ScriptsDir 'Warm-Runspace.ps1') | Should -BeFalse -Because (
             "the superset warm script was removed; AD/Lens graphs warm via the " +
             "deferred finder warms, never behind the startup barrier")
@@ -62,12 +60,9 @@ Describe "Runspace warm coverage" {
 
     It "nothing unproven goes back under the barrier" {
         # Three re-introductions, each of which shipped once and hung startup:
-        # - a socket probe inside the scan-path warm (a hooked connect wedges below
-        #   any PowerShell timeout, and the app never showed a window);
-        # - Stop/BeginStop on a parked warm (blocks forever when wedged, throws
-        #   away nearly finished work when merely slow);
-        # - accumulating every warm handle before waiting (N concurrent using-module
-        #   graph compiles deadlock PowerShell's module-load lock).
+        # - a socket probe in the scan-path warm, which wedges below any PowerShell timeout
+        # - Stop/BeginStop on a parked warm, which blocks forever or discards near-done work
+        # - accumulating warm handles before waiting, which deadlocks the module-load lock
         $services = Get-Content (Join-Path $PSScriptRoot '../../src/Services/WorkerServices.psm1') -Raw
         $services -match '(?s)\[void\] WarmScanLaunchPath\(\)(.*?)\r?\n    \}' | Should -BeTrue
         $Matches[1] | Should -Not -Match 'Probe|TcpClient|Socket|Reachable|Connect' -Because (

@@ -27,8 +27,7 @@ Describe "RemoteError" {
             $ex.ExitCode       | Should -Be 501
             $ex.Message        | Should -BeLike '*exit code 501*'
         }
-        # psexec surfaces Win32 transport errors as its exit code; 5 is the machine-
-        # account-not-admin-on-target signature the autostarted SYSTEM instance hits.
+        # psexec returns Win32 codes, and 5 is the SYSTEM instance's not-admin-on-target signature.
         It "RemoteExecutionException decodes access denied (exit 5) into the message" {
             $ex = [RemoteExecutionException]::new('PC-4', 'Remote probe', 5)
             $ex.ExitCode | Should -Be 5
@@ -81,8 +80,7 @@ Describe "RemoteError" {
             }
         }
         It "IsConnectionLost also matches the LOCAL-side (client Wi-Fi drop) network codes" {
-            # These surface when the operator's own laptop loses connectivity mid-run
-            # (psexec exits 59 etc.) - they must recover, not hard-fail. None are dcu codes.
+            # A client-side drop mid-run must recover, not hard-fail. None of these are dcu codes.
             foreach ($net in 51, 53, 54, 55, 58, 59, 1231, 1232) {
                 [RemoteConnectionLostException]::IsConnectionLost($net) | Should -BeTrue
             }

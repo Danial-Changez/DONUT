@@ -21,8 +21,7 @@
     https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/command-line-interface-error-codes
 #>
 
-# Per-command verdict for a dcu-cli return code (a scan's 500 is a clean no-updates
-# result, not a failure; every other command keeps the plain success/fail split).
+# Per-command verdict: a scan's 500 is a clean no-updates result, not a failure.
 enum DcuCommandOutcome {
     Success
     RebootRequired
@@ -31,20 +30,18 @@ enum DcuCommandOutcome {
 }
 
 class DcuLog {
-    # Extracts dcu-cli's final return code from its activity-log text as @{ Found; Code };
-    # Found is $false when no "return code: N" line is present (dcu-cli never finished).
+    # Extracts dcu-cli's final return code as Found plus Code. Found is $false when no
+    # "return code: N" line is present, meaning dcu-cli never finished.
     static [hashtable] ParseReturnCode([string]$logText) {
         if ([string]::IsNullOrWhiteSpace($logText)) { return @{ Found = $false; Code = 0 } }
-        # dcu-cli: "The program exited with return code: 0". Tolerate case/spacing and
-        # take the last occurrence (the most recent run's result).
+        # Case and spacing vary, and the last occurrence is the most recent run's result.
         $hits = [regex]::Matches($logText, '(?im)return\s+code:\s*(-?\d+)')
         if ($hits.Count -eq 0) { return @{ Found = $false; Code = 0 } }
         $last = $hits[$hits.Count - 1]
         return @{ Found = $true; Code = [int]$last.Groups[1].Value }
     }
 
-    # dcu-cli's documented return codes: 0/1/5 pass for any command, a scan's 500 is
-    # a clean no-updates result (see Classify), everything else is a real error.
+    # 0/1/5 pass for any command, a scan's 500 is clean (see Classify), the rest are errors.
     static [hashtable] $Meanings = @{
         0    = 'success'
         1    = 'reboot required'
@@ -74,13 +71,13 @@ class DcuLog {
     # The codes that are not failures: 0 (done) plus 1 and 5 (done, but reboot to finish).
     static [int[]] $SuccessCodes = @(0, 1, 5)
     static [int[]] $RebootCodes  = @(1, 5)
-    # scan-only: dcu-cli exits 500 when the scan ran clean and found nothing to install.
+    # Scan-only: dcu-cli exits 500 when the scan ran clean and found nothing to install.
     static [int[]] $ScanNoUpdateCodes = @(500)
 
     static [bool] IsSuccess([int]$code) { return [DcuLog]::SuccessCodes -contains $code }
     static [bool] NeedsReboot([int]$code) { return [DcuLog]::RebootCodes -contains $code }
 
-    # The per-command verdict InvokePsExec gates on; only Failed should throw.
+    # The per-command verdict InvokePsExec gates on. Only Failed should throw.
     static [DcuCommandOutcome] Classify([string]$command, [int]$code) {
         if ($command -eq 'scan' -and [DcuLog]::ScanNoUpdateCodes -contains $code) {
             return [DcuCommandOutcome]::NoUpdates

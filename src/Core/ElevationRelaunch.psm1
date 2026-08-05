@@ -38,8 +38,8 @@ class ElevationRelaunch {
         return @{ FilePath = $hostPath; Arguments = "--await-pid $ownPid" }
     }
 
-    # @{ Ok; Declined; Reason }. Declined separates "the user said no" from "it broke",
-    # which read the same to the caller but not to the person looking at the toast.
+    # Returns Ok, Declined and Reason. Declined separates "the user said no" from "it
+    # broke", which read the same to the caller but not to the person reading the toast.
     static [hashtable] Spawn([hashtable]$spec) {
         try {
             Start-Process -FilePath $spec.FilePath -ArgumentList $spec.Arguments `

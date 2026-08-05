@@ -21,12 +21,14 @@ using module ".\LogService.psm1"
     (QueryDomainControllers, ResolveViaServer, TestServerOnline) so the
     discovery/selection logic can be unit-tested off a domain by subclassing
     this type and faking those seams.
+
+    First-run org discovery (DiscoverSearchDomains, DiscoverSiteServer) persists its
+    results to config.json. The repo itself ships no organization names.
 #>
 class NetworkProbe {
     [LogService] $Logger
 
-    # Cached discovery state. $null = not yet queried; an array (possibly empty)
-    # means discovery has run.
+    # Cached discovery state: $null means not yet queried, an array means discovery ran.
     hidden [string[]] $DomainControllers = $null
     hidden [string] $ActiveDomainController = $null
 
@@ -84,8 +86,7 @@ class NetworkProbe {
         return $this.DomainControllers
     }
 
-    # Returns the first reachable domain controller, caching the selection.
-    # Returns $null when none are reachable.
+    # First reachable domain controller, cached. $null when none are reachable.
     [string] GetActiveDomainController() {
         if (-not [string]::IsNullOrWhiteSpace($this.ActiveDomainController)) {
             return $this.ActiveDomainController
@@ -130,8 +131,8 @@ class NetworkProbe {
         }
     }
 
-    # Resolves a host against an already-known DC (one Resolve-DnsName, no discovery)
-    # - the cheap background pre-resolve path. Returns $null (logged) on any failure.
+    # Resolves a host against an already-known DC (one Resolve-DnsName, no discovery),
+    # the cheap background pre-resolve path. Returns $null (logged) on any failure.
     [IPAddress] ResolveWith([string]$hostName, [string]$dc) {
         if ([string]::IsNullOrWhiteSpace($dc)) {
             $this.Logger.LogError("ResolveWith for '$hostName': no domain controller supplied.")
@@ -164,8 +165,7 @@ class NetworkProbe {
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
-            # Pre-connect on purpose: a hooked BeginConnect never returns, so only a
-            # line logged before it can name the wedged call, host, and port.
+            # Logged pre-connect: a hooked BeginConnect never returns to name the wedge.
             if ($logFailure) {
                 $this.Logger.LogDebug(
                     "$checkLabel probe: connecting to '$hostName':$port (2 s cap)...")
@@ -193,24 +193,24 @@ class NetworkProbe {
         }
     }
 
-    # TCP 135 (RPC endpoint mapper) - what psexec/CIM need to connect.
+    # TCP 135 (RPC endpoint mapper) is what psexec and CIM need to connect.
     [bool] IsRpcAvailable([string]$hostName) {
         return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC')
     }
 
-    # TCP 445 (SMB) = the admin share + psexec transport. An open 135 doesn't imply
-    # 445; when blocked, UNC ops hang with no timeout - so check it up front.
+    # TCP 445 (SMB) is the admin share and psexec transport. An open 135 does not imply
+    # 445, and a blocked 445 hangs UNC operations with no timeout, so check it up front.
     [bool] IsSmbAvailable([string]$hostName) {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
     }
 
-    # Same 445 reachability check, but silent on failure. The live-tail gate calls this every
-    # ~1.5s; when a host drops mid-run the noisy variant spammed a DEBUG line per tick.
+    # Same 445 reachability check, but silent on failure. The live-tail gate calls it every
+    # ~1.5s, and the noisy variant spammed a DEBUG line per tick while a host was down.
     [bool] IsSmbReachableQuiet([string]$hostName) {
         return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $false)
     }
 
-    # Cheap non-blocking "is MY network up" check; the reconnect loop uses it to tell
+    # Cheap non-blocking check of the local network, so the reconnect loop can tell
     # own-Wi-Fi-down from target-unreachable. Overridable seam for the worker tests.
     [bool] IsLocalOnline() {
         try {
@@ -236,8 +236,7 @@ class NetworkProbe {
     [string] ResolveComputerName([string]$ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
         try {
-            # Pre-call breadcrumb: DCOM binds below PowerShell; if the query wedges,
-            # this line names it.
+            # Pre-call breadcrumb: DCOM binds below PowerShell, so a wedge has no other trace.
             $this.Logger.LogDebug("Identity check: querying computer name at '$ip' (WMI/DCOM)...")
             $actual = $this.QueryComputerName($ip)
             $this.Logger.LogDebug("Identity check: '$ip' reports '$actual'.")
@@ -251,13 +250,12 @@ class NetworkProbe {
 
     # --- Overridable seams (raw side effects; faked in unit tests) ---
 
-    # Queries Active Directory for all domain controllers and returns their host names.
     hidden [string[]] QueryDomainControllers() {
         return @(Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName)
     }
 
-    # Same LDAP stack as user search (DirectorySearcher), which is proven to work as
-    # the machine account; GetComputerDomain reads domain membership, not the token.
+    # Same LDAP stack as user search (DirectorySearcher), proven to work as the machine
+    # account. GetComputerDomain reads domain membership, not the token.
     hidden [string[]] QueryDomainControllersViaLdap() {
         $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()
         return @($domain.DomainControllers | Select-Object -ExpandProperty Name)
@@ -270,11 +268,10 @@ class NetworkProbe {
                 Where-Object NameTarget | Select-Object -ExpandProperty NameTarget -Unique)
     }
 
-    # Reads Win32_ComputerSystem.Name from the host at $ip over a DCOM CIM session
-    # (root\cimv2, single property - none of the root\wmi serialization issues).
+    # Reads Win32_ComputerSystem.Name over a DCOM CIM session (root\cimv2, single
+    # property, so none of the root\wmi serialization issues apply).
     hidden [string] QueryComputerName([string]$ip) {
-        # -OperationTimeoutSec bounds the open (see GatherRemoteInventory): a box that
-        # died between the RPC gate and this call must fail in seconds, not minutes.
+        # -OperationTimeoutSec bounds the open so a box that died mid-gate fails in seconds.
         $open = @{
             ComputerName        = $ip
             SessionOption       = (New-CimSessionOption -Protocol Dcom)
@@ -313,27 +310,21 @@ class NetworkProbe {
         return $this.IsOnline($server)
     }
 
-    # --- First-run org discovery (results persist to config; the repo ships no
-    #     organization names) ---
+    # --- First-run org discovery ---
 
-    # The AD domains the finder should search: every domain in this machine's
-    # forest plus every trust partner (domain and forest trusts). Best-effort -
-    # off a domain this returns @() and the finder searches nothing until config
-    # names domains.
+    # The AD domains the finder searches: every domain in this machine's forest plus
+    # every trust partner. Off a domain this returns @() and the finder searches nothing.
     [string[]] DiscoverSearchDomains() {
         $found = [System.Collections.Generic.List[string]]::new()
         try {
             Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
             $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
-            # The whole forest, not just the joined domain: child domains
-            # (home.test.ca under test.ca) hold their own users and are not
-            # trust partners, so trust enumeration alone never finds them.
+            # The whole forest: child domains are not trust partners, so trusts alone miss them.
             foreach ($d in @($domain.Forest.Domains)) { $found.Add([string]$d.Name) }
             foreach ($t in @($domain.GetAllTrustRelationships())) { $found.Add([string]$t.TargetName) }
             foreach ($t in @($domain.Forest.GetAllTrustRelationships())) {
                 $found.Add([string]$t.TargetName)
-                # A forest trust names only the partner's root domain; expand to
-                # its child domains when reachable (the root alone otherwise).
+                # A forest trust names only the partner's root domain, so expand it when reachable.
                 try {
                     $ctx = [System.DirectoryServices.ActiveDirectory.DirectoryContext]::new(
                         'Forest', [string]$t.TargetName)
@@ -351,9 +342,8 @@ class NetworkProbe {
         return @($found | Where-Object { $_ } | Select-Object -Unique)
     }
 
-    # The SCCM management point this client reports to - the best available guess
-    # for the AdminService (SMS Provider) host; config-editable when they differ.
-    # Best-effort: no SCCM client -> ''.
+    # The SCCM management point this client reports to, the best available guess for the
+    # AdminService (SMS Provider) host. Config-editable when they differ, '' without SCCM.
     [string] DiscoverSiteServer() {
         try {
             $auth = Get-CimInstance -Namespace 'root\ccm' -ClassName 'SMS_Authority' -ErrorAction Stop |

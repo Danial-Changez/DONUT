@@ -37,8 +37,7 @@ class AsyncJobPresenter {
     [void] PumpJobs() {
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }
 
-        # A modal's nested message loop re-fires this timer: keep polling/streaming, but
-        # defer completion work + AfterPump (both can open a dialog; stacking deadlocks).
+        # A modal's nested loop re-fires this timer, so defer work that could stack a modal.
         $modal = $this.IsModalOpen()
 
         $processedAny = $false
@@ -54,8 +53,7 @@ class AsyncJobPresenter {
                 if ($modal) { continue }   # leave the finished job for a later, non-modal tick
                 $this.OnJobCompleted($job)
                 $job.Cleanup()
-                # OnJobCompleted may append jobs but never reorders/removes earlier
-                # entries, so the original index still points at this finished job.
+                # OnJobCompleted only appends, so the index still points at this finished job.
                 $this.ActiveJobs.RemoveAt($i)
             }
         }
@@ -63,8 +61,8 @@ class AsyncJobPresenter {
         if ($processedAny -and -not $modal) { $this.AfterPump() }
     }
 
-    # True when a modal dialog is open (so PumpJobs defers dialog-opening completion work).
-    # Overridden by presenters that own a DialogPresenter; no-op base.
+    # True when a modal dialog is open, so PumpJobs defers dialog-opening completion work.
+    # Presenters that own a DialogPresenter override it, and the base is a no-op.
     [bool] IsModalOpen() { return $false }
 
     # --- Overridable hooks (no-op by default) ---

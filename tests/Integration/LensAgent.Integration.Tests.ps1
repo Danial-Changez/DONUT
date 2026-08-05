@@ -13,7 +13,7 @@ using module "..\..\src\Models\PersonLens.psm1"
     survive non-Windows hosts (see the integration notes in testing.md).
 #>
 
-# Overrides only agent startup: the exchange loop runs against the REAL agent
+# Overrides only agent startup: the exchange loop runs against the real agent
 # process this file started, never a scheduled task.
 class LiveAgentLensService : PersonLensService {
     LiveAgentLensService() : base('site.invalid', 'C:\Src') {}
@@ -36,8 +36,7 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
 
         $agentScript = (Resolve-Path (
                 Join-Path $PSScriptRoot '..\..\src\Scripts\LensAgent.ps1')).Path
-        # ProcessStartInfo.ArgumentList quotes each argument; Start-Process joins its
-        # -ArgumentList unquoted, truncating paths with spaces (e.g. this checkout's).
+        # Start-Process joins -ArgumentList unquoted and truncates paths with spaces.
         $psi = [System.Diagnostics.ProcessStartInfo]::new([System.Environment]::ProcessPath)
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
@@ -85,14 +84,13 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
         }
         $out = $svc.ExchangeRoundTrip($request, $false)
 
-        # Parent-side failure bundles would also parse; rule each out so the text
-        # provably came back decrypted from the agent's result-<id>.bin.
+        # Parent-side failure bundles would also parse, so rule each one out.
         $out | Should -Not -BeNullOrEmpty
         $out | Should -Not -BeLike '*Lens agent unavailable*'
         $out | Should -Not -BeLike '*session key is missing*'
         $out | Should -Not -BeLike '*did not complete within*'
 
-        # Off-domain this is an errors bundle - it must still parse as a PersonLens.
+        # Off-domain this is an errors bundle, and it must still parse as a PersonLens.
         $lens = [PersonLens]::FromJson($out)
         $lens | Should -Not -BeNullOrEmpty
         $lens.GetType().Name | Should -Be 'PersonLens'

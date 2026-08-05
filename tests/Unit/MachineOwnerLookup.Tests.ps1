@@ -1,8 +1,7 @@
 Describe "Machine owner lookup" {
 
     BeforeAll {
-        # Dot-sourcing is safe off Windows: the [ADSI] binds live inside function bodies,
-        # never at parse. Find-Gc is redefined per test to stand in for the directory.
+        # Dot-sourcing is safe off Windows because the [ADSI] binds live inside function bodies.
         . (Join-Path $PSScriptRoot '..\..\src\Scripts\LensAgent.Common.ps1')
         $script:Owners = $script:OwnerScript
 
@@ -13,7 +12,7 @@ Describe "Machine owner lookup" {
     }
 
     BeforeEach {
-        # The memo is deliberately session-long in the agent; tests must not share it.
+        # The memo is deliberately session-long in the agent, so tests must not share it.
         $script:OwnerNameCache = @{}
     }
 
@@ -59,9 +58,8 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return [pscustomobject]@{ value = @() } }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            # The stub hit proves the ORDER (SCCM asked and empty -> directory asked next):
-            # its [ADSI] bind cannot work off Windows, so the read errors into the catch
-            # and the SAM stands in - which is the chain's last step doing its job.
+            # The stub hit proves the order: SCCM answered empty, so the directory is asked next.
+            # Its [ADSI] bind fails off Windows, so the catch falls back to the SAM.
             function Find-Gc { param([string]$Filter)
                 return [pscustomobject]@{ Properties = @{ distinguishedname = @('CN=x') } }
             }
@@ -136,7 +134,7 @@ Describe "Machine owner lookup" {
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1', '', $null) -server 'sccm.corp.com') | ConvertFrom-Json
 
             @($bundle.owners).Count | Should -Be 1
-            # 1 affinity + 1 name - the blanks never reach either query.
+            # 1 affinity + 1 name, the blanks never reach either query.
             Should -Invoke Invoke-RestMethod -Times 2 -Exactly
         }
     }

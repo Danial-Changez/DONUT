@@ -3,8 +3,7 @@ using module "..\..\src\Core\ElevationContext.psm1"
 Describe "ElevationContext" {
 
     BeforeDiscovery {
-        # -Skip evaluates at discovery, before any BeforeAll runs. The capability, not the
-        # OS: WindowsIdentity throws PlatformNotSupportedException wherever it is absent.
+        # -Skip evaluates at discovery, and WindowsIdentity throws wherever it is absent.
         $script:HasWindowsIdentity = $true
         try { [void][System.Security.Principal.WindowsIdentity]::GetCurrent() }
         catch { $script:HasWindowsIdentity = $false }
@@ -18,8 +17,7 @@ Describe "ElevationContext" {
         }
 
         It "treats SYSTEM as a narrower question than elevated" -Skip:(-not $script:HasWindowsIdentity) {
-            # Conflating the two is what sent autostart down the machine-account lane: a
-            # SYSTEM token is elevated, so IsSystem implies IsElevated but never the reverse.
+            # Conflating these sent autostart down the machine-account lane, one direction only.
             if ([ElevationContext]::IsSystem()) {
                 [ElevationContext]::IsElevated() | Should -BeTrue
             }

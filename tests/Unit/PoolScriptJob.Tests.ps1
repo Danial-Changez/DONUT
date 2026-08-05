@@ -25,7 +25,7 @@ Describe "PoolScriptJob" {
             return $path
         }
 
-        # Polls until $condition returns $true or ~5s elapse; returns the final verdict.
+        # Polls until $condition returns $true or ~5s elapse, then reports the final verdict.
         function Wait-Until([scriptblock]$condition) {
             for ($i = 0; $i -lt 50; $i++) {
                 if (& $condition) { return $true }
@@ -53,8 +53,7 @@ Describe "PoolScriptJob" {
         @($result) -join '' | Should -Be 'pool-ok'
     }
 
-    # StartedAt has to precede the script actually running, because the AD search breadcrumb
-    # reports (script start - StartedAt) as its queue span and that must never go negative.
+    # The AD breadcrumb reports script start minus StartedAt as queue span, never negative.
     It "stamps StartedAt no later than the moment the script begins running" {
         $stub = New-Stub 'stamp.ps1' '[datetime]::UtcNow.Ticks'
         $before = [datetime]::UtcNow
@@ -118,7 +117,7 @@ Describe "PoolScriptJob" {
         [PoolScriptJob]::DisposeSafe($job.Ps, $stopping, $null) | Should -BeTrue
         $stopping.Count | Should -Be 1
 
-        # The async stop lands off-thread; the reap then disposes and drains the list.
+        # The async stop lands off-thread, so the reap does the dispose and drains the list.
         Wait-Until { [PoolScriptJob]::ReapStopping($stopping, $null) } | Should -BeTrue
         $stopping.Count | Should -Be 0
     }

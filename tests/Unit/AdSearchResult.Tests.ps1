@@ -22,8 +22,7 @@ Describe "AdFilter filter construction" {
         $f | Should -Match ([regex]::Escape('(objectClass=user)'))
     }
 
-    # sn is carried explicitly instead of via ANR, whose schema-level set would also match
-    # physicalDeliveryOfficeName and proxyAddresses and crowd real people out of the cap.
+    # ANR would also match office and proxy attributes, crowding real people out of the cap.
     It "reaches a surname without pulling in ANR's office and proxy attributes" {
         $f = [AdFilter]::UserFilter('sar')
         $f | Should -Match ([regex]::Escape('sn=sar*'))
@@ -37,14 +36,13 @@ Describe "AdFilter filter construction" {
     }
     It "CombinedFilter ORs the computer and user filters into one query" {
         $f = [AdFilter]::CombinedFilter('sar')
-        $f | Should -Match ([regex]::Escape('(objectCategory=computer)'))   # computer clause
-        $f | Should -Match ([regex]::Escape('(objectClass=user)'))         # user clause
-        $f | Should -Match '^\(\|\('                                       # top-level OR
+        $f | Should -Match ([regex]::Escape('(objectCategory=computer)'))
+        $f | Should -Match ([regex]::Escape('(objectClass=user)'))
+        $f | Should -Match '^\(\|\('   # Top-level OR.
     }
     It "escapes an injection attempt so no extra clause is injected" {
         $f = [AdFilter]::UserFilter('a)(uid=*')
         $f | Should -Match ([regex]::Escape('sAMAccountName=a\29\28uid=\2a'))
-        # the raw ')(' break-out must not survive
         $f | Should -Not -Match ([regex]::Escape(')(uid='))
     }
 }
@@ -77,8 +75,7 @@ Describe "AdSearchRank" {
         [AdSearchRank]::Of($surname, 'dan') | Should -Be 4
     }
 
-    # A forest that stores cn as "Last, First" surfaces the surname in a field the finder
-    # already reads, so that row is a visible match and must not be demoted to the sn tier.
+    # A cn of "Last, First" is a field the finder shows, so it must not drop to the sn tier.
     It "treats a 'Last, First' cn as the visible match it is" {
         $lastFirst = New-Row 'Kim Danielson' 'Danielson, Kim' 'kdanielson' 'kdanielson@x'
         [AdSearchRank]::Of($lastFirst, 'dan') | Should -Be 1
@@ -86,9 +83,9 @@ Describe "AdSearchRank" {
 
     It "orders a mixed set strongest-match first" {
         $rows = @(
-            (New-Row 'Kim Danielson' 'X' 'kd' 'kd@x'),      # surname only -> last
-            (New-Row 'Dan Okafor' 'Okafor' 'dok' 'dok@x'),  # displayName  -> first
-            (New-Row 'Kim Roy' 'Roy' 'danroy' 'kr@x')       # sam          -> middle
+            (New-Row 'Kim Danielson' 'X' 'kd' 'kd@x'),      # Surname only, ranks last.
+            (New-Row 'Dan Okafor' 'Okafor' 'dok' 'dok@x'),  # DisplayName, ranks first.
+            (New-Row 'Kim Roy' 'Roy' 'danroy' 'kr@x')       # Sam, ranks middle.
         )
         $ordered = [AdSearchRank]::Order($rows, 'dan')
         @($ordered).Count | Should -Be 3
@@ -127,7 +124,6 @@ Describe "AdFilter escaping" {
     It "escapes an injection attempt so no extra clause is injected" {
         $f = [AdFilter]::UserFilter('a)(uid=*')
         $f | Should -Match ([regex]::Escape('sAMAccountName=a\29\28uid=\2a'))
-        # the raw ')(' break-out must not survive
         $f | Should -Not -Match ([regex]::Escape(')(uid='))
     }
 }
@@ -136,12 +132,12 @@ Describe "AdFilter account-control decode" {
     It "IsLockedFromComputed is true only when UF_LOCKOUT (0x10) is set" {
         [AdFilter]::IsLockedFromComputed(0x10)  | Should -BeTrue
         [AdFilter]::IsLockedFromComputed(16)    | Should -BeTrue
-        [AdFilter]::IsLockedFromComputed('16')  | Should -BeTrue   # string coerces
-        [AdFilter]::IsLockedFromComputed(0x210) | Should -BeTrue   # other bits + lockout
+        [AdFilter]::IsLockedFromComputed('16')  | Should -BeTrue   # String coerces.
+        [AdFilter]::IsLockedFromComputed(0x210) | Should -BeTrue   # Other bits plus lockout.
     }
     It "IsLockedFromComputed is false when the bit is clear / null" {
         [AdFilter]::IsLockedFromComputed(0)     | Should -BeFalse
-        [AdFilter]::IsLockedFromComputed(0x200) | Should -BeFalse  # NORMAL_ACCOUNT, no lockout
+        [AdFilter]::IsLockedFromComputed(0x200) | Should -BeFalse  # NORMAL_ACCOUNT, no lockout.
         [AdFilter]::IsLockedFromComputed($null) | Should -BeFalse
     }
     It "IsDisabledFromUac is true only when UF_ACCOUNTDISABLE (0x2) is set" {

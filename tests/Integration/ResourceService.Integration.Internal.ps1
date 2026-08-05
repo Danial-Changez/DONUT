@@ -1,5 +1,4 @@
-# Integration tests for ResourceService - requires WPF in STA mode
-# These tests verify actual XAML loading and WPF Application/Window behavior
+# Integration tests for ResourceService, which need WPF in STA mode.
 using module "..\..\src\Services\ResourceService.psm1"
 
 BeforeDiscovery {
@@ -13,22 +12,20 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
         $script:srcRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\src")
         $script:stylesPath = Join-Path $script:srcRoot "UI\Styles"
         
-        # Count expected XAML files
         $script:expectedStyleCount = (Get-ChildItem -Path $script:stylesPath -Filter '*.xaml').Count
     }
 
     Context "LoadStylesInto with ResourceDictionary" {
         It "Should load all XAML style files into a ResourceDictionary" {
-            # Create a standalone ResourceDictionary (doesn't require Application)
+            # A standalone ResourceDictionary needs no Application.
             $resourceDict = [System.Windows.ResourceDictionary]::new()
             
             $service = [ResourceService]::new($script:srcRoot)
             
-            # Use reflection to call the hidden method - unwrap PSObject for .NET interop
+            # Reflection reaches the hidden method, and the cast unwraps PSObject for interop.
             $method = $service.GetType().GetMethods() | Where-Object { $_.Name -eq 'LoadStylesInto' } | Select-Object -First 1
             $method.Invoke($service, [object[]]@([System.Windows.ResourceDictionary]$resourceDict))
             
-            # Verify styles were loaded
             $resourceDict.MergedDictionaries.Count | Should -Be $script:expectedStyleCount
         }
 
@@ -39,13 +36,11 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             $method = $service.GetType().GetMethods() | Where-Object { $_.Name -eq 'LoadStylesInto' } | Select-Object -First 1
             $method.Invoke($service, [object[]]@([System.Windows.ResourceDictionary]$resourceDict))
             
-            # Check that we can find color-related resources
             $allKeys = @()
             foreach ($dict in $resourceDict.MergedDictionaries) {
                 $allKeys += $dict.Keys
             }
             
-            # UIColors.xaml should have color definitions
             $colorKeys = $allKeys | Where-Object { $_ -match 'Color|Brush' }
             $colorKeys.Count | Should -BeGreaterThan 0
         }
@@ -57,7 +52,6 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             $method = $service.GetType().GetMethods() | Where-Object { $_.Name -eq 'LoadStylesInto' } | Select-Object -First 1
             $method.Invoke($service, [object[]]@([System.Windows.ResourceDictionary]$resourceDict))
             
-            # Check for button-related resources
             $allKeys = @()
             foreach ($dict in $resourceDict.MergedDictionaries) {
                 $allKeys += $dict.Keys
@@ -73,20 +67,16 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             $service = [ResourceService]::new("C:\NonExistent\Path")
             $method = $service.GetType().GetMethods() | Where-Object { $_.Name -eq 'LoadStylesInto' } | Select-Object -First 1
             
-            # Should not throw, just warn
             { $method.Invoke($service, [object[]]@([System.Windows.ResourceDictionary]$resourceDict)) } | Should -Not -Throw
             
-            # No styles should be loaded
             $resourceDict.MergedDictionaries.Count | Should -Be 0
         }
     }
 
     Context "LoadGlobalResources with Application" {
         It "Should create Application.Current if not exists" -Skip:$(-not $script:isStaMode) {
-            # Shutdown any existing application first
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.Shutdown()
-                # Give it time to shutdown
                 Start-Sleep -Milliseconds 100
             }
             
@@ -97,7 +87,6 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
         }
 
         It "Should load styles into Application.Current.Resources" -Skip:(-not $script:isStaMode) {
-            # Ensure application exists
             if (-not [System.Windows.Application]::Current) {
                 $app = New-Object System.Windows.Application
                 $app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
@@ -123,7 +112,6 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
 
     Context "ApplyResourcesToWindow" {
         It "Should apply resources to a Window's ResourceDictionary" -Skip:(-not $script:isStaMode) {
-            # Ensure application exists with resources
             if (-not [System.Windows.Application]::Current) {
                 $app = New-Object System.Windows.Application
                 $app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
@@ -132,7 +120,6 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             $service = [ResourceService]::new($script:srcRoot)
             $service.LoadGlobalResources()
             
-            # Create a simple window
             $window = New-Object System.Windows.Window
             $window.Title = "Test Window"
             
@@ -140,16 +127,13 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             
             $service.ApplyResourcesToWindow($window)
             
-            # Window should now have the styles
             $window.Resources.MergedDictionaries.Count | Should -BeGreaterThan $initialCount
             
-            # Cleanup
             $window.Close()
         }
 
         It "Should fallback to LoadStylesInto when Application.Current is null" {
-            # This test works without STA since it uses the fallback path
-            # We can't easily clear Application.Current, so we test the method exists
+            # Application.Current cannot be cleared here, so only the signature is checked.
             $service = [ResourceService]::new($script:srcRoot)
             
             $method = $service.GetType().GetMethod('ApplyResourcesToWindow')
@@ -167,7 +151,6 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             $method = $service.GetType().GetMethods() | Where-Object { $_.Name -eq 'LoadStylesInto' } | Select-Object -First 1
             $method.Invoke($service, [object[]]@([System.Windows.ResourceDictionary]$resourceDict))
             
-            # Collect all keys
             $allKeys = @()
             foreach ($dict in $resourceDict.MergedDictionaries) {
                 foreach ($key in $dict.Keys) {
@@ -175,10 +158,9 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
                 }
             }
             
-            # Should have a reasonable number of resources
             $allKeys.Count | Should -BeGreaterThan 5
             
-            # Output keys for debugging (visible in Detailed output)
+            # Diagnostic only, and visible in Detailed output.
             Write-Host "Loaded $($allKeys.Count) resource keys from $($resourceDict.MergedDictionaries.Count) dictionaries"
         }
 
@@ -188,11 +170,9 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
             foreach ($file in $xamlFiles) {
                 $content = Get-Content -Path $file.FullName -Raw
                 
-                # Basic XAML structure check
                 $content | Should -Match '<ResourceDictionary'
                 $content | Should -Match 'xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"'
                 
-                # Verify it's parseable by creating a ResourceDictionary
                 $context = New-Object System.Windows.Markup.ParserContext
                 $context.BaseUri = [Uri]::new($file.FullName)
                 

@@ -6,13 +6,11 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "ConfigManager" {
 
     BeforeAll {
-        # Use a unique temp directory for tests to avoid conflicts with real config
         $script:testRoot = Join-Path $env:TEMP "DonutConfigManagerTests_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
         $script:testSourceRoot = Join-Path $testRoot "src"
         New-Item -Path $testSourceRoot -ItemType Directory -Force | Out-Null
         
-        # Redirect the machine-wide data root: ConfigManager anchors on DonutPaths
-        # (%ProgramData%), so an unredirected run edits the operator's real config.
+        # ConfigManager anchors on DonutPaths, so an unredirected run edits the real config.
         $script:originalProgramData = $env:ProgramData
         $env:ProgramData = $testRoot
         $script:originalLocalAppData = $env:LOCALAPPDATA
@@ -20,18 +18,15 @@ Describe "ConfigManager" {
     }
 
     AfterAll {
-        # Restore the real data root
         $env:ProgramData = $script:originalProgramData
         $env:LOCALAPPDATA = $script:originalLocalAppData
-        
-        # Cleanup
+
         if (Test-Path $script:testRoot) {
             Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
     BeforeEach {
-        # Clean up any existing config for each test
         $configDir = Join-Path $script:testRoot "DONUT\config"
         if (Test-Path $configDir) {
             Remove-Item -Path $configDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -62,13 +57,11 @@ Describe "ConfigManager" {
         It "Should create directories if they do not exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Remove directories
             $configDir = Split-Path $manager.ConfigPath -Parent
             Remove-Item -Path $configDir -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path $manager.LogsPath -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path $manager.ReportsPath -Recurse -Force -ErrorAction SilentlyContinue
             
-            # Call EnsureDirectories
             $manager.EnsureDirectories()
             
             Test-Path $configDir | Should -Be $true
@@ -79,7 +72,6 @@ Describe "ConfigManager" {
         It "Should not fail if directories already exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Call twice - should not throw
             { $manager.EnsureDirectories() } | Should -Not -Throw
         }
     }
@@ -124,7 +116,6 @@ Describe "ConfigManager" {
         It "Should load existing config from file" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Create a config file manually
             $testSettings = @{
                 activeCommand = "applyUpdates"
                 throttleLimit = 8
@@ -141,7 +132,6 @@ Describe "ConfigManager" {
         It "Should return default config when file does not exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Ensure no config file exists
             if (Test-Path $manager.ConfigPath) {
                 Remove-Item $manager.ConfigPath -Force
             }
@@ -155,7 +145,6 @@ Describe "ConfigManager" {
         It "Should create default config file when none exists" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Ensure no config file exists
             if (Test-Path $manager.ConfigPath) {
                 Remove-Item $manager.ConfigPath -Force
             }
@@ -168,10 +157,8 @@ Describe "ConfigManager" {
         It "Should handle malformed JSON gracefully" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Write invalid JSON
             "{ invalid json }" | Set-Content -Path $manager.ConfigPath
-            
-            # Should not throw, should return config with empty settings
+
             $config = $manager.LoadConfig()
             $config | Should -Not -BeNullOrEmpty
         }

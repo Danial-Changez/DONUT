@@ -12,8 +12,7 @@ Describe "Row palette single-source" {
         $script:ColorsPath = Join-Path $PSScriptRoot '../../src/UI/Styles/UIColors.xaml'
         $script:VmText = Get-Content -LiteralPath $script:VmPath -Raw
         $script:PresenterText = Get-Content -LiteralPath $script:PresenterPath -Raw
-        # The status accents rows key into the palette with (see HostViewModel.IdleColorKey
-        # and FleetCardStatus color keys).
+        # The accent keys rows resolve at runtime (HostViewModel.IdleColorKey, FleetCardStatus).
         $script:PaletteKeys = @('AccentGreen', 'AccentRed', 'AccentYellow', 'AccentOrange',
             'AccentCyan', 'AccentPurple', 'BodyTextTertiary')
     }

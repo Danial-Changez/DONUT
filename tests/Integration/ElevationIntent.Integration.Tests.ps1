@@ -40,8 +40,7 @@ Describe "Pending intent on the real data root" {
         $store = [PendingIntentStore]::new($null)
         $store.Save([PendingIntent]::Create([GatedAction]::RunAll, @('PC-1', 'PC-2'), [datetime]::UtcNow))
 
-        # The claimant is a real child pwsh, like the elevated relaunch: it inherits
-        # the redirected data root and runs the real store code against real files.
+        # A real child pwsh, like the elevated relaunch, inheriting the redirected data root.
         $claimant = Join-Path $script:testRoot 'claim-intent.ps1'
         @"
 using module "$($script:repoRoot)/src/Services/PendingIntentStore.psm1"
@@ -63,7 +62,7 @@ using module "$($script:repoRoot)/src/Models/PendingIntent.psm1"
         $verdict.action | Should -Be 'RunAll'
         @($verdict.hosts) | Should -Be @('PC-1', 'PC-2')
 
-        # Claimed by the child; nothing is left for this process.
+        # Claimed by the child, so nothing is left for this process.
         Test-Path -LiteralPath $store.IntentPath() | Should -BeFalse
         $store.Take([datetime]::UtcNow) | Should -BeNullOrEmpty
     }

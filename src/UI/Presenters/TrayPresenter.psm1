@@ -55,13 +55,12 @@ class TrayPresenter {
         [void]$this.Menu.Items.Add([ToolStripSeparator]::new())
         [void]$this.Menu.Items.Add('Exit', $null,
             { param($s, $e) $presenter.ExitApp() }.GetNewClosure())
-        # App-themed menu (WinForms defaults to the office-blue gradient). Guarded:
-        # the helper is compiled C#, absent only on a dev session that skipped it.
+        # WinForms defaults to an office-blue menu, and the compiled C# themer may be absent.
         $theme = 'Donut.Interop.TrayTheme' -as [type]
         if ($theme) { $theme::Apply($this.Menu) }
         $this.Icon.ContextMenuStrip = $this.Menu
 
-        # Left-click restores; right-click opens the menu (WinForms default).
+        # Left-click restores, and right-click opens the menu (WinForms default).
         $this.Icon.Add_MouseClick({
                 param($s, $e)
                 if ($e.Button -eq [MouseButtons]::Left) { $presenter.ShowMainWindow() }
@@ -106,14 +105,13 @@ class TrayPresenter {
         $this.ShowRequestTimer.Start()
     }
 
-    # Surfaces (and foregrounds) the main window; on the first show after a hidden
-    # start, runs the sign-in/update check that the hidden boot deferred.
+    # Surfaces (and foregrounds) the main window. The first show after a hidden start
+    # also runs the sign-in and update check that the hidden boot deferred.
     [void] ShowMainWindow() {
         $w = $this.Main.Window
         if ($null -eq $w) { return }
 
-        # Sign-in and the update prompt come FIRST, the order a cold start already uses
-        # (DonutApp.ps1). Showing the window first put it on screen beside the login modal.
+        # Sign-in and the update prompt come first, or the window opens beside the login modal.
         $pending = $this.Main.PendingUpdateCheck
         if ($null -ne $pending) {
             $this.Main.PendingUpdateCheck = $null
@@ -128,8 +126,7 @@ class TrayPresenter {
         }
         catch { $this.Logger.LogException("Show main window failed", $_) }
 
-        # Once per launch: the actions are elsewhere (any fleet action prompts, and the
-        # Settings toggle restarts elevated), so this only has to name the state.
+        # Once per launch: the remedies live elsewhere, so this only has to name the state.
         if ($this.Main.PendingLimitedNotice) {
             $this.Main.PendingLimitedNotice = $false
             if ($this.Main.ToastService) {
@@ -147,7 +144,7 @@ class TrayPresenter {
         catch { $this.Logger.LogException("Open settings from tray failed", $_) }
     }
 
-    # Tray "Logs": Explorer on the folder Donut.log and the worker logs land in - the
+    # Tray "Logs": Explorer on the folder Donut.log and the worker logs land in. It is the
     # first ask in any support ticket, reachable without surfacing the window.
     [void] OpenLogsFolder() {
         try {
@@ -171,14 +168,13 @@ class TrayPresenter {
     }
 
     # Requests a real exit (vs. close-to-tray hide): flags it so the window's Closing
-    # handler won't cancel, then closes - the existing Closed teardown is the exit path.
+    # handler will not cancel, then closes, since Closed teardown is the exit path.
     [void] ExitApp() {
         $this.Main.ExitRequested = $true
         if ($this.Main.Window) { $this.Main.Window.Close() }
     }
 
-    # One-time balloon after the X hides the window to the tray, so the app doesn't
-    # look like it vanished.
+    # One-time balloon after the X hides the window, so the app doesn't look gone.
     [void] ShowCloseToTrayHint() {
         if ($this.HintShown -or $null -eq $this.Icon) { return }
         $this.HintShown = $true

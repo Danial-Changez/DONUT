@@ -7,11 +7,8 @@ const DOCS_ROOT = path.resolve(import.meta.dirname, '../../docs');
 // joining wants a trailing slash.
 const BASE = base.endsWith('/') ? base : `${base}/`;
 
-// Root-absolute references to build-time public assets — the rendered diagram
-// SVGs live in web/public/diagrams/, served under the deploy base. Astro doesn't
-// base-prefix absolute paths in Markdown, so authors write them base-less
-// (/diagrams/x.svg) and we prefix here, keeping the base in one place
-// (site-base.mjs) instead of baked into content that would break on a repo move.
+// Astro does not base-prefix absolute paths in Markdown, so authors write these
+// base-less and the prefix is applied here, keeping the base in one place.
 const ASSET_PREFIXES = ['/diagrams/'];
 
 /** Join BASE (trailing slash) onto a root-absolute path (leading slash). */

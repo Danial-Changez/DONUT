@@ -64,20 +64,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Teardown needs no live service (StopAndPurgeAgent is static) and runs de-elevated too,
-# so an agent left by an earlier elevated session is still swept at close.
+# Runs de-elevated too, so an agent left by an earlier elevated session is still swept.
 if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
 if ($WarmOnly) {
-    # There is no agent to warm when DONUT is already the interactive user, and
-    # registering its scheduled task would need rights this process does not have.
+    # There is no agent to warm when DONUT is already the interactive user.
     if (-not [ElevationContext]::IsElevated()) { return '' }
     return $svc.EnsureAgent()
 }
-# Machine -> primary user rides the same agent and the same RBAC scope, so it is a mode
-# here rather than a second worker with its own copy of the exchange plumbing.
+# Owner lookups ride the same agent and RBAC scope, so they are a mode, not a worker.
 if (@($OwnerOf).Count -gt 0) { return $svc.RunOwnerLookupJson($OwnerOf) }
 $svc.RunLookupJson($Identity)

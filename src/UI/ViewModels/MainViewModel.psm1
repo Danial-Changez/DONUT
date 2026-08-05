@@ -24,21 +24,19 @@ class MainViewModel : ObservableObject {
     [object] $MaximizeCommand     # toggles Maximized <-> Normal
     [object] $CloseCommand
 
-    # QR overlay: a secret rendered to an in-memory image (never disk) - BitLocker
-    # keys from the Lens, or a temp password from the reset overlay.
+    # QR overlay: a secret rendered to an in-memory image, never to disk.
     [bool]   $IsQrOpen = $false
-    [object] $QrImage             # ImageSource; bound to the overlay's Image.Source
-    [string] $QrCaption = ''      # e.g. "BitLocker recovery key - WSID123"
-    [string] $QrHint = ''         # the line under the QR; varies with the payload kind
+    [object] $QrImage             # ImageSource bound to the overlay's Image.Source
+    [string] $QrCaption = ''      # e.g. the BitLocker recovery key caption for a WSID
+    [string] $QrHint = ''         # the line under the QR, varying with the payload kind
     [object] $CloseQrCommand
 
-    # Reset-password overlay: IsResetOpen gates it; ResetVm holds the target/form.
+    # Reset-password overlay: IsResetOpen gates it, ResetVm holds the target and form.
     [bool]   $IsResetOpen = $false
-    [object] $ResetVm             # ResetPasswordViewModel; set once by MainPresenter
+    [object] $ResetVm             # ResetPasswordViewModel, set once by MainPresenter
     [object] $CloseResetCommand
 
-    # Guided tour: the ? button binds OpenTourCommand; Esc binds CloseTourCommand.
-    # IsTourOpen gates the overlay; TourPresenter drives step navigation.
+    # Guided tour: IsTourOpen gates the overlay and TourPresenter drives step navigation.
     [bool]   $IsTourOpen = $false
     [object] $OpenTourCommand
     [object] $CloseTourCommand

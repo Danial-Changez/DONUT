@@ -26,8 +26,7 @@ param(
     [string]$LogsPath
 )
 
-# ScheduledTasks auto-loads lazily; under the boot-time pool storm its module analysis can
-# hit a transient "Collection was modified" race, so import it explicitly with a short retry.
+# Lazy auto-load hits a transient "Collection was modified" race under the boot pool storm.
 $imported = $false
 $importError = $null
 for ($attempt = 1; $attempt -le 5; $attempt++) {

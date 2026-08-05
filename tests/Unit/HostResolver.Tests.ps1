@@ -22,19 +22,18 @@ Describe "HostResolver" {
             $r = New-Resolver
             $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             $r.GetCachedIp("PC-1") | Should -Be "10.0.0.5"
-            $r.GetCachedIp("pc-1") | Should -Be "10.0.0.5"   # case-insensitive
+            $r.GetCachedIp("pc-1") | Should -Be "10.0.0.5"   # Case-insensitive.
             $r.GetCachedIp("PC-2") | Should -BeNullOrEmpty
         }
 
         It "caches a blank-IP verdict as Offline so an unresolvable host backs off, not loops" {
-            # A missing cache entry reads as 'Unknown', which the inventory/run gates
-            # re-resolve every DNS-timeout - the infinite resolve loop. Cache it instead.
+            # A missing entry reads 'Unknown', which the gates re-resolve forever, so cache it.
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $r.CacheVerdict("PC-1", "", $false)
-            $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty        # no usable IP
-            $r.IsHostOnline("PC-1") | Should -Be 'Offline'        # cached, not 'Unknown'
-            $r.NeedsResolve("PC-1") | Should -BeFalse             # backs off until the TTL
+            $r.GetCachedIp("PC-1") | Should -BeNullOrEmpty        # No usable IP.
+            $r.IsHostOnline("PC-1") | Should -Be 'Offline'        # Cached, not 'Unknown'.
+            $r.NeedsResolve("PC-1") | Should -BeFalse             # Backs off until the TTL.
         }
 
         It "tracks tri-state reachability" {
@@ -72,7 +71,7 @@ Describe "HostResolver" {
             $r.Ttl = [timespan]::FromMilliseconds(1)
             $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             Start-Sleep -Milliseconds 20
-            $r.NeedsResolve("PC-1") | Should -BeTrue   # stale -> re-validate
+            $r.NeedsResolve("PC-1") | Should -BeTrue   # Stale, so re-validate.
         }
 
         It "is true again after Invalidate" {
@@ -94,9 +93,9 @@ Describe "HostResolver" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $r.MarkInFlight("PC-1")
-            $r.NeedsResolve("PC-1") | Should -BeFalse   # wedged while in flight
-            $r.ClearInFlight("PC-1")                    # a failed resolve releases it
-            $r.NeedsResolve("PC-1") | Should -BeTrue    # uncached again -> re-resolves
+            $r.NeedsResolve("PC-1") | Should -BeFalse   # Wedged while in flight.
+            $r.ClearInFlight("PC-1")                    # A failed resolve releases it.
+            $r.NeedsResolve("PC-1") | Should -BeTrue    # Uncached again, so re-resolves.
         }
 
         It "caching clears the in-flight flag" {
@@ -104,7 +103,7 @@ Describe "HostResolver" {
             $r.SetActiveDc("DC1")
             $r.MarkInFlight("PC-1")
             $r.CacheVerdict("PC-1", "10.0.0.5", $true)
-            $r.NeedsResolve("PC-1") | Should -BeFalse   # cached now
+            $r.NeedsResolve("PC-1") | Should -BeFalse   # Cached now.
         }
     }
 
@@ -133,9 +132,9 @@ Describe "HostResolver" {
             $r.Ttl = [timespan]::FromMilliseconds(1)
             $r.CacheVerdict("PC-1", "10.0.0.5", $true)
             Start-Sleep -Milliseconds 20
-            $r.MarkInFlight("PC-1")                 # NeedsResolve would be false here...
+            $r.MarkInFlight("PC-1")                 # NeedsResolve would be false here.
             $r.NeedsResolve("PC-1")  | Should -BeFalse
-            $r.IsVerdictStale("PC-1") | Should -BeTrue   # ...but the verdict is still stale
+            $r.IsVerdictStale("PC-1") | Should -BeTrue   # The verdict is still stale though.
         }
     }
 
@@ -189,7 +188,7 @@ Describe "HostResolver" {
             $prep.Arguments.HostName | Should -Be "PC-1"
             $prep.Arguments.Dc | Should -Be "DC1"
             $prep.Arguments.ContainsKey('DebugLog') | Should -BeTrue
-            $prep.Arguments.Keys.Count | Should -Be 4   # no Settings snapshot rides along
+            $prep.Arguments.Keys.Count | Should -Be 4   # No Settings snapshot rides along.
         }
     }
 

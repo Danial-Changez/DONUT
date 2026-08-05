@@ -15,16 +15,14 @@ Describe "Class method variable coverage" {
     BeforeAll {
         $script:SrcRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../src'))
 
-        # Readable without assignment inside a class method. NOT the full automatic-variable
-        # list: the class compiler rejects most of them (see the ProbeAutomatics test below).
+        # Names readable without assignment in a class method, not the full automatic list.
         $script:Automatic = @(
             'this', 'true', 'false', 'null', '_', 'PSItem', 'args', 'input', 'error',
             'PSScriptRoot', 'PSCommandPath', 'MyInvocation', 'PSCmdlet', 'PSBoundParameters',
             'PWD', 'LASTEXITCODE', 'StackTrace', 'matches', 'OutputEncoding'
         )
 
-        # Built with the type name inlined: FindAll runs its predicate through a
-        # delegate, where a closed-over $kind variable would not resolve.
+        # The type name is inlined because FindAll runs the predicate through a delegate.
         $script:Predicate = @{}
         foreach ($kind in @('TypeDefinitionAst', 'FunctionMemberAst', 'VariableExpressionAst',
                 'AssignmentStatementAst', 'ForEachStatementAst', 'ParamBlockAst',
@@ -79,7 +77,7 @@ Describe "Class method variable coverage" {
                     $checked++
                     $bound = Get-BoundNames $method
                     foreach ($v in (Find-Ast $method 'VariableExpressionAst')) {
-                        # Scope/drive-qualified ($env:, $script:, $using:) resolve outside the method.
+                        # Scope-qualified ($env:, $script:, $using:) resolves outside the method.
                         if (-not $v.VariablePath.IsUnqualified) { continue }
                         $name = $v.VariablePath.UserPath
                         if ($bound.Contains($name) -or $name -in $script:Automatic) { continue }
@@ -96,9 +94,7 @@ Describe "Class method variable coverage" {
     }
 
     It "allowlists only names the class compiler actually accepts" {
-        # The allowlist above used to carry the full automatic-variable list, including
-        # $PID and $Host, which class methods cannot read - so the guard waved through the
-        # exact crash it exists to catch. Ask the compiler instead of trusting the list.
+        # $PID and $Host were once allowlisted, so the guard waved through the crash it catches.
         $rejected = @()
         foreach ($name in $script:Automatic) {
             $errs = $null

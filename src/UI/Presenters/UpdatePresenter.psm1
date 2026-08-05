@@ -15,6 +15,16 @@ using module '.\DialogPresenter.psm1'
     Uses SelfUpdateService to compare the installed version to the latest GitHub
     release, and on a difference shows the update window (via DialogPresenter),
     then downloads, verifies and applies the MSI (or rolls back to an older tag).
+
+.NOTES
+    Anonymous-first: the public upstream answers without auth, so a default install
+    never sees a sign-in. Only when the repo refuses does the device-flow login
+    appear, once, and the check retries with the stored token from then on.
+
+    Which refusals are promptable: GitHub answers 404 for a private repo asked
+    anonymously (a fork) and 401 for a dead stored token, and signing in fixes both.
+    A 403 is the anonymous rate limit and an offline failure throws without a status,
+    so neither prompts.
 #>
 class UpdatePresenter {
     [SelfUpdateService]$Service
@@ -29,13 +39,8 @@ class UpdatePresenter {
         $this.Dialog = [DialogPresenter]::new($resources)
     }
 
-    # Runs the update check/prompt. Called after the main window is already built +
-    # pool-warmed (see DonutApp), so it only gates showing it.
-    #
-    # Anonymous-first: the public upstream answers without auth, so the default
-    # install never sees a sign-in. Only when the repo refuses (a private fork:
-    # 401/403/404) does the device-flow login appear, once, and the check retries
-    # with the stored token from then on.
+    # Runs the update check and prompt, after the main window is built and pool-warmed.
+    # Anonymous-first, with a sign-in only when the repo refuses. See .NOTES.
     [void] CheckAndPrompt() {
         $localVer = $this.Service.GetLocalVersion()
         $token = $this.Service.GetStoredToken()
@@ -47,10 +52,7 @@ class UpdatePresenter {
         catch {
             $status = 0
             try { $status = [int]$_.Exception.Response.StatusCode } catch {}
-            # GitHub answers 404 for a private repo asked anonymously (a fork) and
-            # 401 for a dead stored token - both mean "sign in fixes this". A 403
-            # is the anonymous rate limit and offline throws without a status;
-            # neither is fixable by auth, so those never prompt.
+            # Only 404-anonymous and 401 are fixable by signing in. See .NOTES.
             $promptable = ($status -eq 404 -and [string]::IsNullOrEmpty($token)) -or
             ($status -eq 401)
             if (-not $promptable) {
@@ -107,8 +109,7 @@ class UpdatePresenter {
             $token = $this.Service.GetStoredToken()
             $stage = [DonutPaths]::DataRoot()
 
-            # Blocking download is acceptable here: the update window is already
-            # closed and the app shuts down right after applying.
+            # A blocking download is fine here: the window is closed and the app exits after.
             $msiPath = $this.Service.DownloadAsset($token, $asset, $stage)
 
             $checksumAsset = $this.Service.GetReleaseAsset($Release, '*.sha256')
@@ -134,8 +135,7 @@ class UpdatePresenter {
             [System.Windows.Application]::Current.Shutdown()
         }
         catch {
-            # Themed alert (not a raw MessageBox) so the failure matches the app's dialogs;
-            # ShowAlert falls back to Topmost when the main window isn't up yet.
+            # Themed alert, not a raw MessageBox, so the failure matches the app's dialogs.
             $this.Logger.LogException("Update failed", $_)
             $this.Dialog.ShowAlert('Update failed', "$_", @())
         }

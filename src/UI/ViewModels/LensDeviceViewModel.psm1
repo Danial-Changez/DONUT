@@ -20,12 +20,11 @@ class LensDeviceViewModel : ObservableObject {
     [string] $Model = ''
     [string] $Serial = ''
     [string] $Manufacturer = ''
-    [string] $TagText = ''                # "Tag <service tag>"; '' collapses it and its separator
-    # OS and manufacturer, one hover away. $null rather than '' so an unknown pair
-    # shows no tooltip at all instead of an empty box.
+    [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
+    # $null rather than '' so an unknown OS/manufacturer pair shows no tooltip at all.
     [object] $DetailTip
-    [string] $BitLockerText = ''          # the joined keys; shown only once revealed
-    [string] $LatestKey = ''              # newest recovery password (by Created); QR payload
+    [string] $BitLockerText = ''          # the joined keys, shown only once revealed
+    [string] $LatestKey = ''              # newest recovery password (by Created), the QR payload
     [bool]   $HasBitLocker = $false
     [bool]   $IsBitLockerRevealed = $false
     [string] $Note = ''
@@ -45,8 +44,7 @@ class LensDeviceViewModel : ObservableObject {
             $this.Manufacturer = $d.Manufacturer
             # "Tag" spelled out matches the MACHINE stat tile, so one fact keeps one name.
             if ($d.Serial) { $this.TagText = "Tag $($d.Serial)" }
-            # OS is off the card: a person's machines nearly always share one, so it cost the
-            # most prominent sub-line to say nothing. It still decides a Windows 10 holdout.
+            # OS lives in the tooltip: usually shared, but it still spots a Windows 10 holdout.
             $tip = @()
             if ($d.Os) { $tip += $d.Os }
             if ($d.Manufacturer) { $tip += $d.Manufacturer }
@@ -54,8 +52,7 @@ class LensDeviceViewModel : ObservableObject {
             $this.Note = $d.Note
             $this.LastSeenText = [LensFormat]::LogonLabel($d.LastLogon)
             $this.HasBitLocker = $d.HasBitLocker()
-            # Order keys newest-first by parsed (agent-normalized ISO8601) Created; blank/
-            # unparseable sort last. Drives both the revealed list and the QR's LatestKey (first).
+            # Newest-first by parsed Created, blanks last, so LatestKey is the QR's newest key.
             $dated = foreach ($k in $d.BitLockerKeys) {
                 $at = [datetime]::MinValue
                 [void][datetime]::TryParse([string]$k.Created,

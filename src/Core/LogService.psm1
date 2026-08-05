@@ -13,11 +13,11 @@
 #>
 class LogService {
     [string] $LogFilePath
-    # Gates LogDebug only - INFO/WARN/ERROR always flow.
+    # Gates LogDebug only. INFO, WARN and ERROR always flow.
     [bool] $DebugEnabled = $true
 
-    # Parameterless initializer for derived no-op loggers (e.g. NullLogService).
-    # Does not bind a file path; WriteLog must be overridden by the derived type.
+    # Parameterless initializer for derived no-op loggers (e.g. NullLogService). It binds
+    # no file path, so WriteLog must be overridden by the derived type.
     LogService() {
     }
 
@@ -28,17 +28,15 @@ class LogService {
         $this.LogFilePath = Join-Path $logDirectory "Donut.log"
     }
 
-    # Returns the supplied logger, or a NullLogService no-op when $null - collapses the
+    # Returns the supplied logger, or a NullLogService no-op when $null, collapsing the
     # repeated "logger or null-object" constructor guard to one call.
     static [LogService] Coalesce([LogService]$logger) {
         if ($null -eq $logger) { return [NullLogService]::new() }
         return $logger
     }
 
-    # Rolls an oversized Donut.log to Donut.old.log (replacing the previous roll).
-    # Main process only, before the logger opens: workers append mid-run and a
-    # rotation under them would tear their stream. Best-effort - a locked or
-    # missing file just skips the roll.
+    # Rolls an oversized Donut.log to Donut.old.log. Main process only and before the
+    # logger opens: workers append mid-run, and rotating under them tears their stream.
     static [void] Rotate([string]$logDirectory, [long]$maxBytes) {
         try {
             $log = Join-Path $logDirectory 'Donut.log'
@@ -48,7 +46,7 @@ class LogService {
             }
         }
         catch {
-            # No log yet, or another process holds it open - skip this launch.
+            # No log yet, or another process holds it open, so skip this launch.
         }
     }
 
@@ -93,8 +91,7 @@ class LogService {
             finally { $fs.Dispose() }
         }
         catch {
-            # A failed log write has nowhere to log itself; swallowing here is the
-            # only option that cannot recurse or take the caller down with it.
+            # A failed log write has nowhere to log itself, so swallowing cannot recurse.
         }
     }
 

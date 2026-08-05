@@ -1,8 +1,7 @@
 using module "..\Core\LogService.psm1"
 using module "..\Models\AdSearchResult.psm1"
 
-# Loaded once at import, not per QueryDirectory call - that seam sits on the
-# finder's per-keystroke hot path.
+# Loaded at import, not per call: QueryDirectory is on the finder's per-keystroke path.
 Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
 
 <#
@@ -38,9 +37,9 @@ class ActiveDirectoryService {
     [LogService] $Logger
     [string[]]   $Domains = @()
     [int]        $MinPrefix = 3
-    # Who is CONSIDERED, not who is shown (AdSearchRank decides that) - see .NOTES.
+    # Who is considered, not who is shown (AdSearchRank decides that). See .NOTES.
     [int]        $MaxPerDomain = 25
-    # Per-forest failures from the last Search, as "<domain>: <reason>" - see .NOTES.
+    # Per-forest failures from the last Search, as "<domain>: <reason>". See .NOTES.
     [string[]]   $LastErrors = @()
 
     ActiveDirectoryService() {
@@ -62,8 +61,7 @@ class ActiveDirectoryService {
         $p = $prefix.Trim()
         $seen = [System.Collections.Generic.HashSet[string]]::new()
 
-        # One combined computers+users filter, so each forest is bound + queried once
-        # per search (halves the LDAP round-trips); MapRow recovers the kind.
+        # One combined filter halves the LDAP round-trips, and MapRow recovers the kind.
         $filter = [AdFilter]::CombinedFilter($p)
         $props = @('name', 'sAMAccountName', 'userPrincipalName', 'displayName',
             'userAccountControl', 'msDS-User-Account-Control-Computed',
@@ -80,8 +78,7 @@ class ActiveDirectoryService {
                 }
             }
             catch {
-                # Recorded as well as logged: the caller is usually a pool worker whose
-                # logger is null, and a swallowed forest looks exactly like an empty one.
+                # Recorded as well as logged: the usual caller has a null logger. See .NOTES.
                 $this.LastErrors += "${domain}: $($_.Exception.Message)"
                 $this.Logger.LogWarning("AD search in '$domain' failed: $($_.Exception.Message)")
             }
@@ -107,7 +104,7 @@ class ActiveDirectoryService {
     }
 
     # Resets a user's password to a temporary one against its home domain. Returns
-    # success. The password never reaches the logger - only sam/domain/flag do.
+    # success. The password never reaches the logger, only sam, domain, and flag do.
     [bool] ResetPassword([AdSearchResult]$user, [securestring]$newPassword,
         [bool]$changeAtLogon) {
         if ($null -eq $user -or $user.Kind -ne 'User' -or
@@ -130,8 +127,7 @@ class ActiveDirectoryService {
 
     # --- Pure mapping (exercised via Search in tests) ---
 
-    # Kind comes from objectCategory (CN=Computer vs CN=Person), since the combined
-    # filter returns both kinds in one result set.
+    # Kind comes from objectCategory, since the combined filter returns both kinds at once.
     hidden [AdSearchResult] MapRow([string]$domain, [hashtable]$row) {
         if ($null -eq $row) { return $null }
         $isComputer = ([string]$row['objectCategory']) -match '(?i)CN=Computer'
@@ -139,7 +135,7 @@ class ActiveDirectoryService {
         $r.Kind = $(if ($isComputer) { 'Computer' } else { 'User' })
         $r.Domain = $domain
         $r.Name = [string]$row['name']
-        # Computer sAMAccountNames carry a trailing '$'; strip it for display/identity.
+        # Computer sAMAccountNames carry a trailing '$', which display and identity omit.
         $r.SamAccountName = ([string]$row['sAMAccountName']).TrimEnd('$')
         $r.DistinguishedName = [string]$row['distinguishedName']
         $r.Enabled = -not [AdFilter]::IsDisabledFromUac($row['userAccountControl'])

@@ -9,7 +9,6 @@
     sortable DateTime (blank/invalid -> MinValue). WPF-free so it can be unit-tested.
 #>
 class TimeFormat {
-    # Parses a stored ISO8601 stamp into a sortable DateTime (blank/invalid -> MinValue).
     static [datetime] ParseIso([string]$value) {
         if ([string]::IsNullOrWhiteSpace($value)) { return [datetime]::MinValue }
         $parsed = [datetime]::MinValue
@@ -21,8 +20,8 @@ class TimeFormat {
         return [datetime]::MinValue
     }
 
-    # ConvertFrom-Json sniffs ISO strings into [datetime]; a bare [string] cast then
-    # drops the zone marker and the instant shifts by the machine's UTC offset.
+    # ConvertFrom-Json sniffs ISO strings into [datetime], and a bare [string] cast then
+    # drops the zone marker so the instant shifts by the machine's UTC offset.
     static [string] NormalizeStamp($value) {
         if ($value -is [System.DateTimeOffset]) { return $value.UtcDateTime.ToString('o') }
         if ($value -isnot [datetime]) { return [string]$value }
@@ -59,7 +58,6 @@ class TimeFormat {
             return "$d days ago"
         }
 
-        # Older than a week: show a short absolute date (local).
         return $whenUtc.ToLocalTime().ToString('MMM d')
     }
 }

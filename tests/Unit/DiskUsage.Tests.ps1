@@ -2,8 +2,7 @@ using module "..\..\src\Models\DiskUsage.psm1"
 
 Describe "WizTreeCsv.ParseTopFolders" {
     BeforeAll {
-        # A representative WizTree folder export: a banner line, the header row,
-        # the volume-root total, then folders out of size order. Sizes in bytes.
+        # A real WizTree export in bytes: banner, header, volume-root total, then folders.
         $script:Csv = @'
 WizTree (4.0.0) (c) 2024 Antibody Software - https://wiztree.com [Generated 2026-06-28]
 "File Name","Size","Allocated","Modified","Attributes","Files","Folders"
@@ -150,7 +149,7 @@ Describe "DiskUsageTree.BuildNested" {
     It "treats a folder with no listed ancestor as a root showing its full path" {
         $roots = [DiskUsageTree]::BuildNested(@(
                 (New-Folder 'C:\Windows\' 100),
-                (New-Folder 'C:\Users\CE\Deep\' 50)   # parent C:\Users\ not in the list
+                (New-Folder 'C:\Users\CE\Deep\' 50)   # Parent C:\Users\ not in the list.
             ))
         $deep = $roots | Where-Object { $_.Path -eq 'C:\Users\CE\Deep\' }
         $deep.Depth | Should -Be 0
@@ -169,7 +168,7 @@ Describe "DiskUsageTree.BuildNested" {
     It "does not nest a sibling that merely shares a name prefix" {
         $roots = [DiskUsageTree]::BuildNested(@(
                 (New-Folder 'C:\Users\' 180),
-                (New-Folder 'C:\UsersData\' 40)   # not a child of C:\Users\
+                (New-Folder 'C:\UsersData\' 40)   # Not a child of C:\Users\.
             ))
         ($roots | ForEach-Object { $_.Depth }) | Should -Be @(0, 0)
     }

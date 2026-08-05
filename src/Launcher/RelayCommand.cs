@@ -22,7 +22,7 @@ namespace Donut.Mvvm
 
         /// <summary>Creates a command with an optional enabled predicate.</summary>
         /// <param name="execute">Action run when the command is invoked.</param>
-        /// <param name="canExecute">Predicate gating the command; <c>null</c> means always enabled.</param>
+        /// <param name="canExecute">Gate for the command, where <c>null</c> is always enabled.</param>
         /// <exception cref="ArgumentNullException"><paramref name="execute"/> is null.</exception>
         public RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute)
         {
@@ -31,8 +31,7 @@ namespace Donut.Mvvm
         }
 
         /// <inheritdoc/>
-        // Plain event (no CommandManager) so the type carries no PresentationCore dependency
-        // when compiled from source on the dev path. Call RaiseCanExecuteChanged() to refresh.
+        // Plain event, not CommandManager, to keep PresentationCore out of the dev path.
         public event EventHandler? CanExecuteChanged;
 
         /// <summary>Raises <see cref="CanExecuteChanged"/> so bindings re-query the command.</summary>

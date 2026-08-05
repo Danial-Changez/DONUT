@@ -24,14 +24,13 @@ using module ".\RemoteServices.psm1"
 #>
 class HostResolver : RemoteJobService {
     hidden [string]    $ActiveDc = ''
-    # host -> @{ Ip; Online; CheckedAt } (case-insensitive keys).
+    # host -> @{ Ip, Online, CheckedAt } (case-insensitive keys).
     hidden [hashtable] $IpCache = @{}
     hidden [hashtable] $InFlight = @{}   # host -> $true while a resolve job is queued
     # host -> the name the box at its IP reported (identity check).
     hidden [hashtable] $VerifiedNames = @{}
 
-    # How long a cached verdict is trusted before a re-validate is allowed. A
-    # DHCP IP can move, so we re-resolve on the next select once an entry is stale.
+    # A DHCP IP can move, so a verdict older than this re-resolves on the next select.
     [timespan] $Ttl = [timespan]::FromMinutes(5)
 
     HostResolver([AppConfig] $config, [NetworkProbe] $probe) : base($config, $probe) {}
@@ -58,8 +57,7 @@ class HostResolver : RemoteJobService {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $name = $hostName.Trim()
         $this.InFlight.Remove($name)
-        # Cache even an empty-IP (unresolvable) verdict: a missing entry reads as 'Unknown',
-        # which the inventory/run gates re-resolve in a tight loop - back off to the TTL.
+        # Cache even an unresolvable verdict, or the gates re-resolve it in a tight loop.
         $this.IpCache[$name] = @{ Ip = "$ip".Trim(); Online = $online; CheckedAt = [datetime]::UtcNow }
     }
 
@@ -84,15 +82,14 @@ class HostResolver : RemoteJobService {
         $this.InFlight[$hostName.Trim()] = $true
     }
 
-    # Releases the single-flight latch without caching a verdict - required when a
-    # resolve fails or never starts, or the host stays "in flight" forever and wedges.
+    # Releases the single-flight latch without caching a verdict. A resolve that fails
+    # or never starts would otherwise leave the host in flight forever.
     [void] ClearInFlight([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $this.InFlight.Remove($hostName.Trim())
     }
 
-    # Drops a host's cached verdict so the next attempt re-resolves (e.g. after a
-    # job fails - the cached IP may be dead/stale).
+    # Drops a host's cached verdict so the next attempt re-resolves after a failed job.
     [void] Invalidate([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $this.IpCache.Remove($hostName.Trim())
@@ -110,8 +107,8 @@ class HostResolver : RemoteJobService {
         return ($age -gt $this.Ttl)
     }
 
-    # True when a cached verdict aged past the TTL; unlike NeedsResolve it ignores
-    # DC/in-flight state and uncached hosts - only "is the verdict too old to trust?".
+    # True when a cached verdict aged past the TTL. Unlike NeedsResolve it ignores DC
+    # and in-flight state and uncached hosts, asking only whether the verdict is too old.
     [bool] IsVerdictStale([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return $false }
         $name = $hostName.Trim()
@@ -127,10 +124,8 @@ class HostResolver : RemoteJobService {
         return $this.BuildWorkerArgs('', 'Resolve', @{ Mode = 'Warm' })
     }
 
-    # Runspace-warm job: a no-op whose only effect is loading the worker module graph
-    # into the pool runspace it lands on, so later concurrent jobs never cold-load.
-    # $tag rides in HostName so every breadcrumb the warm pass logs carries a
-    # per-shell identity ("[warm-3] Worker up: ...").
+    # A no-op that loads the worker module graph into the pool runspace it lands on, so
+    # later jobs never cold-load. $tag rides in HostName to give warm logs an identity.
     [hashtable] PrepareWarmRunspace([string]$tag) {
         return $this.BuildWorkerArgs($tag, 'Resolve', @{ Mode = 'WarmRunspace' })
     }
@@ -140,8 +135,8 @@ class HostResolver : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Host'; Dc = $this.ActiveDc })
     }
 
-    # Fast-lane variant: args for the slim ResolveWorker child (three CLI strings; no
-    # worker graph, no Settings snapshot - so no per-resolve DeepClone on the UI thread).
+    # Fast-lane variant: args for the slim ResolveWorker child, which takes three CLI
+    # strings and no Settings snapshot, so no per-resolve DeepClone on the UI thread.
     [hashtable] PrepareResolveFast([string]$hostName) {
         $scriptPath = Join-Path $this.Config.SourceRoot "Scripts\ResolveWorker.ps1"
         if (-not (Test-Path $scriptPath)) {
@@ -160,8 +155,8 @@ class HostResolver : RemoteJobService {
         }
     }
 
-    # Identity job: ask the box at the host's cached IP for its own name. Fired in
-    # parallel with the apply-scan; the verdict gates the destructive apply.
+    # Identity job: ask the box at the host's cached IP for its own name. It runs in
+    # parallel with the apply-scan, and its verdict gates the destructive apply.
     [hashtable] PrepareName([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Name'; Ip = $this.GetCachedIp($hostName) })
     }

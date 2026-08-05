@@ -37,8 +37,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Finds the installed DONUT entry in the Uninstall registry (DisplayName + Publisher
-# match); returns its product code / install location / version, or $null if absent.
+# Finds the installed DONUT entry in the Uninstall registry by DisplayName and
+# Publisher. Returns its product code, install location, and version, or $null.
 function Get-DONUTUninstallInfo {
     $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
     if (-not (Test-Path $path)) { return $null }
@@ -68,13 +68,13 @@ function Get-DONUTUninstallInfo {
                 }
             }
         }
-        catch {}   # unreadable key -> treat as not installed
+        catch {}   # An unreadable key reads as not installed.
     }
     return $null
 }
 
-# Installs the MSI with reboot suppressed; returns msiexec's exit code
-# (1603 when the MSI path is missing).
+# Installs the MSI with reboot suppressed. Returns msiexec's exit code, or 1603 when
+# the MSI path is missing.
 function Invoke-MsiInstall {
     param(
         [Parameter(Mandatory = $true)][string]$MsiPath,
@@ -95,7 +95,7 @@ function Invoke-MsiInstall {
     return [int]$p.ExitCode
 }
 
-# Uninstalls the given product code with reboot suppressed; returns msiexec's exit code.
+# Uninstalls the given product code with reboot suppressed, returning msiexec's code.
 function Invoke-MsiUninstall {
     param(
         [Parameter(Mandatory = $true)][string]$ProdCode,
@@ -140,8 +140,8 @@ function Stop-DonutProcessGracefully {
     }
 }
 
-# Surfaces a fatal update error to the user: this worker runs in a hidden window, so its
-# console output is invisible. Best-effort; never throws.
+# Surfaces a fatal update error: this worker runs in a hidden window, so its console
+# output is invisible. Best effort, and never throws.
 function Show-UpdateError {
     param([string]$Message)
     try {
@@ -159,9 +159,7 @@ try {
     if ($ProcessNameToClose) {
         Stop-DonutProcessGracefully -Name $ProcessNameToClose -TimeoutSeconds $CloseTimeoutSeconds
     }
-    # $info is $null on a box with no registered install (first install, portable
-    # run) - Join-Path's mandatory -Path would throw under EAP=Stop and abort the
-    # whole update, so the relaunch path stays optional.
+    # Join-Path's mandatory -Path would throw under EAP=Stop when nothing is registered.
     $info = Get-DONUTUninstallInfo
     $exePath = if ($info -and $info.InstallLocation) {
         Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
@@ -169,8 +167,6 @@ try {
     else { $null }
 
     # A rollback uninstalls the newer build first so the older MSI installs clean.
-    # With nothing registered there is nothing to uninstall; fall through to the
-    # plain install of the older MSI.
     if ($Rollback -and $info) {
         $unExit = Invoke-MsiUninstall -ProdCode $info.ProductCode -Passive:$Passive
         if (@(0, 3010, 1605) -notcontains $unExit) {
@@ -189,8 +185,7 @@ try {
         exit 1
     }
 
-    # The checksum stages next to the MSI (UpdatePresenter downloads both);
-    # remove the pair or the .sha256 outlives every update forever.
+    # Remove the pair, or the staged .sha256 outlives every update forever.
     foreach ($staged in @($MsiPath, "$MsiPath.sha256")) {
         if ($staged -and (Test-Path -LiteralPath $staged)) {
             try {
