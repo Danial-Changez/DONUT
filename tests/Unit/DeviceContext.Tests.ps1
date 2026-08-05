@@ -100,11 +100,9 @@ Describe "DeviceContext" {
         It "Should support typical device status lifecycle" {
             $device = [DeviceContext]::new("WORKSTATION01")
             
-            # Initial state
             $device.StatusMessage | Should -Be "Initialized"
             $device.IsOnline | Should -Be $false
             
-            # After network probe
             $device.IPAddress = "192.168.1.50"
             $device.IsOnline = $true
             $device.StatusMessage = "Online"
@@ -113,11 +111,9 @@ Describe "DeviceContext" {
             $device.IsOnline | Should -Be $true
             $device.StatusMessage | Should -Be "Online"
             
-            # During scan
             $device.StatusMessage = "Scanning for updates..."
             $device.StatusMessage | Should -Be "Scanning for updates..."
             
-            # After completion
             $device.StatusMessage = "Completed - 5 updates found"
             $device.StatusMessage | Should -Be "Completed - 5 updates found"
         }

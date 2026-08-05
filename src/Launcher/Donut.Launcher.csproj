@@ -45,22 +45,7 @@
       <LogicalName>src/UI/Styles/Fonts/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
 
-    <!-- Native tool pushed to remote shares for disk scans; not in git, so it embeds only
-         when the operator has dropped it into src\Tools\ before building. -->
-    <EmbeddedResource Include="$(DonutSrcDir)\Tools\wiztree64.exe"
-                      Condition="Exists('$(DonutSrcDir)\Tools\wiztree64.exe')">
-      <LogicalName>src/Tools/wiztree64.exe</LogicalName>
-    </EmbeddedResource>
-
-    <!-- PsExec: how ExecutionService reaches remote targets (scan/apply/inventory/disk).
-         Same drop-it-in-before-building rule as wiztree64.exe. -->
-    <EmbeddedResource Include="$(DonutSrcDir)\Tools\psexec.exe"
-                      Condition="Exists('$(DonutSrcDir)\Tools\psexec.exe')">
-      <LogicalName>src/Tools/psexec.exe</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="$(DonutSrcDir)\Tools\PsExec64.exe"
-                      Condition="Exists('$(DonutSrcDir)\Tools\PsExec64.exe')">
-      <LogicalName>src/Tools/PsExec64.exe</LogicalName>
-    </EmbeddedResource>
+    <!-- WizTree is deliberately NOT embedded. Its EULA forbids incorporating it into
+         other software without a paid Distribution License, so Bootstrap downloads it. -->
   </ItemGroup>
 </Project>

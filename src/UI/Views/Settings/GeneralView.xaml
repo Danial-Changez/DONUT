@@ -1,8 +1,7 @@
-<!-- General settings form: app-wide options as Arcane sub-cards. Control x:Names are
-     read/written by SettingsPresenter's General-section binder (not dcu-cli args). -->
+<!-- General settings form. The x:Names are read and written by SettingsPresenter's
+     General section binder, and are app options rather than dcu-cli args. -->
 <StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Startup & tray -->
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
@@ -19,28 +18,26 @@
                         Margin="0,0,0,10">
                 <ToggleButton x:Name="chkCloseToTray"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Close to tray"
+                <TextBlock Text="Close to Tray"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="chkRunAsAdmin"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Run as administrator"
+                <TextBlock Text="Run as Administrator"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>
     </Border>
-    <!-- Global hotkey -->
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="SHORTCUTS"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="App hotkey - minimizes or restores DONUT into focus"
+            <TextBlock Text="App Hotkey: minimizes or restores DONUT into focus"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,0,0,8" />
-            <!-- Keybind recorder: the field owns its own clear (X), so the row reads as one
-                 input plus one action instead of three peer controls. -->
+            <!-- The field owns its clear button, so the row reads as one input plus one action. -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -62,11 +59,11 @@
                                 ToolTipService.ShowOnDisabled="True" />
                     </Grid>
                 </Border>
-                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="1" Content="Record keybind"
+                <Button x:Name="recGlobalHotkeyRecord" Grid.Column="1" Content="Record Keybind"
                         Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
-            <TextBlock Text="Settings shortcut - opens Settings while DONUT is focused"
+            <TextBlock Text="Settings Shortcut: opens Settings while DONUT is focused"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,12,0,8" />
             <Grid>
@@ -90,26 +87,25 @@
                                 ToolTipService.ShowOnDisabled="True" />
                     </Grid>
                 </Border>
-                <Button x:Name="recOpenSettingsRecord" Grid.Column="1" Content="Record keybind"
+                <Button x:Name="recOpenSettingsRecord" Grid.Column="1" Content="Record Keybind"
                         Style="{DynamicResource ButtonSecondary}" Margin="8,0,0,0"
                         VerticalAlignment="Center" />
             </Grid>
         </StackPanel>
     </Border>
-    <!-- Tuning: throttle limit + storage-scan folder count, grouped in one card. -->
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
             <TextBlock Text="TUNING"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <TextBlock Text="Throttle limit - machines run at once"
+            <TextBlock Text="Throttle Limit: machines run at once"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,0,0,8" />
             <TextBox x:Name="throttleLimit"
                      Width="120"
                      HorizontalAlignment="Left"
                      Style="{DynamicResource ModernTextBox}" />
-            <TextBlock Text="Folders to scan - largest folders returned"
+            <TextBlock Text="Folders to Scan: largest folders returned"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,16,0,8" />
             <TextBox x:Name="folderScanCount"
@@ -118,7 +114,7 @@
                      Style="{DynamicResource ModernTextBox}" />
         </StackPanel>
     </Border>
-    <!-- Diagnostics: verbose logging opt-in (off by default; applies live, incl. workers). -->
+    <!-- Off by default, and applied live to the app and its worker processes. -->
     <Border Style="{DynamicResource Card}">
         <StackPanel>
             <TextBlock Text="DIAGNOSTICS"
@@ -126,7 +122,7 @@
             <StackPanel Orientation="Horizontal">
                 <ToggleButton x:Name="chkDebugLogging"
                               Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Debug logging"
+                <TextBlock Text="Debug Logging"
                            Style="{DynamicResource SettingsToggleLabel}" />
             </StackPanel>
         </StackPanel>

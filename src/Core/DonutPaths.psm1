@@ -29,8 +29,8 @@ class DonutPaths {
     static [string] LogsDir() { return (Join-Path ([DonutPaths]::DataRoot()) 'logs') }
     static [string] ReportsDir() { return (Join-Path ([DonutPaths]::DataRoot()) 'reports') }
 
-    # Where DONUT's data lived before the shared root, so a caller can say so when the
-    # new root is empty. Nothing reads or writes this path; the move is done by hand.
+    # Where DONUT's data lived before the shared root, so a caller can say so when the new
+    # root is empty. Nothing reads or writes this path. The move is done by hand.
     static [string] LegacyRoot() {
         if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { return $null }
         return (Join-Path $env:LOCALAPPDATA 'DONUT')

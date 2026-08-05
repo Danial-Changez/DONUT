@@ -82,8 +82,7 @@ class PersonLens {
         $p.Email = [string]$h['email']
         $p.Manager = [string]$h['manager']
         $p.Office = [string]$h['office']
-        # $devList, not $devices: a local matching the $Devices property (case-insensitive)
-        # breaks assignment inside a PS class method.
+        # $devList, not $devices: a local matching a property breaks assignment in a class.
         $devList = [System.Collections.Generic.List[LensDevice]]::new()
         foreach ($d in @($h['devices'])) {
             if ($null -ne $d) { $devList.Add([LensDevice]::FromHashtable([hashtable]$d)) }
@@ -102,8 +101,8 @@ class PersonLens {
         return $p
     }
 
-    # Parses the worker's JSON bundle. -AsHashtable gives nested hashtables/arrays that
-    # FromHashtable walks; a malformed bundle returns an empty lens carrying the error.
+    # Parses the worker's JSON bundle. -AsHashtable gives the nested hashtables that
+    # FromHashtable walks, and a malformed bundle returns an empty lens with the error.
     static [PersonLens] FromJson([string]$json) {
         if ([string]::IsNullOrWhiteSpace($json)) { return [PersonLens]::new() }
         try {
@@ -118,11 +117,11 @@ class PersonLens {
     }
 }
 
-# Pure formatting for the Lens (mirrors InventoryFormat / DiskUsageFormat). Static, WPF-free,
-# unit-tested; the device view-model just renders the result.
+# Pure formatting for the Lens (mirrors InventoryFormat and DiskUsageFormat). Static and
+# WPF-free, so the device view-model just renders the result.
 class LensFormat {
-    # Relative "last seen" from AD's lastLogonTimestamp (coarse - replicated with up to
-    # ~14 days of lag). Blank or 0001-01-01 reads as "no logon recorded".
+    # Relative "last seen" from AD's lastLogonTimestamp, which replicates with up to
+    # ~14 days of lag. Blank or 0001-01-01 reads as "no logon recorded".
     static [string] LogonLabel([string]$iso) {
         if ([string]::IsNullOrWhiteSpace($iso)) { return 'no logon recorded' }
         $dt = [datetime]::MinValue

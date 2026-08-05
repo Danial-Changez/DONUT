@@ -48,8 +48,8 @@ using module "..\UI\Presenters\LoginPresenter.psm1"
 using module "..\UI\Presenters\UpdatePresenter.psm1"
 using module "..\Services\ResourceService.psm1"
 
-# Splash progress helpers. $global:Splash is injected by Donut.Launcher (absent on the dev
-# pwsh path, so these no-op there).
+# $global:Splash is injected by Donut.Launcher, absent on the dev pwsh path, so these
+# no-op there.
 function Update-Splash([int]$Percent, [string]$Status) {
     if ($global:Splash) { try { $global:Splash.Report($Percent, $Status) } catch { } }
 }
@@ -65,12 +65,10 @@ try {
     $global:AppConfig = $configManager.LoadConfig()
     Update-Splash 18 'Loading configuration'
 
-    # Central logger (logs directory is guaranteed by ConfigManager). Injected
-    # into the collaborators that support it so runtime errors are recorded.
-    # Roll an oversized log first - it grows unbounded across runs otherwise.
+    # Roll an oversized log first: it grows unbounded across runs otherwise.
     [LogService]::Rotate($configManager.LogsPath, 10MB)
     $logger = [LogService]::new($configManager.LogsPath)
-    # DEBUG gate: the persisted setting, or the -DebugLog session override.
+    # The debug gate is the persisted setting or the -DebugLog session override.
     $logger.DebugEnabled = $global:AppConfig.GetDebugLogging() -or [bool]$global:DebugLogStart
     $logger.LogInfo("DONUT starting up.")
     if ($logger.DebugEnabled) {
@@ -81,17 +79,14 @@ try {
     $logger.LogInfo([BuildProvenance]::Stamp($srcRoot))
     [RunspaceManager]::SetLogger($logger)
 
-    # Hidden (tray) start: launcher sets $global:StartHidden; the dev path sets
-    # $global:TrayStart from Start-Donut.ps1's -Tray switch.
+    # The launcher sets $global:StartHidden, and the dev path sets $global:TrayStart.
     $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart
 
-    # runAsAdmin, honoured here because the manifest is asInvoker - see .NOTES. As early as
-    # the config and logger allow: an instance about to hand over builds nothing it discards.
+    # Honoured here because the manifest is asInvoker, and as early as possible. See .NOTES.
     $limitedCapability = $false
     if ($global:AppConfig.GetRunAsAdmin() -and -not [ElevationContext]::IsElevated()) {
         if ($hidden) {
-            # A logon start must never throw a credential prompt at the sign-in screen, so
-            # autostart runs de-elevated and says so once the user surfaces the window.
+            # A logon start must never throw a credential prompt at the sign-in screen.
             $limitedCapability = $true
             $logger.LogInfo('Autostarted de-elevated: elevating at logon would prompt for credentials.')
         }
@@ -102,8 +97,7 @@ try {
                 Close-Splash
                 return
             }
-            # Deliberately does NOT write runAsAdmin: one declined prompt must not demote
-            # DONUT permanently. The gated actions still offer elevation all session.
+            # runAsAdmin stays unwritten: one declined prompt must not demote DONUT.
             $limitedCapability = $true
             if ($spawn.Declined) { $logger.LogInfo('Elevation declined at startup; continuing de-elevated.') }
             else { $logger.LogError("Could not elevate at startup: $($spawn.Reason)") }
@@ -112,11 +106,9 @@ try {
 
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
-    # RunspaceManager.Initialize raises the ThreadPool floor before it opens the pool
-    # (dispatch starvation guard - architecture/runspaces-and-workers: ThreadPool floor).
+    # Initialize raises the ThreadPool floor first, guarding against dispatch starvation.
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
-    # min = max pins every runspace: idle cleanup only disposes above the minimum, so
-    # min=1 let warmed runspaces die and later jobs cold-load under the loader lock.
+    # min = max pins every runspace, or warmed ones die and later jobs cold-load.
     [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
     Update-Splash 44 'Warming runspace pool'
 
@@ -128,10 +120,7 @@ try {
     $logger.LogInfo("Preparing self-update + main window.")
     $networkProbe = [NetworkProbe]::new($logger)
 
-    # First run in a new environment: the repo ships nothing org-specific, so the
-    # finder's search domains (own forest + trust partners) and the Lens's SCCM
-    # host (the client's management point) are discovered from the machine itself
-    # and persisted to config.json. Later runs - and operator edits - read config.
+    # The repo ships nothing org-specific, so a first run discovers these and persists them.
     $discovered = $false
     if (-not $global:AppConfig.GetDomains()) {
         $domains = @($networkProbe.DiscoverSearchDomains())
@@ -156,8 +145,7 @@ try {
     $selfUpdateService = [SelfUpdateService]::new($logger)
     $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
 
-    # Build the main window (and warm the pool) before showing login: with no window
-    # on screen the synchronous warm is just launch delay, not a frozen login modal.
+    # With no window on screen the synchronous warm is launch delay, not a frozen modal.
     $mainPresenter = $null
     try {
         $mainPresenter = [MainPresenter]::new(
@@ -169,29 +157,24 @@ try {
         $logger.LogException("Main window preload failed", $_)
     }
 
-    # Close the splash before sign-in/update: everything past this point is interactive
-    # (a login or update prompt may appear), not unattended loading.
+    # Everything past this point is interactive, not unattended loading.
     Close-Splash
 
     if ($null -ne $mainPresenter) {
-        # Surfaced with the window, not now: a toast fired into a hidden tray start is
-        # never seen. Same deferral as PendingUpdateCheck below.
+        # A toast fired into a hidden tray start is never seen, so it waits for the window.
         $mainPresenter.PendingLimitedNotice = $limitedCapability
 
-        # Heal the startup task DEFERRED past the startup crunch - as a boot-time
-        # pool job it raced the warm shells (architecture/runspaces-and-workers: startup staging).
+        # Deferred past the startup crunch: as a boot-time job it raced the warm shells.
         $startupTaskTimer = [System.Windows.Threading.DispatcherTimer]::new()
         $startupTaskTimer.Interval = [TimeSpan]::FromSeconds(120)
         $startupTaskTimer.Add_Tick({
                 $startupTaskTimer.Stop()
-                # A heal must never prompt. Registering needs an elevated token, so
-                # de-elevated this would only toast a failure the user did not ask for.
+                # A heal must never prompt, and de-elevated this only toasts a failure.
                 if ([ElevationContext]::IsElevated()) { $mainPresenter.ApplyStartupTask() }
             }.GetNewClosure())
         $startupTaskTimer.Start()
 
-        # Re-run whatever click asked for elevation, once the window exists so the resume
-        # can log and toast into it. Short delay: this is a user-visible action, not a heal.
+        # Waits for the window so the resume can log and toast into it. Short, not a heal.
         $resumeTimer = [System.Windows.Threading.DispatcherTimer]::new()
         $resumeTimer.Interval = [TimeSpan]::FromSeconds(3)
         $resumeTimer.Add_Tick({
@@ -208,7 +191,6 @@ try {
         }
         else {
             try {
-                # Sign-in (if needed) + update check / prompt, before the window shows.
                 $updatePresenter.CheckAndPrompt()
             }
             catch {
@@ -225,5 +207,5 @@ try {
 catch {
     Close-Splash
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
-    [System.Windows.Forms.MessageBox]::Show("Error starting Donut: $_", "Error")
+    [System.Windows.Forms.MessageBox]::Show("DONUT could not start. $_", "Startup Error")
 }

@@ -3,17 +3,17 @@ title: Coding style
 description: Comment and layout conventions for DONUT's PowerShell and C# sources, adapted from the Zephyr style.
 ---
 
-Comment and layout conventions for the PowerShell sources under `src/`. The rules
-are adapted from the [Zephyr RTOS coding style](https://docs.zephyrproject.org/latest/contribute/style/code.html)
+Comment and layout conventions for the sources under `src/`. The rules are adapted
+once from the [Zephyr RTOS coding style](https://docs.zephyrproject.org/latest/contribute/style/code.html)
 and [documentation guidelines](https://docs.zephyrproject.org/latest/contribute/documentation/guidelines.html),
-translated to PowerShell.
+translated to PowerShell and C#; where these rules are silent, follow the style of
+the surrounding code.
 
 ## Comments
 
-**Comments explain *why*, never *what*.** The code already says what it does; a
-comment earns its place only by stating something the code cannot show — a
-constraint, a hazard, a protocol quirk, or a decision that would otherwise be
-re-litigated:
+**Comments explain *why*, never *what*.** A comment earns its place only by stating
+something the code cannot show — a constraint, a hazard, a protocol quirk, or a
+decision that would otherwise be re-litigated:
 
 ```powershell
 # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
@@ -26,122 +26,122 @@ Never narrate the next line:
 $this.PopulateFields()
 ```
 
-**Keep them short.** One line preferred, two lines maximum. If a rationale
-genuinely needs more, it belongs in the file's `.NOTES` block, with inline
-comments pointing at it (`see .NOTES`).
+**One line.** Two is the exception, not the target, and only for the comment that
+introduces a whole unit:
 
-**Doc comments on the API.** The PowerShell equivalents of Zephyr's Doxygen
-comments:
+- A file header, above the `namespace` or the first statement.
+- A `class` declaration's own comment.
+- In PowerShell, a method or function's doc comment (C# uses `///` there, which is
+  exempt from the count because XML doc tags need their own lines).
 
-- Every module (`.psm1`) and entry script (`.ps1`) opens with comment-based help:
-  `.SYNOPSIS` (one line), `.DESCRIPTION` (what it owns and how it fits), and
-  `.NOTES` for cross-cutting constraints (threading rules, transport gates,
-  security invariants) that inline comments can reference.
-- Every class and non-trivial public method gets a brief `#` doc comment directly
-  above it stating its contract — purpose, return semantics, and any caller-facing
-  constraint. State what the signature can't show; don't restate the name or type
-  (Zephyr's Doxygen rule). Trivial getters/setters need none.
-- Fields get a short trailing `# comment` only when the type/name doesn't already
-  say it (units, ownership, lifetime).
+Anything needing more room is documentation, not a comment: put it in the file's
+`.NOTES` block or a page under `docs/`, and reference it inline (`see .NOTES`).
+Deleting a comment is always an option — one that only narrates the next line has
+no claim to the space.
 
-**Layout.**
+**No semicolons or dashes as connectors.** Use "and", a comma, or a second
+sentence. If a comment genuinely lists things, use a colon and short dashed
+entries:
 
-- Comments wrap at ~90 columns (hard cap 100, matching Zephyr).
-- Sentence case; capitalize acronyms properly (`DCU`, `SMB`, `UNC`). No
-  all-caps emphasis (`NEVER`, `WITHOUT`) — if a point needs stress, say why
-  instead.
-- Plain sentences: no informal jargon ("gotcha", "magic", "hack") — name the
-  actual problem or constraint instead.
-- ASCII only; **never emojis** (Zephyr: "avoid using non-ASCII symbols in code,
-  unless it significantly improves clarity, avoid emojis in any case"). Use an
-  ASCII hyphen (` - `), not an em dash, as the sentence separator in comments.
-  Non-ASCII in string literals is a product decision, not a style one (e.g. the
-  overview tiles' `'—'` placeholder stays).
-- Section separators, used sparingly in files large enough to need navigation,
-  are exactly `# --- Section name ---` (no long dash padding, no `====`).
+```csharp
+// Installs what the machine is missing:
+// - PsExec, which every remote operation runs through.
+// - PowerShell 7, which worker processes need.
+```
+
+A list is exempt from the line limit, but only when it makes the comment *shorter*
+than the prose it replaces. It is not a licence to write more.
+
+**Doc comments on the API:**
+
+- Every module and entry script opens with comment-based help: `.SYNOPSIS`,
+  `.DESCRIPTION`, and `.NOTES` for cross-cutting constraints.
+- Every class and non-trivial public method gets a brief `#` doc comment stating
+  its contract — what the signature can't show, never a restatement of the name.
+  Trivial getters/setters need none.
+- Fields get a short trailing comment only when the type/name doesn't already say
+  it (units, ownership, lifetime).
+
+**Layout:**
+
+- Comments wrap at ~90 columns (hard cap 100).
+- Sentence case; capitalize acronyms (`DCU`, `SMB`, `UNC`). No all-caps emphasis —
+  if a point needs stress, say why instead.
+- Plain sentences: no informal jargon ("gotcha", "hack") — name the actual
+  constraint.
+- ASCII only, and never emojis. Non-ASCII in string literals is a product
+  decision, not a style one.
+- Section separators, used sparingly: exactly `# --- Section name ---`.
 
 ## Code
 
-- No trailing whitespace; spaces around operators (`$x = if (...)`, never
-  `$x =if (...)`).
-- Follow the style of the surrounding code when these rules are silent
-  (Zephyr's own fallback rule).
+- No trailing whitespace; spaces around operators.
 - Comments inside remote-script here-string templates (e.g.
-  `InventoryService::BuildProbeScript`) are part of the shipped payload string —
-  edit them only deliberately, never as part of a style sweep.
+  `InventoryService::BuildProbeScript`) are part of the shipped payload — edit
+  them only deliberately, never in a style sweep.
 
 ## C# (`src/Launcher/`)
 
-The launcher and the `Donut.Mvvm` base types are C#. The same "why, not what"
-rule applies, expressed in C#'s native Doxygen equivalent — **XML documentation
-comments** (`///`). Zephyr's [Doxygen style](https://docs.zephyrproject.org/latest/contribute/style/doxygen.html)
-scopes this to the **public API**, and warns *"don't restate the identifier or
-the type"* — so document what the signature can't show, and nothing that just
-echoes it:
+Same "why, not what" rule, expressed as **XML documentation comments** (`///`),
+scoped to the public API:
 
-- **Public types and non-trivial public members** get a `///` `<summary>` stating
-  the contract. Add `<param>` / `<returns>` / `<exception>` only where they carry
-  something the signature doesn't — valid values/ranges, units, nullability,
-  ownership/lifetime, or the *why*; `<remarks>` for cross-cutting notes (threading,
-  idempotency). Reference other types with `<see cref="..."/>`.
-- **Trivial members need none.** An obvious auto-property (`FillColor`), a
-  setup-only constructor, a self-describing one-liner — leave undocumented rather
-  than add a `<summary>` that restates the name. (Same as the PowerShell rule:
-  "trivial getters/setters need none.")
-- **Internal/private members are not API.** A plain `//` comment for the *why* is
-  enough — no `///` (Zephyr excludes internals from Doxygen entirely). Inline `//`
-  notes sit below any `///` doc, never replace it.
-- **Interface implementations** use `/// <inheritdoc/>` instead of restating the
-  interface's contract.
-- Nullable reference types are on (`<Nullable>enable</Nullable>` /
-  `#nullable enable`); annotate nullability honestly (`object?`, `Foo?`) so the
-  compiler stays quiet — see the `RelayCommand` / `ObservableObject` signatures.
+- **Public types and non-trivial public members** get a `<summary>` stating the
+  contract. `<param>`/`<returns>`/`<exception>` only where they carry something the
+  signature doesn't; `<remarks>` for cross-cutting notes.
+- **Trivial members need none** — leave undocumented rather than restate the name.
+- **Internal/private members are not API** — a plain `//` for the why, no `///`.
+- **Interface implementations** use `/// <inheritdoc/>`.
+- Nullable reference types are on; annotate honestly so the compiler stays quiet.
 - WinForms custom controls mark code-only public properties
-  `[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]`
-  (analyzer **WFO1000**); they are never placed on a designer surface.
-- Section separators match the PowerShell rule: `// --- Section name ---`.
+  `[DesignerSerializationVisibility(Hidden)]` (analyzer WFO1000).
+- Section separators: `// --- Section name ---`.
 
-Doc-file generation (`GenerateDocumentationFile`) is intentionally **off**: the
-docs are for readers, not a published API surface, so missing-doc warnings
-(CS1591) are not a build gate.
+`GenerateDocumentationFile` is intentionally off: the docs are for readers, not a
+published API surface, so CS1591 is not a build gate.
+
+## XAML (`src/UI/`)
+
+The same rule, measured across a whole `<!-- -->` span: one line, and two only for
+a file header or a comment introducing an element or a section of a resource
+dictionary. A comment restating a style's own `x:Key` earns nothing — delete it.
+The user-facing text those files carry has its own rules in
+[UI reference](./ui-reference.md#writing-ui-text).
 
 ## Formatting (automated)
 
 The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's
-".clang-format", mapped from [Zephyr's](https://github.com/zephyrproject-rtos/zephyr/blob/main/.clang-format)
-with PowerShell idiom where C conventions don't translate:
+".clang-format", mapped from Zephyr's:
 
 | Zephyr `.clang-format`        | DONUT equivalent                                        |
 | ----------------------------- | ------------------------------------------------------- |
 | `ColumnLimit: 100`            | `PSAvoidLongLines` at 100 (reported, not build-breaking) |
 | `IndentWidth: 8` (tabs)       | 4-space indent (`PSUseConsistentIndentation`)            |
-| `BreakBeforeBraces: Linux`    | Open brace on the same line; `else`/`catch` on their own line (the repo's dominant style, per Zephyr's "follow existing code" fallback) |
+| `BreakBeforeBraces: Linux`    | Open brace same line; `else`/`catch` on their own line   |
 | `AlignConsecutiveMacros`      | Hashtable assignment alignment                           |
-| proper capitalization         | `PSUseCorrectCasing` (cmdlet/keyword casing)             |
+| proper capitalization         | `PSUseCorrectCasing`                                     |
 | `InsertNewlineAtEndOfFile`    | Enforced by `Invoke-Format.ps1`                          |
-
-`tools/Invoke-Format.ps1` applies these rules with `Invoke-Formatter`:
 
 ```powershell
 pwsh -File tools\Invoke-Format.ps1          # fix src\ in place
-pwsh -File tools\Invoke-Format.ps1 -Check   # CI / pre-commit gate: exit 1 if unformatted
+pwsh -File tools\Invoke-Format.ps1 -Check   # CI / pre-commit gate
 ```
 
-The VS Code PowerShell extension picks up the same settings file, so
-**Format Document** produces identical output.
+The VS Code PowerShell extension picks up the same settings file, so **Format
+Document** produces identical output.
 
 ## Linting
 
-`tools/Invoke-Lint.ps1` runs PSScriptAnalyzer with the repo settings
-(`PSScriptAnalyzerSettings.psd1`) over `src/`. Run it (and
-`Invoke-Format.ps1 -Check`) before committing; new findings should be fixed,
-not suppressed.
+`tools/Invoke-Lint.ps1` runs PSScriptAnalyzer with the repo settings over `src/`,
+then sweeps **every** PowerShell, C#, web, and XAML file in the repo for the
+comment-length rule above. PSScriptAnalyzer has no such rule and cannot parse the
+other languages at all, so nothing else would catch it. Run it (and
+`Invoke-Format.ps1 -Check`) before committing; new findings are fixed, not
+suppressed.
 
-`PSAvoidLongLines` (the 100-column rule) is report-only, not a lint gate: a
-first pass rewrapped ~340 pre-existing violations down to ~160, but a line is
-left long when wrapping would hurt more than help — long URLs/reference
-links, the `InventoryService`/`WorkerServices` here-string script templates
-(edited only deliberately, never for style), and a handful of long operator
-chains, CIM `-Filter` strings, and error-message literals where a mid-string
-break reads worse than the overrun. Use judgment the same way when adding new
-code: wrap when it's free, don't mangle a string literal to hit the count.
+The comment sweep starts clean and gates unconditionally, so any hit is something
+you just added. The `Invoke-StyleCheckForChange` hook applies the same rule per
+edit, so it usually surfaces before the lint run does.
+
+`PSAvoidLongLines` is report-only: wrap when it's free, but leave a line long when
+wrapping would hurt — long URLs, the here-string script templates, and string
+literals where a mid-string break reads worse than the overrun.

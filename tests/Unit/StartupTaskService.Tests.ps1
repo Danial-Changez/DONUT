@@ -2,11 +2,11 @@ using module "..\..\src\Services\StartupTaskService.psm1"
 using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
-# Captures which CIM seam Apply dispatched to, without touching Task Scheduler.
-#   Identity/ConsoleUser: what the identity seams should report
-#   Existing: the task GetExistingTask() should return (null = not installed)
-#   Registered/Unregistered: how many times each seam ran
-#   LastName/LastUser/LastSpec: what RegisterTask received
+# Captures which CIM seam Apply dispatched to, without touching Task Scheduler:
+# - Identity/ConsoleUser: what the identity seams report
+# - Existing: the task GetExistingTask() returns (null means not installed)
+# - Registered/Unregistered: how many times each seam ran
+# - LastName/LastUser/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
     [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false; IsElevated = $true }
     [string] $ConsoleUser = 'PROD\jdoe'
@@ -33,8 +33,8 @@ class FakeStartupTaskService : StartupTaskService {
     hidden [void] RemoveStaleTasks([string]$keepName) { $this.StaleSweeps++ }
 }
 
-# Exercises the REAL GetInteractiveUser against faked session probes: OwnerBySession
-# maps a session id (or 'any') to that desktop's owner, AskedSessions records the order.
+# Exercises the real GetInteractiveUser against faked session probes: OwnerBySession
+# maps a session id (or 'any') to that desktop's owner, and AskedSessions records order.
 class SessionProbeService : StartupTaskService {
     [hashtable] $OwnerBySession = @{}
     [string] $ComputerSystemUser
@@ -97,9 +97,7 @@ Describe "StartupTaskService" {
 
     Context "ResolveOwner (whose logon fires the task)" {
         It "Names the signed-in console user, never the account DONUT runs as" {
-            # The regression this keeps closed: over-the-shoulder UAC (signed in as jdoe,
-            # DONUT elevated as jdoe-admin in the SAME session) bound the trigger to
-            # jdoe-admin, an account that never signs in - so the task sat Ready forever.
+            # Over-the-shoulder UAC once bound the trigger to jdoe-admin, so the task sat Ready.
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
             $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
             $fake.ConsoleUser = 'PROD\jdoe'
@@ -148,8 +146,7 @@ Describe "StartupTaskService" {
             $spec.WorkingDirectory | Should -Be 'C:\My App\src'
         }
 
-        # Split-Path uses the platform separator, so a Windows path only splits on Windows -
-        # the same reason the -File assertions above fail off it.
+        # Split-Path uses the platform separator, so a Windows path only splits on Windows.
         It "Runs the packaged launcher from its own folder" -Skip:(-not $IsWindows) {
             $spec = $script:svc.BuildLaunchSpec('C:\Program Files\DONUT\Donut.Launcher.exe', 'C:\ignored')
             $spec.WorkingDirectory | Should -Be 'C:\Program Files\DONUT'
@@ -195,8 +192,7 @@ Describe "StartupTaskService" {
             $script:svc.ReconcileDecision($false, $null, $script:spec) | Should -Be 'NoOp'
         }
         It "Reregisters a task that predates the working directory" {
-            # Tasks registered before WorkingDirectory existed carry a blank one, and must
-            # re-register rather than sit there launching from %windir%\system32 forever.
+            # Tasks predating WorkingDirectory carry a blank one and would launch from system32.
             $noWorkDir = New-FakeTask 'C:\pwsh.exe' '--x' ''
             $script:svc.ReconcileDecision($true, $noWorkDir, $script:spec) | Should -Be 'Reregister'
         }

@@ -33,8 +33,7 @@ Describe "Worker child-process protocol (real RemoteWorker.ps1)" {
         Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # BuildWorkerArgs joins with '\'; normalize so the transport under test is the
-    # same on the one Linux box (the join itself is asserted by unit tests).
+    # BuildWorkerArgs joins with '\', so normalize to keep the transport the same on Linux.
     BeforeEach {
         $script:normalize = { param($p) $p -replace '\\', [IO.Path]::DirectorySeparatorChar }
     }

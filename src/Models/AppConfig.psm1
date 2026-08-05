@@ -8,6 +8,16 @@
     forests, per-command DCU options). Builds the dcu-cli argument string for a
     command from its configured options, and round-trips through ConfigManager's
     JSON load/save.
+
+.NOTES
+    DCU option reference:
+    https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
+
+    The repo ships no organization names. 'domains' (the AD forests the Home finder
+    searches) and 'adminServiceHost' (the SCCM AdminService host) start empty and are
+    discovered on first run from this machine's forest, its trust partners and the local
+    SCCM client's management point, then persisted to config.json at DonutApp startup.
+    adminServiceHost stays editable for sites whose SMS Provider is a different box.
 #>
 class AppConfig {
     [string] $SourceRoot
@@ -15,36 +25,26 @@ class AppConfig {
     [string] $ReportsPath
     [hashtable] $Settings
 
-    # DCU option reference:
-    # https://www.dell.com/support/manuals/en-ca/command-update/dcu_rg/dell-command-update-cli-commands
     static [hashtable] $Defaults = @{
         activeCommand         = 'scan'
         throttleLimit         = 8
         # Largest folders the on-demand storage scan returns (top-N by size).
         folderScanCount       = 12
-        # How long a run keeps trying to reconnect + resume after a network drop (either
-        # side) before it settles as Unconfirmed. See ExecutionService.RecoverByResumeTail.
+        # Reconnect window before a dropped run settles as Unconfirmed. See RecoverByResumeTail.
         recoveryWindowMinutes = 30
-        # AD domains searched by the Home live-finder (each queried
-        # independently). Empty = discovered on first run from the machine's
-        # forest (every domain in it) plus its trust partners, then persisted to
-        # config.json (DonutApp startup) - the repo ships no organization names.
+        # AD domains for the Home live-finder, each queried independently. See .NOTES.
         domains               = @()
-        # SCCM AdminService host (SMS Provider) for the user Lens's device lookup.
-        # Empty = discovered on first run from the local SCCM client's management
-        # point, then persisted; editable when the SMS Provider is a different box.
+        # SCCM AdminService host (SMS Provider) for the Lens device lookup. See .NOTES.
         adminServiceHost      = ''
-        # Start elevated at logon (scheduled task), hide the X into the tray, and the
-        # global show/restore hotkey. All opt-in; blank hotkey disables it.
+        # All opt-in: startup task, tray on close, and a global hotkey that blank disables.
         startWithWindows      = $false
         closeToTray           = $false
         globalHotkey          = 'Ctrl+Alt+D'
-        # Run elevated. On by default because remote work authenticates as the process:
-        # de-elevated, DONUT is the console user, who has no rights on fleet targets.
+        # On by default: de-elevated, DONUT is the console user with no rights on targets.
         runAsAdmin            = $true
-        # In-app shortcut (only while DONUT is focused) to open Settings; blank disables.
+        # In-app shortcut (only while DONUT is focused) to open Settings. Blank disables it.
         openSettingsShortcut  = 'Ctrl+,'
-        # Set once the first-run guided tour is shown/skipped; the ? button replays it.
+        # Set once the first-run guided tour is shown or skipped. The ? button replays it.
         hasSeenTour           = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
         debugLogging          = $false
@@ -84,8 +84,7 @@ class AppConfig {
     }
 
     hidden [hashtable] MergeWithDefaults([hashtable]$userSettings) {
-        # Deep clone so the shared static Defaults are never mutated and the result never
-        # aliases the caller's hashtables (safe to re-merge an already-merged config).
+        # Deep clone so the static Defaults are never mutated and nothing aliases the caller.
         $merged = [AppConfig]::DeepClone([AppConfig]::Defaults)
         if ($null -eq $userSettings) { return $merged }
 
@@ -104,7 +103,7 @@ class AppConfig {
                     }
                     elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
                         $userCmd['args'] -is [hashtable]) {
-                        # Snapshot the keys - never enumerate a collection being written to.
+                        # Snapshot the keys: never enumerate a collection being written to.
                         foreach ($argKey in @($userCmd['args'].Keys)) {
                             $merged['commands'][$cmd]['args'][$argKey] = $userCmd['args'][$argKey]
                         }
@@ -178,9 +177,8 @@ class AppConfig {
         return @{}
     }
 
-    # AD forests for the Home live-finder. Tolerates the JSON round-trip
-    # (Object[]/strings). Empty until first-run discovery persists them - the
-    # finder searches nothing rather than guessing at an organization.
+    # AD forests for the Home live-finder, tolerating the JSON round-trip. Empty until
+    # first-run discovery persists them, so the finder never guesses at an organization.
     [string[]] GetDomains() {
         $val = $this.GetSetting('domains', $null)
         if ($val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
@@ -191,8 +189,7 @@ class AppConfig {
         return @()
     }
 
-    # SCCM AdminService host for the user Lens device lookup. Empty until
-    # first-run discovery persists it.
+    # SCCM AdminService host for the Lens device lookup. Empty until discovery persists it.
     [string] GetAdminServiceHost() {
         $val = [string]$this.GetSetting('adminServiceHost', $null)
         if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
@@ -254,19 +251,18 @@ class AppConfig {
         return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
     }
 
-    # Verbose [DEBUG] logging (off by default; INFO/WARN/ERROR always flow). String-bool tolerant.
+    # Verbose [DEBUG] logging, off by default (INFO, WARN and ERROR always flow).
     [bool] GetDebugLogging() {
         return [AppConfig]::AsBool($this.GetSetting('debugLogging', $null), $false)
     }
 
-    # Defaults to TRUE, unlike every other toggle here: a corrupt value must not silently
+    # Defaults to true, unlike every other toggle here: a corrupt value must not silently
     # drop DONUT into a mode where no remote job can run. Intent only, not the live token.
     [bool] GetRunAsAdmin() {
         return [AppConfig]::AsBool($this.GetSetting('runAsAdmin', $null), $true)
     }
 
-    # Global show/restore hotkey gesture (e.g. 'Ctrl+Alt+D'). Blank/whitespace
-    # means the feature is disabled; returns '' in that case.
+    # Global show/restore hotkey (e.g. 'Ctrl+Alt+D'). Blank returns '' and disables it.
     [string] GetGlobalHotkey() {
         $val = [string]$this.GetSetting('globalHotkey', $null)
         if ([string]::IsNullOrWhiteSpace($val)) { return '' }
@@ -280,8 +276,8 @@ class AppConfig {
         return $val.Trim()
     }
 
-    # Coerces a config value to bool: real [bool] as-is, 'true'/'false' (any case,
-    # trimmed - TryParse's own contract) by parse, everything else to the default.
+    # Coerces a config value to bool: a real [bool] as-is, 'true'/'false' by parse (any
+    # case and trimmed, per TryParse), everything else to the default.
     hidden static [bool] AsBool([object]$value, [bool]$default) {
         if ($value -is [bool]) { return $value }
         $parsed = $false
@@ -289,7 +285,7 @@ class AppConfig {
         return $default
     }
 
-    # Builds the dcu-cli argument string; DCU's format is -option=value (not /option).
+    # Builds the dcu-cli argument string. DCU's format is -option=value, not /option.
     [string] BuildDcuArgs([string]$command, [hashtable]$overrides) {
         $cmdArgs = $this.GetCommandArgs($command)
 
@@ -308,7 +304,6 @@ class AppConfig {
                 continue
             }
 
-            # Boolean flags use enable/disable format
             if ($val -is [bool]) {
                 if ($val -eq $true) {
                     # Some flags are just present (like -silent), others need =enable
@@ -322,8 +317,7 @@ class AppConfig {
                 # $false means the flag is simply omitted.
             }
             elseif ($val -is [string]) {
-                # Single-quote values with a space/comma (double quotes would close the
-                # remote pwsh -c wrapper; a bare comma is the array operator).
+                # Double quotes close the remote -c wrapper, a bare comma is the array operator.
                 if ($val -match '[\s,]') {
                     $escaped = $val -replace "'", "''"
                     $argList.Add("-$key='$escaped'") | Out-Null

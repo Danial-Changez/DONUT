@@ -5,7 +5,6 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "RunspaceManager" {
 
     AfterEach {
-        # Clean up after each test to ensure isolation
         [RunspaceManager]::Close()
         [RunspaceManager]::SetLogger($null)
     }
@@ -38,8 +37,7 @@ Describe "RunspaceManager" {
         }
 
         It "raises the ThreadPool floor before opening the pool (starvation guard)" {
-            # Pool dispatch/completion run on ThreadPool threads; the floor has to be raised
-            # or 8 concurrent warm opens starve dispatch (see runspaces-and-workers).
+            # ThreadPool dispatch starves under 8 concurrent warm opens unless the floor rises.
             [RunspaceManager]::Initialize(8, 8)
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)
@@ -73,8 +71,7 @@ Describe "RunspaceManager" {
             [RunspaceManager]::InteractivePool.Dispose()
             [RunspaceManager]::InteractivePool = $null
 
-            # A throw here fails the test on its own - no Should -Not -Throw wrapper, whose
-            # child scope would swallow the assignment.
+            # No Should -Not -Throw wrapper: its child scope would swallow the assignment below.
             $pool = [RunspaceManager]::GetInteractivePool()
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
@@ -92,12 +89,8 @@ Describe "RunspaceManager" {
         }
 
         It "Should auto-initialize if pool does not exist" {
-            # Ensure pool is closed
             [RunspaceManager]::Close()
-            
-            # GetPool calls Initialize internally - need to handle no-arg call
-            # The class implementation calls Initialize() with no args which requires default params
-            # This tests that GetPool works when pool is null
+
             $pool = [RunspaceManager]::GetPool()
             
             $pool | Should -Not -BeNullOrEmpty
@@ -122,9 +115,8 @@ Describe "RunspaceManager" {
         }
 
         It "Should handle being called when pool is already null" {
-            [RunspaceManager]::Close()  # First close
+            [RunspaceManager]::Close()
 
-            # Should not throw
             { [RunspaceManager]::Close() } | Should -Not -Throw
         }
     }

@@ -3,53 +3,42 @@ title: Settings
 description: The settings overlay - DCU command options, general app settings, and the keybind recorder. Everything saves in real time.
 ---
 
-The gear icon opens the settings overlay. There is **no Save button** — every change
-persists the moment you make it (text fields when you leave them), and settings that
-have side effects apply immediately: recording a new hotkey re-registers it,
-toggling Start with Windows reconciles the scheduled task.
+The gear icon opens the settings overlay. There is **no Save button** — every
+change persists the moment you make it (text fields when you leave them), and
+settings with side effects apply immediately.
 
 ## Command sections (Scan / Apply Updates)
 
-Each DCU command has an option form: toggles for flags (`silent`, `reboot`,
-`autoSuspendBitLocker`, `forceupdate`), chips for the filter lists (severity, type,
-device category), and text fields for paths (`outputLog`, `report`,
-`catalogLocation`). Every control maps 1:1 to a dcu-cli argument — see the
+Each DCU command has an option form: toggles for flags, chips for the filter lists
+(severity, type, device category), and text fields for paths. Every control maps
+1:1 to a dcu-cli argument — see the
 [DCU command reference](../configuration/dcu-commands.md). Leaving an option empty
 lets the target machine's DCU defaults apply.
 
 ## General section
 
-- **Start with Windows** — registers/unregisters the logon scheduled task, which starts
-  DONUT as you at your normal rights. See [Tray, hotkey & autostart](./tray-hotkey-autostart.md).
-- **Close to tray** — the window's X hides to the tray instead of exiting.
-- **Run as administrator** — on by default. Every remote operation (scan, apply,
-  inventory, storage scan, clear) authenticates as the DONUT process, so without
-  administrator rights none of them can reach a fleet target. Turning it **on** relaunches
-  DONUT through a UAC prompt right away; turning it **off** takes effect at the next
-  launch, because Windows has no way to drop privileges in place. The switch shows what
-  the running process actually is, so launching from an elevated terminal reads as on.
-- **Global hotkey** — shows/restores DONUT from anywhere (default `Ctrl+Alt+D`).
-- **Settings shortcut** — an in-app shortcut (while DONUT is focused) that toggles Settings
-  open and closed (default `Ctrl+,`); Esc also closes.
-- **Throttle limit** — how many machines run concurrently (default 8).
-- **Folders to scan** — how many largest folders the storage scan returns (default 12).
-- **Debug logging** — verbose `[DEBUG]` breadcrumbs in `Donut.log`, off by default
-  (failures and warnings always log). Applies immediately — no restart — including to
-  the worker processes jobs spawn. For a one-off diagnostic session, launch with
-  `Start-Donut -DebugLog` instead; that forces it on without changing this setting.
+| Setting | What it does |
+|---|---|
+| Start with Windows | Launches DONUT hidden in the tray when you sign in — see [Tray, hotkey & autostart](./tray-hotkey-autostart.md) |
+| Close to Tray | The window's X hides to the tray instead of exiting |
+| Run as Administrator | On by default. Remote work needs administrator rights, so leave it on. Turning it **on** relaunches through a UAC prompt now, and turning it **off** applies at the next launch. The switch shows what the running process actually is |
+| App Hotkey | Shows or restores DONUT from anywhere (default `Ctrl+Alt+D`) |
+| Settings Shortcut | Toggles Settings open and closed while DONUT is focused (default `Ctrl+,`) |
+| Throttle Limit | How many machines run at once (default 8) |
+| Folders to Scan | How many largest folders the storage scan returns (default 12) |
+| Debug Logging | Verbose breadcrumbs in `Donut.log`, off by default. Applies immediately, no restart |
 
 ## Recording a keybind
 
 Keybinds aren't typed — they're **recorded**:
 
 1. Click **Record Keybind**. The field starts listening.
-2. Hold your modifier(s) and press one key (e.g. hold `Ctrl+Alt`, tap `D`). The
-   preview updates live; releasing the modifiers commits it.
-3. **Esc** cancels a recording; **Clear** removes the keybind entirely (disabling
-   that shortcut).
+2. Hold your modifier(s) and press one key (e.g. hold `Ctrl+Alt`, tap `D`).
+   Releasing the modifiers commits it.
+3. **Esc** cancels a recording; **Clear** removes the keybind entirely.
 
-Combos must include `Ctrl`, `Alt`, or `Win` (Shift alone is rejected — it would
-swallow normal typing).
+Combos must include `Ctrl`, `Alt`, or `Win` — Shift alone is rejected, since it
+would swallow normal typing.
 
 ## Where settings live
 

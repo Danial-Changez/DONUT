@@ -21,7 +21,7 @@ class DialogPresenter {
     [ResourceService]$Resources
     [Window]$Window
     [bool]$Result
-    [bool]$IsShowing = $false   # true while a modal is up; the pump defers dialog-opening work
+    [bool]$IsShowing = $false   # true while a modal is up, so the pump defers dialog work
 
     DialogPresenter([ResourceService]$resources) {
         $this.Resources = $resources
@@ -62,8 +62,8 @@ class DialogPresenter {
         return $this.ShowConfirmation($title, $message, $listItems, 'Confirm', $false)
     }
 
-    # Destructive-aware confirmation: $primaryText names the action (per the modal pattern -
-    # not a generic "Confirm"), and $isDestructive paints the primary button red.
+    # Destructive-aware confirmation: $primaryText names the action rather than a generic
+    # "Confirm", and $isDestructive paints the primary button red.
     [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems,
         [string]$primaryText, [bool]$isDestructive) {
         $this.Initialize()
@@ -95,17 +95,18 @@ class DialogPresenter {
 
     [bool] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
         $this.Initialize()
-        $msg = "Current: $currentVer`nNew: $newVer`n`nWould you like to update now?"
+        $msg = "Current: $currentVer`nNew: $newVer`n`nUpdate now?"
         if ($isRollback) {
-            $msg = "Current: $currentVer`nTarget: $newVer`n`nRollback detected. Proceed?"
+            $msg = "Current: $currentVer`nTarget: $newVer`n`n" +
+            "This rolls DONUT back to an older version. Continue?"
         }
-        $this.Window.DataContext = $this.NewVm("Updates detected", $msg, @(),
-            'Update now', 'Later')
+        $this.Window.DataContext = $this.NewVm("Update Available", $msg, @(),
+            'Update Now', 'Later')
         return $this.ShowModal()
     }
 
     # Builds the dialog's content view-model: Has* flags for which parts show, plus the
-    # button commands (primary resolves $true, secondary $false; empty secondary = alert).
+    # button commands (primary resolves $true, secondary $false, and no secondary = alert).
     hidden [DialogViewModel] NewVm(
         [string]$title,
         [string]$message,
@@ -118,8 +119,7 @@ class DialogPresenter {
         $vm.HasTitle = -not [string]::IsNullOrEmpty($title)
         $vm.Message = $message
         $vm.HasMessage = -not [string]::IsNullOrEmpty($message)
-        # Normalize each item to { Left; Right }: a plain string is left-only; an object with
-        # a Right (e.g. a size) renders right-aligned. Lets the view align values in a column.
+        # Each item normalizes to @{ Left; Right } so the view can align values in a column.
         $vm.ListItems = @(
             foreach ($it in $listItems) {
                 if ($null -eq $it) { continue }
@@ -131,8 +131,7 @@ class DialogPresenter {
 
         $self = $this
         $vm.PrimaryText = $primaryText
-        # The view binds Button.Style to this (MVVM); the destructive overload overrides it. Tint
-        # variants match the app's arcane action buttons (Run/Add), not the heavier solid fills.
+        # Tint variants match the app's arcane action buttons, not the heavier solid fills.
         $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonTintPrimary')
         $prim = { param($p) $self.Result = $true; $self.Window.Close() }.GetNewClosure()
         $vm.PrimaryCommand = [RelayCommand]::new([System.Action[object]]$prim)
@@ -146,8 +145,7 @@ class DialogPresenter {
         return $vm
     }
 
-    # Runs the modal: parents/fronts the window, flags IsShowing for the pump's
-    # reentrancy guard, and returns the button verdict.
+    # Runs the modal, flagging IsShowing for the pump's reentrancy guard.
     hidden [bool] ShowModal() {
         $this.Result = $false
         $this.PrepareToShow()
@@ -171,7 +169,7 @@ class DialogPresenter {
             $this.Window.WindowStartupLocation = 'CenterOwner'
         }
         else {
-            # No usable owner (e.g. the startup update prompt) - force it forward.
+            # No usable owner (e.g. the startup update prompt), so force it forward.
             $this.Window.Topmost = $true
         }
     }

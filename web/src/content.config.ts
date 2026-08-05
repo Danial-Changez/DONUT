@@ -4,14 +4,11 @@ import { docsSchema } from '@astrojs/starlight/schema';
 
 export const collections = {
   docs: defineCollection({
-    // Site content lives in repo-root docs/ (GitHub-browsable); README indexes,
-    // diagram sources, and archived plans are GitHub-only.
+    // README indexes, diagram sources, and archived plans stay GitHub-only.
     loader: glob({
       pattern: ['**/*.{md,mdx}', '!**/README.md', '!diagrams/**', '!plans/**'],
       base: '../docs',
-      // Mirror docsLoader ids: strip the extension and map index files to their
-      // directory. The root index.md must stay 'index' (Astro rejects empty ids);
-      // Starlight routes the 'index' id to the site root.
+      // The root must stay 'index', as Astro rejects an empty id.
       generateId: ({ entry }) => {
         const id = entry
           .replace(/\.(md|mdx)$/i, '')

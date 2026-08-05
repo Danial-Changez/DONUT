@@ -24,8 +24,7 @@ Describe "PendingIntent" {
 
     Context "IsResumable" {
         It "refuses to resume DeleteFolders" {
-            # The one destructive action, and its folder list is not carried here, so it
-            # could only be resumed by guessing. The user re-picks instead.
+            # The folder list is not carried here, so resuming would be a guess. The user re-picks.
             [PendingIntent]::Create([GatedAction]::DeleteFolders, @('PC-1'), $script:now).IsResumable() |
                 Should -BeFalse
         }
@@ -52,7 +51,7 @@ Describe "PendingIntent" {
         }
 
         It "rejects a note stamped in the future" {
-            # Clock skew or tampering; either way it is not a click that just happened.
+            # Clock skew or tampering, and either way it is not a click that just happened.
             $i = [PendingIntent]::Create([GatedAction]::Run, @('PC-1'), $script:now.AddMinutes(5))
             $i.IsFresh($script:now, $script:ttl) | Should -BeFalse
         }
@@ -76,8 +75,7 @@ Describe "PendingIntent" {
         }
 
         It "writes the action by NAME, not its ordinal" {
-            # ConvertTo-Json on an enum emits the integer, which would silently re-read as
-            # a different action once a member is inserted.
+            # An enum serialized as its integer would re-read as a different action after an insert.
             [PendingIntent]::Create([GatedAction]::DiskScan, @(), $script:now).ToJson() |
                 Should -BeLike '*"action":"DiskScan"*'
         }

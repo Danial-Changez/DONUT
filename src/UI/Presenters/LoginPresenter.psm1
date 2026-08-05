@@ -38,8 +38,7 @@ class LoginPresenter {
     [bool] ShowLogin() {
         $this.LoginWindow = $this.LoadXaml('LoginWindow.xaml')
 
-        # Content VM: the output panel binds OutputText; the GitHub button binds
-        # AuthCommand. Window chrome (close/minimize/drag) stays event-wired.
+        # Window chrome (close, minimize, drag) stays event-wired rather than bound.
         $this.LoginVm = [LoginViewModel]::new()
         $presenter = $this
         $auth = { param($p) $presenter.StartAuthFlow() }.GetNewClosure()
@@ -72,8 +71,7 @@ class LoginPresenter {
 
         $this.LoginSuccess = $false
 
-        # Shown from the worker STA thread; force it to the front once rendered so it does
-        # not open hidden behind other windows (see MainPresenter for the same pattern).
+        # Shown from the worker STA thread, so force it forward or it opens hidden.
         $this.LoginWindow.Add_ContentRendered({
                 $lw = $presenter.LoginWindow
                 $lw.Activate()
@@ -87,8 +85,7 @@ class LoginPresenter {
     }
 
     [void] StartAuthFlow() {
-        # Re-entry guard: a second click starts a fresh device flow, so stop the old
-        # poll first or its dead-code failure would overwrite the new code display.
+        # Stop the old poll first, or its failure would overwrite the new code display.
         if ($this.PollTimer -and $this.PollTimer.IsEnabled) { $this.PollTimer.Stop() }
         try {
             $response = $this.Service.InitiateDeviceFlow()

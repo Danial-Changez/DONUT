@@ -30,7 +30,7 @@ Describe "FolderNodeViewModel" {
         $roots[0].Depth         | Should -Be 0
 
         $child = $roots[0].Children[0]
-        $child.Label            | Should -Be '\bob\Videos'   # segment relative to shown parent
+        $child.Label            | Should -Be '\bob\Videos'   # Segment relative to shown parent.
         $child.Path             | Should -Be 'C:\Users\bob\Videos'
         $child.SizeText         | Should -Be '20 GB'
         $child.IsRoot           | Should -BeFalse
@@ -63,8 +63,7 @@ Describe "FolderNodeViewModel" {
         }
 
         It "checking a child never selects the parent - the tree shows only the largest folders" {
-            # The roll-up this replaces promoted "all visible children checked" to a checked
-            # parent, escalating one child's clear into the parent's entire on-disk contents.
+            # The old roll-up escalated one child's clear into the parent's whole contents.
             $a = $app.Children | Where-Object { $_.Path -eq 'C:\App\a' }
             $a.SetChecked($true)
 
@@ -78,7 +77,7 @@ Describe "FolderNodeViewModel" {
 
             $app.IsSelected | Should -BeFalse
             ($app.Children | Where-Object { $_.Path -eq 'C:\App\a' }).IsSelected | Should -BeFalse
-            # only the still-checked child is collected - the unchecked one is never cleared
+            # The unchecked child is never cleared, only the still-checked one is collected.
             (@([FolderNodeViewModel]::CollectSelected($roots)).Path) | Should -Be 'C:\App\b'
         }
 

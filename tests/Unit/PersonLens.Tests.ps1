@@ -46,8 +46,7 @@ Describe "PersonLens" {
             $d0.HasBitLocker() | Should -BeTrue
             $d0.BitLockerKeys.Count | Should -Be 2
             $d0.BitLockerKeys[0].Password | Should -Be '111-222'
-            # ConvertFrom-Json coerces the ISO date to [datetime]; NormalizeStamp must
-            # re-emit the UTC round-trip format, never a locale string.
+            # ConvertFrom-Json coerces the stamp to [datetime], so NormalizeStamp must re-emit UTC.
             $d0.BitLockerKeys[0].Created  | Should -Be '2026-05-01T00:00:00.0000000Z'
             $d0.BitLockerKeys[1].Created  | Should -BeNullOrEmpty
         }

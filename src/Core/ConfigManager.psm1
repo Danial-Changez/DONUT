@@ -27,8 +27,7 @@ class ConfigManager {
         $this.Initialize($sourceRoot, $logger)
     }
 
-    # Shared constructor body (PowerShell classes cannot chain to a sibling
-    # constructor, so the common setup lives here).
+    # PowerShell classes cannot chain constructors, so the shared setup lives here.
     hidden [void] Initialize([string]$sourceRoot, [LogService]$logger) {
         $this.Logger = [LogService]::Coalesce($logger)
         $this.SourceRoot = $sourceRoot
@@ -58,16 +57,15 @@ class ConfigManager {
         if ($fresh) { $this.SecureDataRoot() }
     }
 
-    # Best-effort: needs elevation, and the de-elevated instance depends on the elevated
-    # one having done it. Never fatal - a missing ACL surfaces as a write failure later.
+    # Best-effort: needs elevation, and the de-elevated instance depends on the
+    # elevated one having done it. A missing ACL surfaces as a write failure later.
     hidden [void] SecureDataRoot() {
         $root = [DonutPaths]::DataRoot()
         $reason = [DonutPaths]::Secure($root)
         if ($reason) { $this.Logger.LogWarning("Data root left with inherited permissions: $reason") }
         else { $this.Logger.LogInfo("Secured the data root for SYSTEM, Administrators and the interactive user: $root") }
 
-        # The move off %LOCALAPPDATA% is done by hand, so say where the old data is
-        # rather than silently starting from defaults.
+        # The move off %LOCALAPPDATA% is manual, so say where the old data is.
         $legacy = [DonutPaths]::LegacyRoot()
         if ($legacy -and (Test-Path $legacy)) {
             $this.Logger.LogWarning("Starting with a fresh data root at $root - earlier settings, logs and reports are still under $legacy.")

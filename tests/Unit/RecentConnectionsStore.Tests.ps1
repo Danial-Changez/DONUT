@@ -5,7 +5,7 @@ using module "..\..\src\Services\RecentConnectionsStore.psm1"
 Describe "RecentConnectionsStore" {
 
     BeforeEach {
-        # A real file under TestDrive; a $null logger coalesces to the no-op.
+        # A real file under TestDrive, and a $null logger coalesces to the no-op.
         $script:path = Join-Path $TestDrive "recents_$(Get-Random).json"
         $script:store = [RecentConnectionsStore]::new($script:path, $null)
     }
@@ -92,7 +92,7 @@ Describe "RecentConnectionsStore" {
             }
 
             $script:store.GetAll().Count | Should -Be ([RecentConnectionsStore]::Cap)
-            # The trim happened on write, not just on read: reload and re-count.
+            # The trim must have landed on write, not just on read.
             $reloaded = [RecentConnectionsStore]::new($script:path, $null)
             $reloaded.Count() | Should -Be ([RecentConnectionsStore]::Cap)
         }
@@ -159,7 +159,7 @@ Describe "RecentConnectionsStore" {
         }
 
         It "Keeps the cached owner across a later Upsert" {
-            # Owner comes from a Lens round trip; a run settling must not force a re-fetch.
+            # Owner comes from a Lens round trip, so a run settling must not force a re-fetch.
             $script:store.UpsertOwner("PC-1", "Jamie Doe")
 
             $script:store.Upsert("PC-1", "Completed", "Scan", 0)
@@ -201,7 +201,7 @@ Describe "RecentConnectionsStore" {
 
             $script:store.Upsert("PC-1", "Completed", "Scan", 0)
             $script:store.Upsert("PC-2", "Completed", "Scan", 0)
-            Test-Path -LiteralPath $script:path | Should -BeFalse   # nothing written yet
+            Test-Path -LiteralPath $script:path | Should -BeFalse
 
             $script:store.FlushSave()
             Test-Path -LiteralPath $script:path | Should -BeTrue    # coalesced single write

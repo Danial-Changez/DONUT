@@ -21,13 +21,13 @@ class ElevationContext {
     }
 
     # A service token, which is elevated but authenticates on the network as the
-    # machine account - which is why autostart no longer runs DONUT this way.
+    # machine account. That is why autostart no longer runs DONUT this way.
     static [bool] IsSystem() {
         return [System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem
     }
 
     # The account the process runs as, e.g. DOMAIN\jdoe-admin under over-the-shoulder
-    # UAC. Never the desktop's owner; StartupTaskService.GetInteractiveUser answers that.
+    # UAC. Never the desktop's owner, which StartupTaskService.GetInteractiveUser answers.
     static [string] CurrentIdentityName() {
         return [string][System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     }
@@ -47,8 +47,7 @@ class ElevationContext {
             return $null
         }
         catch {
-            # No CIM at all (a locked-down or non-Windows host). Callers treat a null as
-            # "no interactive session", which is the same degraded path.
+            # No CIM at all: callers treat $null as "no interactive session" either way.
             return $null
         }
     }

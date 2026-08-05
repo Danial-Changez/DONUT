@@ -1,21 +1,25 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    PostToolUse hook: flags comment blocks over the two-line cap in edited src files.
+    PostToolUse hook: flags comment blocks over the line cap in edited source files.
 
 .DESCRIPTION
-    Reads the Claude Code hook payload (JSON) from stdin and, for edited source files
-    under src/ (*.ps1, *.psm1, *.cs), reports any run of 3+ consecutive full-line
-    comments - the "one line preferred, two lines maximum" rule in Coding-Style.md that
-    neither Invoke-Format nor PSScriptAnalyzer enforces. PowerShell comment-based help
-    blocks and C# XML doc comments (///) are exempt (they may span more lines).
-    Violations surface via hookSpecificOutput.additionalContext so the comment is
-    trimmed - or its rationale moved to .NOTES - immediately, rather than in review.
+    Reads the Claude Code hook payload (JSON) from stdin and, for edited PowerShell
+    and C# files anywhere in the repo, reports comment blocks longer than
+    docs/development/coding-style.md allows: one line, or two directly above a file
+    header, a class, or a method or function definition. Violations surface via
+    hookSpecificOutput.additionalContext so the comment is trimmed, or its rationale
+    moved to .NOTES, immediately rather than in review.
+
+.NOTES
+    Exemptions match tools/Invoke-Lint.ps1, which sweeps the same rule repo-wide:
+    - Comment-based help and C# /// doc comments may span any number of lines.
+    - A dashed list may run long when it replaces denser prose.
+    - Here-string bodies are payload, not commentary, so they never count.
 #>
 
 $ErrorActionPreference = 'Stop'
 
-# --- Read the hook payload from stdin ---
 $raw = [Console]::In.ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
 
@@ -25,19 +29,31 @@ $filePath = $payload.tool_input.file_path
 if (-not $filePath) { $filePath = $payload.tool_response.filePath }
 if (-not $filePath) { exit 0 }
 
-# --- Act only on source files under src/ (the scope Coding-Style.md governs) ---
+# The rule is repo-wide, so only build output is out of scope.
 $normalized = $filePath -replace '\\', '/'
-if ($normalized -notmatch '/src/.+\.(ps1|psm1|cs)$') { exit 0 }
+if ($normalized -notmatch '\.(ps1|psm1|cs|mjs|js|ts|astro|xaml)$') { exit 0 }
+if ($normalized -match '/(bin|obj|\.cache|node_modules|dist|\.astro|\.diag)/') { exit 0 }
 if (-not (Test-Path -LiteralPath $filePath)) { exit 0 }
 
 $lines = [System.IO.File]::ReadAllLines($filePath)
+$isXaml = $normalized -match '\.xaml$'
+# Everything else but PowerShell uses // comments and the same brace shapes.
+$isCs = -not $isXaml -and $normalized -notmatch '\.(ps1|psm1)$'
 
-# --- Collect the line number of every full-line comment ---
-# Trailing comments (code then #) don't count; only comment-led lines form a block.
+# Trailing comments (code then #) do not count, only comment-led lines form a block.
 $commentLines = [System.Collections.Generic.List[int]]::new()
 
-if ($filePath -match '\.cs$') {
-    # C#: plain // lines; /// XML doc and /* */ blocks are exempt.
+if ($isXaml) {
+    # XAML has no per-line marker, so every line of a <!-- --> span counts.
+    $open = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($open -lt 0 -and $lines[$i] -match '<!--') { $open = $i }
+        if ($open -lt 0 -or $lines[$i] -notmatch '-->') { continue }
+        $open..$i | ForEach-Object { $commentLines.Add($_ + 1) }
+        $open = -1
+    }
+}
+elseif ($isCs) {
     $inBlock = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $t = $lines[$i].Trim()
@@ -47,7 +63,7 @@ if ($filePath -match '\.cs$') {
     }
 }
 else {
-    # PowerShell: tokenize so here-string bodies and <# #> help blocks aren't miscounted.
+    # Tokenized so here-string bodies and <# #> help blocks are not miscounted.
     $errs = $null
     $tokens = [System.Management.Automation.PSParser]::Tokenize(($lines -join "`n"), [ref]$errs)
     foreach ($tok in $tokens) {
@@ -58,15 +74,35 @@ else {
     }
 }
 
-# --- Report the first line of each 3+ line comment run ---
-$runs = [System.Collections.Generic.List[int]]::new()
+$csExempt = '^\s*(namespace|#nullable|export|import|const|function|class)|' +
+'^\s*((public|internal|sealed|static|abstract|partial)\s+)*(class|record|struct|interface|enum)\s'
+$psExempt = '^\s*(class|enum|function)\s|' +
+'^\s*(hidden\s+)?(static\s+)?(\[[\w\.\[\]]+\]\s*)?[\w-]+\s*\('
+$xamlExempt = '^\s*<[A-Za-z]'
+$exemptNext = if ($isXaml) { $xamlExempt } elseif ($isCs) { $csExempt } else { $psExempt }
+$marker = if ($isXaml) { '' } elseif ($isCs) { '//' } else { '#' }
+
+# Reports the first line of every run that exceeds its own allowance.
+function Test-Run([int] $start, [int] $len) {
+    if ($len -lt 2) { return $false }
+    $body = $lines[($start - 1)..($start + $len - 2)]
+    if (@($body -match "^\s*$marker\s+-\s").Count -ge 2) { return $false }
+    $next = if ($start + $len - 1 -lt $lines.Count) { $lines[$start + $len - 1] } else { '' }
+    $limit = if ($start -eq 1 -or $next -match $exemptNext) { 2 } else { 1 }
+    return $len -gt $limit
+}
+
+$runs = [System.Collections.Generic.List[string]]::new()
 $start = 0; $len = 0; $prev = -99
 foreach ($n in ($commentLines | Sort-Object -Unique)) {
     if ($n -eq $prev + 1) { $len++ }
-    else { if ($len -ge 3) { $runs.Add($start) }; $start = $n; $len = 1 }
+    else {
+        if (Test-Run $start $len) { $runs.Add("${start}") }
+        $start = $n; $len = 1
+    }
     $prev = $n
 }
-if ($len -ge 3) { $runs.Add($start) }
+if (Test-Run $start $len) { $runs.Add("${start}") }
 
 $leaf = Split-Path $filePath -Leaf
 if ($runs.Count -eq 0) {
@@ -75,12 +111,12 @@ if ($runs.Count -eq 0) {
 }
 
 $hits = ($runs | ForEach-Object { "${leaf}:$_" }) -join ', '
-$context = "Comment cap exceeded (Coding-Style.md: one line preferred, two maximum) - " +
-"3+ consecutive comment lines starting at $hits. Trim to <=2 lines, or move the longer " +
-"rationale into the file's .NOTES block (PowerShell) and reference it from a short inline note."
+$context = 'Comment cap exceeded (docs/development/coding-style.md: one line, two only ' +
+"above a file header, class, or method) at $hits. Trim to one line, delete the comment " +
+"if it only narrates the code, or move real rationale into .NOTES with a short pointer."
 
 @{
-    systemMessage      = "[DONUT] Comment over the 2-line cap in $leaf ($hits)"
+    systemMessage      = "[DONUT] Comment over the line cap in $leaf ($hits)"
     hookSpecificOutput = @{
         hookEventName     = 'PostToolUse'
         additionalContext = $context

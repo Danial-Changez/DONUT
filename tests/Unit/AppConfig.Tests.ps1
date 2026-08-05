@@ -54,7 +54,6 @@ Describe "AppConfig" {
             
             $config.Settings.activeCommand | Should -Be 'applyUpdates'
             $config.Settings.throttleLimit | Should -Be 10
-            # Defaults should still be present
             $config.Settings.commands | Should -Not -BeNullOrEmpty
         }
 
@@ -80,7 +79,6 @@ Describe "AppConfig" {
             
             $config.Settings.commands.scan.args.silent | Should -Be $true
             $config.Settings.commands.scan.args.report | Should -Be 'C:\CustomReport'
-            # Other defaults should still exist
             $config.Settings.commands.applyUpdates | Should -Not -BeNullOrEmpty
         }
     }
@@ -165,9 +163,8 @@ Describe "AppConfig" {
 
     Context "GetThrottleLimit / SetThrottleLimit" {
         It "Should return default 8 when not set" {
-            # Start fresh without the defaults being merged
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            $config.Settings.Remove('throttleLimit')  # Remove to test default
+            $config.Settings.Remove('throttleLimit')
 
             $config.GetThrottleLimit() | Should -Be 8
         }
@@ -287,8 +284,7 @@ Describe "AppConfig" {
         }
 
         It "Should fall back to TRUE, not false, on garbage values" {
-            # The one toggle whose default is on: a corrupt config must not silently
-            # drop DONUT into a mode where every remote job fails on access denied.
+            # Defaults on, so a corrupt config must not drop every remote job into access denied.
             foreach ($garbage in @('yes-please', 3, '', $null)) {
                 $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $garbage })
                 $config.GetRunAsAdmin() | Should -Be $true -Because "'$garbage' is not a usable boolean"
@@ -556,19 +552,15 @@ Describe "AppConfig" {
             }
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $userSettings)
             
-            # User values
             $config.Settings.commands.scan.args.silent | Should -Be $true
             $config.Settings.commands.scan.args.customArg | Should -Be 'customValue'
-            # Default values from scan should still exist
             $config.Settings.commands.scan.args.ContainsKey('report') | Should -Be $true
         }
     }
 
     Context "Merge isolation (regression)" {
         It "Should not throw when rebuilt from an already-merged config (worker round-trip)" {
-            # The worker reconstructs AppConfig from the UI's live (already-merged)
-            # Settings. This used to throw 'Collection was modified' because the
-            # shallow clone made source and target args the same object.
+            # A shallow clone aliased source and target args, throwing 'Collection was modified'.
             $first = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ activeCommand = 'applyUpdates' })
 
             { [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $first.Settings) } | Should -Not -Throw
@@ -585,7 +577,6 @@ Describe "AppConfig" {
                 commands = @{ scan = @{ args = @{ silent = (-not $before) } } }
             }) | Out-Null
 
-            # The shared static must be untouched by an instance merge.
             [AppConfig]::Defaults.commands.scan.args.silent | Should -Be $before
         }
 
@@ -604,10 +595,7 @@ Describe "AppConfig" {
 
     Context "DeepClone cycle safety" {
         It "clones a self-referencing tree without recursing forever" {
-            # DeepClone runs on the UI thread for every job prep; without a cycle
-            # guard a Settings tree that ever contains a cycle would freeze the
-            # dispatcher in pure CPU. The clone must terminate and preserve the
-            # cycle shape within the copy.
+            # DeepClone runs on the UI thread, so a cycle without a guard freezes the dispatcher.
             $a = @{ name = 'a' }
             $b = @{ parent = $a }
             $a.child = $b

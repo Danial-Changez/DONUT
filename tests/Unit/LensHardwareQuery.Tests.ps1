@@ -1,13 +1,12 @@
 Describe "Lens hardware inventory query" {
 
     BeforeAll {
-        # The script only defines helpers and scriptblocks at load, so dot-sourcing it is
-        # safe off Windows: the [ADSI] bind lives inside a function body, never at parse.
+        # Dot-sourcing is safe off Windows because the [ADSI] bind lives inside a function body.
         . (Join-Path $PSScriptRoot '..\..\src\Scripts\LensAgent.Common.ps1')
         $script:HwScript = $script:HardwareScript
         $script:Pairs = @(@{ name = 'WS-1'; resourceId = '16777345' })
 
-        # An OData collection answer; an empty one is how a site rejects the filter shape
+        # An OData collection answer. An empty one is how a site rejects the filter shape
         # without erroring, which is the case that used to blank the card in silence.
         function New-Collection { param($Rows) return [pscustomobject]@{ value = @($Rows) } }
     }

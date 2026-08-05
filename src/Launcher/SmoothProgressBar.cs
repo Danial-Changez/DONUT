@@ -6,11 +6,11 @@ using System.Windows.Forms;
 namespace Donut.Launcher;
 
 /// <summary>
-/// Minimal owner-painted progress bar - the stock <see cref="ProgressBar"/> locks its
-/// fill to the theme green, and this bar is on screen for ~2 seconds, so it earns no
-/// animation machinery. Starts indeterminate (a dim full-width tint of the fill color,
-/// for the module-parse phase that reports no percentage); the first <see cref="Value"/>
-/// assignment switches to a plain percent fill.
+/// Minimal owner-painted progress bar, because the stock <see cref="ProgressBar"/>
+/// locks its fill to the theme green. On screen for about two seconds, so it earns no
+/// animation machinery. Starts as a dim full-width tint for the module-parse phase,
+/// which reports no percentage, and the first <see cref="Value"/> assignment switches
+/// it to a plain percent fill.
 /// </summary>
 public sealed class SmoothProgressBar : Control
 {

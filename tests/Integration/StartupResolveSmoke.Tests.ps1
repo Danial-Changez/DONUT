@@ -35,12 +35,7 @@ Describe "Startup warm + resolve smoke" {
         $script:ReportsDir = Join-Path $WorkDir 'reports'
         New-Item -ItemType Directory -Force -Path $LogsDir, $ReportsDir | Out-Null
 
-        # The child harness: opens a 2-runspace pool, then runs the app's startup
-        # sequence - the worker warm pass, a follow-up worker job, the DC-discovery
-        # job - each with a bounded wait, and reports one JSON verdict. A shell
-        # whose wait lapses is deliberately leaked (disposing a running pipeline
-        # blocks - the exact production hang this suite guards); it dies with the
-        # child process.
+        # The harness deliberately leaks a lapsed shell, since disposing a running pipeline blocks.
         $script:ChildScript = Join-Path $WorkDir 'SmokeHarness.ps1'
         @'
 param([string]$SourceRoot, [string]$LogsDir, [string]$ReportsDir, [string]$OutFile)
@@ -104,8 +99,7 @@ catch { $result.Error = $_.Exception.Message }
         $script:OutJson = Join-Path $WorkDir 'smoke-result.json'
         $pwshPath = (Get-Process -Id $PID).Path
         if ([string]::IsNullOrWhiteSpace($pwshPath)) { $pwshPath = 'pwsh' }
-        # ProcessStartInfo.ArgumentList quotes each argument; Start-Process joins its
-        # -ArgumentList unquoted, truncating paths with spaces (e.g. this checkout's).
+        # Start-Process joins -ArgumentList unquoted and truncates paths with spaces.
         $psi = [System.Diagnostics.ProcessStartInfo]::new($pwshPath)
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
@@ -151,15 +145,12 @@ catch { $result.Error = $_.Exception.Message }
     }
 
     It "the startup DC-discovery job (Resolve/Warm) always terminates" {
-        # Off-domain the discovery finds no controller and that is a PASS here: the
-        # guarantee under test is that the job COMPLETES and reports, never that AD
-        # is reachable from the test host.
+        # Off-domain finding no controller still passes: the guarantee is that the job reports.
         [bool]$Smoke.ResolveCompleted | Should -BeTrue -Because (
             "the startup DC warm-up must always come back - a Resolve job that " +
             "neither completes nor fails leaves the whole app without an active DC")
         [string]$Smoke.ResolveMode | Should -Be 'Warm'
-        # The worker's entry marker proves the pipeline came up and logged; its
-        # absence is the signature of the bring-up wedge this smoke exists to catch.
+        # The worker's entry marker is exactly what the bring-up wedge silently omits.
         $logFile = Join-Path $LogsDir 'Donut.log'
         Test-Path $logFile | Should -BeTrue
         (Get-Content $logFile -Raw) | Should -Match 'DC discovery running on the pool'

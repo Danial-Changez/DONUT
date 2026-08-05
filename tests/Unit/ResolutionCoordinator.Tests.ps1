@@ -1,7 +1,9 @@
-# Unit tests for ResolutionCoordinator. WPF-free (the coordinator reaches the detail
-# panel only through the duck-typed $Home), so no assembly wrapper is needed. Fakes
-# the shared HostResolver + the HomePresenter back-ref and drives CompleteResolve /
-# PrefetchIp directly.
+<#
+    Unit tests for ResolutionCoordinator. WPF-free (the coordinator reaches the detail
+    panel only through the duck-typed $Home), so no assembly wrapper is needed. Fakes
+    the shared HostResolver and the HomePresenter back-ref, then drives CompleteResolve
+    and PrefetchIp directly.
+#>
 using module "..\..\src\UI\Presenters\ResolutionCoordinator.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
 using module "..\..\src\Core\ResolveProcessJob.psm1"
@@ -13,7 +15,7 @@ using module "..\..\src\Services\HostResolver.psm1"
 # --- Test doubles -----------------------------------------------------------
 
 # Records the resolver mutations CompleteResolve / PrefetchIp make. base($null, $null)
-# is safe - RemoteJobService's constructor only stores its refs.
+# is safe because RemoteJobService's constructor only stores its refs.
 class FakeHostResolver : HostResolver {
     [bool] $NeedsResolveResult = $true
     [string] $CachedIp = ''
@@ -36,7 +38,7 @@ class FakeHostResolver : HostResolver {
     }
 }
 
-# A fast job that never spawns a process; tests flip its Status/ProcessFault directly.
+# A fast job that never spawns a process, so tests flip Status/ProcessFault directly.
 class FakeFastJob : ResolveProcessJob {
     FakeFastJob([string]$h) : base($h, [JobKind]::Resolve, $null) {}
     [void] Start([string]$s, [hashtable]$a, [string]$t) { $this.Status = [JobStatus]::Running }
@@ -113,9 +115,9 @@ Describe "ResolutionCoordinator" {
 
             $script:coord.CompleteResolve($job)
 
-            $script:resolver.Verdicts['PC1'] | Should -Be @('10.0.0.5', $true)  # cached
-            $script:fakeHome.Rendered | Should -Be @('PC1')                     # row refreshed
-            $script:fakeHome.Reissued.Count | Should -Be 1                      # queue handed back
+            $script:resolver.Verdicts['PC1'] | Should -Be @('10.0.0.5', $true)
+            $script:fakeHome.Rendered | Should -Be @('PC1')
+            $script:fakeHome.Reissued.Count | Should -Be 1
             $script:fakeHome.Reissued[0] | Should -Be @('PC1', $true)
         }
 
@@ -126,7 +128,7 @@ Describe "ResolutionCoordinator" {
             $script:coord.CompleteResolve($job)
 
             $script:resolver.Cleared | Should -Be @('PC1')          # single-flight latch released
-            $script:fakeHome.DroppedRuns | Should -Be @('PC1')      # queued run dropped
+            $script:fakeHome.DroppedRuns | Should -Be @('PC1')
             $script:fakeHome.Reissued.Count | Should -Be 0
         }
 
@@ -140,14 +142,12 @@ Describe "ResolutionCoordinator" {
             $script:resolver.ActiveDc | Should -Be 'DC01'
             $script:config.Settings['activeDomainController'] | Should -Be 'DC01'
             $script:cfgMgr.SaveCount | Should -Be 1
-            # The DC warm finishing ends the startup crunch: the deferred finder/Lens
-            # warms must be released exactly once here.
+            # The DC warm ends the startup crunch, so the deferred warms release exactly once.
             $script:fakeHome.DeferredWarmReasons.Count | Should -Be 1
         }
 
         It "releases the deferred warms even when the DC warm FAILS" {
-            # A failed warm must not leave the finder/Lens warms waiting on the
-            # fallback timer - the crunch is over either way.
+            # A failed warm must not strand the deferred warms on the fallback timer either.
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Failed'
             $job.FailureMessage = 'boom'
@@ -169,8 +169,7 @@ Describe "ResolutionCoordinator" {
         }
 
         It "never persists the controller list - only the active DC is config state" {
-            # 'domainControllers' was written but never read back; the warm re-discovers
-            # the list every launch, so persisting it was pure config noise.
+            # 'domainControllers' was never read back, and the warm re-discovers it every launch.
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
             $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03') })
@@ -207,7 +206,6 @@ Describe "ResolutionCoordinator" {
             $job.Result = @{ Mode = 'Host'; HostName = 'PC1'; Ip = '10.0.0.5'; Online = $true }
             $script:fastCoord.CompleteResolve($job)
 
-            # A finished fast job frees a slot: the queued host starts.
             $script:fastCoord.FastJobs.Count | Should -Be 5
             $script:fastCoord.FastJobs[4].HostName | Should -Be 'PC5'
         }

@@ -42,8 +42,7 @@ if (-not (Get-Command dot -ErrorAction SilentlyContinue)) {
     $layoutArgs = @('-Playout=smetana')
 }
 
-# Site-dark theme injected at render time (transparent bg, panel fills, violet
-# accents) so the .puml sources stay theme-agnostic; see tools/plantuml-dark.cfg.
+# The dark theme is injected at render time so the .puml sources stay theme-agnostic.
 $darkConfig = Join-Path $PSScriptRoot 'plantuml-dark.cfg'
 
 $pumlFiles = Get-ChildItem -Path $sourceDir -Filter '*.puml'

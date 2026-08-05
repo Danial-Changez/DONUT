@@ -29,8 +29,7 @@ class HotkeyGesture {
     static [uint32] $MOD_SHIFT = [uint32]0x4
     static [uint32] $MOD_WIN = [uint32]0x8
 
-    # Punctuation the WPF KeyConverter only accepts by Oem* name; aliased both ways so a
-    # user can type "Ctrl+," and see it normalized back to "Ctrl+," (not "Ctrl+OemComma").
+    # KeyConverter only accepts Oem* names, so alias both ways and echo what the user typed.
     static [hashtable] $PunctToKey = @{
         ',' = 'OemComma'; '.' = 'OemPeriod'; '/' = 'OemQuestion'; ';' = 'OemSemicolon'
         '-' = 'OemMinus'; '=' = 'OemPlus'; '[' = 'OemOpenBrackets'; ']' = 'Oem6'
@@ -81,7 +80,7 @@ class HotkeyGesture {
             return $g
         }
 
-        # A bare Shift can't gate a global hotkey (it just types); require a real modifier.
+        # A bare Shift cannot gate a global hotkey since it just types, so require a real one.
         $realMods = [HotkeyGesture]::MOD_CONTROL -bor [HotkeyGesture]::MOD_ALT -bor [HotkeyGesture]::MOD_WIN
         if (($mods -band $realMods) -eq 0) {
             $g.Reason = 'Add Ctrl, Alt, or Win - Shift alone types text.'
@@ -109,7 +108,7 @@ class HotkeyGesture {
     }
 
     # Resolves a key token to a [Key] via WPF's KeyConverter (case-insensitive), mapping
-    # bare punctuation to its Oem* name first; $null when the token isn't a key name.
+    # bare punctuation to its Oem* name first. $null when the token is not a key name.
     hidden static [object] ResolveKey([string]$token) {
         if ([HotkeyGesture]::PunctToKey.ContainsKey($token)) {
             $token = [HotkeyGesture]::PunctToKey[$token]

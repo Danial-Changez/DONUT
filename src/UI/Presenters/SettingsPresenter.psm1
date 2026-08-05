@@ -43,7 +43,7 @@ class SettingsPresenter {
     hidden [object] $ShortcutRecorder
 
     # $chrome hosts the page segments, which live in the overlay's header row rather than
-    # in the scrolling body; it is the window, and $view is still the body.
+    # the scrolling body, so it is the window while $view stays the body.
     SettingsPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
         [FrameworkElement] $chrome, [ToastService] $toast, [hashtable] $sideEffects) {
         $this.Config = $config
@@ -90,8 +90,7 @@ class SettingsPresenter {
 
     [void] LoadSettingsView([string] $viewName) {
         $fileName = "${viewName}View.xaml"
-        # No disk pre-check: hosted runs serve the view from the embedded copy, where
-        # a Test-Path would wrongly skip it. ViewLoader throws on a truly missing view.
+        # No disk pre-check: a hosted run serves the view from the embedded copy.
         try {
             $this.CurrentSettingsView = [ViewLoader]::Load(
                 $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
@@ -110,7 +109,7 @@ class SettingsPresenter {
             return
         }
 
-        # The General view isn't a DCU command - it edits the app-wide settings.
+        # The General view is not a DCU command: it edits the app-wide settings.
         if ($this.CurrentSection -eq 'General') {
             $this.PopulateGeneralSettings()
             return
@@ -208,8 +207,8 @@ class SettingsPresenter {
         }
     }
 
-    # Writes one DCU control's value into its command args and flushes. Does not change the
-    # active command - editing a command's options is separate from selecting it to run.
+    # Writes one DCU control's value into its command args and flushes. It never changes the
+    # active command, since editing a command's options is separate from selecting it to run.
     hidden [void] PersistDcuArg([object]$ctrl) {
         if ($this.CurrentSection -eq 'General' -or [string]::IsNullOrWhiteSpace($this.CurrentSection)) { return }
         if (-not $this.Config.Settings.ContainsKey('commands')) { return }
@@ -235,14 +234,14 @@ class SettingsPresenter {
         $throttle = $view.FindName('throttleLimit')
         if ($throttle) {
             $throttle.Text = [string]$this.Config.GetThrottleLimit()
-            $throttle.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())   # clear error while editing
+            $throttle.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())
             $throttle.Add_LostFocus({ param($s, $e) $self.PersistThrottle($s) }.GetNewClosure())
         }
 
         $folders = $view.FindName('folderScanCount')
         if ($folders) {
             $folders.Text = [string]$this.Config.GetFolderScanCount()
-            $folders.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())   # clear error while editing
+            $folders.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())
             $folders.Add_LostFocus({ param($s, $e) $self.PersistFolderScanCount($s) }.GetNewClosure())
         }
 
@@ -262,8 +261,7 @@ class SettingsPresenter {
             $closeTray.Add_Unchecked($h)
         }
 
-        # Reflects the live token, not the stored setting: launching from an elevated
-        # shell makes DONUT admin whatever the setting says, and the switch must not lie.
+        # Reflects the live token, not the setting: an elevated shell makes DONUT admin anyway.
         $runAsAdmin = $view.FindName('chkRunAsAdmin')
         if ($runAsAdmin) {
             $runAsAdmin.IsChecked = [ElevationContext]::IsElevated()
@@ -280,7 +278,6 @@ class SettingsPresenter {
             $debugLog.Add_Unchecked($h)
         }
 
-        # Keybind recorders (replace the old typed text boxes).
         $hkValue = $view.FindName('recGlobalHotkeyValue')
         $hkRecord = $view.FindName('recGlobalHotkeyRecord')
         $hkClear = $view.FindName('recGlobalHotkeyClear')
@@ -315,7 +312,7 @@ class SettingsPresenter {
         }
         else {
             $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Throttle limit', 'Enter a whole number of 1 or more.') }
+            if ($this.Toast) { $this.Toast.ShowError('Throttle Limit', 'Enter a whole number, 1 or more.') }
         }
     }
 
@@ -329,7 +326,7 @@ class SettingsPresenter {
         }
         else {
             $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Folders to scan', 'Enter a whole number of 1 or more.') }
+            if ($this.Toast) { $this.Toast.ShowError('Folders to Scan', 'Enter a whole number, 1 or more.') }
         }
     }
 
@@ -353,12 +350,11 @@ class SettingsPresenter {
         }
         catch {
             $this.Logger.LogException('Config save failed', $_)
-            if ($this.Toast) { $this.Toast.ShowError('Save failed', "$_") }
+            if ($this.Toast) { $this.Toast.ShowError('Save Failed', "$_") }
         }
     }
 
-    # Flags or clears a field's inline validation error (the red border comes from the
-    # ModernTextBox Tag='error' trigger).
+    # Flags a field's validation error (the red border is the ModernTextBox Tag trigger).
     hidden [void] SetFieldError([object]$box, [bool]$hasError) {
         if ($null -eq $box) { return }
         $box.Tag = if ($hasError) { 'error' } else { $null }

@@ -1,6 +1,4 @@
-# Unit tests for FinderPresenter's Lens poll loop - requires WPF + Donut.Mvvm (loaded by
-# the wrapper). Covers the deadline backstop and the completion guard: both exist so a
-# lookup that never lands can't leave the detail pane on its loading placeholder forever.
+# The wrapper loads WPF and Donut.Mvvm. Both guards stop a stalled lookup stranding the pane.
 using module "..\..\src\UI\Presenters\FinderPresenter.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\PersonLens.psm1"
@@ -8,7 +6,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 
 # --- Test doubles -----------------------------------------------------------
 
-# Forces the completion branch to fail after the job has already left LensJobs - the
+# Forces the completion branch to fail after the job has already left LensJobs, the
 # exact shape that used to strand the pane with no job left to retry.
 class ThrowingFinderPresenter : FinderPresenter {
     ThrowingFinderPresenter([AppConfig]$c, [object]$l)
@@ -20,10 +18,8 @@ class ThrowingFinderPresenter : FinderPresenter {
 Describe "FinderPresenter Lens poll" {
 
     BeforeAll {
-        # Must live in BeforeAll: a helper declared at file scope runs during discovery
-        # only, and is not in scope when the It blocks execute.
-        # A never-invoked PowerShell is safe to dispose synchronously (state NotStarted),
-        # so DisposeJob takes its direct path and no reap timer is involved.
+        # Must live in BeforeAll: a file-scope helper is discovery-only and out of scope in It.
+        # A never-invoked PowerShell disposes synchronously, so DisposeJob needs no reap timer.
         function New-LensJob {
             param([int]$Token, [int]$AgeSeconds, [bool]$Completed = $false, [string]$Who = 'Jane Doe')
             return @{
@@ -102,7 +98,7 @@ Describe "FinderPresenter Lens poll" {
         It "retires a superseded expired lookup without touching the pane" {
             $p = $script:presenter
             $p.LensVm.SetLoading('Newer Person')
-            $p.LensToken = 2                     # a newer pick already owns the pane
+            $p.LensToken = 2                     # A newer pick already owns the pane.
             $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 120))
 
             $p.PollLens()
@@ -138,12 +134,11 @@ Describe "FinderPresenter Lens poll" {
 
             $text | Should -Match 'queue 20\b'
             $text | Should -Match 'search 200\b'
-            $text | Should -Match 'rows 10\b'   # worker total minus the search itself
+            $text | Should -Match 'rows 10\b'   # Worker total minus the search itself.
             $text | Should -Match 'notice \d+'
         }
 
-        # A superseded or thrown leg never emits one, and the caller still logs its total -
-        # a missing breadcrumb must not throw inside the poll loop.
+        # A superseded or thrown leg emits no record, and that must not throw in the poll loop.
         It "degrades to nothing when the worker emitted no record" {
             $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow)
             $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''

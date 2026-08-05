@@ -36,6 +36,15 @@
     Coverage XML format (only with -Coverage): JaCoCo (default) or Cobertura.
     ReportGenerator renders either; pick whichever a downstream consumer
     (CI, IDE plugin) expects.
+
+.NOTES
+    The run relaunches itself in a clean child pwsh when either condition holds:
+    - Repo modules are already loaded. `using module` never reloads an imported
+      module, so a session that ran the suite (or the app) before an edit would
+      silently test stale classes.
+    - The host thread is MTA. The WPF integration tests need an STA thread, and
+      on an MTA host they self-skip, so the "full suite" quietly stops covering
+      them. The child is started with -Sta on Windows.
 #>
 param(
     [string[]] $Path = @('tests'),
@@ -51,11 +60,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 if (-not $ReportDir) { $ReportDir = Join-Path $repoRoot 'CoverageReport' }
 
-# using module never reloads an already-imported module, so a session that has
-# run the suite (or the app) before an edit would test STALE classes silently.
-# The WPF integration tests additionally need an STA thread - on an MTA host
-# they self-skip and the "full suite" quietly stops covering them. Either
-# condition gets a clean child pwsh (-Sta on Windows).
+# A stale repo module or an MTA host both need a clean child pwsh. See .NOTES.
 $stale = Get-Module | Where-Object {
     $_.Path -and $_.Path.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
 }
@@ -109,8 +114,6 @@ if ($result.FailedCount -gt 0) {
     Write-Host "$($result.FailedCount) test(s) failed; the report still reflects executed code." -ForegroundColor Yellow
 }
 
-# Prefer a machine-wide ReportGenerator; otherwise auto-install a repo-local
-# dotnet tool under tools/.cache (gitignored) on first use.
 if (-not (Get-Command reportgenerator -ErrorAction SilentlyContinue)) {
     $toolDir = Join-Path $repoRoot 'tools' '.cache' 'reportgenerator'
     if (-not (Test-Path (Join-Path $toolDir 'reportgenerator*'))) {
@@ -130,8 +133,7 @@ if (-not (Get-Command reportgenerator -ErrorAction SilentlyContinue)) {
     $env:PATH = "$toolDir$([IO.Path]::PathSeparator)$env:PATH"
 }
 
-# ReportGenerator merges into an existing directory; clear it so removed
-# modules do not linger in the site between runs.
+# ReportGenerator merges into an existing directory, so removed modules would linger.
 if (Test-Path $ReportDir) {
     Remove-Item (Join-Path $ReportDir '*') -Recurse -Force
 }

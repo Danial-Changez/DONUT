@@ -3,7 +3,7 @@ title: DONUT
 description: A fleet management app for Dell workstations - AD search, remote driver updates through Dell Command Update, hardware inventory, and user-to-device lookup.
 template: splash
 hero:
-  tagline: Manage your Dell fleet from one app to find machines and people, with the added ability of pushing driver updates remotely!
+  tagline: Find machines and people across Active Directory, and push driver updates to your Dell fleet from one app.
   actions:
     - text: Get started
       link: ./get-started/what-is-donut/
@@ -45,19 +45,19 @@ import IconLinkCard from '../web/src/components/IconLinkCard.astro';
   </div>
 </div>
 
-## Everything the fleet needs
+## What DONUT does
 
 <CardGrid>
   <IconLinkCard
     title="Fleet-wide scans"
-    description="Queue machines and scan them all in parallel, with live progress per row."
+    description="Queue machines and scan them in parallel, with live progress per row."
     href="./features/scanning/"
     icon="magnifier"
     foot="Scanning"
   />
   <IconLinkCard
-    title="Safe update applies"
-    description="Two-phase flow: see exactly what will install, confirm per host, track reboots."
+    title="Update applies"
+    description="See what will install, confirm per host, and track which machines need a reboot."
     href="./features/applying-updates/"
     icon="approve-check-circle"
     foot="Applying updates"
@@ -71,7 +71,7 @@ import IconLinkCard from '../web/src/components/IconLinkCard.astro';
   />
   <IconLinkCard
     title="User Lens"
-    description="Pick a person to see their devices and BitLocker keys — fetched safely de-elevated."
+    description="Pick a person to see their devices and BitLocker recovery keys."
     href="./features/user-lens/"
     icon="information"
     foot="User Lens"
@@ -84,7 +84,7 @@ import IconLinkCard from '../web/src/components/IconLinkCard.astro';
     foot="Machine details"
   />
   <IconLinkCard
-    title="Stays out of the way"
+    title="Runs in the background"
     description="Tray icon, global hotkey, start-with-Windows, and self-updates from GitHub releases."
     href="./features/tray-hotkey-autostart/"
     icon="download"

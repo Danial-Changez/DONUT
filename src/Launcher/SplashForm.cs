@@ -7,14 +7,13 @@ using Timer = System.Windows.Forms.Timer;   // disambiguate from System.Threadin
 namespace Donut.Launcher;
 
 /// <summary>
-/// Borderless startup splash - spinning-donut GIF, the current init milestone, and an
-/// owner-drawn progress bar. Lives on the main thread while the app graph parses on the
-/// worker thread, so it stays responsive through the parse.
+/// Borderless startup splash carrying the donut GIF, the current init milestone, and
+/// an owner-drawn progress bar. Lives on the main thread while the app graph parses on
+/// the worker thread, so it stays responsive throughout.
 /// </summary>
 public sealed class SplashForm : Form
 {
-    // Arcane splash: near-black ground + violet accent (matches the app's theme); the
-    // loading.gif is keyed transparent so the pink donut floats on it.
+    // Matches the app's violet accent, and loading.gif is keyed to this ground.
     private static readonly Color Violet = Color.FromArgb(0x8E, 0x51, 0xFF);
 
     private readonly PictureBox _art;
@@ -30,9 +29,7 @@ public sealed class SplashForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
         TopMost = true;
-        // All bounds below are designed at 96 DPI; without this anchor WinForms has no
-        // base to scale them from, so on a scaled laptop display the fonts grow but the
-        // label boxes don't and the status text clips.
+        // Bounds below are designed at 96 DPI, so a scaled display needs this anchor.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.FromArgb(0x0A, 0x0A, 0x0A);
@@ -90,8 +87,7 @@ public sealed class SplashForm : Form
         Controls.Add(_bar);
     }
 
-    // Loads the splash art from embedded resources: the spinning-donut GIF if present,
-    // otherwise the static logo. GIFs animate automatically in a PictureBox.
+    // Falls back to the static logo, and a PictureBox animates a GIF on its own.
     private void TryLoadArtFromResources()
     {
         foreach (string logical in new[] { "assets/Images/loading.gif",
@@ -102,7 +98,7 @@ public sealed class SplashForm : Form
         }
     }
 
-    // Rounded window corners (borderless form).
+    // A borderless form gets no DWM rounding, so the corners are clipped by hand.
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);

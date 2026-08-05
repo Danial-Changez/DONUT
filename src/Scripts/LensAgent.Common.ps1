@@ -79,8 +79,7 @@ function Find-Gc([string]$Filter) {
     return $s.FindOne()
 }
 
-# Self-contained so it runs on a thread job parallel to the AD read. endswith on the
-# forest-unique SAM is the only filter this AdminService accepts (others answer 404).
+# endswith on the forest-unique SAM is the only filter this AdminService serves.
 $script:AffinityScript = {
     param($server, $samValue)
     $p = @{
@@ -93,13 +92,11 @@ $script:AffinityScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# Per-device hardware from SCCM inventory, keyed by the affinity ResourceID. Filters
-# ResourceID eq N with a keyed-segment fallback; string filters 404 on this AdminService.
+# ResourceID eq N with a keyed-segment fallback, since string filters 404 here.
 $script:HardwareScript = {
     param($server, $pairs)
     function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
-        # The braces are load-bearing: "$class?" parses as a variable named class?, which is
-        # undefined, so the class silently vanishes from the path and the query matches nothing.
+        # The braces are load-bearing: "$class?" parses as an undefined variable class?.
         $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
         else {
             "https://$srv/AdminService/wmi/${class}?`$filter=" +
@@ -144,8 +141,7 @@ $script:HardwareScript = {
             $bios = Get-InventoryRow -srv $server -class 'SMS_G_System_PC_BIOS' `
                 -select 'SerialNumber' -id $pair.resourceId
             if ($bios) { $out.serial = [string]$bios.SerialNumber }
-            # Both shapes answering nothing used to blank the card with no reason on it,
-            # which reads exactly like the feature was never built.
+            # Both shapes answering nothing used to blank the card with no reason on it.
             if (-not $out.model -and -not $out.serial) {
                 $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
                 if ($script:FilterError) { $out.error += " (filter form: $($script:FilterError))" }
@@ -159,8 +155,7 @@ $script:HardwareScript = {
 
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
 function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
-    # No exchange means an in-process caller, which gets the whole bundle at the end;
-    # progressive painting is the agent path's benefit only.
+    # No exchange means an in-process caller, which gets the whole bundle at the end.
     if (-not $ReqId -or -not $ExchangeDir) { return }
     try {
         $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
@@ -177,8 +172,7 @@ function Get-LensForestNc {
     return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 }
 
-# The affinity query run the other way: machine -> its primary user, same RBAC scope as the
-# person direction. A plain 'ResourceName eq' filter is served here - see .NOTES.
+# Machine to primary user, where a plain 'ResourceName eq' filter is served. See .NOTES.
 $script:OwnerScript = {
     param($server, $wsid)
     $uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
@@ -188,12 +182,11 @@ $script:OwnerScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# Session memo for owner display names: the agent is persistent, users share machines,
-# and a name does not change mid-session, so each distinct owner is resolved once.
+# The agent is persistent and a name does not change mid-session, so memoize it.
 $script:OwnerNameCache = @{}
 
-# UniqueUserName -> display name. SCCM first: SMS_R_User.FullUserName is User Discovery's
-# copy of displayName across EVERY forest the site covers - see .NOTES.
+# UniqueUserName to display name. SCCM first: SMS_R_User.FullUserName covers every
+# forest the site covers, which the GC cannot. See .NOTES.
 function Get-OwnerDisplayName {
     param([string]$uniqueUserName, [string]$sam, [string]$server)
     $r = [ordered]@{ owner = ''; error = '' }
@@ -202,8 +195,7 @@ function Get-OwnerDisplayName {
         return $r
     }
     try {
-        # endswith, not eq: the operator this AdminService is proven to serve on this
-        # attribute; the domain prefix keeps it effectively exact.
+        # endswith, not eq: the only operator this AdminService serves on this attribute.
         $uri = "https://$server/AdminService/wmi/SMS_R_User?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$uniqueUserName')") +
         "&`$select=FullUserName,UniqueUserName"
@@ -214,8 +206,7 @@ function Get-OwnerDisplayName {
     }
     catch { $r.error = "SCCM user: $($_.Exception.Message)" }
     if (-not $r.owner) {
-        # The GC only covers the agent's own forest, so this can never name a user from
-        # a sibling forest - it stays as the fallback for the one forest it does cover.
+        # The GC covers only the agent's own forest, never a sibling forest's user.
         try {
             $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$sam))"
             if ($hit) {
@@ -230,8 +221,8 @@ function Get-OwnerDisplayName {
     return $r
 }
 
-# One machine -> "who normally uses it". SCCM affinity names the account, then
-# Get-OwnerDisplayName names the person; the SAM is the fallback when naming fails.
+# One machine to "who normally uses it". SCCM affinity names the account, then
+# Get-OwnerDisplayName names the person, with the SAM as the fallback.
 function Get-MachineOwner {
     param([string]$wsid, [string]$server)
     $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
@@ -243,7 +234,7 @@ function Get-MachineOwner {
             $out.error = "no primary user recorded for $wsid"
             return $out
         }
-        # Affinity can list several; the first is SCCM's own ordering, same as the Lens.
+        # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
         $unique = [string]$rows[0].UniqueUserName
         $out.sam = ($unique -split '\\')[-1]
     }
@@ -259,7 +250,7 @@ function Get-MachineOwner {
     return $out
 }
 
-# The whole machine list in one request - see .NOTES for why this is not fanned out.
+# The whole machine list in one request. See .NOTES for why it is not fanned out.
 function Resolve-MachineOwnerBatch {
     param([string[]]$wsids, [string]$server)
     $bundle = [ordered]@{ owners = @(); error = '' }
@@ -274,7 +265,7 @@ function Resolve-MachineOwnerBatch {
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
 function Resolve-Lens {
-    # "Lens" is singular; the rule misreads the trailing 's'.
+    # "Lens" is singular, and the rule misreads the trailing 's'.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '')]
     param([string]$identity, [string]$samHint, [string]$server, [string]$reqId)
     $bundle = [ordered]@{
@@ -282,8 +273,7 @@ function Resolve-Lens {
         devices = @(); errors = @()
     }
 
-    # Affinity starts immediately when the SAM is already trustworthy: the finder's
-    # hint, a DOMAIN\SAM identity, or a bare SAM. A UPN/display-name waits for AD.
+    # Affinity can start early only when the SAM is already trustworthy.
     $samGuess =
     if ($samHint) { $samHint }
     elseif ($identity -match '\\') { $identity.Split('\')[-1] }
@@ -297,8 +287,7 @@ function Resolve-Lens {
     # AD user (forest-wide GC -> home-domain bind).
     $sam = $samGuess
     $uFilter =
-    # objectCategory=person + objectClass=user is the canonical "users, not computers, not
-    # contacts" pair: objectClass=user alone also matches computers, which derive from it.
+    # objectClass=user alone also matches computers, which derive from it.
     if ($identity -match '@') { "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))" }
     elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
     else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
@@ -313,8 +302,7 @@ function Resolve-Lens {
         $bundle.email       = [string]$user.Properties['mail'][0]
         $mgrDn = [string]$user.Properties['manager'][0]
         if ($mgrDn) { $bundle.manager = Get-Cn $mgrDn }
-        # physicalDeliveryOfficeName duplicates the city/province here, so it is only a
-        # fallback when the street-address fields are empty.
+        # physicalDeliveryOfficeName duplicates the city and province here.
         $office = @()
         foreach ($k in 'streetaddress', 'l', 'st', 'postalcode') {
             $v = [string]$user.Properties[$k][0]; if ($v) { $office += $v }
@@ -332,7 +320,7 @@ function Resolve-Lens {
     # Partial 1: directory facts.
     Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 1
 
-    # UPN/display-name pick: the SAM only became known from the AD read - start now.
+    # On a UPN or display-name pick, the SAM only became known from the AD read.
     if (-not $affinityJob -and $sam -and $server) {
         try { $affinityJob = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $server, $sam } catch { $affinityJob = $null }
     }
@@ -359,7 +347,7 @@ function Resolve-Lens {
         finally {
             if ($affinityJob) { Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue }
         }
-        # name -> ResourceID pairs; the id feeds the hardware-inventory query.
+        # name -> ResourceID pairs, where the id feeds the hardware-inventory query.
         foreach ($row in @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam })) {
             $rn = [string]$row.ResourceName
             if ($rn -and -not $wsMap.Contains($rn)) { $wsMap[$rn] = [string]$row.ResourceID }
@@ -401,8 +389,7 @@ function Resolve-Lens {
                             Where-Object { $_ -match '^DC=' } |
                             ForEach-Object { $_.Substring(3) }) -join '.')
 
-                # OS + last domain logon (lastLogonTimestamp: replicated, up to ~14 days
-                # coarse - good enough for "which of these machines is current").
+                # lastLogonTimestamp is replicated, so it can be up to 14 days coarse.
                 $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
                 $cs.SearchScope = 'Base'
                 $cs.Filter = '(objectClass=*)'
@@ -426,8 +413,7 @@ function Resolve-Lens {
                 $keys = @($bl.FindAll())
                 if ($keys.Count -gt 0) {
                     $dev.bitLockerKeys = @($keys | ForEach-Object {
-                            # whenCreated marshals as a DateTime; normalize to ISO8601 UTC so the
-                            # DTO contract holds and newest-first selection is chronological.
+                            # ISO8601 UTC keeps the DTO contract and newest-first order.
                             $wc = $_.Properties['whencreated'][0]
                             $iso = ''
                             if ($wc -is [datetime]) {
@@ -458,7 +444,7 @@ function Resolve-Lens {
         $devices.Add($dev)
     }
 
-    # Merge the parallel hardware results; a failed source degrades to blank fields.
+    # Merges the parallel hardware results, where a failed source degrades to blanks.
     if ($hwPairs.Count -gt 0) {
         $hwRows = $null
         try {
@@ -466,8 +452,7 @@ function Resolve-Lens {
                 if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
                 else { throw 'timed out after 30s.' }
             }
-            # No job means it would not start; inline keeps the cards filled, the way the
-            # affinity read above already degrades, instead of blanking every model silently.
+            # No job means it would not start, and inline keeps the cards filled.
             else { $hwRows = & $script:HardwareScript $server $hwPairs }
         }
         catch { $bundle.errors += "SCCM hardware inventory: $($_.Exception.Message)" }
@@ -494,8 +479,7 @@ function Resolve-Lens {
     $bundle.devices = $devices.ToArray()
 
     $json = $bundle | ConvertTo-Json -Depth 6
-    # Only the agent has an exchange to write to. A de-elevated DONUT calls this in
-    # process and takes the return value, skipping the encrypted hand-off entirely.
+    # Only the agent has an exchange to write to. A de-elevated DONUT takes the return.
     if ($reqId -and $ExchangeDir) {
         Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $json
     }

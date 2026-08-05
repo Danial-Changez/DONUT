@@ -32,6 +32,9 @@ using module "..\..\Core\TimeFormat.psm1"
     HomePresenter still owns the reachability gate and the AsyncJob pump; it runs the
     probe here (RunInventoryProbe) once a host is online and routes the Inventory /
     DiskScan completions to CompleteInventory / CompleteDiskScan.
+
+    The report files in reports\ are the store for per-machine scan and probe data, so
+    config stays settings-only.
 #>
 class InventoryPresenter {
     [AppConfig]        $Config
@@ -42,21 +45,18 @@ class InventoryPresenter {
     [object]           $Toasts   # ToastService
     [object]           $Home     # duck-typed back-ref to HomePresenter's machine seams
 
-    # Detail-panel + overview controls. The header/overview values are selectable TextBoxes
-    # (SelectableText) so the operator can copy them; still binding-driven, no method reads them.
+    # Header and overview values are selectable TextBoxes so the operator can copy them.
     [Button] $DetailRefreshButton
     [ListBox] $DetailLog
-    # The collection the log ListBox renders; swapped whole on host switch / trim.
+    # The collection the log ListBox renders, swapped whole on host switch or trim.
     [object] $DetailLogItems
     [ProgressBar] $DetailProgress
     [Button] $FindFoldersButton
 
     [hashtable] $LogBuffers   # hostname -> List[LogLine] of accumulated job-log lines
-    # hostname(lower) -> DiskUsageReport, parsed once per session from the scan's CSV in
-    # reports\. The CSV is the persistent store; config carries no per-machine scan data.
+    # hostname(lower) -> DiskUsageReport, parsed once per session from the scan's CSV.
     hidden [hashtable] $DiskReports = @{}
-    # hostname(lower) -> MachineInventory, parsed once per session from the probe's JSON
-    # in reports\. Same pattern: the report file is the store, config stays settings-only.
+    # hostname(lower) -> MachineInventory, parsed once per session from the probe's JSON.
     hidden [hashtable] $Inventories = @{}
     [int] $MaxLogLines = 2000 # ring-buffer cap for the in-memory log + detail ListBox
     hidden [bool] $CascadingChecks = $false   # re-entrancy guard for the folder selection cascade
@@ -82,8 +82,7 @@ class InventoryPresenter {
         $this.LogBuffers = @{}
     }
 
-    # Adopts the detail-header + overview tile controls from the Home view. The detail
-    # log, progress bar, and probe buttons migrate with the probe lifecycle (stage 3).
+    # Adopts the detail-header and overview controls from the Home view.
     [void] Initialize([System.Windows.FrameworkElement] $view) {
 
         $this.DetailRefreshButton = $view.FindName('btnDetailRefresh')
@@ -96,7 +95,7 @@ class InventoryPresenter {
             $this.DetailRefreshButton.Add_Click({
                     $presenter.RefreshInventory($presenter.Home.SelectedHost) }.GetNewClosure())
         }
-        # Per-line rendering costs cross-line drag-selection; Copy replaces it.
+        # Per-line rendering costs cross-line drag-selection, so Copy replaces it.
         $copyLog = $view.FindName('btnCopyLog')
         if ($copyLog) {
             $copyLog.Add_Click({
@@ -112,8 +111,7 @@ class InventoryPresenter {
                     $presenter.DeleteSelectedFolders($presenter.Home.SelectedHost) }.GetNewClosure())
         }
 
-        # The folders TreeView keeps its own inner ScrollViewer, which marks the wheel handled so
-        # the outer scroller never moves; re-raise the wheel to the parent so it bubbles up.
+        # The TreeView's inner ScrollViewer eats the wheel, so re-raise it to the parent.
         $folders = $view.FindName('DiskFoldersList')
         if ($folders) {
             $folders.Add_PreviewMouseWheel({
@@ -153,14 +151,14 @@ class InventoryPresenter {
         else { $this.ClearSelection() }
     }
 
-    # Programmatic selection; the ListBox's SelectionChanged then opens the detail.
+    # Programmatic selection, so the ListBox's SelectionChanged opens the detail.
     [void] SelectMachine([string]$hostName) {
         $rowVm = $this.Home.GetRow($hostName)
         if ($rowVm -and $this.Home.MachineList) { $this.Home.MachineList.SelectedItem = $rowVm }
     }
 
-    # Opens the detail panel (single click): renders cached inventory/folders instantly,
-    # never touches the network - a fresh probe needs double-click or Refresh.
+    # Opens the detail panel (single click): renders cached inventory and folders instantly
+    # and never touches the network. A fresh probe needs double-click or Refresh.
     [void] SelectHost([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         $this.Home.SelectedHost = $hostName
@@ -171,12 +169,9 @@ class InventoryPresenter {
         $this.RenderHostLog($hostName)
 
         $this.PopulateDetailCards($hostName, $this.GetInventory($hostName))
-        # Fill the Available Updates card from the last scan's report on disk (if any), so a
-        # completed/cached scan shows without re-running. Read-only: selecting never re-scans.
+        # Read-only: a cached scan report paints the Updates card without re-running it.
         [void]$this.Home.RenderUpdatesFromReport($hostName)
-        # Folder data comes from the scan's CSV in reports\, memoized per session so a
-        # re-select re-applies the same instance (skipped by ApplyFolders, keeping the
-        # folder tree's expansion state).
+        # Memoized so a re-select re-applies the same instance, keeping the tree's expansion.
         $diskKey = $hostName.ToLowerInvariant()
         if (-not $this.DiskReports.ContainsKey($diskKey)) {
             $parsed = $this.DiskUsageService.ParseDiskUsage($hostName)
@@ -185,11 +180,10 @@ class InventoryPresenter {
         $rowVm = $this.Home.GetRow($hostName)
         if ($rowVm) { $rowVm.ApplyFolders($this.DiskReports[$diskKey]) }
 
-        # Reflect any known verdict now; the PrefetchIp above updates it when it lands.
+        # Reflect any known verdict now, since the PrefetchIp above updates it when it lands.
         $this.Home.RenderReachability($hostName)
 
-        # Gather, or queue behind the reachability verdict - selecting an unreachable
-        # machine must never open the freeze-prone connect.
+        # Queued behind the reachability verdict: an unreachable host must never be connected.
         $this.Home.StartInventory($hostName, $false)
     }
 
@@ -204,8 +198,8 @@ class InventoryPresenter {
         if ($vm) { $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName)) }
     }
 
-    # A failed probe used to vanish: the exception type dies at the runspace boundary, so
-    # re-derive the reason and flip offline-class rows; the next re-probe self-corrects.
+    # The exception type dies at the runspace boundary, so re-derive the reason from the
+    # message and flip offline-class rows. The next re-probe self-corrects.
     hidden [void] ReflectFailure([string]$hostName, [string]$failureMessage) {
         $reason = [RemoteFailure]::ReasonFromMessage($failureMessage)
         if ($reason -in @([RemoteFailureReason]::Offline, [RemoteFailureReason]::Unresolvable,
@@ -247,8 +241,8 @@ class InventoryPresenter {
         $this.AppendLogLines($hostName, @([LogLine]::Donut($severity, $text)))
     }
 
-    # A blank line between operations (e.g. a disk scan then an update scan); skipped while the
-    # host's log is still empty so a run never opens with a leading blank line.
+    # A blank line between operations, skipped while the host's log is still empty so a
+    # run never opens with a leading blank line.
     [void] AppendSeparator([string]$hostName) {
         if ($this.LogBuffers.ContainsKey($hostName) -and $this.LogBuffers[$hostName].Count -gt 0) {
             $this.AppendLogLines($hostName, @([LogLine]::Donut([LogSeverity]::Info, '')))
@@ -273,7 +267,7 @@ class InventoryPresenter {
 
         if ($hostName -eq $this.Home.SelectedHost -and $this.DetailLog) {
             if ($trimmed -or $null -eq $this.DetailLogItems) {
-                # Old lines were dropped - re-render the capped buffer once.
+                # Old lines were dropped, so re-render the capped buffer once.
                 $this.RenderHostLog($hostName)
             }
             else {
@@ -317,8 +311,8 @@ class InventoryPresenter {
         $this.LogBuffers.Remove($hostName)
     }
 
-    # The one driver of the terminal's progress bar for the selected host - ANY job
-    # (inventory, disk scan, scan, apply): a percentage when known, else indeterminate.
+    # The one driver of the selected host's progress bar for every job kind: a percentage
+    # when known, else indeterminate.
     [void] ShowJobProgress([string]$hostName, [bool]$running, [double]$percent, [bool]$indeterminate) {
         if ($hostName -ne $this.Home.SelectedHost -or -not $this.DetailProgress) { return }
         if (-not $running) {
@@ -336,8 +330,8 @@ class InventoryPresenter {
         $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
     }
 
-    # Runs the inventory probe for an online host (single-flight; non-forced calls skip
-    # hosts with fresh cached inventory). HomePresenter's gate confirms reachability.
+    # Runs the inventory probe for an online host (single-flight, and non-forced calls skip
+    # a fresh cached inventory). HomePresenter's gate confirms reachability.
     [void] RunInventoryProbe([string]$hostName, [bool]$force) {
         foreach ($j in $this.Home.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and
@@ -378,7 +372,7 @@ class InventoryPresenter {
     # Inventory job finished: parse + memoize + repopulate the detail cards.
     [void] CompleteInventory([AsyncJob]$job) {
         $hostName = $job.HostName
-        # The card may have been cleared mid-probe; nothing is left to paint - drop it.
+        # The card may have been cleared mid-probe, leaving nothing to paint.
         if (-not $this.Home.Rows.ContainsKey($hostName)) { return }
         $this.ShowJobProgress($hostName, $false, 0, $false)
 
@@ -406,14 +400,14 @@ class InventoryPresenter {
         foreach ($h in $hosts) { $this.FindBigFolders($h) }
     }
 
-    # Queues the on-demand "biggest folders on C:" scan (single-flight). Heavy - it
-    # deploys and runs WizTree - so it only runs from the button.
+    # Queues the on-demand "biggest folders on C:" scan (single-flight). It deploys and
+    # runs WizTree, so it is button-only rather than automatic.
     [void] FindBigFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
         if (-not $this.Home.RequireElevation([GatedAction]::DiskScan, @($hostName), 'A storage scan')) { return }
         foreach ($j in $this.Home.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
-                # A silently ignored click reads as a dead button - say so instead.
+                # A silently ignored click reads as a dead button, so say so instead.
                 $this.AppendLog($hostName, "A storage scan is already running for $hostName - wait for it to finish (or time out).")
                 return
             }
@@ -458,33 +452,32 @@ class InventoryPresenter {
 
         $this.DiskReports[$hostName.ToLowerInvariant()] = $report
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found $($report.Folders.Count) largest folders on C:.") }
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found the $($report.Folders.Count) largest folders on C:.") }
 
         # Apply regardless of selection: shows now if selected, ready if selected later.
         $row = $this.Home.GetRow($hostName)
         if ($row) { $row.ApplyFolders($report) }
     }
 
-    # Deletes the folders the operator checked in the tree (destructive - confirmed first). Only
-    # deletable rows carry a checkbox and the worker re-checks each path; re-scans on completion.
+    # Deletes the folders the operator checked in the tree. Destructive, so it confirms first,
+    # only deletable rows carry a checkbox, and the worker re-checks every path.
     [void] DeleteSelectedFolders([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-        # Not resumed after elevating (PendingIntent.IsResumable): the folder selection
-        # lives in this window and would have to be guessed, so the user re-picks.
+        # Not resumed after elevating: the folder selection lives here, so the user re-picks.
         if (-not $this.Home.RequireElevation([GatedAction]::DeleteFolders, @($hostName), 'Clearing folders')) { return }
         $row = $this.Home.GetRow($hostName)
         if ($null -eq $row) { return }
         $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))
         if ($selected.Count -eq 0) {
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check one or more folders to clear first.") }
+            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check at least one folder to clear.") }
             return
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
         $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
-            "Clear folder contents on $hostName",
-            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}? The folders are kept. This runs as SYSTEM and cannot be undone.",
+            "Clear Folder Contents on $hostName",
+            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}. The folders are kept. Runs as SYSTEM and cannot be undone.",
             $list, 'Clear', $true)
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
@@ -505,7 +498,7 @@ class InventoryPresenter {
         catch {
             $this.AppendLog($hostName, "Clear could not start: $_")
             $this.Logger.LogException("Folder clear failed to start for $hostName", $_)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start clearing folders.") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start the clear.") }
             $this.ShowJobProgress($hostName, $false, 0, $false)
         }
     }
@@ -517,13 +510,13 @@ class InventoryPresenter {
         if ($job.Status -eq 'Failed') {
             $this.AppendLog($hostName, "Clear failed.")
             $this.ReflectFailure($hostName, $job.FailureMessage)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clearing folders failed. Open the log for details.") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Clear failed. Open the log for details.") }
             return
         }
         $count = 0
         if ($job.Result -and $job.Result.Deleted) { $count = [int]$job.Result.Deleted }
         $this.AppendLog($hostName, "Cleared $count folder(s). Re-scanning...")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s) on $hostName.") }
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s).") }
         $this.FindBigFolders($hostName)
     }
 }

@@ -16,7 +16,7 @@ The first time the window opens, a short **guided tour** walks the essentials â€
 search bar, the Scan/Apply mode toggle, the machine list, the detail pane, and
 Settings. One idea per step:
 
-- **Esc** exits at any point; **Skip tour** is offered on the welcome step.
+- **Esc** exits at any point; **Skip Tour** is offered on the welcome step.
 - Replay it anytime with the **`?`** button in the title bar; the **book** button beside it
   opens this documentation in your browser.
 - It only auto-runs once (tracked by the `hasSeenTour` config key).

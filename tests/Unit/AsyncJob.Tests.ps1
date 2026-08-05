@@ -8,14 +8,12 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "AsyncJob" {
 
     BeforeAll {
-        # Create a simple test script for async execution
         $script:testScriptDir = Join-Path $env:TEMP "DonutAsyncJobTests"
         if (-not (Test-Path $script:testScriptDir)) {
             New-Item -Path $script:testScriptDir -ItemType Directory -Force | Out-Null
         }
         
-        # Stubs speak AsyncJob's child-process protocol: read args from -ArgsFile,
-        # write the result to -ResultFile, exit non-zero + clean stderr on failure.
+        # Stubs follow AsyncJob's child protocol: -ArgsFile in, -ResultFile out, non-zero to fail.
         $script:simpleScript = Join-Path $script:testScriptDir "SimpleScript.ps1"
         @'
 param([string]$ArgsFile, [string]$ResultFile)
@@ -23,7 +21,6 @@ $a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json
 @{ Success = $true; Value = $a.Input } | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:simpleScript
 
-        # Script that takes time
         $script:slowScript = Join-Path $script:testScriptDir "SlowScript.ps1"
         @'
 param([string]$ArgsFile, [string]$ResultFile)
@@ -33,7 +30,6 @@ Start-Sleep -Milliseconds $d
 @{ Completed = $true } | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:slowScript
 
-        # Script that fails (non-zero exit + clean stderr, like RemoteWorker)
         $script:errorScript = Join-Path $script:testScriptDir "ErrorScript.ps1"
         @'
 param([string]$ArgsFile, [string]$ResultFile)
@@ -42,7 +38,6 @@ $a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json
 exit 1
 '@ | Set-Content -Path $script:errorScript
         
-        # Initialize RunspaceManager for tests
         [RunspaceManager]::Initialize(1, 5)
     }
 
@@ -66,8 +61,7 @@ exit 1
         It "Should initialize Logs as a ConcurrentQueue" {
             $job = [AsyncJob]::new("TestHost", "UpdateApply")
             
-            # The Logs property should be initialized
-            # Note: Due to module loading order, we check it exists and can be used
+            # Module loading order rules out a type check, so only existence is asserted.
             $null -ne $job.Logs | Should -Be $true
         }
 
@@ -90,7 +84,6 @@ exit 1
             
             $job.Status | Should -Be "Running"
             
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -102,7 +95,6 @@ exit 1
             
             $job.TempConfigPath | Should -Be $tempConfig
             
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -113,7 +105,6 @@ exit 1
             
             $job.AsyncResult | Should -Not -BeNullOrEmpty
             
-            # Cleanup
             $job.Cleanup()
         }
     }
@@ -122,7 +113,6 @@ exit 1
         It "Should do nothing if status is not Running" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             
-            # Poll before start - should not throw
             { $job.Poll() } | Should -Not -Throw
             $job.Status | Should -Be "Created"
         }
@@ -131,7 +121,6 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "hello" }, "")
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -140,7 +129,6 @@ exit 1
             
             $job.Status | Should -Be "Completed"
             
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -148,7 +136,6 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "testvalue" }, "")
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -157,7 +144,6 @@ exit 1
             
             $job.Result | Should -Not -BeNullOrEmpty
             
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -165,7 +151,6 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:errorScript, @{ Message = "Test error" }, "")
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -174,7 +159,6 @@ exit 1
             
             $job.Status | Should -Be "Failed"
             
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -182,7 +166,6 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:errorScript, @{ Message = "Captured error" }, "")
 
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -191,7 +174,6 @@ exit 1
 
             $job.Logs.Count | Should -BeGreaterThan 0
 
-            # Cleanup
             $job.Cleanup()
         }
 
@@ -205,8 +187,7 @@ exit 1
                 Start-Sleep -Milliseconds 50
             }
 
-            # The failure line is severity-typed; the old "Error: " text prefix is
-            # gone (the [Error] tag renders from LogLine.Tag instead).
+            # The failure line is severity-typed now, so the old "Error: " prefix is gone.
             $found = $null
             $line = $null
             while ($job.Logs.TryDequeue([ref]$line)) {
@@ -228,7 +209,6 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "test" }, "")
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -242,12 +222,10 @@ exit 1
             $job = [AsyncJob]::new("TestHost", "Scan")
             $tempConfig = Join-Path $script:testScriptDir "temp_config_cleanup.json"
             
-            # Create the temp file
             "{}" | Set-Content -Path $tempConfig
             
             $job.Start($script:simpleScript, @{ Input = "test" }, $tempConfig)
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -262,7 +240,6 @@ exit 1
         It "Should handle cleanup when PowerShell is null" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             
-            # Cleanup without ever starting
             { $job.Cleanup() } | Should -Not -Throw
         }
     }
@@ -302,9 +279,7 @@ exit 1
 
     Context "Stall heartbeat" {
         It "warns with the pool state when a running job crosses the threshold, then re-arms" {
-            # The recurring field failure is a job that logs "Started X job." and then
-            # nothing, with no way to tell queued-behind-a-starved-pool from a wedged
-            # worker. The heartbeat is the log evidence for that gap.
+            # The log otherwise cannot tell a starved pool from a wedged worker on a silent job.
             $logger = [CapturingLogService]::new()
             $job = [AsyncJob]::new("SlowHost", "Scan", $logger)
             $job.Start($script:slowScript, @{ DelayMs = 4000 }, $null)
@@ -362,8 +337,7 @@ exit 1
             $logger = [CapturingLogService]::new()
             $job = [AsyncJob]::new("BusyHost", "Scan", $logger)
 
-            # 0 idle runspaces (the work is running) + plenty of free workers: this is
-            # the scan case (pool 7/8 free -> 1 busy), not starvation.
+            # 0 idle runspaces with plenty of free workers is the scan case, not starvation.
             $job.HealThreadPoolIfStarved(0, 8)
             $logger.Contains("raised ThreadPool floor") | Should -BeFalse
             [AsyncJob]::ThreadPoolHealed | Should -BeFalse

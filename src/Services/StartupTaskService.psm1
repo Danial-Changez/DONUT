@@ -48,7 +48,7 @@ class StartupTaskService {
     [LogService] $Logger
     [object] $Toast        # ToastService, duck-typed and optional (null in headless runs)
     [string] $SourceRoot
-    [string] $LastFailure  # why the last Apply returned $false, for the caller's toast
+    [string] $LastFailure  # Why the last Apply returned $false, for the caller's toast
 
     StartupTaskService([LogService]$logger, [object]$toast, [string]$sourceRoot) {
         $this.Logger = $logger
@@ -66,8 +66,8 @@ class StartupTaskService {
         return @{ User = $this.GetInteractiveUser() }
     }
 
-    # Pure: the task action for the current host - a pwsh.exe host (dev) re-launches the
-    # script with -Tray, any other exe is the launcher and takes --tray. Paths quoted.
+    # Pure: the task action for the current host. A pwsh.exe host (dev) re-launches the
+    # script with -Tray, and any other exe is the launcher and takes --tray.
     [hashtable] BuildLaunchSpec([string]$processPath, [string]$sourceRoot) {
         $leaf = Split-Path $processPath -Leaf
         if ($leaf -ieq 'pwsh.exe') {
@@ -78,8 +78,7 @@ class StartupTaskService {
                 WorkingDirectory = $sourceRoot
             }
         }
-        # Without one Task Scheduler starts DONUT in %windir%\system32, which is neither
-        # where it was launched from nor anywhere it should resolve a relative path.
+        # Without one, Task Scheduler starts DONUT in %windir%\system32.
         return @{
             Execute          = $processPath
             Argument         = '--tray'
@@ -87,7 +86,7 @@ class StartupTaskService {
         }
     }
 
-    # Pure: what Apply should do - 'Register' (wanted, absent), 'Reregister' (wanted, app
+    # Pure: what Apply should do. 'Register' (wanted, absent), 'Reregister' (wanted, app
     # moved), 'Unregister' (unwanted, present), or 'NoOp'.
     [string] ReconcileDecision([bool]$enabled, [object]$existingTask, [hashtable]$spec) {
         if ($enabled) {
@@ -113,13 +112,12 @@ class StartupTaskService {
     }
 
     # Thin shell: reconcile the desired state against the installed task and apply it.
-    # Returns $true on success/no-op; a failure logs+toasts the real reason, $false.
+    # Returns $true on success or no-op. A failure logs and toasts the real reason.
     [bool] Apply([bool]$enabled) {
         $this.LastFailure = ''
         try {
             $owner = $this.ResolveOwner()
-            # Both values decide whether the task fires at all; log them so one that never
-            # does is diagnosable from Donut.log alone.
+            # Both values decide whether the task fires, so a dead task stays diagnosable.
             $this.Logger.LogInfo(("Startup task: runs-as '{0}', signed-in console user '{1}'." -f
                     $this.GetProcessIdentity().Name, $owner.User))
             if (-not $owner.User) {
@@ -149,7 +147,7 @@ class StartupTaskService {
         $this.LastFailure = $reason
         $this.Logger.LogError("Startup task update failed: $reason")
         if ($this.Toast) {
-            $this.Toast.ShowError('Startup task', "Could not update the startup task - $reason")
+            $this.Toast.ShowError('Startup Task', "Could not update the startup task: $reason")
         }
         return $false
     }
@@ -166,8 +164,8 @@ class StartupTaskService {
         }
     }
 
-    # Who is signed in to the desktop DONUT shows on - never who DONUT runs as. The
-    # session's explorer.exe owner answers; Win32_ComputerSystem covers session 0.
+    # Who is signed in to the desktop DONUT shows on, never who DONUT runs as. The
+    # session's explorer.exe owner answers, and Win32_ComputerSystem covers session 0.
     hidden [string] GetInteractiveUser() {
         $session = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
         $owner = $this.GetSessionOwner($session)
@@ -200,7 +198,7 @@ class StartupTaskService {
     }
 
     # One lane: the console user's own logon, as that user. RunLevel Highest so an admin
-    # console account starts elevated with no logon-time UAC prompt - see .NOTES.
+    # console account starts elevated with no logon-time UAC prompt. See .NOTES.
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
         $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument `
             -WorkingDirectory $spec.WorkingDirectory
@@ -208,8 +206,7 @@ class StartupTaskService {
         $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
             -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-        # -ErrorAction Stop: an access-denied register is non-terminating by default and
-        # would slip past Apply's try/catch (false success, no toast).
+        # An access-denied register is non-terminating and would slip past Apply's catch.
         Register-ScheduledTask -TaskName $name -Action $action `
             -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
         $this.Logger.LogInfo("Registered startup task $name, triggered by $triggerUser's logon.")
@@ -220,8 +217,8 @@ class StartupTaskService {
         $this.Logger.LogInfo("Unregistered startup task $name.")
     }
 
-    # Drops DONUT-* tasks left under a previous owner's name. Scoped hard: never
-    # DONUT-LensAgent (PersonLensService owns it), only actions launching this install.
+    # Drops DONUT-* tasks left under a previous owner's name. Never DONUT-LensAgent,
+    # which PersonLensService owns, and only actions that launch this install.
     hidden [void] RemoveStaleTasks([string]$keepName) {
         $exe = [Environment]::ProcessPath
         foreach ($task in @(Get-ScheduledTask -TaskName 'DONUT-*' -ErrorAction SilentlyContinue)) {

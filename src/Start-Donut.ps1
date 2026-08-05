@@ -7,6 +7,16 @@
     needs at runtime, then dot-sources DonutApp.ps1, which builds the config,
     logger and runspace pool and shows the main window.
 
+.PARAMETER Tray
+    Start hidden in the system tray instead of showing the main window.
+
+.PARAMETER DebugLog
+    Force verbose logging for this session only, without touching the setting.
+
+.PARAMETER AwaitPid
+    Wait out the instance being replaced before starting (the launcher's
+    --await-pid twin, used by the elevation relaunch).
+
 .NOTES
     Hosted by Donut.Launcher.exe in production. Must run under PowerShell 7+ in
     STA; Windows PowerShell 5.1 fails to load the XAML. The guard below covers
@@ -19,12 +29,9 @@
     and logs whatever account it runs as.
 #>
 
-# -Tray starts hidden in the tray; -DebugLog forces verbose logging for this session
-# only; -AwaitPid waits out the instance being replaced (launcher's --await-pid twin).
 param([switch]$Tray, [switch]$DebugLog, [int]$AwaitPid = 0)
 
-# WPF needs pwsh 7+ on an STA thread (see .NOTES); relaunch under pwsh -Sta
-# instead of failing later in the XAML load.
+# WPF needs pwsh 7+ on an STA thread, so relaunch rather than fail in the XAML load.
 if ($PSVersionTable.PSVersion.Major -lt 7 -or
     [System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
     $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -41,15 +48,13 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -or
     exit $LASTEXITCODE
 }
 
-# An elevation relaunch must outlive the instance it replaces before taking the mutex
-# below: that mutex is Local\-scoped, so per-session and not per-token.
+# The mutex below is Local\-scoped, so per-session and not per-token.
 if ($AwaitPid -gt 0) {
     $predecessor = Get-Process -Id $AwaitPid -ErrorAction SilentlyContinue
     if ($predecessor) { $predecessor | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue }
 }
 
-# Single instance (dev path only; the launcher owns it in prod via the injected
-# $global:SingleInstanceOwned). Acquired below the guard so its parent can't clash.
+# Dev path only, and acquired below the guard so the relaunching parent cannot clash.
 if (-not $global:SingleInstanceOwned) {
     $createdNew = $false
     $global:DonutInstanceMutex = [System.Threading.Mutex]::new(
@@ -83,19 +88,16 @@ function Get-RuntimeAssemblyPath([string]$SimpleName) {
     return $asm.Location
 }
 
-# All assembly loads, helper compiles, and the graph dot-source run behind this
-# handler: load/compile/parse failures die silently otherwise - crash-log them.
+# Load, compile, and parse failures die silently otherwise, so crash-log them.
 try {
-    # Load the WPF set explicitly (they load lazily) so Get-RuntimeAssemblyPath can
-    # resolve real runtime paths before the graph dot-sources.
+    # They load lazily, so Get-RuntimeAssemblyPath needs them resolved first.
     Add-Type -AssemblyName PresentationFramework
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Security
 
-    # Dev-path C# helpers: each file guarded by its own type and compiled alone -
-    # a shared guard once skipped a missing helper and killed the graph parse.
+    # One guard per file: a shared guard once skipped a helper and killed the parse.
     $refs = @(
         Get-RuntimeAssemblyPath 'System.ObjectModel'
         Get-RuntimeAssemblyPath 'WindowsBase'
@@ -111,22 +113,19 @@ try {
         Add-Type -Path "$PSScriptRoot\Launcher\WindowChromeHelper.cs" -ReferencedAssemblies $refs
     }
 
-    # QR helper (Donut.Qr.QrCode): wraps bundled QRCoder (MIT) for the BitLocker QR overlay.
-    # Prod compiles it into Donut.Launcher (guard skips); the dev path loads + compiles it here.
+    # Prod compiles this into Donut.Launcher, and the dev path compiles it here.
     if (-not ('Donut.Qr.QrCode' -as [type])) {
         $qrDll = Join-Path $PSScriptRoot 'Lib\QRCoder.dll'
         if (Test-Path $qrDll) {
             Add-Type -Path $qrDll
-            # System.Drawing.Primitives: GetGraphic's Color overloads need it to resolve;
-            # nowarn 1701/1702: QRCoder targets .NET 6, Add-Type escalates the mismatch.
+            # Primitives resolves the Color overloads, and nowarn covers QRCoder's .NET 6.
             Add-Type -Path "$PSScriptRoot\Launcher\QrCode.cs" `
                 -ReferencedAssemblies @($qrDll, 'System.Drawing.Primitives') `
                 -CompilerOptions '/nowarn:1701,1702'
         }
     }
 
-    # Global-hotkey interop (Donut.Interop.HotkeyManager): a RegisterHotKey wrapper. Prod
-    # compiles it into Donut.Launcher (guard skips); the dev path compiles it here.
+    # A RegisterHotKey wrapper. Prod compiles it into Donut.Launcher, the dev path here.
     if (-not ('Donut.Interop.HotkeyManager' -as [type])) {
         # Same version-safe resolution as the MVVM block above.
         $refs = @(
@@ -136,13 +135,10 @@ try {
         Add-Type -Path "$PSScriptRoot\Launcher\HotkeyManager.cs" -ReferencedAssemblies $refs
     }
 
-    # Tray-menu theming (Donut.Interop.TrayTheme): the app palette for the one WinForms
-    # surface WPF styles can't reach. Prod compiles it into Donut.Launcher (guard skips).
+    # The one WinForms surface WPF styles cannot reach. Prod compiles it into the launcher.
     if (-not ('Donut.Interop.TrayTheme' -as [type])) {
         Add-Type -AssemblyName System.Windows.Forms
-        # Facades load lazily; touch one type from each so the path resolution below
-        # can see them. CancelEventArgs/Handler live in different facades - the menu
-        # Opening hook needs both.
+        # Facades load lazily, so touch one type from each for the path resolution below.
         [void][System.Drawing.Color]
         [void][System.ComponentModel.CancelEventArgs]
         [void][System.ComponentModel.CancelEventHandler]
@@ -160,14 +156,12 @@ try {
     . "$PSScriptRoot\Scripts\DonutApp.ps1"
 }
 catch {
-    # Snapshot the error + host details up front (labels kept short so the record
-    # lines stay within the column limit).
+    # Snapshot the error and host details before anything else can overwrite $_.
     $errMsg = $_.Exception.Message
     $ps = $PSVersionTable.PSVersion
     $apartment = [System.Threading.Thread]::CurrentThread.GetApartmentState()
 
-    # The data root spelled out rather than via DonutPaths: this runs when the module
-    # graph may have failed to load, which is exactly what it is here to record.
+    # Spelled out rather than via DonutPaths: the module graph may have failed to load.
     $crashDir = Join-Path $env:ProgramData 'DONUT\data\logs'
     try {
         if (-not (Test-Path $crashDir)) {
@@ -190,11 +184,9 @@ catch {
     ) -join [Environment]::NewLine
     try { Add-Content -Path $crashFile -Value $record -Encoding UTF8 } catch { }
 
-    # Console output (visible when launched from a terminal).
     Write-Error "DONUT failed to start: $errMsg`nCrash log: $crashFile"
 
-    # GUI output (visible when launched from Explorer); skip the modal on the
-    # unattended tray/autostart path so a headless failure can't hang on a dialog.
+    # Skip the modal on the unattended tray path so a headless failure cannot hang.
     if (-not $Tray) {
         try {
             [System.Windows.Forms.MessageBox]::Show(

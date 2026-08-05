@@ -15,9 +15,8 @@
     <ColumnDefinition Width="Auto" />
   </Grid.ColumnDefinitions>
 
-  <!-- Add / run input: type or paste WSIDs (comma- or space-separated), Enter to add.
-       One Arcane input surface - the bar carries the fill + focus ring; the icon and
-       the transparent single-line field sit on it. Down/Up drive the finder dropdown. -->
+  <!-- One input surface: the border carries the fill and focus ring so the icon and the
+       transparent field read as a single control. Down and Up drive the finder dropdown. -->
   <Border
     x:Name="SearchBox"
     Grid.Column="0"
@@ -68,7 +67,7 @@
     </Grid>
   </Border>
 
-  <!-- Live AD finder dropdown: computers (type-ahead for scan/run) + users (UPN, unlock when locked) -->
+  <!-- Live AD finder: computers to scan or run, users to unlock or reset. -->
   <Popup x:Name="SearchResultsPopup"
          Grid.Column="0"
          PlacementTarget="{Binding ElementName=SearchBox}"
@@ -84,11 +83,9 @@
             Margin="0,4,0,0"
             Padding="6"
             SnapsToDevicePixels="True">
-      <!-- One flat list of SearchRowViewModels: section headers and result rows share
-           the template, switched by IsHeader. A ListBox (not ItemsControl) so Down/Up
-           from the search bar can drive SelectedIndex; selection highlights the row. -->
-      <!-- CanContentScroll off = pixel scrolling: item scrolling leaves a dead band under
-           the last row (viewport rounds to whole items), read as phantom padding. -->
+      <!-- Pixel scrolling: item scrolling leaves a dead band under the last row. -->
+      <!-- Headers and result rows share one template, switched by IsHeader. A ListBox, not
+           an ItemsControl, so Down and Up from the search bar can drive SelectedIndex. -->
       <ListBox x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}"
                Background="Transparent" BorderThickness="0" MaxHeight="340"
                ItemContainerStyle="{DynamicResource MachineListItem}"
@@ -98,7 +95,6 @@
         <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid>
-                <!-- Section header ("COMPUTERS" / "USERS") -->
                 <TextBlock Text="{Binding HeaderText}" FontFamily="{DynamicResource FontSans}" FontSize="10"
                            FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}"
                            Margin="6,6,0,4">
@@ -113,8 +109,7 @@
                     </Style>
                   </TextBlock.Style>
                 </TextBlock>
-                <!-- Result row: click or Enter picks (computers go straight onto the machine
-                     pane, users open the Lens); keyboard highlight mirrors hover. -->
+                <!-- Picking a row adds a computer to the machine pane, or opens a user's Lens. -->
                 <Border CornerRadius="7" Padding="10,6,8,6" Margin="0,0,0,2">
                   <Border.Style>
                     <Style TargetType="Border">
@@ -129,7 +124,7 @@
                         <Trigger Property="IsMouseOver" Value="True">
                           <Setter Property="Background" Value="{DynamicResource PanelBackgroundHover}" />
                         </Trigger>
-                        <!-- Keyboard-selected row = what Enter will do; violet so it reads at a glance. -->
+                        <!-- The selected row is what Enter will do, so it earns the violet tint. -->
                         <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                           <Setter Property="Background" Value="{DynamicResource RowSelected}" />
                           <Setter Property="BorderBrush" Value="{DynamicResource TintVioletBorder}" />
@@ -138,7 +133,7 @@
                     </Style>
                   </Border.Style>
                   <Border.InputBindings>
-                    <!-- Null for user rows: the gesture is simply ignored. -->
+                    <!-- PickCommand is null on user rows, so the click is simply ignored. -->
                     <MouseBinding MouseAction="LeftClick" Command="{Binding PickCommand}" />
                   </Border.InputBindings>
                   <Grid>
@@ -155,19 +150,16 @@
                                  Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
                                  TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                     </StackPanel>
-                    <!-- Grey utility (one tint per row - Unlock keeps it when shown):
-                         opens the shell's temp-password reset overlay. -->
+                    <!-- Grey stays neutral so Unlock keeps the row's one tint. -->
                     <Button Grid.Column="1" Content="Reset..." Command="{Binding ResetCommand}"
                             Style="{DynamicResource ButtonSecondary}" Height="32" FontSize="11"
                             VerticalAlignment="Center" Margin="0,0,6,0"
                             ToolTip="Set a temporary password"
                             Visibility="{Binding CanReset, Converter={StaticResource BoolToVis}}" />
-                    <!-- The row's one action earns the tint (colour hierarchy); Outline is
-                         reserved for low-emphasis navigation (tour Back). -->
+                    <!-- The row's one action earns the tint, so Outline stays for low-emphasis nav. -->
                     <Button Grid.Column="2" Content="Unlock" Command="{Binding UnlockCommand}"
                             Style="{DynamicResource ButtonTintPrimary}" Height="32" FontSize="11"
                             VerticalAlignment="Center"
-                            ToolTip="Unlock this account"
                             Visibility="{Binding CanUnlock, Converter={StaticResource BoolToVis}}" />
                   </Grid>
                 </Border>
@@ -178,7 +170,7 @@
     </Border>
   </Popup>
 
-  <!-- Quick mode cycle: click to switch the active command, using its defaults -->
+  <!-- The pill shows the active command, and clicking it switches to the other one. -->
   <Button
     x:Name="btnMode"
     Grid.Column="1"
@@ -187,7 +179,7 @@
     Height="32"
     Margin="12,0,0,0"
     Style="{DynamicResource ButtonPill}"
-    ToolTip="Cycle Scan / Apply"
+    ToolTip="Switch between Scan and Apply"
   >
     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
       <TextBlock Text="&#x27F3;" FontFamily="{DynamicResource FontSymbol}" FontSize="13"
@@ -197,11 +189,11 @@
     </StackPanel>
   </Button>
 
-  <!-- Run all idle machines using the active mode (Scan / Apply Updates) -->
+  <!-- Runs every machine that is not already running, in the active mode. -->
   <Button
     x:Name="btnRunAll"
     Grid.Column="2"
-    Content="Run all"
+    Content="Run All"
     Style="{DynamicResource ButtonTintSuccess}"
     Width="100"
     Height="32"

@@ -7,7 +7,7 @@ Describe "FolderDeletionPolicy" {
             [FolderDeletionPolicy]::IsDeletable('C:\Users\john\Downloads') | Should -BeTrue
             [FolderDeletionPolicy]::IsDeletable('C:\Users\john') | Should -BeTrue
             [FolderDeletionPolicy]::IsDeletable('C:\Intel\Logs') | Should -BeTrue
-            [FolderDeletionPolicy]::IsDeletable('C:\temp\') | Should -BeTrue   # trailing slash
+            [FolderDeletionPolicy]::IsDeletable('C:\temp\') | Should -BeTrue   # Trailing slash.
         }
 
         It "blocks the volume root and blank/null paths" {
@@ -42,9 +42,9 @@ Describe "FolderDeletionPolicy" {
             [FolderDeletionPolicy]::IsDeletable('C:\Windows\Temp') | Should -BeTrue
             [FolderDeletionPolicy]::IsDeletable('C:\Windows\SoftwareDistribution\Download') | Should -BeTrue
             [FolderDeletionPolicy]::IsDeletable('C:\Windows\Prefetch') | Should -BeTrue
-            # A prefix collision must NOT slip through (ccmcache2 is not ccmcache).
+            # A prefix collision must not slip through, ccmcache2 is not ccmcache.
             [FolderDeletionPolicy]::IsDeletable('C:\Windows\ccmcache2') | Should -BeFalse
-            # The whole SoftwareDistribution (WU state) stays protected - only Download is safe.
+            # The whole SoftwareDistribution is Windows Update state, so only Download is safe.
             [FolderDeletionPolicy]::IsDeletable('C:\Windows\SoftwareDistribution') | Should -BeFalse
         }
 
@@ -73,7 +73,7 @@ Describe "FolderDeletionPolicy" {
         It "still resolves harmless traversal to the folder it actually names" {
             [FolderDeletionPolicy]::IsDeletable('C:\temp\.\sub') | Should -BeTrue
             [FolderDeletionPolicy]::IsDeletable('C:\foo\..\temp') | Should -BeTrue
-            # Canonicalizing INTO an allowed cache is a real allow, not a bypass.
+            # Canonicalizing into an allowed cache is a real allow, not a bypass.
             [FolderDeletionPolicy]::IsDeletable('C:\temp\..\Windows\ccmcache') | Should -BeTrue
         }
     }

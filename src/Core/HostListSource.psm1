@@ -22,8 +22,7 @@ class HostListSource {
         $this.SourceRoot = $sourceRoot
     }
 
-    # Candidate WSID.txt locations, in priority order: the machine-wide config copy
-    # under the data root, then the repo's res\WSID.txt (sibling of SourceRoot).
+    # In priority order: the machine-wide config copy, then the repo's res\WSID.txt.
     [string[]] CandidatePaths() {
         return @(
             (Join-Path ([DonutPaths]::ConfigDir()) "WSID.txt"),
@@ -31,7 +30,6 @@ class HostListSource {
         )
     }
 
-    # Returns the first candidate path that exists, or $null when none do.
     [string] ResolvePath() {
         foreach ($candidate in $this.CandidatePaths()) {
             if ($this.PathExists($candidate)) { return $candidate }
@@ -39,8 +37,7 @@ class HostListSource {
         return $null
     }
 
-    # Returns the trimmed, blank-free list of host names from the first available
-    # WSID.txt, or an empty array when no file exists or the read fails.
+    # Trimmed and blank-free, or an empty array when no file exists or the read fails.
     [string[]] ReadHosts() {
         $path = $this.ResolvePath()
         if (-not $path) { return @() }

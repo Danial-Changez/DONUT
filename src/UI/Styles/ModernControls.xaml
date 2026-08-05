@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Embedded search input: fully transparent - the composed search bar (HomeView's
-         SearchBox border) carries the fill and focus ring, so icon, text, and button
-         read as one Arcane input surface instead of nested boxes. -->
+    <!-- Transparent because HomeView's SearchBox border carries the fill and focus ring. -->
     <Style x:Key="GoogleSearchBar"
            TargetType="TextBox">
         <Setter Property="Background"
@@ -33,8 +31,7 @@
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="0"
                                       VerticalAlignment="Center" />
-                        <!-- Placeholder watermark: conveys both modes of the bar (add
-                             machines vs. search a person/PC) for a first-time user. -->
+                        <!-- The watermark names both modes of the bar for a first-time user. -->
                         <TextBlock x:Name="Placeholder"
                                    Text="WSID to add  ·  or search a name"
                                    Foreground="{DynamicResource BodyTextPrimary}"
@@ -79,7 +76,6 @@
         <Setter Property="Focusable"
                 Value="True" />
     </Style>
-    <!-- implicit style for all TextBox controls -->
     <Style TargetType="TextBox">
         <Setter Property="Background"
                 Value="Transparent" />
@@ -106,10 +102,7 @@
         <Setter Property="Focusable"
                 Value="True" />
     </Style>
-    <!-- Reads like a TextBlock but lets the user select + copy the text. Keyed (not
-         implicit), so it fully replaces the implicit TextBox style above: used for the
-         machine-detail values (host, IP, service tag, disk, folder rows). Font + colour
-         come from each instance; no ellipsis (TextBox has none) so long values clip. -->
+    <!-- A TextBox so detail values can be copied. No ellipsis, so long values clip. -->
     <Style x:Key="SelectableText"
            TargetType="TextBox">
         <Setter Property="IsReadOnly"
@@ -139,8 +132,7 @@
         <Setter Property="VerticalScrollBarVisibility"
                 Value="Hidden" />
     </Style>
-    <!-- Chrome-less list item (machine list + finder dropdown): strips the default
-         ListBoxItem selection visuals; the row templates draw their own via triggers. -->
+    <!-- Strips the default selection visuals, the row templates draw their own. -->
     <Style x:Key="MachineListItem"
            TargetType="ListBoxItem">
         <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
@@ -156,8 +148,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Modern TextBox: Arcane boxed input - white@12% fill, rounded-lg, no border
-         until focus paints the primary ring. -->
     <Style x:Key="ModernTextBox"
            TargetType="TextBox">
         <Setter Property="Background"
@@ -176,13 +166,12 @@
                 Value="1" />
         <Setter Property="Height"
                 Value="32" />
-        <!-- One space of inset, not a gutter - review called the old 10 too airy. -->
+        <!-- One space of inset, not a gutter. The old 10 read too airy. -->
         <Setter Property="Padding"
                 Value="4,0" />
         <Setter Property="Margin"
                 Value="0,0,0,8" />
-        <!-- Stretch so a width-less field fills its card instead of collapsing to
-             content width (~1 char); fields with an explicit Width keep it. -->
+        <!-- Stretch so a width-less field fills its card instead of collapsing. -->
         <Setter Property="HorizontalAlignment"
                 Value="Stretch" />
         <Setter Property="VerticalContentAlignment"
@@ -222,9 +211,7 @@
                                     Property="Opacity"
                                     Value="0.5" />
                         </Trigger>
-                        <!-- Validation error: red border, flagged via Tag='error' set
-                             imperatively when a field fails to save. Last, so it wins
-                             over the focus ring. -->
+                        <!-- Set from code, and last so it beats the focus ring. -->
                         <Trigger Property="Tag"
                                  Value="error">
                             <Setter TargetName="Bd"
@@ -236,7 +223,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Modern GroupBox Style -->
     <Style TargetType="GroupBox">
         <Setter Property="Margin"
                 Value="0,0,0,18" />
@@ -253,7 +239,6 @@
         <Setter Property="BorderThickness"
                 Value="1" />
     </Style>
-    <!-- Modern CheckBox: shadcn-sized 16px box, primary fill when checked. -->
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">
         <Setter Property="FocusVisualStyle"
@@ -344,7 +329,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Uppercase micro-label heading for the settings sub-cards (matches Home). -->
+    <!-- Callers hand-uppercase the text, WPF has no casing property. -->
     <Style x:Key="SettingsSectionLabel"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
@@ -353,13 +338,11 @@
                 Value="11" />
         <Setter Property="FontWeight"
                 Value="SemiBold" />
-        <!-- Arcane table-header/stat-label muted tone (matches MicroLabel). -->
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextPrimary}" />
         <Setter Property="Margin"
                 Value="0,0,0,10" />
     </Style>
-    <!-- Label sitting to the right of a ModernToggleSwitch in the settings forms. -->
     <Style x:Key="SettingsToggleLabel"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
@@ -373,8 +356,7 @@
         <Setter Property="VerticalAlignment"
                 Value="Center" />
     </Style>
-    <!-- Caption above a settings field or chip group. Instances set Margin (4 above
-         a textbox, 8 above chips) and TextWrapping where the copy is long. -->
+    <!-- Margin is left to instances, spacing differs above a textbox and above chips. -->
     <Style x:Key="SettingsFieldLabel"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
@@ -384,8 +366,7 @@
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextPrimary}" />
     </Style>
-    <!-- Chip-style CheckBox for multi-select config tokens: a pill that fills accent
-         when checked. Stays a CheckBox so the binder reads Content + IsChecked. -->
+    <!-- Stays a CheckBox so the settings binder can read Content and IsChecked. -->
     <Style x:Key="ChipCheckBox"
            TargetType="CheckBox">
         <Setter Property="FocusVisualStyle"
@@ -435,8 +416,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Segmented pill toggle: two in a rounded track make the Scan/Apply command
-         picker. Checked segment fills accent; RadioButton keeps them exclusive. -->
+    <!-- A RadioButton so the segments stay mutually exclusive. -->
     <Style x:Key="SegmentToggle"
            TargetType="RadioButton">
         <Setter Property="FocusVisualStyle"
@@ -451,7 +431,7 @@
                 Value="{DynamicResource BodyTextSecondary}" />
         <Setter Property="Cursor"
                 Value="Hand" />
-        <!-- Default segment padding; instances (e.g. the compact Home filter) can override. -->
+        <!-- Instances such as the compact Home filter override this padding. -->
         <Setter Property="Padding"
                 Value="18,7" />
         <Setter Property="Template">
@@ -483,9 +463,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Scrollbar Styles moved from ButtonStyles.xaml -->
-    <!-- Thumb has no fixed length: the Track sizes it from the viewport/content ratio
-         (see ViewportSize below). MinHeight keeps a tiny thumb grabbable on long content. -->
+    <!-- MinHeight keeps the Track-sized thumb grabbable on very long content. -->
     <Style x:Key="ScrollBarTrackThumb"
            TargetType="Thumb">
         <Setter Property="MinHeight"
@@ -527,7 +505,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Invisible RepeatButton for ScrollBar -->
     <Style x:Key="InvisibleRepeatButton"
            TargetType="RepeatButton">
         <Setter Property="Width"
@@ -542,7 +519,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Neutral zinc scrollbar (Arcane): quiet thumb, brightens on hover/drag. -->
     <Style TargetType="ScrollBar">
         <Setter Property="Foreground"
                 Value="{DynamicResource PanelBackgroundActive}" />
@@ -559,8 +535,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <!-- ViewportSize bound (not NaN) so the thumb length tracks how much
-                             content overflows - a big thumb when there's little to scroll. -->
+                        <!-- Bound, not NaN, so thumb length tracks the overflow. -->
                         <Track x:Name="PART_Track"
                                Grid.Row="0"
                                IsDirectionReversed="true"
@@ -639,7 +614,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Modern Toggle Switch: shadcn switch - 36x20 muted track, primary when on. -->
     <Style x:Key="ModernToggleSwitch"
            TargetType="ToggleButton">
         <Setter Property="FocusVisualStyle"
@@ -660,7 +634,6 @@
                     <Grid x:Name="Root"
                           Width="36"
                           Height="20">
-                        <!-- Track -->
                         <Border x:Name="SwitchTrack"
                                 Width="36"
                                 Height="20"
@@ -668,14 +641,12 @@
                                 Background="{DynamicResource SurfaceMuted}"
                                 BorderBrush="{DynamicResource InputBorder}"
                                 BorderThickness="1" />
-                        <!-- Thumb -->
                         <Ellipse x:Name="SwitchThumb"
                                  Width="14"
                                  Height="14"
                                  Fill="{DynamicResource TitleTextPrimary}"
                                  Margin="3,3,0,3"
                                  HorizontalAlignment="Left" />
-                        <!-- Label (optional) -->
                         <ContentPresenter VerticalAlignment="Center"
                                           HorizontalAlignment="Right"
                                           Margin="0,0,8,0" />
@@ -716,8 +687,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Storage-scan folder tree: transparent host + dark-themed TreeViewItem with a
-         rotating chevron and a subtle left guide line per nesting level. -->
     <Style x:Key="DiskTree" TargetType="{x:Type TreeView}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -725,8 +694,7 @@
     </Style>
 
     <Style x:Key="DiskTreeItem" TargetType="{x:Type TreeViewItem}">
-        <!-- Roots start expanded, deeper levels collapsed (keeps the panel compact).
-             Depth comes from the bound FolderNodeViewModel. -->
+        <!-- Roots expand and deeper levels stay collapsed, keeping the panel compact. -->
         <Setter Property="IsExpanded" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />

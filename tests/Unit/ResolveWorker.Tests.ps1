@@ -75,8 +75,7 @@ Describe "ResolveWorker" {
 
     Context "end-to-end file protocol (real child pwsh)" {
         It "writes an empty-IP verdict with exit 0 when DNS cannot answer" {
-            # On this box the DC is fake (and Resolve-DnsName may not even exist):
-            # both are DNS failures, which the worker must report as a VERDICT.
+            # Fake DC or missing Resolve-DnsName: both are DNS failures, reported as a verdict.
             $resultFile = Join-Path $script:root 'verdict.json'
             $pwsh = [System.Environment]::ProcessPath
             & $pwsh -NoProfile -NoLogo -NonInteractive -File $script:workerPath `

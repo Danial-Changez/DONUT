@@ -49,7 +49,7 @@ class ToastService {
     }
 
     # Builds and enqueues a toast. colorKey is a UIColors resource key used for the
-    # accent bar / border / title / glow; durationMs is how long before auto-dismiss.
+    # accent bar, border, title and glow, and durationMs is the auto-dismiss delay.
     [void] Show([string]$title, [string]$message, [string]$colorKey, [int]$durationMs) {
         if ($null -eq $this.HostControl) { return }
 
@@ -64,7 +64,6 @@ class ToastService {
 
         $this.Items.Add($toast)
 
-        # Auto-dismiss timer.
         $timer = [DispatcherTimer]::new()
         $timer.Interval = [TimeSpan]::FromMilliseconds($durationMs)
         $timer.Add_Tick({
@@ -90,8 +89,7 @@ class ToastService {
         $reaper.Start()
     }
 
-    # Resolves a brush from the host's merged resource dictionaries, falling back
-    # to a solid colour if the key is missing.
+    # Resolves a brush from the host's merged dictionaries, or a solid fallback colour.
     hidden [Brush] ResolveBrush([string]$key, [Color]$fallback) {
         $res = $null
         if ($this.HostControl) { $res = $this.HostControl.TryFindResource($key) }

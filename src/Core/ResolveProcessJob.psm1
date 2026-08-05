@@ -29,13 +29,12 @@ class ResolveProcessJob : AsyncJob {
 
     ResolveProcessJob([string]$hostName, [JobKind]$type, [LogService]$logger) : base($hostName, $type, $logger) {}
 
-    # Direct spawn: the three args ride the command line (no ArgsFile - RemoteWorker's
-    # exists to ship a Settings snapshot this worker never reads).
+    # Direct spawn: the args ride the command line. RemoteWorker's ArgsFile exists to
+    # ship a Settings snapshot this worker never reads.
     [void] Start([string]$scriptPath, [hashtable]$arguments, [string]$tempConfigPath) {
         try {
             $this.FastResultFile = [System.IO.Path]::GetTempFileName()
-            # Never ProcessPath directly: launcher-hosted runs would fork a second
-            # DONUT that exits 0 with no verdict (see WorkerProcess.FindPwsh).
+            # Never ProcessPath: it forks a second DONUT (see WorkerProcess.FindPwsh).
             $pwsh = [WorkerProcess]::FindPwsh()
             if ([string]::IsNullOrWhiteSpace($pwsh)) {
                 throw 'pwsh.exe was not found on PATH - the fast resolve child cannot run.'
@@ -48,8 +47,7 @@ class ResolveProcessJob : AsyncJob {
                 $psi.ArgumentList.Add($a)
             }
             if ([bool]$arguments.DebugLog) { $psi.ArgumentList.Add('-DebugLog') }
-            # No stream redirection: undrained pipes wedge children; the verdict rides
-            # the result file and diagnostics ride Donut.log.
+            # No stream redirection: undrained pipes wedge children. The verdict rides a file.
             $psi.UseShellExecute = $false
             $psi.CreateNoWindow = $true
 
@@ -105,7 +103,7 @@ class ResolveProcessJob : AsyncJob {
         $this.Logger.LogWarning("[$($this.HostName)] $message")
     }
 
-    # A wedged process - unlike a wedged pipeline - has a clean recovery: Kill.
+    # A wedged process, unlike a wedged pipeline, has a clean recovery: Kill.
     hidden [void] KillChild([string]$why) {
         try { $this.Process.Kill($true) }
         catch { $this.Logger.LogDebug("[$($this.HostName)] fast resolve kill failed: $($_.Exception.Message)") }

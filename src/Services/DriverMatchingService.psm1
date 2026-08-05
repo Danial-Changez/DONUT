@@ -25,7 +25,6 @@ class DriverMatchingService {
     }
 
     hidden [void] InitializePatterns() {
-        # Brand patterns for manufacturer detection (OEM/Component makers)
         $this.BrandPatterns = @{
             "Dell"      = @("Dell Inc.", "Dell", "DELL")
             "HP"        = @("Hewlett-Packard", "HP", "HP Inc.", "Hewlett Packard")
@@ -41,7 +40,6 @@ class DriverMatchingService {
             "Realtek"   = @("Realtek", "Realtek Semiconductor")
         }
 
-        # Category patterns for detecting update/driver categories
         $this.CategoryPatterns = @{
             "BIOS"        = @("BIOS", "System BIOS", "UEFI", "Firmware")
             "Chipset"     = @("Chipset", "Intel Management Engine", "ME", "AMT")
@@ -83,7 +81,7 @@ class DriverMatchingService {
         return "Other"
     }
 
-    # Generic driver matching (for non-categorized searches)
+    # Scores every installed driver and returns the best above the confidence floor.
     [object] FindBestDriverMatch([string]$updateName, [array]$installedDrivers) {
         if ($null -eq $installedDrivers -or $installedDrivers.Count -eq 0) {
             return $null
@@ -104,27 +102,24 @@ class DriverMatchingService {
 
             $driverNameLower = $driverName.ToLower()
 
-            # Category match (highest weight)
             $driverCategory = $this.DetectCategory($driverName)
             if ($driverCategory -eq $updateCategory -and $updateCategory -ne "Other") {
                 $score += 50
             }
 
-            # Provider/Brand match
             $updateBrand = $this.DetectBrand($updateName)
             $driverBrand = $this.DetectBrand($driverProvider)
             if ($updateBrand -eq $driverBrand -and $updateBrand -ne "Unknown") {
                 $score += 30
             }
 
-            # Partial name match (keywords)
+            # Words of two letters or less match too many drivers to be evidence.
             $updateWords = $updateNameLower -split '\s+|[-_]'
             $driverWords = $driverNameLower -split '\s+|[-_]'
             $commonWords = $updateWords |
                 Where-Object { $driverWords -contains $_ -and $_.Length -gt 2 }
             $score += ($commonWords.Count * 5)
 
-            # Version pattern detection
             if ($updateNameLower -match '\d+\.\d+' -and $driverNameLower -match '\d+\.\d+') {
                 $score += 10
             }

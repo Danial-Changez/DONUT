@@ -107,15 +107,13 @@ function Get-EscapedPrefix([string]$value) {
 function Get-Filter([string]$shape, [string]$escaped) {
     $head = '(&(objectCategory=person)(objectClass=user)'
     if ($shape -eq 'anr') {
-        # userPrincipalName stays ORed in: UPN is NOT one of the ANR attributes, so
-        # dropping it here would silently stop UPN searches working in the app.
+        # UPN is not an ANR attribute, so dropping the OR would silently stop UPN searches.
         return "$head(|(anr=$escaped)(userPrincipalName=$escaped*)))"
     }
     return "$head(|(sAMAccountName=$escaped*)(cn=$escaped*)(displayName=$escaped*)(userPrincipalName=$escaped*)(sn=$escaped*)))"
 }
 
-# One run: returns @{ Ms; Count } or @{ Error }. Never throws - a forest that is down
-# should report itself, not abort the whole table.
+# Never throws: a forest that is down should report itself, not abort the whole table.
 function Invoke-Timed([string]$domain, [string]$filter, [string]$referral) {
     $entry = $null
     $searcher = $null
@@ -151,14 +149,12 @@ function Get-Median([long[]]$values) {
     return $s[[int]([math]::Floor($s.Count / 2))]
 }
 
-# The ANR attribute set plus what the report prints. userPrincipalName is here because the
-# filter ORs it in, not because ANR covers it - a UPN-only hit has to stay visible.
+# userPrincipalName is here because the filter ORs it in, not because ANR covers it.
 $script:IdentityProps = @('distinguishedName', 'sAMAccountName', 'displayName', 'name',
     'givenName', 'sn', 'userPrincipalName', 'physicalDeliveryOfficeName',
     'proxyAddresses', 'legacyExchangeDN')
 
-# Untimed identity read: the app's filter and cap, wider properties so each row can be
-# attributed. Never on the timed path - see .NOTES. Returns @{ Rows; Capped } or @{ Error }.
+# Wider properties so each row can be attributed. Never on the timed path, see .NOTES.
 function Get-IdentityRow([string]$domain, [string]$filter) {
     $entry = $null
     $searcher = $null
@@ -200,8 +196,7 @@ function Get-MatchReason([hashtable]$row, [string]$prefix) {
     $whole = $prefix.Trim()
     $tokens = @($whole -split '\s+', 2)
 
-    # ANR splits a two-token value across givenName/sn and tries it both ways round; this is
-    # the shape the current four-clause filter structurally cannot match.
+    # ANR splits a two-token value across givenName and sn, which the current filter cannot.
     if ($tokens.Count -eq 2) {
         $orders = @(@('givenName', 'sn'), @('sn', 'givenName'))
         foreach ($pair in $orders) {
@@ -232,8 +227,7 @@ function Get-MatchReason([hashtable]$row, [string]$prefix) {
         }
     }
 
-    # Nothing loaded explains it, which is itself a finding - the match came from an
-    # attribute this pass does not read.
+    # Nothing loaded explains it, which is itself a finding: an unread attribute matched.
     if ($reasons.Count -eq 0) { $reasons.Add('unattributed') }
     return $reasons.ToArray()
 }
@@ -274,8 +268,7 @@ foreach ($p in $Prefix) {
         foreach ($shape in 'current', 'anr') {
             $filter = Get-Filter $shape $escaped
             foreach ($referral in 'External', 'None') {
-                # Warm-up: the first bind to a forest pays connect + authenticate, which is
-                # not what any of these variants is being judged on.
+                # The first bind pays connect and authenticate, which is not under test.
                 [void](Invoke-Timed -domain $domain -filter $filter -referral $referral)
 
                 $times = [System.Collections.Generic.List[long]]::new()

@@ -16,7 +16,7 @@ using module "..\Core\DonutPaths.psm1"
 using module "..\Core\LogService.psm1"
 
 class SelfUpdateService {
-    [string]$ClientId = 'Your Github App Client ID'   # only needed for a private fork
+    [string]$ClientId = 'Your Github App Client ID'   # Only needed for a private fork.
     [string]$Scope = 'repo read:packages'
     [string]$TokenFile
     [string]$Owner = 'Danial-Changez'
@@ -45,7 +45,7 @@ class SelfUpdateService {
             $json = [Text.Encoding]::UTF8.GetString($decrypted)
             $data = $json | ConvertFrom-Json
 
-            # Returned as-is: no expiry check / refresh (kept simple deliberately).
+            # Returned as-is, deliberately: no expiry check and no refresh.
             return $data.access_token
         }
         catch {
@@ -81,8 +81,8 @@ class SelfUpdateService {
         return Invoke-RestMethod @req
     }
 
-    # Polls GitHub's device-flow token endpoint once; Status tells the caller what next:
-    # 'authorized' (token populated) / 'pending' / 'slow_down' (back off) / 'error' (stop).
+    # Polls GitHub's device-flow token endpoint once. Status tells the caller what is
+    # next: 'authorized' with a token, 'pending', 'slow_down' to back off, or 'error'.
     [PSCustomObject] PollForToken([string]$DeviceCode) {
         $body = @{
             client_id   = $this.ClientId
@@ -127,8 +127,7 @@ class SelfUpdateService {
 
     # --- Release management ---
 
-    # Accept header plus Authorization only when a token exists: the public
-    # upstream answers anonymously, a private fork needs the device-flow token.
+    # Authorization only when a token exists: the public upstream answers anonymously.
     hidden static [hashtable] Headers([string]$Token, [string]$Accept) {
         $h = @{ Accept = $Accept }
         if (-not [string]::IsNullOrEmpty($Token)) { $h['Authorization'] = "token $Token" }
@@ -161,7 +160,7 @@ class SelfUpdateService {
     }
 
     [version] GetLocalVersion() {
-        # Registry first (MSI installs); the match criteria mirror InstallWorker's.
+        # Registry first for MSI installs, with match criteria mirroring InstallWorker's.
         $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
         if (Test-Path $regPath) {
             $subKeys = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
@@ -194,7 +193,7 @@ class SelfUpdateService {
         $workerScript = Join-Path $SourceRoot "Scripts\InstallWorker.ps1"
         if (-not (Test-Path $workerScript)) { throw "InstallWorker.ps1 not found at $workerScript" }
 
-        # Run the worker from the stage dir - the MSI replaces the source tree mid-install.
+        # Run the worker from the stage dir: the MSI replaces the source tree mid-install.
         $stageDir = Split-Path $MsiPath -Parent
         $tempWorker = Join-Path $stageDir "InstallWorker.ps1"
         Copy-Item -Path $workerScript -Destination $tempWorker -Force

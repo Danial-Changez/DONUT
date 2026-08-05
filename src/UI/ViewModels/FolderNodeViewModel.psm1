@@ -30,7 +30,7 @@ class FolderNodeViewModel : ObservableObject {
     [bool]     $IsRoot = $false
     [bool]     $IsDeletable = $false   # gates the checkbox (FolderDeletionPolicy)
     [bool]     $IsSelected = $false
-    [object]   $Parent = $null         # set by FromNodes; walked when a child is spared
+    [object]   $Parent = $null         # set by FromNodes, walked when a child is spared
     [object[]] $Children = @()
 
     # Root display nodes for a report (empty for a null/empty report).
@@ -61,9 +61,8 @@ class FolderNodeViewModel : ObservableObject {
 
     # --- Clear selection ---
 
-    # The user (un)checked this node: cascade the value to every deletable descendant.
-    # Unchecking also releases any checked ancestor - see .DESCRIPTION. Idempotent,
-    # so the presenter can relay a click blindly.
+    # The user (un)checked this node: cascade to every deletable descendant, and unchecking
+    # also releases any checked ancestor (see .DESCRIPTION). Idempotent, so relaying is safe.
     [void] SetChecked([bool]$value) {
         $this.CascadeDown($value)
         if (-not $value) {
@@ -80,8 +79,7 @@ class FolderNodeViewModel : ObservableObject {
         foreach ($c in $this.Children) { $c.CascadeDown($value) }
     }
 
-    # Top-most checked deletable nodes: a checked node clears its whole subtree, so its
-    # descendants are not listed separately.
+    # Top-most checked nodes only: a checked node clears its whole subtree.
     static [FolderNodeViewModel[]] CollectSelected([object[]]$nodes) {
         $out = [System.Collections.Generic.List[FolderNodeViewModel]]::new()
         foreach ($n in @($nodes)) {

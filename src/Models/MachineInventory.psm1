@@ -72,14 +72,13 @@ class InventoryFormat {
         return $pct
     }
 
-    # One-line battery-health summary for the card.
     static [string] BatteryHealthLabel([bool]$hasBattery, [int]$healthPct) {
         if (-not $hasBattery) { return 'No battery (desktop / AC)' }
         if ($healthPct -lt 0) { return '— (no battery data)' }
         return "$healthPct% health"
     }
 
-    # Free / total disk on C: as GB. '—' when total is unknown.
+    # Free and total disk on C: as GB. The em-dash placeholder when total is unknown.
     static [string] DiskFreeLabel([double]$freeBytes, [double]$totalBytes) {
         if ($totalBytes -le 0) { return '—' }
         $gb = 1073741824.0   # 1024^3
@@ -89,7 +88,7 @@ class InventoryFormat {
         return "$($free.ToString($ci)) GB free of $($total.ToString($ci)) GB"
     }
 
-    # Uptime phrased from the last boot time. '—' for an unknown (MinValue) boot.
+    # Uptime from the last boot time. The em-dash placeholder for an unknown boot.
     static [string] UptimeLabel([datetime]$lastBoot) {
         if ($lastBoot -eq [datetime]::MinValue) { return '—' }
         $bootUtc = if ($lastBoot.Kind -eq [System.DateTimeKind]::Utc) { $lastBoot }

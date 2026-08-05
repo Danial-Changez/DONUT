@@ -17,12 +17,8 @@
     </WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-        <!-- Window-scoped ScrollViewer template: the stock template fills the
-             corner where the vertical and horizontal scrollbars meet with a
-             SystemColors-painted Rectangle, which shows up as a white box at the
-             bottom of the update list. Re-template it so that corner cell stays
-             empty/transparent. Scoped to this window so it can't override the
-             TextBox PART_ContentHost ScrollViewers elsewhere in the app. -->
+        <!-- The stock template paints the scrollbar corner a SystemColors white. Scoped
+             to this window so it cannot reach TextBox content hosts elsewhere. -->
         <Style TargetType="{x:Type ScrollViewer}">
             <Setter Property="Template">
                 <Setter.Value>
@@ -62,8 +58,7 @@
                                        ViewportSize="{TemplateBinding ViewportWidth}"
                                        Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
 
-                            <!-- Grid.Row="1" Grid.Column="1" (the corner) is left
-                                 intentionally empty so no white box is drawn. -->
+                            <!-- The corner cell stays empty so no white box is drawn. -->
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -85,18 +80,13 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <!-- Header (drag region: title + X) -->
                 <RowDefinition Height="Auto" />
-                <!-- Message -->
                 <RowDefinition Height="Auto" />
-                <!-- List -->
                 <RowDefinition Height="Auto" />
-                <!-- Buttons -->
             </Grid.RowDefinitions>
 
-            <!-- Header (popup chrome contract): 48px row, the whole row is the drag region;
-                 X pinned Top with its flush 50x36 pad (square - the window is square), the
-                 title centered beside it with top air. Esc also closes (DialogPresenter). -->
+            <!-- Popup chrome contract: the 48px header doubles as the drag region.
+                 DialogPresenter wires both the X and Esc to the same close. -->
             <Grid x:Name="panelControlBar" Grid.Row="0" Background="Transparent" Height="48">
                 <TextBlock Text="{Binding Title}"
                            Visibility="{Binding HasTitle, Converter={StaticResource BoolToVis}}"
@@ -118,7 +108,6 @@
                 </Button>
             </Grid>
 
-            <!-- Message (left-aligned, muted) -->
             <TextBlock Grid.Row="1"
                        Text="{Binding Message}"
                        Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
@@ -126,7 +115,6 @@
                        Margin="24,6,24,0"
                        TextWrapping="Wrap" />
 
-            <!-- List: each item a subtle muted card (mono, for paths/versions) -->
             <ScrollViewer Grid.Row="2"
                           Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
                           MaxHeight="168" VerticalScrollBarVisibility="Auto"
@@ -158,14 +146,12 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <!-- Buttons: bottom-right, secondary then primary (primary rightmost). The primary
-                 binds its Style from the VM (accent, or destructive-red for irreversible acts). -->
+            <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
             <StackPanel Grid.Row="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">
-                <!-- Opt-in "remember this" (HasRemember is false for every other caller),
-                     left of the buttons so the choice reads before the commit. -->
+                <!-- Left of the buttons so the choice reads before the commit. -->
                 <CheckBox x:Name="chkRemember"
                           Content="{Binding RememberText}"
                           IsChecked="{Binding Remember, Mode=TwoWay}"

@@ -82,8 +82,7 @@ $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
-# Beat from a background thread: a lookup blocks the serve loop for tens of seconds, and
-# beating there would let EnsureAgent (15s = dead) tear a busy agent down mid-lookup.
+# Beating from the serve loop would let EnsureAgent tear a busy agent down mid-lookup.
 try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
 $script:HeartbeatJob = $null
 try {
@@ -127,13 +126,12 @@ while ($true) {
     if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }
 
     $now = [datetime]::UtcNow
-    # Only beat from the serve loop as the no-ThreadJob fallback, so it never races the
-    # background beater on heartbeat.txt (a concurrent write could look like a vanished dir).
+    # Fallback only, so it never races the background beater on heartbeat.txt.
     if (-not $script:HeartbeatJob) {
         if (($now - $lastBeat).TotalSeconds -ge 2) {
             $lastBeat = $now
             try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
-            catch { break }   # exchange dir gone (parent purged it) -> exit
+            catch { break }   # Exchange dir gone (the parent purged it), so exit.
         }
         if (($now - $lastParentCheck).TotalSeconds -ge 3) {
             $lastParentCheck = $now
@@ -152,15 +150,13 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
-            # One request carries the whole machine list and answers inline: resolving them
-            # back to back here beats N requests through this loop's 150ms pass. See .NOTES.
+            # Answering inline beats N requests through this loop's 150ms pass.
             if ([string]$req.kind -eq 'owner') {
                 $ownerJson = Resolve-MachineOwnerBatch -wsids @($req.machines) -server ([string]$req.siteServer)
                 Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $ownerJson
                 continue
             }
-            # Offload the lookup so a slow one never blocks the loop; fall back to inline if
-            # the ThreadJob can't start, so a lookup is never silently dropped.
+            # Falls back to inline so a lookup is never silently dropped.
             $offloaded = $false
             try {
                 $job = Start-ThreadJob -ScriptBlock {

@@ -1,12 +1,9 @@
-<!-- Shared container styles. Colours/fonts live in UIColors.xaml; this file holds
-     the Card recipe that views hand-built as raw Borders. Consumed via
-     DynamicResource, so merge order does not matter. -->
+<!-- Shared container styles, colours and fonts live in UIColors.xaml. Everything here is
+     consumed via DynamicResource, so merge order does not matter. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Keyboard focus ring (WCAG 2.4.7). WPF's default focus adorner is a faint dotted
-         rectangle that's invisible on the near-black theme; this violet outline is applied
-         via a FocusVisualStyle setter on buttons/toggles/segments/rows. -->
+    <!-- WPF's default dotted adorner is invisible on near-black (WCAG 2.4.7). -->
     <Style x:Key="FocusRingVisual">
         <Setter Property="Control.Template">
             <Setter.Value>
@@ -22,9 +19,7 @@
         </Setter>
     </Style>
 
-    <!-- Shared card container: the PanelBackground + PanelBorder recipe every settings
-         and Home sub-card repeated by hand. Instances still set Margin (and override
-         Padding where a denser card is wanted). -->
+    <!-- Instances still set Margin, and override Padding where a denser card is wanted. -->
     <Style x:Key="Card"
            TargetType="Border">
         <Setter Property="Background"
@@ -39,10 +34,8 @@
                 Value="16,14" />
     </Style>
 
-    <!-- Named text roles. TitleText/BodyText etc. existed only as *brushes*; these are the
-         matching TextBlock styles so headings/body copy stop being styled ad-hoc inline. -->
-    <!-- Pane/window titles: the 18px bold tier used by the Machines/detail/Lens/
-         Configuration/dialog headings (above TextTitle in the scale). -->
+    <!-- Text roles, so headings and body copy stop being styled inline at each call site. -->
+    <!-- The tier above TextTitle, used for pane and dialog headings. -->
     <Style x:Key="TextPaneTitle"
            TargetType="TextBlock">
         <Setter Property="FontFamily"

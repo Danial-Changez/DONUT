@@ -30,7 +30,7 @@ class PersonLensService {
     [LogService] $Logger
     [string]     $SiteServer
     [string]     $SourceRoot
-    [string]     $SamHint = ''    # finder-supplied SAM so the agent can start SCCM affinity early
+    [string]     $SamHint = ''    # Finder-supplied SAM so SCCM affinity can start early.
     [int]        $TimeoutSec = 60
 
     PersonLensService([string]$siteServer, [string]$sourceRoot) {
@@ -65,8 +65,8 @@ class PersonLensService {
         return $b
     }
 
-    # AES-256-CBC (PKCS7) over the UTF-8 text - the twin of the agent's Protect-Text;
-    # kept here so the round-trip is unit-testable.
+    # AES-256-CBC (PKCS7) over the UTF-8 text, the twin of the agent's Protect-Text.
+    # Kept here so the round trip is unit-testable.
     static [byte[]] ProtectText([string]$text, [byte[]]$keyIv) {
         $aes = [System.Security.Cryptography.Aes]::Create()
         try {
@@ -96,13 +96,13 @@ class PersonLensService {
         Move-Item -LiteralPath $tmp -Destination $path -Force
     }
 
-    # The agent's fixed exchange dir + task name (fixed so any pool runspace finds the
-    # same live agent; concurrency is serialized by the EnsureAgent mutex).
+    # The exchange dir and task name are fixed so any pool runspace finds the same live
+    # agent. Concurrency is serialized by the EnsureAgent mutex.
     static [string] AgentDir() { return (Join-Path $env:ProgramData 'DONUT\lens-agent') }
     static [string] $AgentTaskName = 'DONUT-LensAgent'
 
-    # Deletes per-lookup lens-* dirs older than $minutes left by previous builds or
-    # crashes - never the live agent's own dir, which EnsureAgent manages itself.
+    # Deletes per-lookup lens-* dirs older than $minutes, left by previous builds or
+    # crashes. Never the live agent's own dir, which EnsureAgent manages itself.
     static [void] SweepStaleExchanges([int]$minutes) {
         $root = Join-Path $env:ProgramData 'DONUT'
         Get-ChildItem -Path $root -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
@@ -111,8 +111,8 @@ class PersonLensService {
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    # Full parent-side teardown on close: the purge deletes every lens-* dir because bundles
-    # hold BitLocker keys and nothing may outlive the app. Best-effort.
+    # Full parent-side teardown on close. The purge deletes every lens-* dir because
+    # bundles hold BitLocker keys and nothing may outlive the app. Best effort.
     static [void] StopAndPurgeAgent() {
         $dir = [PersonLensService]::AgentDir()
         try { New-Item -ItemType File -Path (Join-Path $dir 'stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
@@ -127,8 +127,8 @@ class PersonLensService {
 
     # --- Agent supervision ---
 
-    # (Re)starts the agent when its heartbeat is stale; returns '' or the failure reason.
-    # Mutex-guarded so concurrent pool runspaces can't race a double start.
+    # (Re)starts the agent when its heartbeat is stale, returning '' or a failure reason.
+    # Mutex-guarded so concurrent pool runspaces cannot race a double start.
     [string] EnsureAgent() {
         $mutex = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
         $owned = $false
@@ -140,7 +140,7 @@ class PersonLensService {
             $beat = Join-Path $dir 'heartbeat.txt'
             if ((Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and
                 (Test-Path -LiteralPath $beat)) {
-                # The agent beats every ~2s; anything older means it's gone.
+                # The agent beats every 2s or so, so anything older means it is gone.
                 $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
                 if ($beatAge.TotalSeconds -lt 15) { return '' }
             }
@@ -159,8 +159,7 @@ class PersonLensService {
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
-            # Strip the inherited ACL (ProgramData grants all local users read!) down to
-            # SYSTEM / Administrators / the interactive user - bundles hold BitLocker keys.
+            # ProgramData grants every local user read, and bundles hold BitLocker keys.
             $aclError = [DonutPaths]::Secure($dir)
             if ($aclError) { return $aclError }
 
@@ -172,8 +171,7 @@ class PersonLensService {
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
             $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -ExchangeDir "{1}" -ParentPid {2} -SiteServer "{3}"' -f $agentScript, $dir, $donutPid, $this.SiteServer
-            # pwsh's window is created before -WindowStyle Hidden can hide it, so it flashes a
-            # console; conhost --headless runs it on a pseudoconsole with no window at all.
+            # -WindowStyle Hidden applies too late to stop the flash, so conhost runs it.
             $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
             $action =
             if (Test-Path -LiteralPath $conhost) {
@@ -185,8 +183,7 @@ class PersonLensService {
             }
             $principalArgs = @{ UserId = $interactiveUser; LogonType = 'Interactive'; RunLevel = 'Limited' }
             $principal = New-ScheduledTaskPrincipal @principalArgs
-            # PT0S = no execution time limit: the agent lives for the app's lifetime and
-            # exits itself when DONUT's process dies (its -ParentPid watchdog).
+            # No execution time limit: the agent lives until its -ParentPid watchdog fires.
             $taskSettings = @{
                 AllowStartIfOnBatteries    = $true
                 DontStopIfGoingOnBatteries = $true
@@ -237,9 +234,8 @@ class PersonLensService {
 
     # --- Env-coupled seam (overridden in tests) ---
 
-    # The machine list -> their SCCM primary users, as @{ owners = @(...); error } JSON.
-    # One request for the whole list: same RBAC scope and the same two routes as the person
-    # lookup, but the agent resolves them back to back rather than one exchange each.
+    # Machine list to SCCM primary users, as @{ owners = @(...), error } JSON. One request
+    # covers the whole list, which the agent resolves back to back rather than one each.
     [string] RunOwnerLookupJson([string[]]$machines) {
         if (@($machines).Count -eq 0) { return '' }
         if (-not [ElevationContext]::IsElevated()) {
@@ -260,16 +256,15 @@ class PersonLensService {
     }
 
     [string] RunLookupJson([string]$identity) {
-        # De-elevated, DONUT already IS the interactive user whose rights this data needs,
-        # so the agent, its task, the AES exchange and the heartbeat are all unnecessary.
+        # De-elevated, DONUT is already the user whose rights this data needs.
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }
 
         return $this.ExchangeRoundTrip(
             @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer }, $true)
     }
 
-    # The encrypted round trip both lookups share: write request-<id>, wait for result-<id>,
-    # return its decrypted text. Only the person lookup streams partial-<id>-N while waiting.
+    # The encrypted round trip both lookups share: write request-<id>, wait for
+    # result-<id>, return its decrypted text. Only person lookups stream partial-<id>-N.
     hidden [string] ExchangeRoundTrip([hashtable]$request, [bool]$streamPartials) {
         $agentErr = $this.EnsureAgent()
         if ($agentErr) { return [PersonLensService]::ErrorBundle("Lens agent unavailable: $agentErr") }
@@ -285,7 +280,7 @@ class PersonLensService {
             [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
                 ($request | ConvertTo-Json -Compress), $keyIv)
 
-            # 100ms poll; the agent's writes are atomic (tmp + rename), so no settle wait.
+            # The agent's writes are atomic (tmp + rename), so the poll needs no settle wait.
             $deadline = (Get-Date).AddSeconds($this.TimeoutSec)
             $partialIndex = 1
             while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
@@ -298,7 +293,7 @@ class PersonLensService {
                         Write-Information -MessageData $partialText -Tags 'LensPartial'
                     }
                     catch { $this.Logger.LogWarning("Lens partial $partialIndex was unreadable; the final bundle still lands.") }
-                    continue   # check for the next partial before sleeping
+                    continue   # Check for the next partial before sleeping.
                 }
                 Start-Sleep -Milliseconds 100
             }
@@ -311,7 +306,7 @@ class PersonLensService {
             return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
         }
         finally {
-            # Consume this lookup's files; the agent + its 10-min sweep cover the rest.
+            # Consume this lookup's files, and the agent's 10-minute sweep covers the rest.
             Get-ChildItem -Path $dir -Filter "*-$reqId*.bin" -File -ErrorAction SilentlyContinue |
                 Remove-Item -Force -ErrorAction SilentlyContinue
         }

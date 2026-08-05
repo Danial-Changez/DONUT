@@ -35,8 +35,7 @@ Describe "Config persistence on the real data root" {
         $store1.UpsertOwner('PC-ROUNDTRIP', 'PC-ROUNDTRIP (Danial C)')
         $store1.FlushSave()
 
-        # Second app run: a fresh store must rehydrate from config\recents.json,
-        # and config.json itself must carry no machine-list state.
+        # Second app run: rehydrate from recents.json, with no machine-list state in config.json.
         $store2 = [RecentConnectionsStore]::new([RecentConnectionsStore]::DefaultPath(), $null)
         $row = $store2.GetByHost('PC-ROUNDTRIP')
         $row | Should -Not -BeNullOrEmpty
@@ -48,8 +47,7 @@ Describe "Config persistence on the real data root" {
     }
 
     It "a legacy config.json migrates its recentHosts into recents.json once" {
-        # Simulate a pre-split install: recentHosts (with an inventory blob) and
-        # the never-read domainControllers list still inside config.json.
+        # A pre-split install: recentHosts with an inventory blob still inside config.json.
         $manager = [ConfigManager]::new($script:testSourceRoot)
         $config = $manager.LoadConfig()
         $config.Settings['recentHosts'] = @(@{ hostname = 'LEGACY-PC'; lastSeen = ''
@@ -69,7 +67,7 @@ Describe "Config persistence on the real data root" {
         $rc | Should -Not -BeNullOrEmpty
         $rc.Owner | Should -Be 'Jamie Doe'
 
-        # config.json on disk is settings-only now; the blob did not ride along.
+        # config.json on disk is settings-only now, and the blob did not ride along.
         $reloaded = ([ConfigManager]::new($script:testSourceRoot)).LoadConfig()
         $reloaded.Settings.ContainsKey('recentHosts') | Should -BeFalse
         $reloaded.Settings.ContainsKey('domainControllers') | Should -BeFalse

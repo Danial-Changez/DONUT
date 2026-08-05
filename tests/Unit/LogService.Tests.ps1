@@ -13,7 +13,6 @@ Describe "LogService" {
     }
 
     BeforeEach {
-        # Create a fresh log directory for each test
         $script:testLogDir = Join-Path $script:tempDir "Logs_$(Get-Random)"
         if (-not (Test-Path $script:testLogDir)) {
             New-Item -Path $script:testLogDir -ItemType Directory -Force | Out-Null
@@ -34,7 +33,6 @@ Describe "LogService" {
             
             Test-Path $newLogDir | Should -Be $true
             
-            # Cleanup
             Remove-Item -Path $newLogDir -Recurse -Force -ErrorAction SilentlyContinue
         }
 
@@ -108,7 +106,6 @@ Describe "LogService" {
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*[DEBUG]*"
             $content | Should -BeLike "*Custom level test*"
-            # Verify format: [timestamp] [level] message
             $content | Should -Match "\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \[DEBUG\] Custom level test"
         }
 
@@ -128,7 +125,6 @@ Describe "LogService" {
         It "Should handle concurrent writes without error" {
             $logger = [LogService]::new($script:testLogDir)
 
-            # Write multiple logs quickly (simulating concurrent access)
             1..20 | ForEach-Object {
                 $logger.LogInfo("Concurrent message $_")
             }

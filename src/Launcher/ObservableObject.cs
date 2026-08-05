@@ -13,9 +13,8 @@ namespace Donut.Mvvm
     /// the value actually changes) or <see cref="Raise"/> directly.
     /// </summary>
     /// <remarks>
-    /// Compiled into Donut.Launcher so production is pre-compiled; Start-Donut.ps1 also
-    /// compiles it from this source (guarded) so the `pwsh -Sta` dev path resolves the type
-    /// at parse time.
+    /// Compiled into Donut.Launcher for production. Start-Donut.ps1 also compiles it from
+    /// this source, guarded, so the `pwsh -Sta` dev path resolves the type at parse time.
     /// </remarks>
     public abstract class ObservableObject : INotifyPropertyChanged
     {
@@ -33,14 +32,13 @@ namespace Donut.Mvvm
         }
 
         /// <summary>
-        /// Set a public property by name; raises PropertyChanged (and returns true) only when
-        /// the value actually changed - so setting the same value in the per-tick pump does
-        /// not flood the binding system. Coerces obvious value-type mismatches (e.g. double
-        /// percent into an int property) defensively.
+        /// Set a public property by name, raising PropertyChanged only when the value
+        /// actually changed, so the per-tick pump cannot flood the binding system.
+        /// Coerces obvious value-type mismatches, such as a double percent into an int.
         /// </summary>
         /// <param name="propertyName">Public instance property to write.</param>
-        /// <param name="value">New value; coerced to the property type when it differs.</param>
-        /// <returns><c>true</c> if the value changed and notification was raised; otherwise <c>false</c>.</returns>
+        /// <param name="value">New value, coerced to the property type when it differs.</param>
+        /// <returns><c>true</c> when the value changed and notification was raised.</returns>
         public bool Set(string propertyName, object value)
         {
             var prop = GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);

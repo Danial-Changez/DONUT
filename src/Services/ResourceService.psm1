@@ -9,6 +9,13 @@ using module "..\Core\LogService.psm1"
     Merges every *.xaml under src/UI/Styles into one ResourceDictionary (colours,
     button styles, control templates, icons) and applies it to a window so views
     can resolve the shared DynamicResource keys.
+
+.NOTES
+    Hosted by the launcher, the dictionaries are read from the embedded copy and the
+    XAML never touches disk, while a dev run reads the checkout files. Either way the
+    ParserContext BaseUri must stay a path to a file in UI\Styles: the dictionaries
+    reference their fonts relatively (./Fonts/...) and those ttf files are always on
+    disk, so a BaseUri pointing anywhere else silently loses every custom font.
 #>
 class ResourceService {
     [string]$SourceRoot
@@ -24,7 +31,6 @@ class ResourceService {
         $this.Logger = [LogService]::Coalesce($logger)
     }
 
-    # Loads all styles into the global Application scope
     [void] LoadGlobalResources() {
         if (-not [System.Windows.Application]::Current) {
             try {
@@ -55,7 +61,7 @@ class ResourceService {
         }
     }
 
-    # Applies loaded styles to a specific window (needed for XamlReader loaded windows)
+    # XamlReader-loaded windows do not inherit the application's merged dictionaries.
     [void] ApplyResourcesToWindow([Window]$window) {
         if ([System.Windows.Application]::Current) {
             foreach ($dict in [System.Windows.Application]::Current.Resources.MergedDictionaries) {
@@ -70,10 +76,7 @@ class ResourceService {
     hidden [void] LoadStylesInto([ResourceDictionary]$targetDictionary) {
         $stylesPath = Join-Path $this.SourceRoot 'UI\Styles'
 
-        # Hosted by the launcher, the dictionaries come from the embedded copy (the
-        # xaml never touches disk); a dev run reads the checkout files. Either way
-        # BaseUri stays a Styles FILE path: the dictionaries' relative font
-        # references (./Fonts/...) resolve against it, and the ttfs ARE on disk.
+        # BaseUri must stay a path to a file in UI\Styles either way. See .NOTES.
         $assets = 'Donut.Launcher.EmbeddedAssets' -as [type]
         if ($assets) {
             $names = @($assets::List('src/UI/Styles/') |
@@ -83,8 +86,7 @@ class ResourceService {
                     $leaf = [System.IO.Path]::GetFileName($logical)
                     $context = [System.Windows.Markup.ParserContext]::new()
                     $context.BaseUri = [Uri]::new((Join-Path $stylesPath $leaf))
-                    # Assigned before the try: a try-only assignment reads as unassigned
-                    # to the class runtime ("Variable is not assigned in the method").
+                    # A try-only assignment reads as unassigned to the class runtime.
                     $dict = $null
                     $stream = $assets::Open($logical)
                     try { $dict = [System.Windows.Markup.XamlReader]::Load($stream, $context) }

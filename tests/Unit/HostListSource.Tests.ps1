@@ -1,9 +1,8 @@
 using module "..\..\src\Core\HostListSource.psm1"
 using module "..\..\src\Core\DonutPaths.psm1"
 
-# Fake that overrides the filesystem seams so path-selection and parsing can be
-# exercised off-disk. PathExists consults an in-memory set of "present" paths;
-# ReadLines returns canned content keyed by path.
+# Fake that overrides the filesystem seams so path selection and parsing run off-disk.
+# PathExists consults an in-memory set of present paths, ReadLines returns canned content.
 class FakeHostListSource : HostListSource {
     [System.Collections.Generic.HashSet[string]] $Present
     [hashtable] $Contents

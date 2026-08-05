@@ -15,8 +15,7 @@
                       CornerRadius="0"
                       UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
-    <!-- Popup chrome contract (see DialogWindow): square window, 1px panel border,
-         the dark-to-primary gradient ground, 48px header as the drag region. -->
+    <!-- Popup chrome contract, same recipe as DialogWindow. -->
     <Border BorderThickness="1"
             BorderBrush="{DynamicResource PanelBorder}">
         <Border.Background>
@@ -31,13 +30,9 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <!-- Header (drag region: title + window controls) -->
                 <RowDefinition Height="Auto" />
-                <!-- Message -->
                 <RowDefinition Height="Auto" />
-                <!-- Device-code output -->
                 <RowDefinition Height="Auto" />
-                <!-- Button + help line -->
             </Grid.RowDefinitions>
 
             <Grid x:Name="panelControlBar"
@@ -78,9 +73,9 @@
                        Style="{DynamicResource TextBody}"
                        Margin="24,6,24,0"
                        TextWrapping="Wrap"
-                       Text="Updates for this build come from a private GitHub repository. Sign in once to check for them - the button opens github.com with a device code to enter." />
+                       Text="Update checks use a private GitHub repository, so sign in once. The button opens github.com and shows a device code to enter." />
 
-            <!-- Device-flow output: the verification URL + user code land here. -->
+            <!-- The device flow writes its verification URL and user code here. -->
             <Border Grid.Row="2"
                     Margin="24,16,24,0"
                     CornerRadius="6"

@@ -23,22 +23,20 @@ class DiskUsageService : RemoteJobService {
     DiskUsageService([AppConfig] $config, [NetworkProbe] $probe,
         [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Returns worker args for the "DiskScan" job (no network here - the worker gates
-    # reachability itself and resolves wiztree64.exe); Options carries the configurable row cap.
+    # Worker args for the "DiskScan" job. No network here: the worker gates reachability
+    # itself and resolves wiztree64.exe. Options carries the configurable row cap.
     [hashtable] PrepareDiskScan([string]$hostName) {
         return $this.BuildWorkerArgs($hostName, "DiskScan", @{ TopN = $this.Config.GetFolderScanCount() })
     }
 
-    # Worker args for the destructive "DeleteFolders" job. The operator-selected paths (already
-    # filtered to deletable) ride in Options and cross the boundary as JSON, never a command line.
+    # Worker args for the destructive "DeleteFolders" job. Operator-selected paths ride
+    # in Options and cross the boundary as JSON, never as a command line.
     [hashtable] PrepareDeleteFolders([string]$hostName, [string[]]$paths) {
         return $this.BuildWorkerArgs($hostName, "DeleteFolders", @{ Paths = $paths })
     }
 
-    # Reads the top-rows CSV the worker copied back (already just the N+1 largest
-    # rows, selected on the target) into a typed report - small enough to parse on
-    # the dispatcher. $null when no scan has run; a corrupt file parses to an
-    # empty report, which callers treat the same.
+    # Parses the top-rows CSV the worker copied back into a typed report. Returns $null
+    # when no scan has run, and a corrupt file parses to an empty report.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {
         $csvPath = Join-Path $this.Config.ReportsPath "$hostName-folders.csv"
         if (-not (Test-Path $csvPath)) { return $null }

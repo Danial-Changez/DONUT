@@ -52,8 +52,7 @@ foreach ($file in $files) {
     $needWork.Add($file.FullName)
 
     if (-not $Check) {
-        # Preserve the file's BOM state: ReadAllText strips a BOM, so re-detect it
-        # from the raw bytes and write with a matching encoding.
+        # ReadAllText strips the BOM, so re-detect it from the raw bytes to preserve it.
         $hasBom = $false
         $head = [System.IO.File]::ReadAllBytes($file.FullName)
         if ($head.Length -ge 3 -and $head[0] -eq 0xEF -and $head[1] -eq 0xBB -and $head[2] -eq 0xBF) {

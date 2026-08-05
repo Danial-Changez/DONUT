@@ -9,7 +9,7 @@ always see what will be installed before anything changes.
 ## Run an apply
 
 1. Click the mode pill until it shows **Apply Updates**.
-2. Click **Run** on a machine (or **Run all** — a single confirmation lists every
+2. Click **Run** on a machine (or **Run All** — a single confirmation lists every
    target first).
 3. DONUT reuses a [fresh scan](./scanning.md#scan-results-are-reused-for-24-hours)
    (less than 24 hours old) or runs one, then shows a **per-host confirmation** with
@@ -31,15 +31,3 @@ If you disconnect while updates are running, the remote updates continue — you
 lose the live feed. DONUT keeps trying to reconnect and resume the log tail for
 [`recoveryWindowMinutes`](../configuration/config-reference.md) (default 30) before
 settling the row as *Unconfirmed*.
-
-## Under the hood
-
-![Apply updates sequence diagram](/diagrams/applyUpdates_sequence_diagram.svg)
-
-*Source: [`applyUpdates_sequence_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/applyUpdates_sequence_diagram.puml)*
-
-The remote worker itself (inside a pool runspace):
-
-![Remote worker activity diagram](/diagrams/activity_diagram.svg)
-
-*Source: [`activity_diagram.puml`](https://github.com/Danial-Changez/DONUT/blob/main/docs/diagrams/activity_diagram.puml)*

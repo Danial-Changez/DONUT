@@ -7,14 +7,12 @@ using module "..\..\src\Models\AppConfig.psm1"
 Describe "Core Module Integration" {
 
     BeforeAll {
-        # Setup test environment
         $script:testRoot = Join-Path $env:TEMP "DonutCoreIntegration_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
         New-Item -Path $script:testRoot -ItemType Directory -Force | Out-Null
         
         $script:testSourceRoot = Join-Path $script:testRoot "src"
         New-Item -Path $script:testSourceRoot -ItemType Directory -Force | Out-Null
         
-        # Create test scripts directory
         $script:scriptsDir = Join-Path $script:testSourceRoot "Scripts"
         New-Item -Path $script:scriptsDir -ItemType Directory -Force | Out-Null
         
@@ -31,25 +29,21 @@ if ($a.ConfigPath -and (Test-Path $a.ConfigPath)) {
 $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:testWorker
 
-        # Redirect the machine-wide data root: ConfigManager anchors on DonutPaths
-        # (%ProgramData%), so an unredirected run edits the operator's real config.
+        # ConfigManager anchors on %ProgramData%, so an unredirected run edits the real config.
         $script:originalProgramData = $env:ProgramData
         $env:ProgramData = $script:testRoot
         $script:originalLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = $script:testRoot
         
-        # Initialize RunspaceManager
         [RunspaceManager]::Initialize(1, 5)
     }
 
     AfterAll {
         [RunspaceManager]::Close()
         
-        # Restore the real data root
         $env:ProgramData = $script:originalProgramData
         $env:LOCALAPPDATA = $script:originalLocalAppData
         
-        # Cleanup
         if (Test-Path $script:testRoot) {
             Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -59,7 +53,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
         It "Should execute multiple jobs concurrently using shared pool" {
             $jobs = @()
             
-            # Create multiple jobs
             for ($i = 1; $i -le 3; $i++) {
                 $job = [AsyncJob]::new("Host$i", "Scan")
                 $job.Start($script:testWorker, @{
@@ -70,7 +63,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 $jobs += $job
             }
             
-            # Wait for all to complete
             $timeout = [DateTime]::Now.AddSeconds(30)
             $allComplete = $false
             
@@ -85,7 +77,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 Start-Sleep -Milliseconds 100
             }
             
-            # Verify all completed
             foreach ($job in $jobs) {
                 $job.Status | Should -Be "Completed"
                 $job.Cleanup()
@@ -102,11 +93,9 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 ConfigPath = ""
             }, "")
             
-            # The job should use the same pool
             $pool2 = [RunspaceManager]::GetPool()
             $pool1 | Should -Be $pool2
             
-            # Wait and cleanup
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -120,18 +109,15 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
         It "Should pass config to AsyncJob via temp file" {
             $configManager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Create and save config
             $config = [AppConfig]::new($script:testSourceRoot, $configManager.LogsPath, $configManager.ReportsPath, @{
                 activeCommand = "scan"
                 throttleLimit = 5
             })
             $configManager.SaveConfig($config)
             
-            # Create temp config for job
             $tempConfig = Join-Path $script:testRoot "temp_job_config.json"
             $config.Settings | ConvertTo-Json -Depth 10 | Set-Content -Path $tempConfig
             
-            # Start job with config
             $job = [AsyncJob]::new("ConfigTestHost", "Scan")
             $job.Start($script:testWorker, @{
                 HostName = "ConfigTestHost"
@@ -139,7 +125,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 ConfigPath = $tempConfig
             }, $tempConfig)
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -148,7 +133,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             
             $job.Status | Should -Be "Completed"
             
-            # Cleanup should remove temp config
             $job.Cleanup()
             Test-Path $tempConfig | Should -Be $false
         }
@@ -156,23 +140,19 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
         It "Should load config, modify, save, and reload correctly" {
             $configManager = [ConfigManager]::new($script:testSourceRoot)
             
-            # Initial save
             $config1 = [AppConfig]::new($script:testSourceRoot, $configManager.LogsPath, $configManager.ReportsPath, @{
                 activeCommand = "scan"
                 throttleLimit = 3
             })
             $configManager.SaveConfig($config1)
             
-            # Load
             $loaded = $configManager.LoadConfig()
             $loaded.Settings.activeCommand | Should -Be "scan"
             
-            # Modify and save
             $loaded.Settings.activeCommand = "applyUpdates"
             $loaded.Settings.throttleLimit = 10
             $configManager.SaveConfig($loaded)
             
-            # Reload and verify
             $reloaded = $configManager.LoadConfig()
             $reloaded.Settings.activeCommand | Should -Be "applyUpdates"
             $reloaded.Settings.throttleLimit | Should -Be 10
@@ -183,7 +163,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
         It "Should use NetworkProbe to validate host before creating job" {
             $probe = [NetworkProbe]::new()
             
-            # Check localhost (should be online)
             $isOnline = $probe.IsOnline("localhost")
             
             if ($isOnline) {
@@ -194,7 +173,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                     ConfigPath = ""
                 }, "")
                 
-                # Wait for completion
                 $timeout = [DateTime]::Now.AddSeconds(10)
                 while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                     $job.Poll()
@@ -215,15 +193,12 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             
             $isOnline | Should -Be $false
             
-            # In real code, we'd skip job creation here
-            # This test verifies the probe correctly identifies offline hosts
         }
 
         It "Should resolve hostname before job execution" {
             $probe = [NetworkProbe]::new()
 
-            # Resolution is DC-authoritative and fail-hard: it only returns an
-            # address when an Active Directory domain controller is reachable.
+            # Resolution is DC-authoritative: an address only comes back when a DC is reachable.
             $ip = $probe.ResolveHost("localhost")
             if (Get-Command Get-ADDomainController -ErrorAction SilentlyContinue) {
                 $ip | Should -Not -BeNullOrEmpty
@@ -233,7 +208,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 $ip | Should -BeNullOrEmpty
             }
 
-            # Create job with resolved info
             $job = [AsyncJob]::new("localhost", "Scan")
             $job.Start($script:testWorker, @{
                 HostName = "localhost"
@@ -241,7 +215,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 ConfigPath = ""
             }, "")
             
-            # Wait for completion
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
@@ -255,7 +228,6 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 
     Context "Full Pipeline Integration" {
         It "Should execute complete workflow: Config -> Probe -> AsyncJob" {
-            # 1. Setup ConfigManager
             $configManager = [ConfigManager]::new($script:testSourceRoot)
             $config = [AppConfig]::new($script:testSourceRoot, $configManager.LogsPath, $configManager.ReportsPath, @{
                 activeCommand = "scan"
@@ -263,17 +235,14 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             })
             $configManager.SaveConfig($config)
             
-            # 2. Probe host
             $probe = [NetworkProbe]::new()
             $targetHost = "localhost"
             $isOnline = $probe.IsOnline($targetHost)
             $isOnline | Should -Be $true
             
-            # 3. Create temp config for job
             $tempConfig = Join-Path $script:testRoot "pipeline_config.json"
             $config.Settings | ConvertTo-Json -Depth 10 | Set-Content -Path $tempConfig
             
-            # 4. Execute job
             $job = [AsyncJob]::new($targetHost, $config.Settings.activeCommand)
             $job.Start($script:testWorker, @{
                 HostName = $targetHost
@@ -281,18 +250,15 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
                 ConfigPath = $tempConfig
             }, $tempConfig)
             
-            # 5. Poll until complete
             $timeout = [DateTime]::Now.AddSeconds(15)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 100
             }
             
-            # 6. Verify results
             $job.Status | Should -Be "Completed"
             $job.Result | Should -Not -BeNullOrEmpty
             
-            # 7. Cleanup
             $job.Cleanup()
             Test-Path $tempConfig | Should -Be $false
         }

@@ -1,7 +1,4 @@
-# Unit tests for InventoryPresenter - requires WPF + Donut.Mvvm (loaded by the
-# wrapper). Fakes the services + the HomePresenter back-ref so the detail render,
-# the report-file memo, and the re-probe decision are verified without WPF
-# controls or a live runspace.
+# The wrapper loads WPF and Donut.Mvvm. Fakes replace the services and the HomePresenter.
 using module "..\..\src\UI\Presenters\InventoryPresenter.psm1"
 using module "..\..\src\Models\MachineInventory.psm1"
 using module "..\..\src\Services\InventoryService.psm1"
@@ -10,9 +7,8 @@ using module "..\..\src\Models\JobEnums.psm1"
 
 # --- Test doubles -----------------------------------------------------------
 
-# Overrides ParseInventory to return a script-set value (no report-file IO) and
-# counts the calls so the session memo is verifiable. The base InventoryService
-# ctor only stores its refs, so base($null, $null) is safe.
+# Returns a script-set inventory with no report-file IO, and counts calls so the session
+# memo is verifiable. The base ctor only stores its refs, so base($null, $null) is safe.
 class FakeInventoryService : InventoryService {
     [MachineInventory] $NextInventory
     [int] $ParseCalls = 0
@@ -82,7 +78,7 @@ Describe "InventoryPresenter" {
             $script:svc.NextInventory = New-Inventory
 
             $first = $script:p.GetInventory('PC1')
-            $second = $script:p.GetInventory('pc1')   # case-insensitive key
+            $second = $script:p.GetInventory('pc1')   # Case-insensitive key.
 
             $script:svc.ParseCalls | Should -Be 1
             $second | Should -Be $first
@@ -128,12 +124,12 @@ Describe "InventoryPresenter" {
             # The memo now serves the fresh probe without re-reading the file.
             $script:svc.NextInventory = $null
             $script:p.GetInventory('PC1') | Should -Be $inv
-            $script:fakeHome.Rows['PC1'].AppliedInventory | Should -Be $inv  # tile populated
+            $script:fakeHome.Rows['PC1'].AppliedInventory | Should -Be $inv
             $script:fakeHome.Rows['PC1'].ProbedIp | Should -Be '10.0.0.9'
         }
 
         It "drops the result when the card was cleared mid-probe" {
-            # No row for PC1 -> treated as cleared: nothing memoized, no throw.
+            # No row for PC1 means cleared: nothing memoized, no throw.
             $script:svc.NextInventory = New-Inventory
             $script:job.Status = 'Completed'
 

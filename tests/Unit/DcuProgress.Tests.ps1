@@ -86,8 +86,7 @@ Describe "DcuProgress" {
         }
 
         It "does not mistake the component check (step 2) for the update check (step 1)" {
-            # "Checking for application component updates" would also match a naive
-            # 'checking for' pattern - the more specific line must win.
+            # A naive 'checking for' pattern would also match, so the more specific line wins.
             [DcuProgress]::ParseScanStep("Checking for application component updates...") | Should -Be 2
         }
 

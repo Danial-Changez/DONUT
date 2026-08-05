@@ -4,7 +4,7 @@ using module "..\..\src\Core\LogService.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 # Fake that overrides the filesystem seams so claim/discard behaviour is exercised
-# off-disk. Text holds the file's content; $null means the file does not exist.
+# off-disk. Text holds the file's content, and $null means the file does not exist.
 class FakeIntentStore : PendingIntentStore {
     [string] $Text = $null
     [int] $Deletes = 0

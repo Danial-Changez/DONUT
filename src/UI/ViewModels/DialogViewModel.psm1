@@ -20,11 +20,11 @@ class DialogViewModel : ObservableObject {
     [bool]   $HasList = $false
     [string] $PrimaryText = 'OK'
     [object] $PrimaryCommand      # RelayCommand: Result = true, close
-    [object] $PrimaryStyle        # resolved Style the primary button binds to (accent / destructive)
+    [object] $PrimaryStyle        # Style the primary button binds to (accent or destructive)
     [string] $SecondaryText = ''
     [bool]   $HasSecondary = $false
     [object] $SecondaryCommand    # RelayCommand: Result = false, close
     [string] $RememberText = ''
-    [bool]   $HasRemember = $false  # opt-in checkbox; off for every existing caller
-    [bool]   $Remember = $false     # two-way bound; read by the caller after the modal
+    [bool]   $HasRemember = $false  # opt-in checkbox, off for every existing caller
+    [bool]   $Remember = $false     # two-way bound, read by the caller after the modal
 }

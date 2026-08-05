@@ -27,14 +27,14 @@ param(
     [string]$Dc,
     [string]$LogsDir,
     [string]$ResultFile,
-    # Parent's effective debug-log state; this worker's lines are all [DEBUG].
+    # Parent's effective debug-log state, since this worker's lines are all [DEBUG].
     [switch]$DebugLog
 )
 
 $ErrorActionPreference = 'Stop'
 
-# NetworkProbe.ResolveWith semantics: authoritative A lookup against the DC; '' on
-# any failure (that is a verdict, not an error - the host may simply not exist).
+# NetworkProbe.ResolveWith semantics: authoritative A lookup against the DC. Returns
+# '' on any failure, which is a verdict rather than an error, since the host may not exist.
 function Resolve-TargetIp {
     param([string]$TargetHost, [string]$Server, [object]$Log)
     if ([string]::IsNullOrWhiteSpace($Server)) {
@@ -55,7 +55,7 @@ function Resolve-TargetIp {
 }
 
 # NetworkProbe.IsPortOpen port for RPC 135: bounded 2 s TCP connect. The breadcrumb
-# logs before BeginConnect - a security-stack-hooked connect never returns.
+# logs before BeginConnect, because a security-stack-hooked connect never returns.
 function Test-RpcPort {
     param([string]$Ip, [object]$Log, [int]$Port = 135)
     try {
@@ -95,8 +95,7 @@ try {
         ConvertTo-Json -Compress | Set-Content -LiteralPath $ResultFile -Encoding UTF8
 }
 catch {
-    # No result file written = infrastructure fault: exit non-zero so the parent
-    # flags ProcessFault and re-runs this host on the classic worker path.
+    # No result file means an infrastructure fault, so the parent flags ProcessFault.
     [Console]::Error.WriteLine("Fast resolve failed: $($_.Exception.Message)")
     exit 1
 }

@@ -13,8 +13,7 @@ Describe "DonutPaths" {
     }
 
     Context "Layout" {
-        # Real temp paths, not drive literals: Join-Path validates the drive, so 'X:\PD'
-        # throws off Windows and the assertion never runs.
+        # Real temp paths, not drive literals: Join-Path validates the drive off Windows.
         BeforeEach {
             $script:pd = Join-Path ([IO.Path]::GetTempPath()) 'DonutPathsTests-PD'
             $env:ProgramData = $script:pd
@@ -30,8 +29,7 @@ Describe "DonutPaths" {
         }
 
         It "is machine-wide, not per-account: LOCALAPPDATA does not move it" {
-            # The whole point of the root. A de-elevated UI and an elevated instance run
-            # as different accounts and must still read the same config, token and logs.
+            # A de-elevated UI and an elevated instance run as different accounts, same data.
             $env:LOCALAPPDATA = Join-Path ([IO.Path]::GetTempPath()) 'someone'
             $first = [DonutPaths]::DataRoot()
 
@@ -52,8 +50,7 @@ Describe "DonutPaths" {
         }
 
         It "returns null when LOCALAPPDATA is unset rather than a bare 'DONUT'" {
-            # Join-Path against an empty root would yield a relative path that resolves
-            # somewhere unrelated; callers only use this to print a hint.
+            # Join-Path against an empty root would yield a relative path resolving elsewhere.
             $env:LOCALAPPDATA = ''
             [DonutPaths]::LegacyRoot() | Should -BeNullOrEmpty
         }

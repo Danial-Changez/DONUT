@@ -1,12 +1,10 @@
-# InventoryPresenter's class graph pulls in WPF controls and the Donut.Mvvm base
-# types, so load those assemblies before the tests' `using module` graph parses.
+# Load WPF and the Donut.Mvvm base types before the tests' `using module` graph parses.
 Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
 Add-Type -AssemblyName PresentationCore -ErrorAction SilentlyContinue
 Add-Type -AssemblyName WindowsBase -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 
-# Per-type guards: ObservableObject (WPF-free) may already be loaded by a lighter VM test, so
-# compile each independently rather than skipping RelayCommand when ObservableObject exists.
+# Per-type guards: a lighter VM test may already have loaded ObservableObject on its own.
 if (-not ('Donut.Mvvm.ObservableObject' -as [type])) {
     Add-Type -Path "$PSScriptRoot\..\..\src\Launcher\ObservableObject.cs" -ReferencedAssemblies System.ObjectModel
 }

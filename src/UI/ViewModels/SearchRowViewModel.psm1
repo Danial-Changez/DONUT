@@ -45,8 +45,7 @@ class SearchRowViewModel {
         if ([string]$r.Kind -eq 'User') {
             $label = if ([string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.SamAccountName }
             else { [string]$r.UserPrincipalName }
-            # ASCII suffix, not an emoji (coding style; the row template pins no symbol
-            # font, so a glyph is tofu-risk). The Unlock button already signals state.
+            # ASCII suffix, not a glyph: the row template pins no symbol font (tofu risk).
             if ($r.LockedOut) { $label = $label + '  (locked)' }
             $vm.Primary = $label
             $sub = @([string]$r.DisplayName, [string]$r.Domain) |

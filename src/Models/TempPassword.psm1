@@ -38,7 +38,6 @@ class TempPassword {
         return $sb.ToString()
     }
 
-    # Converts a plaintext value to a read-only SecureString via AppendChar.
     static [securestring] ToSecure([string]$value) {
         $secure = [securestring]::new()
         if (-not [string]::IsNullOrEmpty($value)) {

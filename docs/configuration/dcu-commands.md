@@ -3,12 +3,10 @@ title: DCU command reference
 description: How the per-command args in config.json become dcu-cli arguments, and what each option does.
 ---
 
-Each command under `commands` in
-[config.json](./config-reference.md) carries an `args` map that DONUT translates
-into the dcu-cli invocation. `AppConfig.BuildDcuArgs()` generates the
-`-option=value` syntax: boolean `true` becomes `-silent` / `-reboot=enable`,
-`false` is omitted (or `=disable` where explicit), empty strings are omitted, and
-values with spaces are quoted.
+Each command under `commands` in [config.json](./config-reference.md) carries an
+`args` map that DONUT translates into the dcu-cli invocation: boolean `true`
+becomes `-silent` / `-reboot=enable`, `false` is omitted (or `=disable` where
+explicit), empty strings are omitted, and values with spaces are quoted.
 
 :::tip
 If a command runs with none of the dropdown/multi-select options set, DCU uses the
@@ -35,16 +33,9 @@ Based on the
 
 ## Return codes
 
-DONUT treats dcu-cli's return code as authoritative (parsed from the output log)
-and classifies it per command (`DcuLog.Classify`):
-
-- `0` succeeds for any command.
-- `1` and `5` mean "completed, reboot required". DONUT flags the reboot instead of failing the job.
-- `500` from a **scan** means the scan ran clean and found nothing to install. DONUT marks the job Completed and reports "no updates found".
-- Every other code fails the job, with the decoded meaning in the error message.
-
-**Note:** `500` is only benign for `scan`. The same code from any other command is
-a failure.
+DONUT treats dcu-cli's return code as authoritative and classifies it per command.
+Note that `500` is only benign for `scan` — the same code from any other command
+is a failure.
 
 | Code | Meaning | DONUT behavior |
 |------|---------|----------------|
