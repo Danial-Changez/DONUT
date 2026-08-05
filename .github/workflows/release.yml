@@ -30,6 +30,15 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Its own prefix because the self-contained publish restores a RID-specific set CI never pulls.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-selfcontained-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
+          restore-keys: |
+            nuget-selfcontained-
+            nuget-
+
       - name: Build MSI
         id: build
         shell: pwsh
