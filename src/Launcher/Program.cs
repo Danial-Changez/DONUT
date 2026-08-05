@@ -7,32 +7,30 @@ using System.Security.Cryptography;
 namespace Donut.Launcher;
 
 /// <summary>
-/// Launcher entry point. Shows the startup splash on the main (UI) thread, then hosts the
-/// DONUT PowerShell/WPF app on a dedicated STA worker thread while a bare WinForms message
-/// loop keeps it alive; the process hard-exits when the app window closes. The tray icon is
-/// owned by the PowerShell/WPF side, not here.
+/// Launcher entry point. Shows the startup splash on the main UI thread, then hosts the
+/// DONUT PowerShell and WPF app on a dedicated STA worker thread while a bare WinForms
+/// message loop keeps it alive. The process hard-exits when the app window closes, and
+/// the tray icon is owned by the PowerShell side rather than here.
 /// </summary>
 static class Program
 {
     /// <summary>How long to wait for the instance we are replacing to release the mutex.</summary>
     const int AwaitPredecessorSeconds = 15;
 
-    /// <summary>Process entry point; STA is required by WPF and WinForms.</summary>
+    /// <summary>Process entry point. STA is required by WPF and WinForms.</summary>
     /// <param name="args">
-    /// <c>--tray</c> starts hidden in the tray (autostart). <c>--await-pid &lt;pid&gt;</c> waits for
-    /// that process to exit first, so an elevation relaunch does not lose the single-instance race.
+    /// <c>--tray</c> starts hidden in the tray for autostart. <c>--await-pid &lt;pid&gt;</c>
+    /// waits for that process to exit first, so an elevation relaunch does not lose the
+    /// single-instance race.
     /// </param>
     [STAThread]
     static void Main(string[] args)
     {
         bool tray = args.Contains("--tray");
 
-        // Before the mutex, not after: it is Local\-scoped, so per-session and not per-token.
-        // An elevated relaunch would otherwise bow out as a "second instance" of its parent.
+        // Before the mutex: it is per-session, so an elevated relaunch would collide.
         AwaitPredecessor(args);
 
-        // Single instance: the first launch owns the mutex; a later launch signals the
-        // running instance to surface its window and exits without a second UI.
         var instanceMutex = new Mutex(true, "Local\\DONUT.SingleInstance", out bool createdNew);
         if (!createdNew)
         {
@@ -47,7 +45,6 @@ static class Program
 
         ApplicationConfiguration.Initialize();
 
-        // Splash art is embedded, so it paints immediately - no wait on disk or extraction.
         // A tray start constructs it but never shows it (StartupProgress then no-ops).
         var splash = new SplashForm();
         if (!tray) { splash.Show(); }
@@ -55,15 +52,14 @@ static class Program
 
         try
         {
-            // Run PowerShell in a separate STA thread to support WPF
             Thread psThread = new Thread(() =>
             {
                 try
                 {
-                    // Always run from the embedded copy: self-extract the app tree, then
-                    // point PowerShell at the extracted Start-Donut.ps1.
+                    // Always the embedded copy, never a checkout beside the exe.
                     progress.Report(3, "Unpacking resources");
-                    string scriptPath = Path.Combine(ExtractEmbeddedApp(), "src", "Start-Donut.ps1");
+                    string appRoot = ExtractEmbeddedApp();
+                    string scriptPath = Path.Combine(appRoot, "src", "Start-Donut.ps1");
                     if (!File.Exists(scriptPath))
                     {
                         MessageBox.Show($"Could not find Start-Donut.ps1 at:\n{scriptPath}", "Error",
@@ -71,17 +67,18 @@ static class Program
                         return;
                     }
 
+                    // Quiet on a tray start: no dialogs on the logon screen.
+                    Bootstrap.Run(progress.Report, appRoot, quiet: tray);
+
                     var iss = InitialSessionState.CreateDefault();
                     iss.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
                     iss.ApartmentState = ApartmentState.STA;
                     iss.ThreadOptions = PSThreadOptions.UseCurrentThread;
 
-                    // Exposed to DonutApp.ps1 as $Splash for milestone reporting.
                     iss.Variables.Add(new SessionStateVariableEntry(
                         "Splash", progress, "DONUT startup splash reporter"));
 
-                    // $StartHidden drives the tray (no-window) boot; $SingleInstanceOwned
-                    // tells the PS side the launcher already holds the single-instance lock.
+                    // Tells the PS side to boot windowless, and that the lock is held.
                     iss.Variables.Add(new SessionStateVariableEntry(
                         "StartHidden", tray, "DONUT hidden (tray) start"));
                     iss.Variables.Add(new SessionStateVariableEntry(
@@ -89,7 +86,6 @@ static class Program
 
                     using (var ps = PowerShell.Create(iss))
                     {
-                        // Pass the script path to ensure it runs in the correct context
                         ps.AddScript($"& '{scriptPath}'");
                         var results = ps.Invoke();
 
@@ -109,8 +105,7 @@ static class Program
                     // Backstop: dismiss the splash if startup threw before DonutApp closed it.
                     progress.Complete();
 
-                    // Fallback hard-exit when the main window never showed (normal close exits
-                    // via the window's Closed handler); else the tray loop keeps the exe alive.
+                    // Only for when no window showed, as a normal close exits itself.
                     Environment.Exit(0);
                 }
             });
@@ -119,8 +114,7 @@ static class Program
             psThread.IsBackground = true;
             psThread.Start();
 
-            // Bare message loop: the tray icon now lives on the PS/WPF side; this only
-            // keeps the process (and its single-instance mutex) alive until the app exits.
+            // Bare loop because the tray icon lives on the PS and WPF side.
             Application.Run(new ApplicationContext());
             GC.KeepAlive(instanceMutex);
         }
@@ -130,8 +124,7 @@ static class Program
         }
     }
 
-    // Waits out the instance being replaced, so an elevation relaunch can take the mutex.
-    // Best-effort: a gone/unreadable pid means there is nothing left to wait for.
+    // Best-effort: a gone or unreadable pid means there is nothing left to wait for.
     static void AwaitPredecessor(string[] args)
     {
         int flag = Array.IndexOf(args, "--await-pid");
@@ -147,13 +140,7 @@ static class Program
         catch (InvalidOperationException) { /* exited between the lookup and the wait */ }
     }
 
-    // Self-extracts the embedded app tree BESIDE the exe, verified per file by SHA-256
-    // (rewriting only missing/changed/tampered ones); returns the root path. Beside the
-    // exe means Program Files under an MSI install - NTFS admin-only write, the right
-    // home for code (data stays in ProgramData\DONUT\data) - and a user-writable folder
-    // for a portable run. The tree only changes when this exe changes (an upgrade, which
-    // is elevated), so the normal refresh is elevated too; a de-elevated launch against
-    // a stale tree gets the start-as-admin-once guidance below.
+    // Beside the exe, not ProgramData: an MSI install makes that admin-only NTFS.
     static string ExtractEmbeddedApp()
     {
         var asm = typeof(Program).Assembly;
@@ -174,11 +161,7 @@ static class Program
                       name.StartsWith("res/", StringComparison.Ordinal)))
                     continue;
 
-                // XAML never touches disk: ViewLoader/ResourceService read it from this
-                // assembly (EmbeddedAssets). Only what MUST be a file is extracted - the
-                // PowerShell graph (using module / worker children / the LensAgent task
-                // resolve real paths), tools, fonts and images. PruneUnknown clears any
-                // xaml an older build extracted.
+                // XAML is read straight from this assembly, so it needs no file.
                 if (name.StartsWith("src/", StringComparison.Ordinal) &&
                     name.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -191,8 +174,7 @@ static class Program
                 using Stream? s = asm.GetManifestResourceStream(name);
                 if (s is null || !NeedsWrite(dest, s)) continue;
 
-                // Deliberately NOT widened for de-elevated writers: this tree is what an
-                // elevated DONUT executes, so local-user write access here is an LPE.
+                // Never widened: this tree runs elevated, so a user-writable copy is an LPE.
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
@@ -208,10 +190,11 @@ static class Program
                         "Start DONUT as administrator once to create or update it.", ex);
                 }
             }
+            // Downloaded by Bootstrap rather than embedded, so Prune must spare it.
+            keep.Add(Path.GetFullPath(Bootstrap.WizTreePath(root)));
             PruneUnknown(root, keep);
 
-            // One-time cleanup: earlier builds extracted to ProgramData - a world-readable
-            // copy of the code this ACL-protected tree supersedes. Best-effort.
+            // Earlier builds left a world-readable copy of this code in ProgramData.
             string legacy = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "DONUT", "app");
@@ -223,8 +206,7 @@ static class Program
         finally { if (owned) mtx.ReleaseMutex(); }
     }
 
-    // True when the on-disk file is missing, a different size, or a different SHA-256 than
-    // the embedded stream (absent, updated, or tampered). Leaves the stream at end.
+    // Leaves the stream at its end.
     static bool NeedsWrite(string dest, Stream embedded)
     {
         if (!File.Exists(dest)) return true;
@@ -236,8 +218,7 @@ static class Program
         return !want.AsSpan().SequenceEqual(SHA256.HashData(fs));
     }
 
-    // Best-effort removal of extracted files no longer embedded (absorbs files dropped
-    // across updates); never touches anything outside the app root.
+    // Absorbs files dropped across updates, never reaching outside the app root.
     static void PruneUnknown(string root, HashSet<string> keep)
     {
         try
