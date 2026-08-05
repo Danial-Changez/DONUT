@@ -17,17 +17,21 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Three jobs rather than one so a format nit stops hiding the test results
+# behind it. Pester's own Run.Parallel cannot replace the matrix here: nearly
+# every test file opens with `using module`, and concurrent class-graph
+# compiles deadlock on the module-load lock (docs/development/decisions.md).
 jobs:
-  verify:
+  checks:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
+      # No cache here: the runner image ships PSScriptAnalyzer, and this job wants no Pester.
       - name: Install PowerShell modules
         shell: pwsh
         run: |
-          Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
           if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
               Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
           }
@@ -40,13 +44,51 @@ jobs:
         shell: pwsh
         run: ./tools/Invoke-Lint.ps1 -FailOn Warning
 
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      # Both suites report, matching the no-FailFast rule in testing.md.
+      fail-fast: false
+      matrix:
+        suite: [Unit, Integration]
+    steps:
+      - uses: actions/checkout@v7
+
+      # Keyed on the pinned version below, so bumping the pin refills the cache.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Documents/PowerShell/Modules
+          key: psmodules-pester-6.0.1
+
+      # Guarded on presence, so a cache hit skips the gallery instead of reinstalling.
+      - name: Install PowerShell modules
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -eq '6.0.1' })) {
+              Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
+          }
+
       - name: Tests
         shell: pwsh
-        run: ./tools/Invoke-Tests.ps1
+        run: ./tools/Invoke-Tests.ps1 -Path tests/${{ matrix.suite }}
+
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+
+      # Restoring the Microsoft.PowerShell.SDK graph is most of the build when uncached.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
+          restore-keys: nuget-
 
       - name: Build launcher
         run: dotnet build DONUT.sln -c Release
