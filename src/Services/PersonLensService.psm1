@@ -289,6 +289,30 @@ class PersonLensService {
             @{ kind = 'owner'; machines = @($machines); siteServer = $this.SiteServer }, $false)
     }
 
+    # User to their application deployments, as @{ deployments = @(...), error } JSON.
+    # Dispatched in parallel with the person lookup, so neither ever waits on the other.
+    [string] RunSoftwareLookupJson([string]$identity) {
+        if ([string]::IsNullOrWhiteSpace($identity)) { return '' }
+        if (-not [ElevationContext]::IsElevated()) {
+            try {
+                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
+                if (-not (Test-Path -LiteralPath $common)) { return '' }
+                . $common
+                $script:ForestNc = Get-LensForestNc
+                $sw = @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer }
+                return [string](Resolve-UserSoftware @sw)
+            }
+            catch {
+                $this.Logger.LogException('In-process software lookup failed', $_)
+                return ''
+            }
+        }
+        return $this.ExchangeRoundTrip(
+            @{ kind = 'software'; identity = $identity; sam = $this.SamHint
+                siteServer = $this.SiteServer
+            }, $false)
+    }
+
     [string] RunLookupJson([string]$identity) {
         # De-elevated, DONUT is already the user whose rights this data needs.
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }

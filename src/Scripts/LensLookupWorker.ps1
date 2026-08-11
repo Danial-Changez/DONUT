@@ -32,6 +32,10 @@
     Machine names: return their SCCM primary users instead of running a person lookup.
     The whole list travels in one request; the agent resolves them back to back.
 
+.PARAMETER SoftwareFor
+    Identity: return their SCCM application deployments instead of running a person
+    lookup. Dispatched beside the person lookup, and it rides the same -Sam hint.
+
 .PARAMETER Sam
     Optional sAMAccountName hint from the finder row, so the agent can start SCCM
     affinity before the AD user read resolves it.
@@ -57,6 +61,7 @@ param(
     [Parameter(Mandatory)] [string] $SourceRoot,
     [string] $Sam = '',
     [string[]] $OwnerOf = @(),
+    [string] $SoftwareFor = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
     [switch] $StopAgent
@@ -77,4 +82,6 @@ if ($WarmOnly) {
 }
 # Owner lookups ride the same agent and RBAC scope, so they are a mode, not a worker.
 if (@($OwnerOf).Count -gt 0) { return $svc.RunOwnerLookupJson($OwnerOf) }
+# Software lookups too, dispatched beside the person lookup they never wait on.
+if ($SoftwareFor) { return $svc.RunSoftwareLookupJson($SoftwareFor) }
 $svc.RunLookupJson($Identity)
