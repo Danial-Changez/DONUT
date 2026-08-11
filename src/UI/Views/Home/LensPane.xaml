@@ -129,8 +129,9 @@
           </ItemsControl.Style>
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
-                      Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+              <!-- The nested row tier, one step lighter than the fact tiles' bordered cards. -->
+              <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
+                      Background="{DynamicResource PanelBackgroundHover}">
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -258,9 +259,9 @@
                       Visibility="{Binding IsSoftwareShown, Converter={StaticResource BoolToVis}}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <!-- The same card and column anatomy as a device row, so the two views are peers. -->
-              <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
-                      Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+              <!-- The same nested-row surface and column anatomy as a device row. -->
+              <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
+                      Background="{DynamicResource PanelBackgroundHover}">
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
