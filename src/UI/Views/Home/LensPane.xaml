@@ -54,7 +54,8 @@
       </TextBlock.Style>
     </TextBlock>
 
-    <Grid Grid.Row="2" Margin="0,0,0,14">
+    <!-- The reset modal's person-fields pairing: the facts live in dense Card tiles. -->
+    <Grid Grid.Row="2" Margin="0,0,0,16">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="*" />
@@ -63,22 +64,38 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
-        <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
-        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
-      </StackPanel>
-      <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
-        <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
-        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" ToolTip="{Binding Manager}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
-      </StackPanel>
-      <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
-        <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
-        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" Margin="0,2,0,0" />
-      </StackPanel>
-      <StackPanel Grid.Row="1" Grid.Column="1">
-        <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
-        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" ToolTip="{Binding Office}" FontFamily="{DynamicResource FontSans}" FontSize="13" Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,2,0,0" />
-      </StackPanel>
+      <Border Grid.Row="0" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,12">
+        <StackPanel>
+          <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="12"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+        </StackPanel>
+      </Border>
+      <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,12">
+        <StackPanel>
+          <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" ToolTip="{Binding Manager}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="13"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+        </StackPanel>
+      </Border>
+      <Border Grid.Row="1" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,0">
+        <StackPanel>
+          <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="12"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+        </StackPanel>
+      </Border>
+      <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,0">
+        <StackPanel>
+          <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" ToolTip="{Binding Office}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="13"
+                   Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+        </StackPanel>
+      </Border>
     </Grid>
 
     <Grid Grid.Row="3">
@@ -166,9 +183,13 @@
                                Foreground="{DynamicResource BodyTextTertiary}" />
                     </StackPanel>
                     <!-- A recovery secret, so it stays hidden until revealed, and selectable to copy. -->
-                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}" FontFamily="{DynamicResource FontMono}" FontSize="12"
-                             Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" Margin="0,6,0,0"
-                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}" />
+                    <Border Background="{DynamicResource TintGreen}" BorderBrush="{DynamicResource TintGreenBorder}"
+                            BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0"
+                            Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
+                      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="12"
+                               Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
+                    </Border>
                     <!-- The note explains a missing key or a device SCCM could not find. -->
                     <TextBox Text="{Binding Note}" FontFamily="{DynamicResource FontSans}" FontSize="11" Foreground="{DynamicResource BodyTextTertiary}" Margin="0,4,0,0">
                       <TextBox.Style>
@@ -237,16 +258,27 @@
                       Visibility="{Binding IsSoftwareShown, Converter={StaticResource BoolToVis}}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <!-- The collection name shows verbatim, the install/application filter went generic. -->
-              <StackPanel Margin="0,0,0,8">
-                <StackPanel Orientation="Horizontal">
-                  <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
-                           FontFamily="{DynamicResource FontSans}" FontSize="13" FontWeight="SemiBold"
-                           Foreground="{DynamicResource TitleTextPrimary}" />
-                  <!-- Separator and program collapse together, and only package rows carry one. -->
-                  <StackPanel Orientation="Horizontal">
-                    <StackPanel.Style>
-                      <Style TargetType="StackPanel">
+              <!-- The same card and column anatomy as a device row, so the two views are peers. -->
+              <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
+                      Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
+                             FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
+                             Foreground="{DynamicResource TitleTextPrimary}" />
+                    <!-- The collection name shows verbatim, the install/application filter went generic. -->
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
+                             FontFamily="{DynamicResource FontSans}" FontSize="12"
+                             Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
+                  </StackPanel>
+                  <!-- Only package rows carry a program, so the chip collapses with it. -->
+                  <ContentControl Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <ContentControl.Style>
+                      <Style TargetType="ContentControl">
                         <Setter Property="Visibility" Value="Visible" />
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding Program}" Value="">
@@ -254,18 +286,14 @@
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
-                    </StackPanel.Style>
-                    <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
-                               Foreground="{DynamicResource BodyTextTertiary}" />
-                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Program}" ToolTip="{Binding Program}"
-                             FontFamily="{DynamicResource FontSans}" FontSize="12"
-                             Foreground="{DynamicResource BodyTextTertiary}" />
-                  </StackPanel>
-                </StackPanel>
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
-                         FontFamily="{DynamicResource FontSans}" FontSize="11"
-                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
-              </StackPanel>
+                    </ContentControl.Style>
+                    <Border Style="{DynamicResource BadgeMuted}" ToolTip="{Binding Program}">
+                      <TextBlock Text="{Binding Program}" Style="{DynamicResource BadgeMutedText}"
+                                 TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                    </Border>
+                  </ContentControl>
+                </Grid>
+              </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
