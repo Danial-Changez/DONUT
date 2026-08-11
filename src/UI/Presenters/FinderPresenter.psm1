@@ -457,6 +457,9 @@ class FinderPresenter {
         try {
             $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
             $parsed = [LensDeployment]::ParseBundle($json)
+            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            $rowCount = @($parsed.Rows).Count
+            $this.Logger.LogDebug("Software lookup for '$($job.Key)': $rowCount row(s) in ${ms}ms")
             if ($parsed.Error) { $this.Logger.LogWarning("Software lookup: $($parsed.Error)") }
             elseif ($json) {
                 $this.SoftwareCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
@@ -786,14 +789,13 @@ class FinderPresenter {
 
         # Re-picking the same person within the TTL renders without a second lookup.
         $cacheKey = $identity.ToLowerInvariant()
-        # The software list loads in parallel, so neither lookup waits on the other.
-        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
         $cached = $this.LensCache[$cacheKey]
         if ($null -ne $cached -and
             ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
             $this.LensToken++   # stales any in-flight lookup, its late result is discarded
             $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
             $this.WireLensDeviceCommands()
+            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
             return
         }
 
@@ -826,6 +828,8 @@ class FinderPresenter {
             $this.LensVm.Set('HasError', $true)
             $this.LensVm.Set('StatusText', "Could not start the lookup: $_")
         }
+        # Dispatched last, so software can never queue ahead of the pick on a full pool.
+        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
     }
 
     # Streams any 'LensPartial' record into the VM before the final bundle lands.
@@ -841,6 +845,9 @@ class FinderPresenter {
                     $rec = $stream[[int]$job.InfoSeen]
                     $job.InfoSeen = [int]$job.InfoSeen + 1
                     if ($rec.Tags -contains 'LensPartial') {
+                        $at = [datetime]::UtcNow - [datetime]$job.StartedAt
+                        $this.Logger.LogDebug(
+                            "Lens partial for '$($job.Key)' at $([int]$at.TotalMilliseconds)ms")
                         $this.LensVm.ApplyPartial([PersonLens]::FromJson([string]$rec.MessageData))
                         # Partial 2 carries name-only device rows, so Add must work on them.
                         $this.WireLensDeviceCommands()
