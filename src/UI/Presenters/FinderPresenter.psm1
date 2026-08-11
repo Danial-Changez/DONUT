@@ -121,6 +121,10 @@ class FinderPresenter {
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
+    [object]              $SoftwareJob      # the one in-flight software lookup, or $null
+    hidden [string]       $SoftwareKey = '' # the pick whose software the reap may apply
+    # identity -> @{ At; Json }, memory only beside LensCache (no secrets, same lifetime).
+    hidden [hashtable] $SoftwareCache = @{}
     [bool]                $LensWarmTimed
     [DispatcherTimer]     $WarmWatchTimer   # times the warms, stops itself once they land
     [DispatcherTimer]     $LensPollTimer
@@ -410,6 +414,56 @@ class FinderPresenter {
             }
         }
         catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
+        finally { $this.DisposeJob($job.Ps) }
+    }
+
+    # The pick's parallel software lookup: a cache hit applies at once, else one job runs.
+    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$cacheKey) {
+        $this.SoftwareKey = $cacheKey
+        $cached = $this.SoftwareCache[$cacheKey]
+        if ($null -ne $cached -and
+            ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
+            $parsed = [LensDeployment]::ParseBundle([string]$cached.Json)
+            $this.LensVm.ApplySoftware(@($parsed.Rows), [string]$parsed.Error)
+            return
+        }
+        # Newest pick wins here too, so a stale in-flight lookup is dropped, not awaited.
+        if ($null -ne $this.SoftwareJob) {
+            $this.DisposeJob($this.SoftwareJob.Ps)
+            $this.SoftwareJob = $null
+        }
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $job = $this.StartPoolScript($worker, @{
+                    SiteServer  = $this.Config.GetAdminServiceHost()
+                    SourceRoot  = $this.Config.SourceRoot
+                    Sam         = $sam
+                    SoftwareFor = $identity
+                })
+            $job.Key = $cacheKey
+            $this.SoftwareJob = $job
+            $this.LensPollTimer.Start()
+        }
+        catch { $this.Logger.LogException('Software lookup could not start', $_) }
+    }
+
+    # Applies the software rows once the parallel lookup lands (newest pick only).
+    hidden [void] ReapSoftware() {
+        $job = $this.SoftwareJob
+        if ($null -eq $job -or -not $job.Handle.IsCompleted) { return }
+        $this.SoftwareJob = $null
+        try {
+            $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+            $parsed = [LensDeployment]::ParseBundle($json)
+            if ($parsed.Error) { $this.Logger.LogWarning("Software lookup: $($parsed.Error)") }
+            elseif ($json) {
+                $this.SoftwareCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
+            }
+            if ([string]$job.Key -eq $this.SoftwareKey) {
+                $this.LensVm.ApplySoftware(@($parsed.Rows), [string]$parsed.Error)
+            }
+        }
+        catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
         finally { $this.DisposeJob($job.Ps) }
     }
 
@@ -727,6 +781,8 @@ class FinderPresenter {
 
         # Re-picking the same person within the TTL renders without a second lookup.
         $cacheKey = $identity.ToLowerInvariant()
+        # The software list loads in parallel, so neither lookup waits on the other.
+        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
         $cached = $this.LensCache[$cacheKey]
         if ($null -ne $cached -and
             ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
@@ -769,8 +825,9 @@ class FinderPresenter {
 
     # Streams any 'LensPartial' record into the VM before the final bundle lands.
     [void] PollLens() {
-        # Shares this tick rather than owning a second timer: both wait on the same agent.
+        # Shares this tick rather than owning a second timer: all wait on the same agent.
         $this.ReapOwners()
+        $this.ReapSoftware()
         foreach ($job in @($this.LensJobs)) {
             # The partial lands before the SCCM/BitLocker crawl, so the pane fills early.
             if ($job.Token -eq $this.LensToken) {
@@ -817,8 +874,9 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        # An owner batch outlives the pick that started it, so it keeps the tick alive too.
-        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob) { $this.LensPollTimer.Stop() }
+        # Owner and software lookups outlive the pick that started them, so they keep it alive.
+        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob -and
+            $null -eq $this.SoftwareJob) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup past LensDeadline is never coming back, so retire it with a reason.

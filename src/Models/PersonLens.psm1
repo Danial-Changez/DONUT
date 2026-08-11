@@ -117,6 +117,38 @@ class PersonLens {
     }
 }
 
+# One application deployment targeting the Lens person. Its own bundle, not the person
+# bundle: the software lookup rides a separate request dispatched in parallel.
+class LensDeployment {
+    [string] $Software = ''
+    [string] $Collection = ''
+
+    static [LensDeployment] FromHashtable([hashtable]$h) {
+        $d = [LensDeployment]::new()
+        if ($null -eq $h) { return $d }
+        $d.Software = [string]$h['software']
+        $d.Collection = [string]$h['collection']
+        return $d
+    }
+
+    # Parses the agent's @{ deployments, error } bundle. Malformed JSON becomes the error.
+    static [hashtable] ParseBundle([string]$json) {
+        $out = @{ Rows = @(); Error = '' }
+        if ([string]::IsNullOrWhiteSpace($json)) { return $out }
+        try {
+            $h = $json | ConvertFrom-Json -AsHashtable -Depth 8
+            $rowList = [System.Collections.Generic.List[LensDeployment]]::new()
+            foreach ($d in @($h['deployments'])) {
+                if ($null -ne $d) { $rowList.Add([LensDeployment]::FromHashtable([hashtable]$d)) }
+            }
+            $out.Rows = $rowList.ToArray()
+            $out.Error = [string]$h['error']
+        }
+        catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
+        return $out
+    }
+}
+
 # Pure formatting for the Lens (mirrors InventoryFormat and DiskUsageFormat). Static and
 # WPF-free, so the device view-model just renders the result.
 class LensFormat {

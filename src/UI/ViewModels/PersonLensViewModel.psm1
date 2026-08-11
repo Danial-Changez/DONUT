@@ -13,6 +13,10 @@ using module ".\LensDeviceViewModel.psm1"
     picked in the AD finder: SetLoading while the de-elevated lookup runs, then Apply the
     resolved PersonLens. Inherits ObservableObject so the pane updates live; the device
     collection is mutated on the UI thread only (the presenter's poll runs there).
+
+    The software list (the person's application deployments) shares the device list's
+    slot behind a toggle: its lookup runs in parallel with the person lookup and lands
+    via ApplySoftware, so neither ever waits on the other.
 #>
 class PersonLensViewModel : ObservableObject {
     [string] $Upn = ''
@@ -26,9 +30,24 @@ class PersonLensViewModel : ObservableObject {
     [string] $StatusText = ''             # loading / error message
     [bool]   $HasDevices = $false
     [ObservableCollection[object]] $Devices
+    [bool]   $IsSoftwareShown = $false
+    [string] $SoftwareStatusText = ''     # loading / error / empty message for the software view
+    [string] $ListLabel = 'DEVICES'
+    [string] $ToggleLabel = 'Software'
+    [object[]] $Deployments = @()
+    [object] $ToggleSoftwareCommand       # RelayCommand: swap the list slot (self-wired)
 
     PersonLensViewModel() {
         $this.Devices = [ObservableCollection[object]]::new()
+        $self = $this
+        # Pure UI state, so the toggle self-wires like a device row's reveal.
+        $toggle = { param($p)
+            $shown = -not $self.IsSoftwareShown
+            $self.Set('IsSoftwareShown', $shown)
+            $self.Set('ListLabel', $(if ($shown) { 'SOFTWARE' } else { 'DEVICES' }))
+            $self.Set('ToggleLabel', $(if ($shown) { 'Devices' } else { 'Software' }))
+        }.GetNewClosure()
+        $this.ToggleSoftwareCommand = [RelayCommand]::new([System.Action[object]]$toggle)
     }
 
     # Devices newest-seen first: parsed LastLogon descending, blanks last.
@@ -53,6 +72,22 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('StatusText', 'Looking up directory + SCCM…')
         $this.Devices.Clear()
         $this.Set('HasDevices', $false)
+        # The software view resets too, since its parallel lookup restarts with the pick.
+        $this.Set('Deployments', @())
+        $this.Set('IsSoftwareShown', $false)
+        $this.Set('SoftwareStatusText', 'Looking up software…')
+        $this.Set('ListLabel', 'DEVICES')
+        $this.Set('ToggleLabel', 'Software')
+    }
+
+    # Maps the parallel software lookup onto the VM (rows, or the reason there are none).
+    [void] ApplySoftware([object[]]$rows, [string]$reason) {
+        $this.Set('Deployments', @($rows))
+        $status =
+        if (@($rows).Count -gt 0) { '' }
+        elseif ($reason) { $reason }
+        else { 'No application deployments.' }
+        $this.Set('SoftwareStatusText', $status)
     }
 
     # Applies a mid-flight partial bundle (1 = directory facts, 2 = name-only device rows)

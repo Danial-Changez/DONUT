@@ -86,10 +86,30 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
-      <TextBlock Grid.Row="0" Text="DEVICES" Style="{DynamicResource MicroLabel}"
-                 Margin="0,0,0,8" />
+      <Grid Grid.Row="0" Margin="0,0,0,8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Text="{Binding ListLabel}" Style="{DynamicResource MicroLabel}"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="{Binding ToggleLabel}" Command="{Binding ToggleSoftwareCommand}"
+                Style="{DynamicResource ButtonSecondary}" FontSize="11" Height="32"
+                ToolTip="Application deployments targeted at this user" />
+      </Grid>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <Grid>
         <ItemsControl ItemsSource="{Binding Devices}">
+          <ItemsControl.Style>
+            <Style TargetType="ItemsControl">
+              <Setter Property="Visibility" Value="Visible" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSoftwareShown}" Value="True">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </ItemsControl.Style>
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
@@ -213,6 +233,23 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <ItemsControl ItemsSource="{Binding Deployments}"
+                      Visibility="{Binding IsSoftwareShown, Converter={StaticResource BoolToVis}}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <!-- The collection name shows verbatim, the install/application filter went generic. -->
+              <StackPanel Margin="0,0,0,8">
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
+                         FontFamily="{DynamicResource FontSans}" FontSize="13" FontWeight="SemiBold"
+                         Foreground="{DynamicResource TitleTextPrimary}" />
+                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
+                         FontFamily="{DynamicResource FontSans}" FontSize="11"
+                         Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </Grid>
       </ScrollViewer>
       <TextBlock Grid.Row="1" Text="No SCCM devices."
                  Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -226,9 +263,29 @@
                   <Condition Binding="{Binding HasDevices}" Value="False" />
                   <Condition Binding="{Binding IsLoading}" Value="False" />
                   <Condition Binding="{Binding HasError}" Value="False" />
+                  <Condition Binding="{Binding IsSoftwareShown}" Value="False" />
                 </MultiDataTrigger.Conditions>
                 <Setter Property="Visibility" Value="Visible" />
               </MultiDataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
+      <!-- One line covers the software view's loading, error and empty states. -->
+      <TextBlock Grid.Row="1" Text="{Binding SoftwareStatusText}"
+                 Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
+                 TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
+        <TextBlock.Style>
+          <Style TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsSoftwareShown}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+              <!-- Last trigger wins, so a blank status stays hidden in the software view too. -->
+              <Trigger Property="Text" Value="">
+                <Setter Property="Visibility" Value="Collapsed" />
+              </Trigger>
             </Style.Triggers>
           </Style>
         </TextBlock.Style>

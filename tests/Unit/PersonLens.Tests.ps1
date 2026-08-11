@@ -110,6 +110,30 @@ Describe "PersonLens" {
         }
     }
 
+    Context "LensDeployment.ParseBundle" {
+        It "parses a software bundle into rows" {
+            $json = '{"deployments":[{"software":"Zoom Workplace","collection":"Zoom Deploy - WASH"}],"error":""}'
+            $b = [LensDeployment]::ParseBundle($json)
+            @($b.Rows).Count | Should-Be 1
+            $b.Rows[0].Software | Should-Be 'Zoom Workplace'
+            $b.Rows[0].Collection | Should-Be 'Zoom Deploy - WASH'
+            $b.Error | Should-Be ''
+        }
+
+        It "carries the bundle's error beside empty rows" {
+            $b = [LensDeployment]::ParseBundle('{"deployments":[],"error":"SCCM software: 404"}')
+            @($b.Rows).Count | Should-Be 0
+            $b.Error | Should-Be 'SCCM software: 404'
+        }
+
+        It "turns malformed or blank JSON into the error or an empty bundle" {
+            ([LensDeployment]::ParseBundle('{ not json').Error -match 'parse') | Should-BeTrue
+            $blank = [LensDeployment]::ParseBundle('')
+            @($blank.Rows).Count | Should-Be 0
+            $blank.Error | Should-Be ''
+        }
+    }
+
     Context "FromError" {
         It "carries the message as the single error so the pane can show a reason" {
             $p = [PersonLens]::FromError('the lookup did not return within 90s')
