@@ -11,9 +11,9 @@
     Lens data (SCCM affinity + BitLocker) is readable only by the operator's regular
     account while DONUT runs elevated as the admin account. Being persistent removes
     the per-pick task registration + pwsh cold start (~2-4s); on boot the agent
-    pre-warms its libraries (DirectoryServices/GC bind, the AdminService TLS/Kerberos
-    channel) on a thread job in parallel with DONUT's own startup, and reuses those
-    warm binds for every later lookup. (The finder's AD search is separate - it runs
+    pre-warms its libraries (GC and home-domain binds, the AdminService affinity and
+    hardware routes) on a thread job in parallel with DONUT's own startup, and reuses
+    those warm connections for every later lookup. (The finder's AD search is separate - it runs
     in-process on the pool via AdSearchWorker, not through this agent.)
 
     Protocol over the ACL-locked exchange dir (every payload AES-256-CBC with the
@@ -98,9 +98,22 @@ try {
         $script:ForestNc = $nc
         # Bind the GC once so later lookups reuse the warm connection.
         try { $null = Find-Gc '(objectClass=domain)' } catch { }
+        # A base read on the domain head warms the plain LDAP bind the first pick pays.
+        try {
+            $dnc = [string]([ADSI]'LDAP://RootDSE').Properties['defaultNamingContext'][0]
+            $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$dnc")
+            $ds.SearchScope = 'Base'
+            $ds.Filter = '(objectClass=*)'
+            $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            $null = $ds.FindOne()
+        }
+        catch { }
         if ($siteServer) {
             # Throwaway affinity primes TLS + Kerberos to the AdminService (result discarded).
             try { $null = & $script:AffinityScript $siteServer 'zzz-donut-warm' } catch { }
+            # A throwaway inventory read wakes the hardware route on the site server too.
+            $pair = @{ name = 'zzz-donut-warm'; resourceId = '0' }
+            try { $null = & $script:HardwareScript $siteServer @($pair) } catch { }
         }
         return $nc
     } -ArgumentList $commonPath, $SiteServer

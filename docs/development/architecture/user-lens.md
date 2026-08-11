@@ -31,9 +31,10 @@ no partials, so the pane fills in one step. See
   token, no password), `RunLevel Limited`, wrapped in `conhost.exe --headless` so no
   console window flashes.
 - `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), and the
-  agent pre-warms its AD/SCCM libraries on a thread job while DONUT boots — even
-  the first pick skips a task registration + `pwsh` cold start, and the serve loop
-  starts serving before the warm lands.
+  agent pre-warms on a thread job while DONUT boots — the GC and home-domain
+  binds plus throwaway AdminService affinity and hardware queries, so even the
+  first pick reuses warm connections on every path — and the serve loop starts
+  serving before the warm lands.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the

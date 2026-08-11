@@ -23,7 +23,7 @@ activate TASK
 TASK -> AG : run LensAgent.ps1 -ExchangeDir -ParentPid -SiteServer
 deactivate TASK
 activate AG
-AG -> AG : write heartbeat, then pre-warm on a THREAD JOB\n(GC bind, AdminService TLS/Kerberos) so the\nserve loop starts serving at once
+AG -> AG : write heartbeat, then pre-warm on a THREAD JOB\n(GC + domain binds, AdminService affinity + hardware\nroutes) so the serve loop starts serving at once
 PW --> P : '' (agent ready) — reaped on first pick
 deactivate PW
 note over AG : agent idle; the SERVE LOOP beats every ~2s and\nnever blocks (a fresh beat proves it serves), exits when\nParentPid dies / stop.flag appears / dir purged
