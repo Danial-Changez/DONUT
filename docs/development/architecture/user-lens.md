@@ -79,6 +79,13 @@ Rules the AdminService imposes (each learned the hard way — see
   the agent's own-forest GC as fallback, the SAM as last resort; names memoize per
   batch, and the batched owner lookup is one request for all machines, served on a
   thread job off the serve loop.
+- The software list (`Resolve-UserSoftware`, request kind `software`) walks the user
+  direction: `SMS_R_User` names the ResourceIDs (endswith, exact tail client-side),
+  `SMS_FullCollectionMembership` the collections (`ResourceID eq N`, with no keyed
+  fallback for its compound key), then one `$select`-trimmed `SMS_DeploymentSummary`
+  fetch is filtered client-side to install-intent applications — an or-filter over
+  the collections would 404. It rides its own request, dispatched in parallel with
+  the person lookup, so neither ever waits on the other.
 - Every AdminService call carries a 15 s timeout and every searcher a 15 s
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.
