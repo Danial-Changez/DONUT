@@ -176,8 +176,7 @@
                       </TextBox.Style>
                     </TextBox>
                   </StackPanel>
-                  <!-- Top, not Center: the actions stay level with the device name on tall cards. -->
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Wrapped so visibility can trigger without overriding the themed style. -->
                     <ContentControl Margin="0,0,6,0">
                       <ContentControl.Style>
