@@ -30,16 +30,21 @@ no partials, so the pane fills in one step. See
   lifetime, started via a scheduled task: `LogonType Interactive` (the logged-on
   token, no password), `RunLevel Limited`, wrapped in `conhost.exe --headless` so no
   console window flashes.
-- `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), so it
-  pre-warms its AD/SCCM libraries while DONUT boots — even the first pick skips a
-  task registration + `pwsh` cold start.
+- `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), and the
+  agent pre-warms its AD/SCCM libraries on a thread job while DONUT boots — even
+  the first pick skips a task registration + `pwsh` cold start, and the serve loop
+  starts serving before the warm lands.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
-  `heartbeat.txt` older than 15 s as a dead agent and re-registers the task.
-- The agent beats from a background thread, not the serve loop, so a lookup in
-  flight never lets the beat go stale and get the busy agent torn down mid-lookup.
-  Lookups run on a `ThreadJob` so a slow one never blocks the serve loop. It
-  self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a purged exchange dir.
+  `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
+  task; two lookup timeouts in a row (`timeouts.txt`) force the same recycle even
+  while the beat stays fresh, which catches an agent poisoned by dead binds after
+  sleep.
+- The serve loop itself beats every ~2 s and never blocks: person lookups and
+  owner batches run on `ThreadJob`s (any job stuck past 3 minutes is cut loose),
+  so a fresh beat proves requests are being read and a stale one means dead or
+  wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
+  purged exchange dir.
 - The AD finder search does **not** route through this agent — it fans out
   in-process on the pool (AD reads don't need de-elevation). Rejected designs are
   in [Design decisions](../decisions.md#rejected-agent-designs).
@@ -71,7 +76,11 @@ Rules the AdminService imposes (each learned the hard way — see
   N` rather than a blank card.
 - Owner naming: `SMS_R_User.FullUserName` first (the site aggregates every forest),
   the agent's own-forest GC as fallback, the SAM as last resort; names memoize per
-  agent session, and the batched owner lookup is one request for all machines.
+  batch, and the batched owner lookup is one request for all machines, served on a
+  thread job off the serve loop.
+- Every AdminService call carries a 15 s timeout and every searcher a 15 s
+  `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
+  the agent.
 
 A failed source degrades: each appends to the bundle's `errors` list and the lens
 still renders. The parse (`PersonLens.FromJson`) is pure and unit-tested; the
@@ -87,6 +96,9 @@ Fixed `%ProgramData%\DONUT\lens-agent` dir:
    paints progressively.
 3. Each side deletes what it consumed; the agent sweeps anything older than 10
    minutes.
+4. The parent counts consecutive lookup timeouts in `timeouts.txt` (no secrets,
+   just a counter); a completed lookup deletes it, and at two `EnsureAgent`
+   recycles the agent.
 
 ## Securing the exchange
 

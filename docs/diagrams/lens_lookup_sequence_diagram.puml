@@ -23,10 +23,10 @@ activate TASK
 TASK -> AG : run LensAgent.ps1 -ExchangeDir -ParentPid -SiteServer
 deactivate TASK
 activate AG
-AG -> AG : write heartbeat, then pre-warm\n(GC bind, ThreadJob, AdminService TLS/Kerberos)
+AG -> AG : write heartbeat, then pre-warm on a THREAD JOB\n(GC bind, AdminService TLS/Kerberos) so the\nserve loop starts serving at once
 PW --> P : '' (agent ready) — reaped on first pick
 deactivate PW
-note over AG : agent idle; a BACKGROUND thread beats every ~2s\n(so a busy lookup never looks dead), exits when\nParentPid dies / stop.flag appears / dir purged
+note over AG : agent idle; the SERVE LOOP beats every ~2s and\nnever blocks (a fresh beat proves it serves), exits when\nParentPid dies / stop.flag appears / dir purged
 
 == Pick a user in the AD finder ==
 OP -> P : click a USER row  (OnPickUser)
@@ -80,7 +80,7 @@ PW -> AG : write request-<id>.bin (kind = 'owner',\nthe whole machine list in ON
 activate AG
 AG -> SCCM : Resolve-MachineOwnerBatch (primary users)
 SCCM --> AG : owner per machine
-AG -> AG : write result-<id>.bin — answered INLINE on the\nserve loop, no thread job, no partials
+AG -> AG : write result-<id>.bin — answered on a THREAD JOB\nlike person lookups, no partials
 deactivate AG
 PW --> P : owners bundle (machine -> owner)
 deactivate PW

@@ -96,7 +96,8 @@ slower than the machinery around it (~150 ms, the Lens agent's serve-loop pass).
 decisions came from applying it:
 
 - The Lens owner lookup is one batched request, not one per machine — N requests
-  against a serially-served agent cost N sleeps, files, AES round trips, and polls.
+  cost N files, AES round trips, and polls; the agent now serves the batch on a
+  thread job, but the batching still pays for itself.
 - An AD-search debounce/poll raise (100→250 ms / 60→150 ms) was reverted: the
   debounce charged every search a flat +150 ms to avoid a cost that was argued rather
   than measured, and the poll timer never ticks while idle, so a fast tick costs
