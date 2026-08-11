@@ -424,7 +424,9 @@ class FinderPresenter {
         if ($null -ne $cached -and
             ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
             $parsed = [LensDeployment]::ParseBundle([string]$cached.Json)
-            $this.LensVm.ApplySoftware(@($parsed.Rows), [string]$parsed.Error)
+            $rows = [LensDeployment]::FilterByCollection(@($parsed.Rows),
+                $this.Config.GetLensSoftwareCollectionFilter())
+            $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
             return
         }
         # Newest pick wins here too, so a stale in-flight lookup is dropped, not awaited.
@@ -460,7 +462,10 @@ class FinderPresenter {
                 $this.SoftwareCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
             }
             if ([string]$job.Key -eq $this.SoftwareKey) {
-                $this.LensVm.ApplySoftware(@($parsed.Rows), [string]$parsed.Error)
+                # The config filter narrows at render time, so the cache stays unfiltered.
+                $rows = [LensDeployment]::FilterByCollection(@($parsed.Rows),
+                    $this.Config.GetLensSoftwareCollectionFilter())
+                $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
             }
         }
         catch { $this.Logger.LogException('Software lookup result could not be read', $_) }

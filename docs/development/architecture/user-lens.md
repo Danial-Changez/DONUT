@@ -83,9 +83,12 @@ Rules the AdminService imposes (each learned the hard way — see
   direction: `SMS_R_User` names the ResourceIDs (endswith, exact tail client-side),
   `SMS_FullCollectionMembership` the collections (`ResourceID eq N`, with no keyed
   fallback for its compound key), then one `$select`-trimmed `SMS_DeploymentSummary`
-  fetch is filtered client-side to install-intent applications — an or-filter over
-  the collections would 404. It rides its own request, dispatched in parallel with
-  the person lookup, so neither ever waits on the other.
+  fetch is filtered client-side to install-intent applications plus every package
+  deployment (packages carry their program name, since no generic filter can sort
+  them apart) — an or-filter over the collections would 404. It rides its own
+  request, dispatched in parallel with the person lookup, so neither ever waits on
+  the other; the optional `lensSoftwareCollectionFilter` config regex narrows the
+  rows parent-side at render time, blank by default.
 - Every AdminService call carries a 15 s timeout and every searcher a 15 s
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.

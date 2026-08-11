@@ -149,6 +149,13 @@ class LensDeployment {
         catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
         return $out
     }
+
+    # Optional per site narrowing: keep rows whose collection matches the config regex.
+    static [object[]] FilterByCollection([object[]]$rows, [string]$pattern) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) { return @($rows) }
+        try { return @($rows | Where-Object { [string]$_.Collection -match $pattern }) }
+        catch { return @($rows) }
+    }
 }
 
 # Pure formatting for the Lens (mirrors InventoryFormat and DiskUsageFormat). Static and

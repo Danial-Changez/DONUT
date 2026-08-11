@@ -344,6 +344,24 @@ Describe "AppConfig" {
         }
     }
 
+    Context "GetLensSoftwareCollectionFilter" {
+        It "defaults to blank so every deployment shows" {
+            [AppConfig]::Defaults.lensSoftwareCollectionFilter | Should-Be ''
+        }
+
+        It "returns the configured pattern trimmed, and whitespace stays off" {
+            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    lensSoftwareCollectionFilter = '  - WASH$  '
+                })
+            $config.GetLensSoftwareCollectionFilter() | Should-Be '- WASH$'
+
+            $blank = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
+                    lensSoftwareCollectionFilter = '   '
+                })
+            $blank.GetLensSoftwareCollectionFilter() | Should-Be ''
+        }
+    }
+
     Context "GetOpenSettingsShortcut" {
         It "Should default to Ctrl+, and trim/disable like the hotkey" {
             [AppConfig]::Defaults.openSettingsShortcut | Should -Be 'Ctrl+,'

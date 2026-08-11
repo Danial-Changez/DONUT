@@ -193,6 +193,19 @@ and both empty shapes fall through. Also: the URL builder writes `${class}?` wit
 braces — `"$class?"` parses `class?` as the variable name and the class vanishes from
 the path, silently.
 
+### The software list shows packages instead of guessing at them
+
+The user Deployments view keeps install-intent applications and **every** package
+deployment. Package program names vary per site ("Install", silent variants,
+maintenance scripts), so no generic filter can sort software from noise — the row
+carries the program name instead and the operator tells them apart, exactly as the
+console's Program column does. Site-specific collection naming conventions stay out
+of the code: the optional `lensSoftwareCollectionFilter` config regex narrows by
+collection name at render time, and its blank default shows everything. The chain
+(`SMS_R_User` endswith → `SMS_FullCollectionMembership` `ResourceID eq N` → one
+`$select`-trimmed `SMS_DeploymentSummary` fetch with `DesiredConfigType` served) is
+field-confirmed against the site this ships to.
+
 ### Naming owners (why SCCM comes first)
 
 Owner chips once shipped showing SAMs. `SMS_R_User.FullUserName` names the person

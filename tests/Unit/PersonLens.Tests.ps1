@@ -136,6 +136,24 @@ Describe "PersonLens" {
         }
     }
 
+    Context "LensDeployment.FilterByCollection" {
+        It "keeps only collections matching the pattern" {
+            $rows = @(
+                [LensDeployment]@{ Software = 'Zoom'; Collection = 'Zoom Deploy - WASH' },
+                [LensDeployment]@{ Software = 'Tool'; Collection = 'Maintenance Push' }
+            )
+            $kept = [LensDeployment]::FilterByCollection($rows, ' - WASH$')
+            @($kept).Count | Should-Be 1
+            $kept[0].Software | Should-Be 'Zoom'
+        }
+
+        It "keeps everything on a blank or invalid pattern" {
+            $rows = @([LensDeployment]@{ Software = 'A'; Collection = 'B' })
+            @([LensDeployment]::FilterByCollection($rows, '')).Count | Should-Be 1
+            @([LensDeployment]::FilterByCollection($rows, '(')).Count | Should-Be 1
+        }
+    }
+
     Context "FromError" {
         It "carries the message as the single error so the pane can show a reason" {
             $p = [PersonLens]::FromError('the lookup did not return within 90s')
