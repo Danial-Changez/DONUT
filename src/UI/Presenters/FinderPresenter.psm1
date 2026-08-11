@@ -449,6 +449,19 @@ class FinderPresenter {
         catch { $this.Logger.LogException('Software lookup could not start', $_) }
     }
 
+    # Milliseconds the worker sat queued on the pool before its first statement ran.
+    hidden [long] QueuedMs([hashtable]$job) {
+        try {
+            foreach ($rec in $job.Ps.Streams.Information) {
+                if ($rec.Tags -notcontains 'WorkerStart') { continue }
+                $started = ([datetime]$rec.MessageData).ToUniversalTime()
+                return [long]($started - [datetime]$job.StartedAt).TotalMilliseconds
+            }
+        }
+        catch { }
+        return -1
+    }
+
     # Applies the software rows once the parallel lookup lands (newest pick only).
     hidden [void] ReapSoftware() {
         $job = $this.SoftwareJob
@@ -459,7 +472,9 @@ class FinderPresenter {
             $parsed = [LensDeployment]::ParseBundle($json)
             $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
             $rowCount = @($parsed.Rows).Count
-            $this.Logger.LogDebug("Software lookup for '$($job.Key)': $rowCount row(s) in ${ms}ms")
+            $queued = $this.QueuedMs($job)
+            $this.Logger.LogDebug(
+                "Software lookup for '$($job.Key)': $rowCount row(s) in ${ms}ms (queued ${queued}ms)")
             if ($parsed.Error) { $this.Logger.LogWarning("Software lookup: $($parsed.Error)") }
             elseif ($json) {
                 $this.SoftwareCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
@@ -871,7 +886,10 @@ class FinderPresenter {
                 $this.LensVm.Apply($lens)
                 $this.WireLensDeviceCommands()
                 $lensMs = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
-                $this.Logger.LogInfo("Lens lookup for '$($job.Key)' completed in ${lensMs}ms ($($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)).")
+                $queued = $this.QueuedMs($job)
+                $msg = "Lens lookup for '$($job.Key)': ${lensMs}ms (queued ${queued}ms), " +
+                "$($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)."
+                $this.Logger.LogInfo($msg)
 
                 # Cache clean results (memory only, see LensCache) for instant TTL re-picks.
                 if ($lens.Errors.Count -eq 0 -and $job.Key) {

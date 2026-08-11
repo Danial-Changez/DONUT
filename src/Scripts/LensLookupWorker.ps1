@@ -69,6 +69,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# The parent subtracts this from its dispatch time to see pool queueing, not work.
+Write-Information -MessageData ([datetime]::UtcNow.ToString('o')) -Tags 'WorkerStart'
+
 # Runs de-elevated too, so an agent left by an earlier elevated session is still swept.
 if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 

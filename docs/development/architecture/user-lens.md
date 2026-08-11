@@ -42,7 +42,8 @@ no partials, so the pane fills in one step. See
   while the beat stays fresh, which catches an agent poisoned by dead binds after
   sleep.
 - The serve loop itself beats every ~2 s and never blocks: person lookups and
-  owner batches run on `ThreadJob`s (any job stuck past 3 minutes is cut loose),
+  owner batches run on `ThreadJob`s (any job stuck past 90 seconds is cut loose,
+  since the parent stops listening at 60 and a straggler only hogs a throttle slot),
   so a fresh beat proves requests are being read and a stale one means dead or
   wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
   purged exchange dir.

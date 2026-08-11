@@ -242,12 +242,12 @@ while ($true) {
         }
     }
 
-    # Reap finished request jobs, and cut loose any stuck past 3 minutes so hung
-    # network calls can never pile up and starve the job queue.
+    # Reap finished request jobs, and cut loose any stuck past 90 seconds: the parent
+    # stops listening at 60, so an older job only hogs a throttle slot.
     for ($i = $lookupJobs.Count - 1; $i -ge 0; $i--) {
         $entry = $lookupJobs[$i]
         $done = [string]$entry.Job.State -in @('Completed', 'Failed', 'Stopped')
-        if (-not $done -and ([datetime]::UtcNow - $entry.Started).TotalMinutes -lt 3) { continue }
+        if (-not $done -and ([datetime]::UtcNow - $entry.Started).TotalSeconds -lt 90) { continue }
         if (-not $done) { Stop-Job -Job $entry.Job -ErrorAction SilentlyContinue }
         Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
         $lookupJobs.RemoveAt($i)
