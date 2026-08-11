@@ -38,8 +38,10 @@
     SMS_R_User names the ResourceIDs (endswith, exact tail client side),
     SMS_FullCollectionMembership the collections, then one $select-trimmed
     SMS_DeploymentSummary fetch is filtered client side - an or-filter over the
-    collections 404s on this route. It rides its own request kind, dispatched in
-    parallel with the person lookup, so neither ever waits on the other.
+    collections 404s on this route. Install-intent applications and every package
+    deployment make the list, packages carrying their program name so an operator
+    can tell software from maintenance. It rides its own request kind, dispatched
+    in parallel with the person lookup, so neither ever waits on the other.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -299,14 +301,20 @@ $script:SoftwareScript = {
     if ($collections.Count -eq 0) { return @() }
     # One site-wide fetch beats a query per collection, and or-filters 404 on this route.
     $sum = Invoke-SoftwareQuery $server ("SMS_DeploymentSummary?`$select=" +
-        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType')
+        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType,ProgramName')
     $seen = [System.Collections.Generic.HashSet[string]]::new()
     $rows = foreach ($d in $sum) {
-        # FeatureType 1 is an application and DesiredConfigType 1 is an install.
-        if ([int]$d.FeatureType -ne 1 -or [int]$d.DesiredConfigType -ne 1) { continue }
+        # Applications count when the intent is install, packages whatever their program.
+        $ft = [int]$d.FeatureType
+        if ($ft -ne 1 -and $ft -ne 2) { continue }
+        if ($ft -eq 1 -and [int]$d.DesiredConfigType -ne 1) { continue }
         if (-not $collections.Contains([string]$d.CollectionID)) { continue }
-        if (-not $seen.Add("$($d.SoftwareName)|$($d.CollectionName)")) { continue }
-        @{ software = [string]$d.SoftwareName; collection = [string]$d.CollectionName }
+        # The program rides package rows, since no generic filter can sort those apart.
+        $prog = if ($ft -eq 2) { [string]$d.ProgramName } else { '' }
+        if (-not $seen.Add("$($d.SoftwareName)|$($d.CollectionName)|$prog")) { continue }
+        @{ software = [string]$d.SoftwareName; collection = [string]$d.CollectionName
+            program = $prog
+        }
     }
     return @($rows | Sort-Object { $_.software })
 }

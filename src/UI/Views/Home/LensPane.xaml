@@ -239,9 +239,29 @@
             <DataTemplate>
               <!-- The collection name shows verbatim, the install/application filter went generic. -->
               <StackPanel Margin="0,0,0,8">
-                <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
-                         FontFamily="{DynamicResource FontSans}" FontSize="13" FontWeight="SemiBold"
-                         Foreground="{DynamicResource TitleTextPrimary}" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
+                           FontFamily="{DynamicResource FontSans}" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TitleTextPrimary}" />
+                  <!-- Separator and program collapse together, and only package rows carry one. -->
+                  <StackPanel Orientation="Horizontal">
+                    <StackPanel.Style>
+                      <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding Program}" Value="">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
+                               Foreground="{DynamicResource BodyTextTertiary}" />
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Program}" ToolTip="{Binding Program}"
+                             FontFamily="{DynamicResource FontSans}" FontSize="12"
+                             Foreground="{DynamicResource BodyTextTertiary}" />
+                  </StackPanel>
+                </StackPanel>
                 <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
                          FontFamily="{DynamicResource FontSans}" FontSize="11"
                          Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />

@@ -12,16 +12,18 @@ Describe "Lens software query" {
         }
         function New-Membership { param([string]$Id) return [pscustomobject]@{ CollectionID = $Id } }
         function New-Deployment {
-            param([string]$Software, [string]$Collection, [string]$Id, [int]$Feature = 1, [int]$Config = 1)
+            param([string]$Software, [string]$Collection, [string]$Id,
+                [int]$Feature = 1, [int]$Config = 1, [string]$Program = '')
             return [pscustomobject]@{ SoftwareName = $Software; CollectionName = $Collection
                 CollectionID = $Id; FeatureType = $Feature; DesiredConfigType = $Config
+                ProgramName = $Program
             }
         }
     }
 
     Context "the full walk" {
 
-        It "walks user to memberships to summary and keeps only the user's application installs" {
+        It "keeps the user's application installs and package deployments, nothing else" {
             Mock Invoke-RestMethod {
                 if ($Uri -match 'SMS_R_User') {
                     return New-Collection @((New-SccmUser 'CORP\jdoe' 100), (New-SccmUser 'CORP\ajdoe' 999))
@@ -31,39 +33,44 @@ Describe "Lens software query" {
                 }
                 return New-Collection @(
                     (New-Deployment 'Zoom Workplace' 'Zoom Deploy - WASH' 'WSH001'),
-                    (New-Deployment '7-Zip' 'Legacy Package Push' 'WSH001' -Feature 2),
+                    (New-Deployment '7-Zip' 'Legacy Package Push' 'WSH001' -Feature 2 -Program 'Install - silent'),
                     (New-Deployment 'Acrobat' 'Acrobat Removal - WASH' 'WSH002' -Config 2),
-                    (New-Deployment 'Chrome' 'Chrome Deploy - WASH' 'WSH999')
+                    (New-Deployment 'Chrome' 'Chrome Deploy - WASH' 'WSH999'),
+                    (New-Deployment 'Baseline' 'Compliance - WASH' 'WSH001' -Feature 6)
                 )
             }
 
             $rows = @(& $script:Software 'sccm.corp.com' 'jdoe')
 
-            @($rows).Count | Should-Be 1
-            $rows[0].software | Should-Be 'Zoom Workplace'
-            $rows[0].collection | Should-Be 'Zoom Deploy - WASH'
+            # The uninstall app, the non-member collection and the baseline all drop.
+            @($rows).Count | Should-Be 2
+            $rows[0].software | Should-Be '7-Zip'
+            $rows[0].program | Should-Be 'Install - silent'
+            $rows[1].software | Should-Be 'Zoom Workplace'
+            $rows[1].program | Should-Be ''
             # One user query, one membership query, one summary fetch.
             Should -Invoke Invoke-RestMethod -Times 3 -Exactly
             # The near-miss SAM tail never earns a membership query.
             Should -Not -Invoke Invoke-RestMethod -ParameterFilter { $Uri -match '999' }
         }
 
-        It "sorts by software and collapses duplicate pairs" {
+        It "sorts by software and collapses duplicate pairs, though a program keeps its own row" {
             Mock Invoke-RestMethod {
                 if ($Uri -match 'SMS_R_User') { return New-Collection @((New-SccmUser 'CORP\jdoe' 100)) }
                 if ($Uri -match 'SMS_FullCollectionMembership') { return New-Collection @((New-Membership 'WSH001')) }
                 return New-Collection @(
                     (New-Deployment 'Zoom Workplace' 'Zoom Deploy - WASH' 'WSH001'),
                     (New-Deployment 'Zoom Workplace' 'Zoom Deploy - WASH' 'WSH001'),
+                    (New-Deployment 'Zoom Workplace' 'Zoom Deploy - WASH' 'WSH001' -Feature 2 -Program 'Repair'),
                     (New-Deployment 'Adobe Reader' 'Reader Deploy - WASH' 'WSH001')
                 )
             }
 
             $rows = @(& $script:Software 'sccm.corp.com' 'jdoe')
 
-            @($rows).Count | Should-Be 2
+            @($rows).Count | Should-Be 3
             $rows[0].software | Should-Be 'Adobe Reader'
-            $rows[1].software | Should-Be 'Zoom Workplace'
+            @($rows | Where-Object { $_.program -eq 'Repair' }).Count | Should-Be 1
         }
 
         It "unions memberships when two domains share the SAM tail" {

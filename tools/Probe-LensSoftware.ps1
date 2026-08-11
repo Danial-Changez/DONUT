@@ -83,16 +83,20 @@ if ($collections.Count -gt 0) {
 Write-Host "`n=== 3. SMS_DeploymentSummary: one `$select fetch, filtered client-side ===" -ForegroundColor Cyan
 try {
     $sum = Invoke-AdminServiceQuery ("SMS_DeploymentSummary?`$select=" +
-        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType')
+        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType,ProgramName')
     Write-Host "  OK  $($sum.Count) deployment row(s) site-wide" -ForegroundColor Green
     $withFeature = @($sum | Where-Object { $null -ne $_.PSObject.Properties['FeatureType'] })
     $withConfig = @($sum | Where-Object { $null -ne $_.PSObject.Properties['DesiredConfigType'] })
     Write-Host "  rows carrying FeatureType: $($withFeature.Count)   DesiredConfigType: $($withConfig.Count)"
+    # Same keep rule as the app: application installs plus every package deployment.
     $mine = @($sum | Where-Object {
-            [int]$_.FeatureType -eq 1 -and [int]$_.DesiredConfigType -eq 1 -and
+            ([int]$_.FeatureType -eq 2 -or
+            ([int]$_.FeatureType -eq 1 -and [int]$_.DesiredConfigType -eq 1)) -and
             $collections.Contains([string]$_.CollectionID) })
     Write-Host "`n  == the $($mine.Count) row(s) the app would show for '$Sam' ==" -ForegroundColor White
-    $mine | Sort-Object SoftwareName | Format-Table SoftwareName, CollectionName -AutoSize | Out-String | Write-Host
+    $mine | Sort-Object SoftwareName |
+        Format-Table SoftwareName, CollectionName, FeatureType, ProgramName -AutoSize |
+        Out-String | Write-Host
 }
 catch { Write-Host "  ERR  $($_.Exception.Message)" -ForegroundColor Red }
 

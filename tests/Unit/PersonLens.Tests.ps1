@@ -112,11 +112,13 @@ Describe "PersonLens" {
 
     Context "LensDeployment.ParseBundle" {
         It "parses a software bundle into rows" {
-            $json = '{"deployments":[{"software":"Zoom Workplace","collection":"Zoom Deploy - WASH"}],"error":""}'
+            $json = '{"deployments":[{"software":"Zoom Workplace","collection":"Zoom Deploy - WASH",' +
+            '"program":"Install - silent"}],"error":""}'
             $b = [LensDeployment]::ParseBundle($json)
             @($b.Rows).Count | Should-Be 1
             $b.Rows[0].Software | Should-Be 'Zoom Workplace'
             $b.Rows[0].Collection | Should-Be 'Zoom Deploy - WASH'
+            $b.Rows[0].Program | Should-Be 'Install - silent'
             $b.Error | Should-Be ''
         }
 

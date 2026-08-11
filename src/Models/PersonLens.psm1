@@ -122,12 +122,14 @@ class PersonLens {
 class LensDeployment {
     [string] $Software = ''
     [string] $Collection = ''
+    [string] $Program = ''      # package rows only, apps always mean install
 
     static [LensDeployment] FromHashtable([hashtable]$h) {
         $d = [LensDeployment]::new()
         if ($null -eq $h) { return $d }
         $d.Software = [string]$h['software']
         $d.Collection = [string]$h['collection']
+        $d.Program = [string]$h['program']
         return $d
     }
 
