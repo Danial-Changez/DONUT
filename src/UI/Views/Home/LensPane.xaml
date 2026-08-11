@@ -129,9 +129,9 @@
           </ItemsControl.Style>
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <!-- Rows sit as inset wells, so the Secondary buttons keep their contrast. -->
+              <!-- A half step above the pane, low enough that the Secondary buttons stand out. -->
               <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
-                      Background="{DynamicResource PrimaryBackground}">
+                      Background="{DynamicResource SurfaceSolid}">
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -259,9 +259,9 @@
                       Visibility="{Binding IsSoftwareShown, Converter={StaticResource BoolToVis}}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <!-- The same inset-well surface and column anatomy as a device row. -->
+              <!-- The same row surface and column anatomy as a device row. -->
               <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,8"
-                      Background="{DynamicResource PrimaryBackground}">
+                      Background="{DynamicResource SurfaceSolid}">
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
