@@ -25,8 +25,9 @@
     The agent deletes each request once read; the parent deletes the responses it
     consumed; anything older than 10 minutes is swept as abandoned.
 
-    A lookup takes tens of seconds, so every request (person lookups and owner batches
-    alike) runs on a ThreadJob and the serve loop stays free to accept the next one.
+    A lookup takes tens of seconds, so every request (person lookups, owner batches
+    and software lists alike) runs on a ThreadJob and the serve loop stays free to
+    accept the next one.
     The lookup pipeline and all exchange helpers live in LensAgent.Common.ps1,
     dot-sourced here and into each request ThreadJob.
 
@@ -189,6 +190,31 @@ while ($true) {
                     Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
                 } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
                 @($req.machines), ([string]$req.siteServer), $reqId
+            }
+            elseif ([string]$req.kind -eq 'software') {
+                # The user's whole software list rides one request, like the owner batch.
+                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+                    param($commonPath, $exchangeDir, $keyIv, $forestNc,
+                        $identity, $sam, $server, $reqId)
+                    . $commonPath
+                    $script:KeyIv = $keyIv
+                    $script:ForestNc = $forestNc
+                    $ExchangeDir = $exchangeDir
+                    # The warm may not have landed yet, and one RootDSE read is cheap.
+                    if (-not $script:ForestNc) {
+                        try { $script:ForestNc = Get-LensForestNc } catch { }
+                    }
+                    $json = ''
+                    try {
+                        $json = Resolve-UserSoftware -identity $identity -sam $sam -server $server
+                    }
+                    catch {
+                        $reason = "software: $($_.Exception.Message)"
+                        $json = @{ deployments = @(); error = $reason } | ConvertTo-Json -Compress
+                    }
+                    Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
+                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
+                ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
             }
             else {
                 Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {

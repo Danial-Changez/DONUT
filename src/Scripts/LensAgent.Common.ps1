@@ -34,6 +34,13 @@
     holding N of the three interactive runspaces. The agent runs the whole batch on one
     ThreadJob off its serve loop, so a slow batch never delays a person lookup.
 
+    Resolve-UserSoftware walks the user direction (user -> application installs):
+    SMS_R_User names the ResourceIDs (endswith, exact tail client side),
+    SMS_FullCollectionMembership the collections, then one $select-trimmed
+    SMS_DeploymentSummary fetch is filtered client side - an or-filter over the
+    collections 404s on this route. It rides its own request kind, dispatched in
+    parallel with the person lookup, so neither ever waits on the other.
+
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
     lookup logic here is unchanged from its previous inline home in LensAgent.ps1.
@@ -262,6 +269,79 @@ function Resolve-MachineOwnerBatch {
     }
     $rows = foreach ($wsid in @($wsids | Where-Object { $_ })) { Get-MachineOwner -wsid $wsid -server $server }
     $bundle.owners = @($rows)
+    return ($bundle | ConvertTo-Json -Compress -Depth 4)
+}
+
+# User to application installs: ResourceIDs, collection memberships, one summary fetch.
+$script:SoftwareScript = {
+    param($server, $sam)
+    function Invoke-SoftwareQuery([string]$srv, [string]$query) {
+        $p = @{ Uri = "https://$srv/AdminService/wmi/$query"
+            UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
+        }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        return @((Invoke-RestMethod @p).value)
+    }
+    # endswith keeps the domain backslash out of the URL, and the exact tail match is ours.
+    $users = Invoke-SoftwareQuery $server ("SMS_R_User?`$filter=" +
+        [uri]::EscapeDataString("endswith(UniqueUserName,'$sam')") +
+        "&`$select=ResourceID,UniqueUserName")
+    $ids = @($users | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } |
+            ForEach-Object { [string]$_.ResourceID })
+    if ($ids.Count -eq 0) { return @() }
+    # ponytail: no keyed fallback here, so a 200-empty rejection reads as no collections.
+    $collections = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($id in $ids) {
+        $rows = Invoke-SoftwareQuery $server ("SMS_FullCollectionMembership?`$filter=" +
+            [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=CollectionID")
+        foreach ($r in $rows) { [void]$collections.Add([string]$r.CollectionID) }
+    }
+    if ($collections.Count -eq 0) { return @() }
+    # One site-wide fetch beats a query per collection, and or-filters 404 on this route.
+    $sum = Invoke-SoftwareQuery $server ("SMS_DeploymentSummary?`$select=" +
+        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType')
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    $rows = foreach ($d in $sum) {
+        # FeatureType 1 is an application and DesiredConfigType 1 is an install.
+        if ([int]$d.FeatureType -ne 1 -or [int]$d.DesiredConfigType -ne 1) { continue }
+        if (-not $collections.Contains([string]$d.CollectionID)) { continue }
+        if (-not $seen.Add("$($d.SoftwareName)|$($d.CollectionName)")) { continue }
+        @{ software = [string]$d.SoftwareName; collection = [string]$d.CollectionName }
+    }
+    return @($rows | Sort-Object { $_.software })
+}
+
+# The user's whole software list in one request, mirroring the owner batch shape.
+function Resolve-UserSoftware {
+    param([string]$identity, [string]$sam, [string]$server)
+    $bundle = [ordered]@{ deployments = @(); error = '' }
+    if (-not $server) {
+        $bundle.error = 'no AdminService host configured'
+        return ($bundle | ConvertTo-Json -Compress -Depth 4)
+    }
+    try {
+        $resolved = $sam
+        if (-not $resolved) {
+            # A UPN or display name pick carries no SAM, so one GC read supplies it.
+            if ($identity -match '\\') { $resolved = $identity.Split('\')[-1] }
+            elseif ($identity -notmatch '[@\s]') { $resolved = $identity }
+            else {
+                $uFilter =
+                if ($identity -match '@') {
+                    "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))"
+                }
+                else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+                $hit = Find-Gc $uFilter
+                if ($hit) {
+                    $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+                    $resolved = [string]$user.Properties['samaccountname'][0]
+                }
+            }
+        }
+        if (-not $resolved) { throw "no SAM resolved for '$identity'." }
+        $bundle.deployments = @(& $script:SoftwareScript $server $resolved)
+    }
+    catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
     return ($bundle | ConvertTo-Json -Compress -Depth 4)
 }
 

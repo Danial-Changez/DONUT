@@ -38,7 +38,7 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 }
 
-function Get-AdminServiceRows([string]$query) {
+function Invoke-AdminServiceQuery([string]$query) {
     $p = @{
         Uri = "https://$SiteServer/AdminService/wmi/$query"
         UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
@@ -52,7 +52,7 @@ Write-Host 'DONUT Lens software probe (read-only)' -ForegroundColor White
 Write-Host "`n=== 1. SMS_R_User: endswith(UniqueUserName,'$Sam') ===" -ForegroundColor Cyan
 $ids = @()
 try {
-    $users = Get-AdminServiceRows ("SMS_R_User?`$filter=" +
+    $users = Invoke-AdminServiceQuery ("SMS_R_User?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$Sam')") +
         "&`$select=ResourceID,UniqueUserName")
     Write-Host "  OK  $($users.Count) row(s)" -ForegroundColor Green
@@ -69,7 +69,7 @@ Write-Host "`n=== 2. SMS_FullCollectionMembership: ResourceID eq N ===" -Foregro
 $collections = [System.Collections.Generic.HashSet[string]]::new()
 foreach ($id in $ids) {
     try {
-        $rows = Get-AdminServiceRows ("SMS_FullCollectionMembership?`$filter=" +
+        $rows = Invoke-AdminServiceQuery ("SMS_FullCollectionMembership?`$filter=" +
             [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=CollectionID")
         Write-Host "  OK  ResourceID $id is in $($rows.Count) collection(s)" -ForegroundColor Green
         foreach ($r in $rows) { [void]$collections.Add([string]$r.CollectionID) }
@@ -82,7 +82,7 @@ if ($collections.Count -gt 0) {
 
 Write-Host "`n=== 3. SMS_DeploymentSummary: one `$select fetch, filtered client-side ===" -ForegroundColor Cyan
 try {
-    $sum = Get-AdminServiceRows ("SMS_DeploymentSummary?`$select=" +
+    $sum = Invoke-AdminServiceQuery ("SMS_DeploymentSummary?`$select=" +
         'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType')
     Write-Host "  OK  $($sum.Count) deployment row(s) site-wide" -ForegroundColor Green
     $withFeature = @($sum | Where-Object { $null -ne $_.PSObject.Properties['FeatureType'] })
