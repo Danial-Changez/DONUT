@@ -469,6 +469,10 @@ function Resolve-Lens {
             $dev.manufacturer = [string]$row.manufacturer
             $dev.model = [string]$row.model
             $dev.serial = [string]$row.serial
+            # A virtual machine does not escrow to AD, so the missing key note is noise there.
+            if ($dev.model -match 'virtual' -and $dev.note -like 'BitLocker not escrowed*') {
+                $dev.note = ''
+            }
             if ($row.error) { $hwErrors += "$($row.name): $($row.error)" }
         }
         # One class-wide failure (e.g. a 404 on every device) collapses to a single entry.
