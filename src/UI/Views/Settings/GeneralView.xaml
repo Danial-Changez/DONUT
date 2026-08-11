@@ -112,7 +112,7 @@
                      Width="120"
                      HorizontalAlignment="Left"
                      Style="{DynamicResource ModernTextBox}" />
-            <TextBlock Text="Lens Software Filter: regex on collection names"
+            <TextBlock Text="Software Filter: regex on collections"
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,16,0,8" />
             <TextBox x:Name="lensSoftwareCollectionFilter"
