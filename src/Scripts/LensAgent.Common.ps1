@@ -26,13 +26,13 @@
     because it aggregates users from EVERY forest the site covers, while Find-Gc reads the
     agent's own forest's GC and can never name a sibling-forest user - which is exactly how
     owner chips shipped showing SAMs. The GC stays as the fallback for its one forest, and
-    the SAM stands in when both reads fail. Names memoize per agent session (OwnerNameCache).
+    the SAM stands in when both reads fail. Names memoize per batch (OwnerNameCache
+    lives in the request job's runspace).
 
-    It takes the WHOLE list in one request and resolves it serially, deliberately. The
-    serve loop below sleeps 150ms between passes, so N separate requests would cost N of
-    those sleeps plus N files, N AES round trips and N parent polls - more wall clock than
-    doing them back to back here, while holding N of the three interactive runspaces. Thread
-    jobs would only be worth it if one query got slow enough to be felt on its own.
+    It takes the WHOLE list in one request and resolves it serially, deliberately. N
+    separate requests would cost N files, N AES round trips and N parent polls, while
+    holding N of the three interactive runspaces. The agent runs the whole batch on one
+    ThreadJob off its serve loop, so a slow batch never delays a person lookup.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -184,7 +184,7 @@ $script:OwnerScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# The agent is persistent and a name does not change mid-session, so memoize it.
+# A name does not change mid-batch, so memoize it for this runspace's lifetime.
 $script:OwnerNameCache = @{}
 
 # UniqueUserName to display name. SCCM first: SMS_R_User.FullUserName covers every
