@@ -74,6 +74,8 @@ function Find-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
+    # An unreachable DC hangs a searcher indefinitely without this cap.
+    $s.ClientTimeout = [TimeSpan]::FromSeconds(15)
     # No PageSize: it only enables paging, and every caller here takes FindOne.
     [void]$s.PropertiesToLoad.Add('distinguishedName')
     return $s.FindOne()
@@ -86,7 +88,7 @@ $script:AffinityScript = {
         Uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
         "&`$select=UniqueUserName,ResourceName,ResourceID"
-        UseDefaultCredentials = $true; ErrorAction = 'Stop'
+        UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
     }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     return @((Invoke-RestMethod @p).value)
@@ -102,7 +104,7 @@ $script:HardwareScript = {
             "https://$srv/AdminService/wmi/${class}?`$filter=" +
             [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
         }
-        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $r = Invoke-RestMethod @p
         if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
@@ -177,7 +179,7 @@ $script:OwnerScript = {
     param($server, $wsid)
     $uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
     [uri]::EscapeDataString("ResourceName eq '$wsid'") + "&`$select=UniqueUserName,ResourceName"
-    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     return @((Invoke-RestMethod @p).value)
 }
@@ -199,7 +201,7 @@ function Get-OwnerDisplayName {
         $uri = "https://$server/AdminService/wmi/SMS_R_User?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$uniqueUserName')") +
         "&`$select=FullUserName,UniqueUserName"
-        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $rows = @((Invoke-RestMethod @p).value)
         if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
@@ -393,6 +395,7 @@ function Resolve-Lens {
                 $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
                 $cs.SearchScope = 'Base'
                 $cs.Filter = '(objectClass=*)'
+                $cs.ClientTimeout = [TimeSpan]::FromSeconds(15)
                 'operatingsystem', 'lastlogontimestamp' |
                     ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
                 $c = $cs.FindOne()
@@ -408,6 +411,7 @@ function Resolve-Lens {
 
                 $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
                 $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
+                $bl.ClientTimeout = [TimeSpan]::FromSeconds(15)
                 'msfve-recoverypassword', 'whencreated' |
                     ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
                 $keys = @($bl.FindAll())
