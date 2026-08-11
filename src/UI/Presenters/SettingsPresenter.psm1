@@ -245,6 +245,13 @@ class SettingsPresenter {
             $folders.Add_LostFocus({ param($s, $e) $self.PersistFolderScanCount($s) }.GetNewClosure())
         }
 
+        $lensRx = $view.FindName('lensSoftwareCollectionFilter')
+        if ($lensRx) {
+            $lensRx.Text = $this.Config.GetLensSoftwareCollectionFilter()
+            $lensRx.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())
+            $lensRx.Add_LostFocus({ param($s, $e) $self.PersistLensFilter($s) }.GetNewClosure())
+        }
+
         $startWin = $view.FindName('chkStartWithWindows')
         if ($startWin) {
             $startWin.IsChecked = $this.Config.GetStartWithWindows()
@@ -327,6 +334,24 @@ class SettingsPresenter {
         else {
             $this.SetFieldError($box, $true)
             if ($this.Toast) { $this.Toast.ShowError('Folders to Scan', 'Enter a whole number, 1 or more.') }
+        }
+    }
+
+    # Validates the Lens software filter as a regex on lost focus. Blank turns it off.
+    hidden [void] PersistLensFilter([object]$box) {
+        $text = ([string]$box.Text).Trim()
+        $valid = $true
+        if ($text) { try { $null = [regex]::new($text) } catch { $valid = $false } }
+        if ($valid) {
+            $this.SetFieldError($box, $false)
+            $this.Config.SetSetting('lensSoftwareCollectionFilter', $text)
+            $this.SaveConfigSafely()
+        }
+        else {
+            $this.SetFieldError($box, $true)
+            if ($this.Toast) {
+                $this.Toast.ShowError('Lens Software Filter', 'Enter a valid regex or leave blank.')
+            }
         }
     }
 

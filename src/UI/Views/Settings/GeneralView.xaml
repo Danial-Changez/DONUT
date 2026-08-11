@@ -112,6 +112,11 @@
                      Width="120"
                      HorizontalAlignment="Left"
                      Style="{DynamicResource ModernTextBox}" />
+            <TextBlock Text="Lens Software Filter: regex on collection names, blank shows all"
+                       Style="{DynamicResource SettingsFieldLabel}"
+                       Margin="0,16,0,8" />
+            <TextBox x:Name="lensSoftwareCollectionFilter"
+                     Style="{DynamicResource ModernTextBox}" />
         </StackPanel>
     </Border>
     <!-- Off by default, and applied live to the app and its worker processes. -->
