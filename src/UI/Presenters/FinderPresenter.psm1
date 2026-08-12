@@ -131,6 +131,8 @@ class FinderPresenter {
     [int]                 $LensToken = 0    # newest pick wins, stale results are discarded
     # Startup agent warm-up @{ Ps; Handle; StartedAt }, reaped on the first pick.
     [object]              $LensWarmJob
+    # Extra -WarmOnly runs so every interactive runspace parses the worker graph early.
+    hidden [List[hashtable]] $LensWarmExtras
     # identity -> @{ At; Json }, memory only: it holds BitLocker keys and must never hit disk.
     hidden [hashtable] $LensCache = @{}
     [timespan] $LensCacheTtl = [timespan]::FromMinutes(15)
@@ -183,6 +185,7 @@ class FinderPresenter {
         # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
+        $this.LensWarmExtras = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
         # Gated on in-flight lookups, so a fast tick is free and it halves partial paint lag.
         $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(100)
@@ -367,6 +370,15 @@ class FinderPresenter {
                     SourceRoot = $this.Config.SourceRoot
                     WarmOnly   = $true
                 })
+            # A pick dispatches two jobs onto any free runspace, so every runspace must
+            # already hold the worker graph. The agent mutex makes the extras near no-ops.
+            for ($i = 1; $i -lt [RunspaceManager]::InteractiveSize; $i++) {
+                $this.LensWarmExtras.Add($this.StartPoolScript($worker, @{
+                            SiteServer = $this.Config.GetAdminServiceHost()
+                            SourceRoot = $this.Config.SourceRoot
+                            WarmOnly   = $true
+                        }))
+            }
         }
         catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
@@ -507,6 +519,9 @@ class FinderPresenter {
             $this.DisposeJob($job.Ps)
         }
         catch { $this.DisposeJob($job.Ps) }
+        # The extra runspace warms carry no result worth reading, so they just retire.
+        foreach ($extra in @($this.LensWarmExtras)) { $this.DisposeJob($extra.Ps) }
+        $this.LensWarmExtras.Clear()
     }
 
     # --- AD live search (search-bar dropdown) ---

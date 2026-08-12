@@ -32,9 +32,11 @@ no partials, so the pane fills in one step. See
   console window flashes.
 - `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), and the
   agent pre-warms on a thread job while DONUT boots — the GC and home-domain
-  binds plus throwaway AdminService affinity and hardware queries, so even the
-  first pick reuses warm connections on every path — and the serve loop starts
-  serving before the warm lands.
+  binds, a person-shaped GC read, plus throwaway AdminService affinity, hardware
+  and software queries, so even the first pick reuses warm connections on every
+  path — and the serve loop starts serving before the warm lands. `WarmLens` also
+  runs a `-WarmOnly` pass on every interactive runspace, so the worker's class
+  graph is parsed before the first pick instead of by it.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the

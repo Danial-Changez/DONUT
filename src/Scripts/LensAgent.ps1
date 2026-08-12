@@ -99,6 +99,9 @@ try {
         $script:ForestNc = $nc
         # Bind the GC once so later lookups reuse the warm connection.
         try { $null = Find-Gc '(objectClass=domain)' } catch { }
+        # A person shaped read warms the index the first real pick will use.
+        $warmUser = '(&(objectCategory=person)(objectClass=user)(sAMAccountName=zzz-donut-warm))'
+        try { $null = Find-Gc $warmUser } catch { }
         # A base read on the domain head warms the plain LDAP bind the first pick pays.
         try {
             $dnc = [string]([ADSI]'LDAP://RootDSE').Properties['defaultNamingContext'][0]
@@ -115,6 +118,8 @@ try {
             # A throwaway inventory read wakes the hardware route on the site server too.
             $pair = @{ name = 'zzz-donut-warm'; resourceId = '0' }
             try { $null = & $script:HardwareScript $siteServer @($pair) } catch { }
+            # One SMS_R_User miss warms the software route's first hop as well.
+            try { $null = & $script:SoftwareScript $siteServer 'zzz-donut-warm' } catch { }
         }
         return $nc
     } -ArgumentList $commonPath, $SiteServer
