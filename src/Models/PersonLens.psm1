@@ -72,6 +72,7 @@ class PersonLens {
     [string] $Office = ''
     [LensDevice[]] $Devices = @()
     [string[]] $Errors = @()     # per-section failures (worker still returns what it could)
+    [hashtable] $Timings = @{}   # cumulative gather-stage ms, printed by debug logging
 
     static [PersonLens] FromHashtable([hashtable]$h) {
         $p = [PersonLens]::new()
@@ -90,6 +91,9 @@ class PersonLens {
         $p.Devices = $devList.ToArray()
         $p.Errors = @(@($h['errors']) | Where-Object { $null -ne $_ } |
                 ForEach-Object { [string]$_ })
+        if ($h['timings'] -is [System.Collections.IDictionary]) {
+            $p.Timings = [hashtable]$h['timings']
+        }
         return $p
     }
 

@@ -94,6 +94,11 @@ Rules the AdminService imposes (each learned the hard way — see
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.
 
+The final bundle also carries a `timings` map — cumulative milliseconds at each
+gather stage (user read, affinity collect, device loop, hardware merge) — which
+debug logging prints beside the parent's queued/total numbers, so a slow pick can
+be attributed to a stage rather than argued about.
+
 A failed source degrades: each appends to the bundle's `errors` list and the lens
 still renders. The parse (`PersonLens.FromJson`) is pure and unit-tested; the
 agent/task I/O is the overridable `RunLookupJson` seam.

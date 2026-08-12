@@ -362,6 +362,9 @@ function Resolve-Lens {
         upn = ''; sam = ''; displayName = ''; email = ''; manager = ''; office = ''
         devices = @(); errors = @()
     }
+    # Cumulative stage marks ride the bundle, so debug logging can split the gather.
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $marks = [ordered]@{}
 
     # Affinity can start early only when the SAM is already trustworthy.
     $samGuess =
@@ -409,6 +412,7 @@ function Resolve-Lens {
 
     # Partial 1: directory facts.
     Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 1
+    $marks.user = $sw.ElapsedMilliseconds
 
     # On a UPN or display-name pick, the SAM only became known from the AD read.
     if (-not $affinityJob -and $sam -and $server) {
@@ -444,6 +448,7 @@ function Resolve-Lens {
         }
         $wsids = @($wsMap.Keys)
     }
+    $marks.affinity = $sw.ElapsedMilliseconds
 
     # Partial 2: name-only device rows the moment affinity lands.
     if ($wsids.Count -gt 0) {
@@ -535,6 +540,7 @@ function Resolve-Lens {
         }
         $devices.Add($dev)
     }
+    $marks.devices = $sw.ElapsedMilliseconds
 
     # Merges the parallel hardware results, where a failed source degrades to blanks.
     if ($hwPairs.Count -gt 0) {
@@ -573,6 +579,8 @@ function Resolve-Lens {
         }
     }
     $bundle.devices = $devices.ToArray()
+    $marks.hardware = $sw.ElapsedMilliseconds
+    $bundle.timings = $marks
 
     $json = $bundle | ConvertTo-Json -Depth 6
     # Only the agent has an exchange to write to. A de-elevated DONUT takes the return.

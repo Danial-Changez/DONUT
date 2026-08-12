@@ -108,6 +108,13 @@ Describe "PersonLens" {
             $p.Devices.Count | Should -Be 0
             $p.Errors.Count | Should -Be 0
         }
+
+        It "maps the gather timings and leaves them empty when omitted" {
+            $p = [PersonLens]::FromJson('{ "sam": "U9", "timings": { "user": 812, "devices": 1900 } }')
+            [int]$p.Timings['user'] | Should-Be 812
+            [int]$p.Timings['devices'] | Should-Be 1900
+            ([PersonLens]::FromJson('{ "sam": "U9" }')).Timings.Count | Should-Be 0
+        }
     }
 
     Context "LensDeployment.ParseBundle" {

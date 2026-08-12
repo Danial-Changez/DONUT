@@ -891,6 +891,12 @@ class FinderPresenter {
                 $msg = "Lens lookup for '$($job.Key)': ${lensMs}ms (queued ${queued}ms), " +
                 "$($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)."
                 $this.Logger.LogInfo($msg)
+                # The agent's cumulative stage marks split the gather like the AD breadcrumb.
+                if ($lens.Timings.Count -gt 0) {
+                    $stages = @($lens.Timings.GetEnumerator() |
+                            ForEach-Object { "$($_.Key) $($_.Value)ms" }) -join ', '
+                    $this.Logger.LogDebug("Lens stages for '$($job.Key)': $stages")
+                }
 
                 # Cache clean results (memory only, see LensCache) for instant TTL re-picks.
                 if ($lens.Errors.Count -eq 0 -and $job.Key) {
