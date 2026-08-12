@@ -65,7 +65,14 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    per-device AD loop — the AdminService answers slowly per query, so serial
    pairs were the whole lookup's tail.
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
-   computer's AD object.
+   computer's AD object, one thread job per device running beside the hardware
+   jobs, so the gather's tail is one device's cost rather than the sum.
+
+The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
+the elevated path, and a lane no other DONUT code uses on the in-process path —
+which is disjoint from the worker and interactive runspace pools. A many-device
+pick that outgrows the throttle queues against other lens jobs only; disk scans,
+DCU runs and inventories are never displaced.
 
 Rules the AdminService imposes (each learned the hard way — see
 [Design decisions](../decisions.md#adminservice-filter-shapes)):
@@ -96,10 +103,10 @@ Rules the AdminService imposes (each learned the hard way — see
   the agent.
 
 The final bundle also carries a `timings` map — cumulative milliseconds at each
-gather stage (user read, affinity collect, device loop, hardware merge) plus each
-device's hardware wall time (`hw <name>`) — which debug logging prints beside the
-parent's queued/total numbers, so a slow pick can be attributed to a stage rather
-than argued about.
+gather stage (user read, affinity collect, device collect, hardware merge) plus
+each device's own wall times (`ad <name>` for the AD detail job, `hw <name>` for
+the hardware job) — which debug logging prints beside the parent's queued/total
+numbers, so a slow pick can be attributed to a stage rather than argued about.
 
 A failed source degrades: each appends to the bundle's `errors` list and the lens
 still renders. The parse (`PersonLens.FromJson`) is pure and unit-tested; the

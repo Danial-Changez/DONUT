@@ -167,6 +167,85 @@ $script:HardwareScript = {
     return $results
 }
 
+# One device's AD detail, self contained: nested jobs do not inherit Common's functions.
+$script:DeviceScript = {
+    param($forestNc, $wsid)
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
+        model = ''; serial = ''; manufacturer = ''
+        note = ''; bitLockerKeys = @()
+    }
+    try {
+        $gc = New-Object System.DirectoryServices.DirectorySearcher
+        $gc.SearchRoot = [ADSI]"GC://$forestNc"
+        $gc.Filter = "(&(objectCategory=computer)(cn=$wsid))"
+        $gc.ClientTimeout = [TimeSpan]::FromSeconds(15)
+        [void]$gc.PropertiesToLoad.Add('distinguishedName')
+        $cHit = $gc.FindOne()
+        if ($cHit) {
+            $compDn = [string]$cHit.Properties['distinguishedname'][0]
+            $dev.domain = (($compDn -split ',' |
+                        Where-Object { $_ -match '^DC=' } |
+                        ForEach-Object { $_.Substring(3) }) -join '.')
+
+            # lastLogonTimestamp is replicated, so it can be up to 14 days coarse.
+            $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
+            $cs.SearchScope = 'Base'
+            $cs.Filter = '(objectClass=*)'
+            $cs.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            'operatingsystem', 'lastlogontimestamp' |
+                ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
+            $c = $cs.FindOne()
+            if ($c) {
+                if ($c.Properties['operatingsystem'].Count -gt 0) {
+                    $dev.os = [string]$c.Properties['operatingsystem'][0]
+                }
+                if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
+                    $ft = [int64]$c.Properties['lastlogontimestamp'][0]
+                    if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
+                }
+            }
+
+            $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
+            $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
+            $bl.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            'msfve-recoverypassword', 'whencreated' |
+                ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
+            $keys = @($bl.FindAll())
+            if ($keys.Count -gt 0) {
+                $dev.bitLockerKeys = @($keys | ForEach-Object {
+                        # ISO8601 UTC keeps the DTO contract and newest-first order.
+                        $wc = $_.Properties['whencreated'][0]
+                        $iso = ''
+                        if ($wc -is [datetime]) {
+                            $iso = $wc.ToUniversalTime().ToString('o')
+                        }
+                        elseif ($wc) {
+                            $dt = [datetime]::MinValue
+                            if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
+                                $iso = $dt.ToUniversalTime().ToString('o')
+                            }
+                            else { $iso = [string]$wc }
+                        }
+                        @{
+                            password = [string]$_.Properties['msfve-recoverypassword'][0]
+                            created  = $iso
+                        }
+                    })
+            }
+            elseif (-not $dev.note) {
+                $dev.note = 'BitLocker not escrowed to AD (or not readable)'
+            }
+        }
+        elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+    }
+    catch {
+        if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
+    }
+    $dev.ms = $sw.ElapsedMilliseconds
+    return $dev
+}
+
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
 function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
     # No exchange means an in-process caller, which gets the whole bundle at the end.
@@ -481,74 +560,47 @@ function Resolve-Lens {
         }
     }
 
-    # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
-    $devices = [System.Collections.Generic.List[object]]::new()
+    # Per WSID: OS / last-logon / BitLocker, one job per device beside the hardware jobs.
+    # ponytail: 2N nested jobs can outgrow the throttle, and overflow queues in this lane only.
+    $devJobs = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($wsid in $wsids) {
-        $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
-            model = ''; serial = ''; manufacturer = ''
-            note = ''; bitLockerKeys = @()
-        }
+        $devJob = $null
         try {
-            $cHit = Find-Gc "(&(objectCategory=computer)(cn=$wsid))"
-            if ($cHit) {
-                $compDn = [string]$cHit.Properties['distinguishedname'][0]
-                $dev.domain = (($compDn -split ',' |
-                            Where-Object { $_ -match '^DC=' } |
-                            ForEach-Object { $_.Substring(3) }) -join '.')
+            $devJob = Start-ThreadJob -ScriptBlock $script:DeviceScript `
+                -ArgumentList $script:ForestNc, $wsid
+        }
+        catch { $devJob = $null }
+        $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })
+    }
 
-                # lastLogonTimestamp is replicated, so it can be up to 14 days coarse.
-                $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
-                $cs.SearchScope = 'Base'
-                $cs.Filter = '(objectClass=*)'
-                $cs.ClientTimeout = [TimeSpan]::FromSeconds(15)
-                'operatingsystem', 'lastlogontimestamp' |
-                    ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
-                $c = $cs.FindOne()
-                if ($c) {
-                    if ($c.Properties['operatingsystem'].Count -gt 0) {
-                        $dev.os = [string]$c.Properties['operatingsystem'][0]
-                    }
-                    if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
-                        $ft = [int64]$c.Properties['lastlogontimestamp'][0]
-                        if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
-                    }
+    $devices = [System.Collections.Generic.List[object]]::new()
+    $devDeadline = [datetime]::UtcNow.AddSeconds(30)
+    foreach ($entry in $devJobs) {
+        $dev = $null
+        try {
+            if ($entry.Job) {
+                $left = [int][Math]::Max(1, ($devDeadline - [datetime]::UtcNow).TotalSeconds)
+                if (Wait-Job -Job $entry.Job -Timeout $left) {
+                    $dev = @(Receive-Job -Job $entry.Job -ErrorAction Stop) | Select-Object -Last 1
                 }
-
-                $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
-                $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
-                $bl.ClientTimeout = [TimeSpan]::FromSeconds(15)
-                'msfve-recoverypassword', 'whencreated' |
-                    ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
-                $keys = @($bl.FindAll())
-                if ($keys.Count -gt 0) {
-                    $dev.bitLockerKeys = @($keys | ForEach-Object {
-                            # ISO8601 UTC keeps the DTO contract and newest-first order.
-                            $wc = $_.Properties['whencreated'][0]
-                            $iso = ''
-                            if ($wc -is [datetime]) {
-                                $iso = $wc.ToUniversalTime().ToString('o')
-                            }
-                            elseif ($wc) {
-                                $dt = [datetime]::MinValue
-                                if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
-                                    $iso = $dt.ToUniversalTime().ToString('o')
-                                }
-                                else { $iso = [string]$wc }
-                            }
-                            @{
-                                password = [string]$_.Properties['msfve-recoverypassword'][0]
-                                created  = $iso
-                            }
-                        })
-                }
-                elseif (-not $dev.note) {
-                    $dev.note = 'BitLocker not escrowed to AD (or not readable)'
-                }
+                else { throw 'timed out after 30s.' }
             }
-            elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+            # No job means it would not start, and inline keeps the row filled.
+            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid }
         }
         catch {
-            if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
+            $dev = [ordered]@{ name = $entry.Wsid; os = ''; lastLogon = ''; domain = ''
+                model = ''; serial = ''; manufacturer = ''
+                note = "AD detail: $($_.Exception.Message)"; bitLockerKeys = @()
+            }
+        }
+        finally {
+            if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+        }
+        # Each device's AD wall time joins the stage marks, then leaves the bundle row.
+        if ($null -ne $dev.ms) {
+            $marks["ad $($entry.Wsid)"] = [long]$dev.ms
+            $dev.Remove('ms')
         }
         $devices.Add($dev)
     }
