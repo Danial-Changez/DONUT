@@ -136,9 +136,11 @@ $script:HardwareScript = {
     $script:FilterError = ''
     $results = @()
     foreach ($pair in $pairs) {
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
         if (-not $pair.resourceId) {
             $out.error = 'no ResourceID in the affinity rows'
+            $out.ms = $sw.ElapsedMilliseconds
             $results += $out
             continue
         }
@@ -159,6 +161,7 @@ $script:HardwareScript = {
             }
         }
         catch { $out.error = $_.Exception.Message }
+        $out.ms = $sw.ElapsedMilliseconds
         $results += $out
     }
     return $results
@@ -461,12 +464,21 @@ function Resolve-Lens {
         Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 2
     }
 
-    # Hardware runs on a thread job parallel to the per-WSID AD loop below.
-    $hwJob = $null
+    # One hardware job per device, beside the AD loop: the provider is slow per call,
+    # so serial pairs were the whole lookup's tail.
+    $hwJobs = [System.Collections.Generic.List[hashtable]]::new()
     $hwPairs = @()
     if ($wsids.Count -gt 0 -and $server) {
         $hwPairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
-        try { $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript -ArgumentList $server, $hwPairs } catch { $hwJob = $null }
+        foreach ($hwPair in $hwPairs) {
+            $hwJob = $null
+            try {
+                $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript `
+                    -ArgumentList $server, @($hwPair)
+            }
+            catch { $hwJob = $null }
+            $hwJobs.Add(@{ Job = $hwJob; Pair = $hwPair })
+        }
     }
 
     # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
@@ -544,20 +556,37 @@ function Resolve-Lens {
 
     # Merges the parallel hardware results, where a failed source degrades to blanks.
     if ($hwPairs.Count -gt 0) {
-        $hwRows = $null
-        try {
-            if ($hwJob) {
-                if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
-                else { throw 'timed out after 30s.' }
+        $hwRows = [System.Collections.Generic.List[object]]::new()
+        # One shared deadline: the jobs run side by side, so they never earn 30s each.
+        $hwDeadline = [datetime]::UtcNow.AddSeconds(30)
+        foreach ($entry in $hwJobs) {
+            try {
+                if ($entry.Job) {
+                    $left = [int][Math]::Max(1, ($hwDeadline - [datetime]::UtcNow).TotalSeconds)
+                    if (Wait-Job -Job $entry.Job -Timeout $left) {
+                        $got = @(Receive-Job -Job $entry.Job -ErrorAction Stop)
+                        foreach ($r in $got) { $hwRows.Add($r) }
+                    }
+                    else { throw 'timed out after 30s.' }
+                }
+                # No job means it would not start, and inline keeps the cards filled.
+                else {
+                    $got = @(& $script:HardwareScript $server @($entry.Pair))
+                    foreach ($r in $got) { $hwRows.Add($r) }
+                }
             }
-            # No job means it would not start, and inline keeps the cards filled.
-            else { $hwRows = & $script:HardwareScript $server $hwPairs }
+            catch {
+                $bundle.errors += "SCCM hardware ($($entry.Pair.name)): $($_.Exception.Message)"
+            }
+            finally {
+                if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+            }
         }
-        catch { $bundle.errors += "SCCM hardware inventory: $($_.Exception.Message)" }
-        finally { if ($hwJob) { Remove-Job -Job $hwJob -Force -ErrorAction SilentlyContinue } }
 
         $hwErrors = @()
         foreach ($row in @($hwRows)) {
+            # Each device's provider wall time rides the stage marks for the debug line.
+            if ($null -ne $row.ms) { $marks["hw $($row.name)"] = [long]$row.ms }
             $dev = $devices | Where-Object { $_.name -eq [string]$row.name } | Select-Object -First 1
             if ($null -eq $dev) { continue }
             $dev.manufacturer = [string]$row.manufacturer
