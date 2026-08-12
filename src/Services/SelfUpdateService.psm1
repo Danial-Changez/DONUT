@@ -73,10 +73,11 @@ class SelfUpdateService {
             scope     = $this.Scope
         }
         $req = @{
-            Uri     = 'https://github.com/login/device/code'
-            Method  = 'Post'
-            Body    = $body
-            Headers = @{ Accept = 'application/json' }
+            Uri        = 'https://github.com/login/device/code'
+            Method     = 'Post'
+            Body       = $body
+            Headers    = @{ Accept = 'application/json' }
+            TimeoutSec = 15
         }
         return Invoke-RestMethod @req
     }
@@ -91,10 +92,11 @@ class SelfUpdateService {
         }
         try {
             $req = @{
-                Uri     = 'https://github.com/login/oauth/access_token'
-                Method  = 'Post'
-                Body    = $body
-                Headers = @{ Accept = 'application/json' }
+                Uri        = 'https://github.com/login/oauth/access_token'
+                Method     = 'Post'
+                Body       = $body
+                Headers    = @{ Accept = 'application/json' }
+                TimeoutSec = 15
             }
             $response = Invoke-RestMethod @req
 
@@ -137,7 +139,8 @@ class SelfUpdateService {
     [PSCustomObject] GetLatestRelease([string]$Token) {
         $uri = "https://api.github.com/repos/$($this.Owner)/$($this.Repo)/releases/latest"
         $headers = [SelfUpdateService]::Headers($Token, 'application/vnd.github.v3+json')
-        return Invoke-RestMethod -Uri $uri -Headers $headers
+        # A cap, or a dead network hangs the deferred tray-surface check on the UI thread.
+        return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
     }
 
     [PSCustomObject] GetReleaseAsset([PSCustomObject]$Release, [string]$Pattern) {
@@ -155,7 +158,8 @@ class SelfUpdateService {
         $destPath = Join-Path $DestDir $Asset.name
         $headers = [SelfUpdateService]::Headers($Token, 'application/octet-stream')
 
-        Invoke-RestMethod -Uri $Asset.url -Headers $headers -OutFile $destPath
+        # Generous, since this is the MSI itself, but no longer indefinite.
+        Invoke-RestMethod -Uri $Asset.url -Headers $headers -OutFile $destPath -TimeoutSec 300
         return $destPath
     }
 
