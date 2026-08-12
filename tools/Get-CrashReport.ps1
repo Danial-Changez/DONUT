@@ -29,7 +29,7 @@ param(
     [int] $LogLines = 40
 )
 
-$log = Join-Path $env:LOCALAPPDATA 'DONUT\logs\Donut.log'
+$log = Join-Path $env:ProgramData 'DONUT\data\logs\Donut.log'
 
 Write-Host 'DONUT crash report (read-only)' -ForegroundColor White
 

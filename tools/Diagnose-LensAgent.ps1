@@ -47,7 +47,7 @@ param(
 )
 
 $dir  = Join-Path $env:ProgramData  'DONUT\lens-agent'
-$log  = Join-Path $env:LOCALAPPDATA 'DONUT\logs\Donut.log'
+$log  = Join-Path $env:ProgramData 'DONUT\data\logs\Donut.log'
 $beat = Join-Path $dir 'heartbeat.txt'
 $stop = Join-Path $dir 'stop.flag'
 
