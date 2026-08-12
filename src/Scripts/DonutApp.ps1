@@ -153,7 +153,7 @@ try {
     try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
-        $logger.LogInfo("Main window preloaded, runspace pool warmed (+$($bootSw.ElapsedMilliseconds)ms).")
+        $logger.LogInfo("Main window preloaded (+$($bootSw.ElapsedMilliseconds)ms).")
         Update-Splash 90 'Preparing sign-in'
     }
     catch {
@@ -187,7 +187,7 @@ try {
         $resumeTimer.Start()
 
         if ($hidden) {
-            $logger.LogInfo("Starting hidden in the system tray (+$($bootSw.ElapsedMilliseconds)ms).")
+            $logger.LogInfo("Starting in the tray (+$($bootSw.ElapsedMilliseconds)ms).")
             # Defer sign-in/update to the first time the user surfaces the window.
             $mainPresenter.PendingUpdateCheck = $updatePresenter
             $mainPresenter.ShowHidden()

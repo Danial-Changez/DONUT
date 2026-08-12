@@ -292,7 +292,7 @@ class HomePresenter : AsyncJobPresenter {
         # The one safe time to take the loader-lock hit is before the message loop (.NOTES).
         $warmSw = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Resolution.WarmPool()
-        $this.Logger.LogInfo("Warm pool barrier held the boot for $($warmSw.ElapsedMilliseconds)ms.")
+        $this.Logger.LogInfo("Warm pool barrier held boot for $($warmSw.ElapsedMilliseconds)ms.")
 
         # The only startup job beyond the warm shells (architecture/runspaces-and-workers).
         $this.Resolution.StartWarm()
