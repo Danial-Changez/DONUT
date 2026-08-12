@@ -184,7 +184,8 @@ class FinderPresenter {
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
-        $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+        # Gated on in-flight lookups, so a fast tick is free and it halves partial paint lag.
+        $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(100)
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
 
         # The reaps fire on the first search or pick, so timing there measures the user.

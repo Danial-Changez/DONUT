@@ -12,7 +12,8 @@ using module ".\LensDeviceViewModel.psm1"
     (LensDeviceViewModels). HomePresenter shows this in the detail pane when a user is
     picked in the AD finder: SetLoading while the de-elevated lookup runs, then Apply the
     resolved PersonLens. Inherits ObservableObject so the pane updates live; the device
-    collection is mutated on the UI thread only (the presenter's poll runs there).
+    collection is handed over whole on the UI thread (one reset per apply, the dropdown
+    postmortem's rule, and the presenter's poll runs there).
 
     The software list (the person's application deployments) shares the device list's
     slot behind a toggle: its lookup runs in parallel with the person lookup and lands
@@ -63,6 +64,15 @@ class PersonLensViewModel : ObservableObject {
             })
     }
 
+    # One Set, not Clear plus N Adds: each Add on a bound collection re-lays the pane per row.
+    hidden [void] SetDeviceRows([LensDevice[]]$devices) {
+        $rows = [ObservableCollection[object]]::new()
+        foreach ($d in $this.SortByLastSeen($devices)) {
+            $rows.Add([LensDeviceViewModel]::new($d))
+        }
+        $this.Set('Devices', $rows)
+    }
+
     # Loading state while the de-elevated lookup runs (shows the picked name immediately).
     [void] SetLoading([string]$who) {
         $this.Set('DisplayName', $who)
@@ -70,7 +80,7 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('IsLoading', $true)
         $this.Set('HasError', $false)
         $this.Set('StatusText', 'Looking up directory + SCCM…')
-        $this.Devices.Clear()
+        $this.Set('Devices', [ObservableCollection[object]]::new())
         $this.Set('HasDevices', $false)
         # The software view resets too, since its parallel lookup restarts with the pick.
         $this.Set('Deployments', @())
@@ -101,9 +111,7 @@ class PersonLensViewModel : ObservableObject {
         if ($lens.Manager) { $this.Set('Manager', $lens.Manager) }
         if ($lens.Office) { $this.Set('Office', $lens.Office) }
         if ($lens.Devices.Count -gt 0) {
-            $this.Devices.Clear()
-            $sorted = $this.SortByLastSeen($lens.Devices)
-            foreach ($d in $sorted) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
+            $this.SetDeviceRows($lens.Devices)
             $this.Set('HasDevices', $true)
             $this.Set('StatusText', 'Loading device details…')
         }
@@ -124,9 +132,7 @@ class PersonLensViewModel : ObservableObject {
         $this.Set('Manager', $lens.Manager)
         $this.Set('Office', $lens.Office)
 
-        $this.Devices.Clear()
-        $sorted = $this.SortByLastSeen($lens.Devices)
-        foreach ($d in $sorted) { $this.Devices.Add([LensDeviceViewModel]::new($d)) }
+        $this.SetDeviceRows($lens.Devices)
         $this.Set('HasDevices', ($this.Devices.Count -gt 0))
 
         if ($lens.Errors.Count -gt 0) {
