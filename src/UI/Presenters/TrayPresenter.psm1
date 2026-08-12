@@ -110,6 +110,7 @@ class TrayPresenter {
     [void] ShowMainWindow() {
         $w = $this.Main.Window
         if ($null -eq $w) { return }
+        $surfaceSw = [System.Diagnostics.Stopwatch]::StartNew()
 
         # Sign-in and the update prompt come first, or the window opens beside the login modal.
         $pending = $this.Main.PendingUpdateCheck
@@ -125,6 +126,8 @@ class TrayPresenter {
             $this.Main.BringToFront()
         }
         catch { $this.Logger.LogException("Show main window failed", $_) }
+        # The gap is the deferred sign-in and update check, not the window itself.
+        $this.Logger.LogDebug("Tray surface took $($surfaceSw.ElapsedMilliseconds)ms to show.")
 
         # Once per launch: the remedies live elsewhere, so this only has to name the state.
         if ($this.Main.PendingLimitedNotice) {

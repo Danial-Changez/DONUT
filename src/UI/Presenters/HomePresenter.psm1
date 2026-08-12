@@ -276,7 +276,9 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.Store.Count() -eq 0) {
             $this.Store.SeedFrom($this.ReadWsidHosts())
         }
+        $rowsSw = [System.Diagnostics.Stopwatch]::StartNew()
         $this.BuildRows()
+        $this.Logger.LogDebug("Machine list restore took $($rowsSw.ElapsedMilliseconds)ms.")
         $this.Store.FlushSave()   # persist the one-time WSID seed (saves are deferred)
         $this.InitMachineListShaping()
 
@@ -288,7 +290,9 @@ class HomePresenter : AsyncJobPresenter {
         if (-not [string]::IsNullOrWhiteSpace($savedDc)) { $this.Resolver.SetActiveDc($savedDc) }
 
         # The one safe time to take the loader-lock hit is before the message loop (.NOTES).
+        $warmSw = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Resolution.WarmPool()
+        $this.Logger.LogInfo("Warm pool barrier held the boot for $($warmSw.ElapsedMilliseconds)ms.")
 
         # The only startup job beyond the warm shells (architecture/runspaces-and-workers).
         $this.Resolution.StartWarm()
