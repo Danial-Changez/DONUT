@@ -15,6 +15,14 @@ detail pane: who they are and what machines they have.
   tooltip. Any device can be **added to the machine list** in one click.
 - **BitLocker recovery keys** — revealed on click per device (never shown by
   default), with a QR code for typing-free entry on the target.
+- **Their software** — the deployments targeted at the user: install-intent
+  applications plus package deployments (each package shows its program name, so
+  software and maintenance are tellable apart), as software over its carrying
+  collection, matching the console's user Properties → Deployments tab. The
+  **Software** button swaps the device list for it and back; its lookup runs in
+  parallel with the person lookup, so neither waits on the other. A site can narrow
+  the list with the optional `lensSoftwareCollectionFilter` config regex on
+  collection names (blank, the default, shows everything).
 
 Results stream in: person facts first, then device names, then the filled detail.
 Each person's results are cached for 15 minutes. If a lookup can't complete, the

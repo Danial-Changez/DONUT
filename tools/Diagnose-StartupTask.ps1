@@ -227,6 +227,11 @@ foreach ($t in $task.Triggers) {
         Write-Host "PROBLEM: the logon trigger is bound to '$($t.UserId)', but '$consoleUser' is who signs in at the console. That account never logs on interactively, so this task stays Ready and never fires." -ForegroundColor Red
     }
 }
+# The scheduler default of 7 boots DONUT below normal CPU class in the logon storm.
+Write-Host "priority  : $($task.Settings.Priority) (current builds register 5, normal class)"
+if ([int]$task.Settings.Priority -ge 7) {
+    Write-Host "PROBLEM: priority $($task.Settings.Priority) runs the whole boot below normal CPU class while every other logon app competes for the disk. Toggle Start with Windows off and on to re-register it at 5." -ForegroundColor Red
+}
 # Any psexec or SYSTEM shape here is a task from before the lane was deleted.
 if ($action.Execute -like '*PsExec*' -or $action.Arguments -like '*Start-DonutInConsoleSession*') {
     Write-Host "PROBLEM: this task is from an older build that started DONUT as SYSTEM via psexec. As SYSTEM it authenticates on the network as the machine account, which has no rights on fleet targets, so every remote job fails on access denied. Toggle Start with Windows off and on to re-register it." -ForegroundColor Red

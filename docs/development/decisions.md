@@ -96,7 +96,8 @@ slower than the machinery around it (~150 ms, the Lens agent's serve-loop pass).
 decisions came from applying it:
 
 - The Lens owner lookup is one batched request, not one per machine — N requests
-  against a serially-served agent cost N sleeps, files, AES round trips, and polls.
+  cost N files, AES round trips, and polls; the agent now serves the batch on a
+  thread job, but the batching still pays for itself.
 - An AD-search debounce/poll raise (100→250 ms / 60→150 ms) was reverted: the
   debounce charged every search a flat +150 ms to avoid a cost that was argued rather
   than measured, and the poll timer never ticks while idle, so a fast tick costs
@@ -191,6 +192,19 @@ pass filters `ResourceID eq N` and falls back once to the keyed segment `Class(N
 and both empty shapes fall through. Also: the URL builder writes `${class}?` with
 braces — `"$class?"` parses `class?` as the variable name and the class vanishes from
 the path, silently.
+
+### The software list shows packages instead of guessing at them
+
+The user Deployments view keeps install-intent applications and **every** package
+deployment. Package program names vary per site ("Install", silent variants,
+maintenance scripts), so no generic filter can sort software from noise — the row
+carries the program name instead and the operator tells them apart, exactly as the
+console's Program column does. Site-specific collection naming conventions stay out
+of the code: the optional `lensSoftwareCollectionFilter` config regex narrows by
+collection name at render time, and its blank default shows everything. The chain
+(`SMS_R_User` endswith → `SMS_FullCollectionMembership` `ResourceID eq N` → one
+`$select`-trimmed `SMS_DeploymentSummary` fetch with `DesiredConfigType` served) is
+field-confirmed against the site this ships to.
 
 ### Naming owners (why SCCM comes first)
 

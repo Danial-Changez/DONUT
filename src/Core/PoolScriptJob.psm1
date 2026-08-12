@@ -57,10 +57,9 @@ class PoolScriptJob {
         if ($null -eq $ps) { return $false }
         $log = [LogService]::Coalesce($logger)
         try {
-            if ($ps.InvocationStateInfo.State -eq 'Running') {
+            if ([string]$ps.InvocationStateInfo.State -in @('Running', 'Stopping')) {
                 # No callback: BeginStop fires it runspace-less, where any scriptblock throws.
-                $ps.BeginStop($null, $null) | Out-Null
-                $stoppingList.Add($ps)
+                $stoppingList.Add(@{ Ps = $ps; StopHandle = $ps.BeginStop($null, $null) })
                 return $true
             }
             $ps.Dispose()
@@ -69,18 +68,19 @@ class PoolScriptJob {
         return $false
     }
 
-    # Disposes each async-stopped pipeline once terminal (disposing a still-Stopping one
-    # would block). Returns $true when the list drained so the caller can stop its timer.
+    # Disposes each parked pipeline only once its stop HANDLE completes. The pipeline state
+    # goes terminal while the stop thread still runs, and disposing then crashes the app.
     static [bool] ReapStopping([System.Collections.IList]$stoppingList, [LogService]$logger) {
         $log = [LogService]::Coalesce($logger)
         for ($i = $stoppingList.Count - 1; $i -ge 0; $i--) {
-            $ps = $stoppingList[$i]
-            $state = [string]$ps.InvocationStateInfo.State
-            if ($state -ne 'Running' -and $state -ne 'Stopping') {
-                try { $ps.Dispose() }
-                catch { $log.LogDebug("Stopped-job dispose failed: $($_.Exception.Message)") }
-                $stoppingList.RemoveAt($i)
-            }
+            $entry = $stoppingList[$i]
+            if (-not $entry.StopHandle.IsCompleted) { continue }
+            # EndStop joins the stop thread, so nothing of the stop can outlive the dispose.
+            try { $entry.Ps.EndStop($entry.StopHandle) }
+            catch { $log.LogDebug("Stop completion failed: $($_.Exception.Message)") }
+            try { $entry.Ps.Dispose() }
+            catch { $log.LogDebug("Stopped-job dispose failed: $($_.Exception.Message)") }
+            $stoppingList.RemoveAt($i)
         }
         return ($stoppingList.Count -eq 0)
     }

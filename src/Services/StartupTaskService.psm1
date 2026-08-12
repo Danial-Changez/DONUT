@@ -204,8 +204,9 @@ class StartupTaskService {
             -WorkingDirectory $spec.WorkingDirectory
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
         $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
+        # Priority 5 keeps normal CPU class, where the scheduler default of 7 boots below it.
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
-            -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+            -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -Priority 5
         # An access-denied register is non-terminating and would slip past Apply's catch.
         Register-ScheduledTask -TaskName $name -Action $action `
             -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null

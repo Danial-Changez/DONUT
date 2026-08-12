@@ -30,16 +30,25 @@ no partials, so the pane fills in one step. See
   lifetime, started via a scheduled task: `LogonType Interactive` (the logged-on
   token, no password), `RunLevel Limited`, wrapped in `conhost.exe --headless` so no
   console window flashes.
-- `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), so it
-  pre-warms its AD/SCCM libraries while DONUT boots — even the first pick skips a
-  task registration + `pwsh` cold start.
+- `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), and the
+  agent pre-warms on a thread job while DONUT boots — the GC and home-domain
+  binds, a person-shaped GC read, plus throwaway AdminService affinity, hardware
+  and software queries, so even the first pick reuses warm connections on every
+  path — and the serve loop starts serving before the warm lands. `WarmLens` also
+  runs a `-WarmOnly` pass on every interactive runspace, so the worker's class
+  graph is parsed before the first pick instead of by it.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
-  `heartbeat.txt` older than 15 s as a dead agent and re-registers the task.
-- The agent beats from a background thread, not the serve loop, so a lookup in
-  flight never lets the beat go stale and get the busy agent torn down mid-lookup.
-  Lookups run on a `ThreadJob` so a slow one never blocks the serve loop. It
-  self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a purged exchange dir.
+  `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
+  task; two lookup timeouts in a row (`timeouts.txt`) force the same recycle even
+  while the beat stays fresh, which catches an agent poisoned by dead binds after
+  sleep.
+- The serve loop itself beats every ~2 s and never blocks: person lookups and
+  owner batches run on `ThreadJob`s (any job stuck past 90 seconds is cut loose,
+  since the parent stops listening at 60 and a straggler only hogs a throttle slot),
+  so a fresh beat proves requests are being read and a stale one means dead or
+  wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
+  purged exchange dir.
 - The AD finder search does **not** route through this agent — it fans out
   in-process on the pool (AD reads don't need de-elevation). Rejected designs are
   in [Design decisions](../decisions.md#rejected-agent-designs).
@@ -54,10 +63,18 @@ future source (e.g. an Intune API) slots in beside the existing ones:
 2. The SCCM affinity query (person → WSIDs, `SMS_UserMachineRelationship`) runs on
    a thread job in parallel with the AD read.
 3. A hardware-inventory pass (model/serial/manufacturer, keyed by the affinity
-   row's `ResourceID`) runs on a second thread job in parallel with the per-device
-   AD loop.
+   row's `ResourceID`) runs one thread job per device in parallel with the
+   per-device AD loop — the AdminService answers slowly per query, so serial
+   pairs were the whole lookup's tail.
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
-   computer's AD object.
+   computer's AD object, one thread job per device running beside the hardware
+   jobs, so the gather's tail is one device's cost rather than the sum.
+
+The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
+the elevated path, and a lane no other DONUT code uses on the in-process path —
+which is disjoint from the worker and interactive runspace pools. A many-device
+pick that outgrows the throttle queues against other lens jobs only; disk scans,
+DCU runs and inventories are never displaced.
 
 Rules the AdminService imposes (each learned the hard way — see
 [Design decisions](../decisions.md#adminservice-filter-shapes)):
@@ -71,7 +88,27 @@ Rules the AdminService imposes (each learned the hard way — see
   N` rather than a blank card.
 - Owner naming: `SMS_R_User.FullUserName` first (the site aggregates every forest),
   the agent's own-forest GC as fallback, the SAM as last resort; names memoize per
-  agent session, and the batched owner lookup is one request for all machines.
+  batch, and the batched owner lookup is one request for all machines, served on a
+  thread job off the serve loop.
+- The software list (`Resolve-UserSoftware`, request kind `software`) walks the user
+  direction: `SMS_R_User` names the ResourceIDs (endswith, exact tail client-side),
+  `SMS_FullCollectionMembership` the collections (`ResourceID eq N`, with no keyed
+  fallback for its compound key), then one `$select`-trimmed `SMS_DeploymentSummary`
+  fetch is filtered client-side to install-intent applications plus every package
+  deployment (packages carry their program name, since no generic filter can sort
+  them apart) — an or-filter over the collections would 404. It rides its own
+  request, dispatched in parallel with the person lookup, so neither ever waits on
+  the other; the optional `lensSoftwareCollectionFilter` config regex narrows the
+  rows parent-side at render time, blank by default.
+- Every AdminService call carries a 15 s timeout and every searcher a 15 s
+  `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
+  the agent.
+
+The final bundle also carries a `timings` map — cumulative milliseconds at each
+gather stage (user read, affinity collect, device collect, hardware merge) plus
+each device's own wall times (`ad <name>` for the AD detail job, `hw <name>` for
+the hardware job) — which debug logging prints beside the parent's queued/total
+numbers, so a slow pick can be attributed to a stage rather than argued about.
 
 A failed source degrades: each appends to the bundle's `errors` list and the lens
 still renders. The parse (`PersonLens.FromJson`) is pure and unit-tested; the
@@ -87,6 +124,9 @@ Fixed `%ProgramData%\DONUT\lens-agent` dir:
    paints progressively.
 3. Each side deletes what it consumed; the agent sweeps anything older than 10
    minutes.
+4. The parent counts consecutive lookup timeouts in `timeouts.txt` (no secrets,
+   just a counter); a completed lookup deletes it, and at two `EnsureAgent`
+   recycles the agent.
 
 ## Securing the exchange
 

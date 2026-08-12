@@ -108,6 +108,57 @@ Describe "PersonLens" {
             $p.Devices.Count | Should -Be 0
             $p.Errors.Count | Should -Be 0
         }
+
+        It "maps the gather timings and leaves them empty when omitted" {
+            $p = [PersonLens]::FromJson('{ "sam": "U9", "timings": { "user": 812, "devices": 1900 } }')
+            [int]$p.Timings['user'] | Should-Be 812
+            [int]$p.Timings['devices'] | Should-Be 1900
+            ([PersonLens]::FromJson('{ "sam": "U9" }')).Timings.Count | Should-Be 0
+        }
+    }
+
+    Context "LensDeployment.ParseBundle" {
+        It "parses a software bundle into rows" {
+            $json = '{"deployments":[{"software":"Zoom Workplace","collection":"Zoom Deploy - WASH",' +
+            '"program":"Install - silent"}],"error":""}'
+            $b = [LensDeployment]::ParseBundle($json)
+            @($b.Rows).Count | Should-Be 1
+            $b.Rows[0].Software | Should-Be 'Zoom Workplace'
+            $b.Rows[0].Collection | Should-Be 'Zoom Deploy - WASH'
+            $b.Rows[0].Program | Should-Be 'Install - silent'
+            $b.Error | Should-Be ''
+        }
+
+        It "carries the bundle's error beside empty rows" {
+            $b = [LensDeployment]::ParseBundle('{"deployments":[],"error":"SCCM software: 404"}')
+            @($b.Rows).Count | Should-Be 0
+            $b.Error | Should-Be 'SCCM software: 404'
+        }
+
+        It "turns malformed or blank JSON into the error or an empty bundle" {
+            ([LensDeployment]::ParseBundle('{ not json').Error -match 'parse') | Should-BeTrue
+            $blank = [LensDeployment]::ParseBundle('')
+            @($blank.Rows).Count | Should-Be 0
+            $blank.Error | Should-Be ''
+        }
+    }
+
+    Context "LensDeployment.FilterByCollection" {
+        It "keeps only collections matching the pattern" {
+            $rows = @(
+                [LensDeployment]@{ Software = 'Zoom'; Collection = 'Zoom Deploy - WASH' },
+                [LensDeployment]@{ Software = 'Tool'; Collection = 'Maintenance Push' }
+            )
+            $kept = [LensDeployment]::FilterByCollection($rows, ' - WASH$')
+            @($kept).Count | Should-Be 1
+            $kept[0].Software | Should-Be 'Zoom'
+        }
+
+        It "keeps everything on a blank or invalid pattern" {
+            $rows = @([LensDeployment]@{ Software = 'A'; Collection = 'B' })
+            @([LensDeployment]::FilterByCollection($rows, '')).Count | Should-Be 1
+            @([LensDeployment]::FilterByCollection($rows, '(')).Count | Should-Be 1
+        }
     }
 
     Context "FromError" {

@@ -121,12 +121,18 @@ class FinderPresenter {
     [PersonLensViewModel] $LensVm          # bound to the detail pane in Person mode
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
+    [object]              $SoftwareJob      # the one in-flight software lookup, or $null
+    hidden [string]       $SoftwareKey = '' # the pick whose software the reap may apply
+    # identity -> @{ At; Json }, memory only beside LensCache (no secrets, same lifetime).
+    hidden [hashtable] $SoftwareCache = @{}
     [bool]                $LensWarmTimed
     [DispatcherTimer]     $WarmWatchTimer   # times the warms, stops itself once they land
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins, stale results are discarded
     # Startup agent warm-up @{ Ps; Handle; StartedAt }, reaped on the first pick.
     [object]              $LensWarmJob
+    # Extra -WarmOnly runs so every interactive runspace parses the worker graph early.
+    hidden [List[hashtable]] $LensWarmExtras
     # identity -> @{ At; Json }, memory only: it holds BitLocker keys and must never hit disk.
     hidden [hashtable] $LensCache = @{}
     [timespan] $LensCacheTtl = [timespan]::FromMinutes(15)
@@ -179,8 +185,10 @@ class FinderPresenter {
         # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
+        $this.LensWarmExtras = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
-        $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+        # Gated on in-flight lookups, so a fast tick is free and it halves partial paint lag.
+        $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(100)
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
 
         # The reaps fire on the first search or pick, so timing there measures the user.
@@ -362,6 +370,15 @@ class FinderPresenter {
                     SourceRoot = $this.Config.SourceRoot
                     WarmOnly   = $true
                 })
+            # A pick dispatches two jobs onto any free runspace, so every runspace must
+            # already hold the worker graph. The agent mutex makes the extras near no-ops.
+            for ($i = 1; $i -lt [RunspaceManager]::InteractiveSize; $i++) {
+                $this.LensWarmExtras.Add($this.StartPoolScript($worker, @{
+                            SiteServer = $this.Config.GetAdminServiceHost()
+                            SourceRoot = $this.Config.SourceRoot
+                            WarmOnly   = $true
+                        }))
+            }
         }
         catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
@@ -413,6 +430,79 @@ class FinderPresenter {
         finally { $this.DisposeJob($job.Ps) }
     }
 
+    # The pick's parallel software lookup: a cache hit applies at once, else one job runs.
+    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$cacheKey) {
+        $this.SoftwareKey = $cacheKey
+        $cached = $this.SoftwareCache[$cacheKey]
+        if ($null -ne $cached -and
+            ([datetime]::UtcNow - [datetime]$cached.At) -lt $this.LensCacheTtl) {
+            $parsed = [LensDeployment]::ParseBundle([string]$cached.Json)
+            $rows = [LensDeployment]::FilterByCollection(@($parsed.Rows),
+                $this.Config.GetLensSoftwareCollectionFilter())
+            $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
+            return
+        }
+        # Newest pick wins here too, so a stale in-flight lookup is dropped, not awaited.
+        if ($null -ne $this.SoftwareJob) {
+            $this.DisposeJob($this.SoftwareJob.Ps)
+            $this.SoftwareJob = $null
+        }
+        try {
+            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+            $job = $this.StartPoolScript($worker, @{
+                    SiteServer  = $this.Config.GetAdminServiceHost()
+                    SourceRoot  = $this.Config.SourceRoot
+                    Sam         = $sam
+                    SoftwareFor = $identity
+                })
+            $job.Key = $cacheKey
+            $this.SoftwareJob = $job
+            $this.LensPollTimer.Start()
+        }
+        catch { $this.Logger.LogException('Software lookup could not start', $_) }
+    }
+
+    # Milliseconds the worker sat queued on the pool before its first statement ran.
+    hidden [long] QueuedMs([hashtable]$job) {
+        try {
+            foreach ($rec in $job.Ps.Streams.Information) {
+                if ($rec.Tags -notcontains 'WorkerStart') { continue }
+                $started = ([datetime]$rec.MessageData).ToUniversalTime()
+                return [long]($started - [datetime]$job.StartedAt).TotalMilliseconds
+            }
+        }
+        catch { }
+        return -1
+    }
+
+    # Applies the software rows once the parallel lookup lands (newest pick only).
+    hidden [void] ReapSoftware() {
+        $job = $this.SoftwareJob
+        if ($null -eq $job -or -not $job.Handle.IsCompleted) { return }
+        $this.SoftwareJob = $null
+        try {
+            $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+            $parsed = [LensDeployment]::ParseBundle($json)
+            $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+            $rowCount = @($parsed.Rows).Count
+            $queued = $this.QueuedMs($job)
+            $this.Logger.LogDebug(
+                "Software lookup for '$($job.Key)': $rowCount row(s) in ${ms}ms (queued ${queued}ms)")
+            if ($parsed.Error) { $this.Logger.LogWarning("Software lookup: $($parsed.Error)") }
+            elseif ($json) {
+                $this.SoftwareCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
+            }
+            if ([string]$job.Key -eq $this.SoftwareKey) {
+                # The config filter narrows at render time, so the cache stays unfiltered.
+                $rows = [LensDeployment]::FilterByCollection(@($parsed.Rows),
+                    $this.Config.GetLensSoftwareCollectionFilter())
+                $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
+            }
+        }
+        catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
+        finally { $this.DisposeJob($job.Ps) }
+    }
+
     # Reap the startup agent warm job (logs its result: '' = started, else the reason).
     hidden [void] ReapLensWarm() {
         if ($null -eq $this.LensWarmJob) { return }
@@ -429,6 +519,9 @@ class FinderPresenter {
             $this.DisposeJob($job.Ps)
         }
         catch { $this.DisposeJob($job.Ps) }
+        # The extra runspace warms carry no result worth reading, so they just retire.
+        foreach ($extra in @($this.LensWarmExtras)) { $this.DisposeJob($extra.Ps) }
+        $this.LensWarmExtras.Clear()
     }
 
     # --- AD live search (search-bar dropdown) ---
@@ -733,6 +826,7 @@ class FinderPresenter {
             $this.LensToken++   # stales any in-flight lookup, its late result is discarded
             $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
             $this.WireLensDeviceCommands()
+            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
             return
         }
 
@@ -765,12 +859,15 @@ class FinderPresenter {
             $this.LensVm.Set('HasError', $true)
             $this.LensVm.Set('StatusText', "Could not start the lookup: $_")
         }
+        # Dispatched last, so software can never queue ahead of the pick on a full pool.
+        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
     }
 
     # Streams any 'LensPartial' record into the VM before the final bundle lands.
     [void] PollLens() {
-        # Shares this tick rather than owning a second timer: both wait on the same agent.
+        # Shares this tick rather than owning a second timer: all wait on the same agent.
         $this.ReapOwners()
+        $this.ReapSoftware()
         foreach ($job in @($this.LensJobs)) {
             # The partial lands before the SCCM/BitLocker crawl, so the pane fills early.
             if ($job.Token -eq $this.LensToken) {
@@ -779,6 +876,9 @@ class FinderPresenter {
                     $rec = $stream[[int]$job.InfoSeen]
                     $job.InfoSeen = [int]$job.InfoSeen + 1
                     if ($rec.Tags -contains 'LensPartial') {
+                        $at = [datetime]::UtcNow - [datetime]$job.StartedAt
+                        $this.Logger.LogDebug(
+                            "Lens partial for '$($job.Key)' at $([int]$at.TotalMilliseconds)ms")
                         $this.LensVm.ApplyPartial([PersonLens]::FromJson([string]$rec.MessageData))
                         # Partial 2 carries name-only device rows, so Add must work on them.
                         $this.WireLensDeviceCommands()
@@ -802,7 +902,16 @@ class FinderPresenter {
                 $this.LensVm.Apply($lens)
                 $this.WireLensDeviceCommands()
                 $lensMs = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
-                $this.Logger.LogInfo("Lens lookup for '$($job.Key)' completed in ${lensMs}ms ($($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)).")
+                $queued = $this.QueuedMs($job)
+                $msg = "Lens lookup for '$($job.Key)': ${lensMs}ms (queued ${queued}ms), " +
+                "$($lens.Devices.Count) device(s), $($lens.Errors.Count) error(s)."
+                $this.Logger.LogInfo($msg)
+                # The agent's cumulative stage marks split the gather like the AD breadcrumb.
+                if ($lens.Timings.Count -gt 0) {
+                    $stages = @($lens.Timings.GetEnumerator() |
+                            ForEach-Object { "$($_.Key) $($_.Value)ms" }) -join ', '
+                    $this.Logger.LogDebug("Lens stages for '$($job.Key)': $stages")
+                }
 
                 # Cache clean results (memory only, see LensCache) for instant TTL re-picks.
                 if ($lens.Errors.Count -eq 0 -and $job.Key) {
@@ -817,8 +926,9 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        # An owner batch outlives the pick that started it, so it keeps the tick alive too.
-        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob) { $this.LensPollTimer.Stop() }
+        # Owner and software lookups outlive the pick that started them, so they keep it alive.
+        if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob -and
+            $null -eq $this.SoftwareJob) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup past LensDeadline is never coming back, so retire it with a reason.

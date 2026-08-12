@@ -96,7 +96,48 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
         $lens.GetType().Name | Should -Be 'PersonLens'
     }
 
-    It "consumed this lookup's exchange files (only key.bin and heartbeat remain)" {
+    It "answers an owner batch on a thread job over the real exchange" {
+        $svc = [LiveAgentLensService]::new()
+        $svc.TimeoutSec = 60
+
+        $request = @{
+            kind       = 'owner'
+            machines   = @('WS-INTEG-1')
+            siteServer = 'site.invalid'
+        }
+        $out = $svc.ExchangeRoundTrip($request, $false)
+
+        Should-NotBeNull $out
+        # A parent-side failure bundle carries errors (plural), the batch shape never does.
+        $bundle = $out | ConvertFrom-Json
+        Should-BeNull $bundle.errors
+        @($bundle.owners).Count | Should-Be 1
+        # Off-domain the row carries an SCCM error, and the row arriving is the pass.
+        @($bundle.owners)[0].name | Should-Be 'WS-INTEG-1'
+    }
+
+    It "answers a software lookup on a thread job over the real exchange" {
+        $svc = [LiveAgentLensService]::new()
+        $svc.TimeoutSec = 60
+
+        $request = @{
+            kind       = 'software'
+            identity   = 'donut.integration'
+            sam        = 'donut.integration'
+            siteServer = 'site.invalid'
+        }
+        $out = $svc.ExchangeRoundTrip($request, $false)
+
+        Should-NotBeNull $out
+        # A parent-side failure bundle carries errors (plural), this shape never does.
+        $bundle = $out | ConvertFrom-Json
+        Should-BeNull $bundle.errors
+        @($bundle.deployments).Count | Should-Be 0
+        # Off-domain the SCCM walk fails, and the named reason arriving is the pass.
+        ($bundle.error -match 'SCCM software') | Should-BeTrue
+    }
+
+    It "consumed each lookup's exchange files (only key.bin and heartbeat remain)" {
         @(Get-ChildItem -Path $script:exchangeDir -Filter '*.bin' -File |
                 Where-Object { $_.Name -ne 'key.bin' }) | Should -BeNullOrEmpty
     }

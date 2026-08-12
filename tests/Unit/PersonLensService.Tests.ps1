@@ -176,6 +176,34 @@ Describe "PersonLensService" {
             Test-Path (Join-Path $dir 'key.bin') | Should -BeTrue   # only its own files go
         }
 
+        It "counts consecutive lookup timeouts across service instances" {
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+
+            # A fresh instance per attempt proves the strike file carries the state.
+            foreach ($i in 1, 2) {
+                $svc = [StubAgentLensService]::new()
+                $svc.TimeoutSec = 0
+                $null = $svc.ExchangeRoundTrip(@{ identity = 'a@b.com' }, $true)
+            }
+
+            [IO.File]::ReadAllText((Join-Path $dir 'timeouts.txt')).Trim() | Should-Be '2'
+        }
+
+        It "forces a recycle only at two strikes" {
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+            [PersonLensService]::ShouldForceRecycle($dir) | Should-BeFalse
+            [IO.File]::WriteAllText((Join-Path $dir 'timeouts.txt'), '1')
+            [PersonLensService]::ShouldForceRecycle($dir) | Should-BeFalse
+            [IO.File]::WriteAllText((Join-Path $dir 'timeouts.txt'), '2')
+            [PersonLensService]::ShouldForceRecycle($dir) | Should-BeTrue
+            [IO.File]::WriteAllText((Join-Path $dir 'timeouts.txt'), 'garbage')
+            [PersonLensService]::ShouldForceRecycle($dir) | Should-BeFalse
+        }
+
         It "completes a full encrypted round trip (with a partial) against a faked agent" {
             $svc = [StubAgentLensService]::new()
             $svc.TimeoutSec = 10
@@ -221,6 +249,54 @@ Describe "PersonLensService" {
                 $out | Should -Be $response
                 @(Get-ChildItem -Path $dir -Filter '*-*.bin' -Exclude 'key.bin') |
                     Should -BeNullOrEmpty   # request, partial and result all consumed
+            }
+            finally {
+                if (-not $handle.IsCompleted) { $agent.Stop() }
+                $agent.Dispose()
+            }
+        }
+
+        It "clears the strikes once a round trip lands" {
+            $svc = [StubAgentLensService]::new()
+            $svc.TimeoutSec = 10
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $keyIv = [PersonLensService]::NewKeyIv()
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), $keyIv)
+            [IO.File]::WriteAllText((Join-Path $dir 'timeouts.txt'), '2')
+            $response = '{ "sam": "U1", "devices": [] }'
+
+            # Stands in for the agent, answering with just the result in the wire format.
+            $agent = [powershell]::Create()
+            [void]$agent.AddScript({
+                    param($dir, $keyIv, $response)
+                    $deadline = (Get-Date).AddSeconds(8)
+                    $req = $null
+                    while ((Get-Date) -lt $deadline -and -not $req) {
+                        $req = Get-ChildItem -Path $dir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
+                            Select-Object -First 1
+                        if (-not $req) { Start-Sleep -Milliseconds 50 }
+                    }
+                    if (-not $req) { return }
+                    $id = $req.BaseName.Substring('request-'.Length)
+                    $aes = [System.Security.Cryptography.Aes]::Create()
+                    try {
+                        $aes.Key = [byte[]]($keyIv[0..31]); $aes.IV = [byte[]]($keyIv[32..47])
+                        $enc = $aes.CreateEncryptor()
+                        $plain = [System.Text.Encoding]::UTF8.GetBytes($response)
+                        $tmp = Join-Path $dir "result-$id.bin.tmp"
+                        [IO.File]::WriteAllBytes($tmp, $enc.TransformFinalBlock($plain, 0, $plain.Length))
+                        Move-Item -LiteralPath $tmp -Destination (Join-Path $dir "result-$id.bin") -Force
+                    }
+                    finally { $aes.Dispose() }
+                })
+            [void]$agent.AddArgument($dir).AddArgument($keyIv).AddArgument($response)
+            $handle = $agent.BeginInvoke()
+            try {
+                $out = $svc.ExchangeRoundTrip(@{ identity = 'jane@corp.example'; sam = 'U1' }, $false)
+
+                $out | Should-Be $response
+                Test-Path (Join-Path $dir 'timeouts.txt') | Should-BeFalse
             }
             finally {
                 if (-not $handle.IsCompleted) { $agent.Stop() }

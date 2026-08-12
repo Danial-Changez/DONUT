@@ -72,6 +72,7 @@ class PersonLens {
     [string] $Office = ''
     [LensDevice[]] $Devices = @()
     [string[]] $Errors = @()     # per-section failures (worker still returns what it could)
+    [hashtable] $Timings = @{}   # cumulative gather-stage ms, printed by debug logging
 
     static [PersonLens] FromHashtable([hashtable]$h) {
         $p = [PersonLens]::new()
@@ -90,6 +91,9 @@ class PersonLens {
         $p.Devices = $devList.ToArray()
         $p.Errors = @(@($h['errors']) | Where-Object { $null -ne $_ } |
                 ForEach-Object { [string]$_ })
+        if ($h['timings'] -is [System.Collections.IDictionary]) {
+            $p.Timings = [hashtable]$h['timings']
+        }
         return $p
     }
 
@@ -114,6 +118,47 @@ class PersonLens {
             $p.Errors = @("Failed to parse the lens bundle: $($_.Exception.Message)")
             return $p
         }
+    }
+}
+
+# One application deployment targeting the Lens person. Its own bundle, not the person
+# bundle: the software lookup rides a separate request dispatched in parallel.
+class LensDeployment {
+    [string] $Software = ''
+    [string] $Collection = ''
+    [string] $Program = ''      # package rows only, apps always mean install
+
+    static [LensDeployment] FromHashtable([hashtable]$h) {
+        $d = [LensDeployment]::new()
+        if ($null -eq $h) { return $d }
+        $d.Software = [string]$h['software']
+        $d.Collection = [string]$h['collection']
+        $d.Program = [string]$h['program']
+        return $d
+    }
+
+    # Parses the agent's @{ deployments, error } bundle. Malformed JSON becomes the error.
+    static [hashtable] ParseBundle([string]$json) {
+        $out = @{ Rows = @(); Error = '' }
+        if ([string]::IsNullOrWhiteSpace($json)) { return $out }
+        try {
+            $h = $json | ConvertFrom-Json -AsHashtable -Depth 8
+            $rowList = [System.Collections.Generic.List[LensDeployment]]::new()
+            foreach ($d in @($h['deployments'])) {
+                if ($null -ne $d) { $rowList.Add([LensDeployment]::FromHashtable([hashtable]$d)) }
+            }
+            $out.Rows = $rowList.ToArray()
+            $out.Error = [string]$h['error']
+        }
+        catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
+        return $out
+    }
+
+    # Optional per site narrowing: keep rows whose collection matches the config regex.
+    static [object[]] FilterByCollection([object[]]$rows, [string]$pattern) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) { return @($rows) }
+        try { return @($rows | Where-Object { [string]$_.Collection -match $pattern }) }
+        catch { return @($rows) }
     }
 }
 

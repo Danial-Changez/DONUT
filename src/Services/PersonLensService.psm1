@@ -111,6 +111,36 @@ class PersonLensService {
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    # Two straight lookup timeouts mean a poisoned agent that still beats (dead binds
+    # after sleep), so EnsureAgent recycles it. File state outlives per-call services.
+    hidden static [string] TimeoutsPath([string]$dir) { return (Join-Path $dir 'timeouts.txt') }
+
+    hidden static [int] ReadLensTimeoutCount([string]$dir) {
+        $n = 0
+        try {
+            $raw = [IO.File]::ReadAllText([PersonLensService]::TimeoutsPath($dir)).Trim()
+            if (-not [int]::TryParse($raw, [ref]$n)) { $n = 0 }
+        }
+        catch { $n = 0 }
+        return $n
+    }
+
+    hidden static [void] RecordLensTimeout([string]$dir) {
+        try {
+            $n = [PersonLensService]::ReadLensTimeoutCount($dir) + 1
+            [IO.File]::WriteAllText([PersonLensService]::TimeoutsPath($dir), "$n")
+        }
+        catch { }
+    }
+
+    hidden static [void] ClearLensTimeouts([string]$dir) {
+        try { [IO.File]::Delete([PersonLensService]::TimeoutsPath($dir)) } catch { }
+    }
+
+    hidden static [bool] ShouldForceRecycle([string]$dir) {
+        return [PersonLensService]::ReadLensTimeoutCount($dir) -ge 2
+    }
+
     # Full parent-side teardown on close. The purge deletes every lens-* dir because
     # bundles hold BitLocker keys and nothing may outlive the app. Best effort.
     static [void] StopAndPurgeAgent() {
@@ -138,12 +168,16 @@ class PersonLensService {
 
             $dir = [PersonLensService]::AgentDir()
             $beat = Join-Path $dir 'heartbeat.txt'
-            if ((Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and
+            # A beating agent can still be poisoned, and two straight timeouts overrule it.
+            $forceRecycle = [PersonLensService]::ShouldForceRecycle($dir)
+            if (-not $forceRecycle -and
+                (Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and
                 (Test-Path -LiteralPath $beat)) {
                 # The agent beats every 2s or so, so anything older means it is gone.
                 $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
                 if ($beatAge.TotalSeconds -lt 15) { return '' }
             }
+            if ($forceRecycle) { $this.Logger.LogWarning('Two Lens lookups timed out in a row, so the agent is being recycled.') }
 
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
             if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
@@ -255,6 +289,30 @@ class PersonLensService {
             @{ kind = 'owner'; machines = @($machines); siteServer = $this.SiteServer }, $false)
     }
 
+    # User to their application deployments, as @{ deployments = @(...), error } JSON.
+    # Dispatched in parallel with the person lookup, so neither ever waits on the other.
+    [string] RunSoftwareLookupJson([string]$identity) {
+        if ([string]::IsNullOrWhiteSpace($identity)) { return '' }
+        if (-not [ElevationContext]::IsElevated()) {
+            try {
+                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
+                if (-not (Test-Path -LiteralPath $common)) { return '' }
+                . $common
+                $script:ForestNc = Get-LensForestNc
+                $sw = @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer }
+                return [string](Resolve-UserSoftware @sw)
+            }
+            catch {
+                $this.Logger.LogException('In-process software lookup failed', $_)
+                return ''
+            }
+        }
+        return $this.ExchangeRoundTrip(
+            @{ kind = 'software'; identity = $identity; sam = $this.SamHint
+                siteServer = $this.SiteServer
+            }, $false)
+    }
+
     [string] RunLookupJson([string]$identity) {
         # De-elevated, DONUT is already the user whose rights this data needs.
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }
@@ -298,8 +356,11 @@ class PersonLensService {
                 Start-Sleep -Milliseconds 100
             }
             if (-not (Test-Path -LiteralPath $resultPath)) {
+                # Strikes accumulate across service instances until a lookup lands.
+                [PersonLensService]::RecordLensTimeout($dir)
                 return [PersonLensService]::ErrorBundle("The lens lookup did not complete within $($this.TimeoutSec)s (agent heartbeat may have died mid-lookup - retry).")
             }
+            [PersonLensService]::ClearLensTimeouts($dir)
             return [PersonLensService]::UnprotectText([IO.File]::ReadAllBytes($resultPath), $keyIv)
         }
         catch {

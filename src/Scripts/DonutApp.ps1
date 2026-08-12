@@ -70,7 +70,10 @@ try {
     $logger = [LogService]::new($configManager.LogsPath)
     # The debug gate is the persisted setting or the -DebugLog session override.
     $logger.DebugEnabled = $global:AppConfig.GetDebugLogging() -or [bool]$global:DebugLogStart
-    $logger.LogInfo("DONUT starting up.")
+    # The gap since process start is the launcher extract plus the module graph parse.
+    $bootMs = [long]((Get-Date) - (Get-Process -Id $PID).StartTime).TotalMilliseconds
+    $logger.LogInfo("DONUT starting up (${bootMs}ms since process start).")
+    $bootSw = [System.Diagnostics.Stopwatch]::StartNew()
     if ($logger.DebugEnabled) {
         $src = if ($global:DebugLogStart) { '-DebugLog session override' } else { 'debugLogging setting' }
         $logger.LogInfo("Debug logging enabled ($src).")
@@ -112,12 +115,12 @@ try {
     [RunspaceManager]::Initialize($throttleLimit, $throttleLimit)
     Update-Splash 44 'Warming runspace pool'
 
-    $logger.LogInfo("Loading resources.")
+    $logger.LogInfo("Loading resources (+$($bootSw.ElapsedMilliseconds)ms).")
     $resourceService = [ResourceService]::new($srcRoot, $logger)
     $resourceService.LoadGlobalResources()
     Update-Splash 66 'Loading resources'
 
-    $logger.LogInfo("Preparing self-update + main window.")
+    $logger.LogInfo("Preparing self-update + main window (+$($bootSw.ElapsedMilliseconds)ms).")
     $networkProbe = [NetworkProbe]::new($logger)
 
     # The repo ships nothing org-specific, so a first run discovers these and persists them.
@@ -150,7 +153,7 @@ try {
     try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
-        $logger.LogInfo("Main window preloaded (runspace pool warmed).")
+        $logger.LogInfo("Main window preloaded (+$($bootSw.ElapsedMilliseconds)ms).")
         Update-Splash 90 'Preparing sign-in'
     }
     catch {
@@ -184,7 +187,7 @@ try {
         $resumeTimer.Start()
 
         if ($hidden) {
-            $logger.LogInfo("Starting hidden in the system tray.")
+            $logger.LogInfo("Starting in the tray (+$($bootSw.ElapsedMilliseconds)ms).")
             # Defer sign-in/update to the first time the user surfaces the window.
             $mainPresenter.PendingUpdateCheck = $updatePresenter
             $mainPresenter.ShowHidden()

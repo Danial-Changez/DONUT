@@ -26,29 +26,31 @@ class AppConfig {
     [hashtable] $Settings
 
     static [hashtable] $Defaults = @{
-        activeCommand         = 'scan'
-        throttleLimit         = 8
+        activeCommand                = 'scan'
+        throttleLimit                = 8
         # Largest folders the on-demand storage scan returns (top-N by size).
-        folderScanCount       = 12
+        folderScanCount              = 12
         # Reconnect window before a dropped run settles as Unconfirmed. See RecoverByResumeTail.
-        recoveryWindowMinutes = 30
+        recoveryWindowMinutes        = 30
         # AD domains for the Home live-finder, each queried independently. See .NOTES.
-        domains               = @()
+        domains                      = @()
         # SCCM AdminService host (SMS Provider) for the Lens device lookup. See .NOTES.
-        adminServiceHost      = ''
+        adminServiceHost             = ''
+        # Optional regex narrowing the Lens software list by collection name. Blank shows all.
+        lensSoftwareCollectionFilter = ''
         # All opt-in: startup task, tray on close, and a global hotkey that blank disables.
-        startWithWindows      = $false
-        closeToTray           = $false
-        globalHotkey          = 'Ctrl+Alt+D'
+        startWithWindows             = $false
+        closeToTray                  = $false
+        globalHotkey                 = 'Ctrl+Alt+D'
         # On by default: de-elevated, DONUT is the console user with no rights on targets.
-        runAsAdmin            = $true
+        runAsAdmin                   = $true
         # In-app shortcut (only while DONUT is focused) to open Settings. Blank disables it.
-        openSettingsShortcut  = 'Ctrl+,'
+        openSettingsShortcut         = 'Ctrl+,'
         # Set once the first-run guided tour is shown or skipped. The ? button replays it.
-        hasSeenTour           = $false
+        hasSeenTour                  = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
-        debugLogging          = $false
-        commands              = @{
+        debugLogging                 = $false
+        commands                     = @{
             scan         = @{
                 args = @{
                     silent               = $false
@@ -194,6 +196,13 @@ class AppConfig {
         $val = [string]$this.GetSetting('adminServiceHost', $null)
         if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
         return ''
+    }
+
+    # Optional regex narrowing the Lens software list by collection name. Blank shows all.
+    [string] GetLensSoftwareCollectionFilter() {
+        $val = [string]$this.GetSetting('lensSoftwareCollectionFilter', $null)
+        if ([string]::IsNullOrWhiteSpace($val)) { return '' }
+        return $val.Trim()
     }
 
     [int] GetThrottleLimit() {

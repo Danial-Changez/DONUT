@@ -11,9 +11,9 @@
     Lens data (SCCM affinity + BitLocker) is readable only by the operator's regular
     account while DONUT runs elevated as the admin account. Being persistent removes
     the per-pick task registration + pwsh cold start (~2-4s); on boot the agent
-    pre-warms its libraries (DirectoryServices/GC bind, ThreadJob, the AdminService
-    TLS/Kerberos channel) in parallel with DONUT's own startup, and reuses those warm
-    binds for every later lookup. (The finder's AD search is separate - it runs
+    pre-warms its libraries (GC and home-domain binds, the AdminService affinity and
+    hardware routes) on a thread job in parallel with DONUT's own startup, and reuses
+    those warm connections for every later lookup. (The finder's AD search is separate - it runs
     in-process on the pool via AdSearchWorker, not through this agent.)
 
     Protocol over the ACL-locked exchange dir (every payload AES-256-CBC with the
@@ -25,16 +25,17 @@
     The agent deletes each request once read; the parent deletes the responses it
     consumed; anything older than 10 minutes is swept as abandoned.
 
-    A lookup takes tens of seconds, so it is offloaded to a ThreadJob (falling back to
-    inline if that fails) and the serve loop stays free to accept the next request. The
-    lookup pipeline and all exchange helpers live in LensAgent.Common.ps1, dot-sourced
-    here and into each lookup ThreadJob.
+    A lookup takes tens of seconds, so every request (person lookups, owner batches
+    and software lists alike) runs on a ThreadJob and the serve loop stays free to
+    accept the next one.
+    The lookup pipeline and all exchange helpers live in LensAgent.Common.ps1,
+    dot-sourced here and into each request ThreadJob.
 
     Exits when stop.flag appears, the parent process dies, or the exchange dir is
-    deleted. heartbeat.txt is touched every ~2s from a background thread (not the serve
-    loop), so a lookup in progress never lets the beat go stale - otherwise EnsureAgent's
-    15s staleness check would tear a busy agent down mid-lookup. A genuinely gone agent
-    still stops beating, so EnsureAgent can still detect and restart it.
+    deleted. heartbeat.txt is touched every ~2s by the serve loop itself, which never
+    blocks (requests and the pre-warm all ride ThreadJobs), so a fresh beat proves
+    requests are being read. A dead or wedged loop stops beating either way, and
+    EnsureAgent's 15s staleness check then recycles the agent on the next lookup.
 
 .PARAMETER ExchangeDir
     The ACL-locked %ProgramData%\DONUT\lens-agent dir PersonLensService created.
@@ -82,41 +83,51 @@ $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
-# Beating from the serve loop would let EnsureAgent tear a busy agent down mid-lookup.
 try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
-$script:HeartbeatJob = $null
-try {
-    $script:HeartbeatJob = Start-ThreadJob -ScriptBlock {
-        param($beatPath, $stopPath, $parentPid)
-        while ($true) {
-            # A failed beat write means the exchange dir is gone.
-            try { [IO.File]::WriteAllText($beatPath, [datetime]::UtcNow.ToString('o')) }
-            catch { break }
-            if ([IO.File]::Exists($stopPath)) { break }
-            # A missing parent process means DONUT closed.
-            try { $null = [System.Diagnostics.Process]::GetProcessById($parentPid) }
-            catch { try { [IO.File]::WriteAllText($stopPath, 'parent-exited') } catch { }; break }
-            Start-Sleep -Seconds 2
-        }
-    } -ArgumentList $heartbeatPath, $stopPath, $ParentPid
-}
-catch { $script:HeartbeatJob = $null }
 
+# Warming off the loop lets serving start at once, and ThrottleLimit lifts the job cap.
 $script:ForestNc = ''
-# Blank on failure is the handled case: Find-Gc falls back without a naming context.
-try { $script:ForestNc = Get-LensForestNc } catch { $script:ForestNc = '' }
-# Bind the GC once (ThreadJob imported above).
-try { $null = Find-Gc '(objectClass=domain)' } catch { }
-if ($SiteServer) {
-    # Throwaway affinity primes TLS + Kerberos to the AdminService (result discarded).
-    try {
-        $null = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $SiteServer, 'zzz-donut-warm'
-    }
-    catch { }
+$script:WarmJob = $null
+$warmStarted = [datetime]::UtcNow
+try {
+    $script:WarmJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+        param($commonPath, $siteServer)
+        . $commonPath
+        $nc = ''
+        # Blank on failure is the handled case: request jobs retry the read themselves.
+        try { $nc = Get-LensForestNc } catch { $nc = '' }
+        $script:ForestNc = $nc
+        # Bind the GC once so later lookups reuse the warm connection.
+        try { $null = Find-Gc '(objectClass=domain)' } catch { }
+        # A person shaped read warms the index the first real pick will use.
+        $warmUser = '(&(objectCategory=person)(objectClass=user)(sAMAccountName=zzz-donut-warm))'
+        try { $null = Find-Gc $warmUser } catch { }
+        # A base read on the domain head warms the plain LDAP bind the first pick pays.
+        try {
+            $dnc = [string]([ADSI]'LDAP://RootDSE').Properties['defaultNamingContext'][0]
+            $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$dnc")
+            $ds.SearchScope = 'Base'
+            $ds.Filter = '(objectClass=*)'
+            $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            $null = $ds.FindOne()
+        }
+        catch { }
+        if ($siteServer) {
+            # Throwaway affinity primes TLS + Kerberos to the AdminService (result discarded).
+            try { $null = & $script:AffinityScript $siteServer 'zzz-donut-warm' } catch { }
+            # A throwaway inventory read wakes the hardware route on the site server too.
+            $pair = @{ name = 'zzz-donut-warm'; resourceId = '0' }
+            try { $null = & $script:HardwareScript $siteServer @($pair) } catch { }
+            # One SMS_R_User miss warms the software route's first hop as well.
+            try { $null = & $script:SoftwareScript $siteServer 'zzz-donut-warm' } catch { }
+        }
+        return $nc
+    } -ArgumentList $commonPath, $SiteServer
 }
+catch { $script:WarmJob = $null }
 
 # --- Serve loop ---
-# Lookup ThreadJobs run off the loop so a slow lookup never blocks a fast search.
+# Nothing here may touch the network, so a fresh beat proves the loop is serving.
 $lookupJobs = [System.Collections.Generic.List[object]]::new()
 $lastBeat = [datetime]::MinValue
 $lastParentCheck = [datetime]::MinValue
@@ -126,17 +137,34 @@ while ($true) {
     if (-not (Test-Path -LiteralPath $ExchangeDir)) { break }
 
     $now = [datetime]::UtcNow
-    # Fallback only, so it never races the background beater on heartbeat.txt.
-    if (-not $script:HeartbeatJob) {
-        if (($now - $lastBeat).TotalSeconds -ge 2) {
-            $lastBeat = $now
-            try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
-            catch { break }   # Exchange dir gone (the parent purged it), so exit.
+    if (($now - $lastBeat).TotalSeconds -ge 2) {
+        $lastBeat = $now
+        try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
+        catch { break }   # Exchange dir gone (the parent purged it), so exit.
+    }
+    if (($now - $lastParentCheck).TotalSeconds -ge 3) {
+        $lastParentCheck = $now
+        # A missing parent process means DONUT closed.
+        if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) {
+            # The reason on the flag is the breadcrumb Diagnose-LensAgent reads.
+            try { [IO.File]::WriteAllText($stopPath, 'parent-exited') } catch { }
+            break
         }
-        if (($now - $lastParentCheck).TotalSeconds -ge 3) {
-            $lastParentCheck = $now
-            # A missing parent process means DONUT closed.
-            if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
+    }
+
+    # Collect the warm result without waiting. A warm stuck past 3 minutes is cut
+    # loose, and request jobs then compute the naming context themselves.
+    if ($script:WarmJob) {
+        if ([string]$script:WarmJob.State -in @('Completed', 'Failed', 'Stopped')) {
+            $nc = Receive-Job -Job $script:WarmJob -ErrorAction SilentlyContinue
+            if ($nc) { $script:ForestNc = [string]($nc | Select-Object -Last 1) }
+            Remove-Job -Job $script:WarmJob -Force -ErrorAction SilentlyContinue
+            $script:WarmJob = $null
+        }
+        elseif (($now - $warmStarted).TotalMinutes -ge 3) {
+            Stop-Job -Job $script:WarmJob -ErrorAction SilentlyContinue
+            Remove-Job -Job $script:WarmJob -Force -ErrorAction SilentlyContinue
+            $script:WarmJob = $null
         }
     }
 
@@ -150,33 +178,64 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
-            # Answering inline beats N requests through this loop's 150ms pass.
+            $job =
             if ([string]$req.kind -eq 'owner') {
-                $ownerJson = Resolve-MachineOwnerBatch -wsids @($req.machines) -server ([string]$req.siteServer)
-                Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $ownerJson
-                continue
+                # One batched owner request still beats N single ones through this loop.
+                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+                    param($commonPath, $exchangeDir, $keyIv, $forestNc, $machines, $server, $reqId)
+                    . $commonPath
+                    $script:KeyIv = $keyIv
+                    $script:ForestNc = $forestNc
+                    $ExchangeDir = $exchangeDir
+                    # The warm may not have landed yet, and one RootDSE read is cheap.
+                    if (-not $script:ForestNc) { try { $script:ForestNc = Get-LensForestNc } catch { } }
+                    $json = ''
+                    try { $json = Resolve-MachineOwnerBatch -wsids @($machines) -server $server }
+                    catch { $json = @{ owners = @(); error = "owner batch: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
+                    Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
+                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
+                @($req.machines), ([string]$req.siteServer), $reqId
             }
-            # Falls back to inline so a lookup is never silently dropped.
-            $offloaded = $false
-            try {
-                $job = Start-ThreadJob -ScriptBlock {
+            elseif ([string]$req.kind -eq 'software') {
+                # The user's whole software list rides one request, like the owner batch.
+                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+                    param($commonPath, $exchangeDir, $keyIv, $forestNc,
+                        $identity, $sam, $server, $reqId)
+                    . $commonPath
+                    $script:KeyIv = $keyIv
+                    $script:ForestNc = $forestNc
+                    $ExchangeDir = $exchangeDir
+                    # The warm may not have landed yet, and one RootDSE read is cheap.
+                    if (-not $script:ForestNc) {
+                        try { $script:ForestNc = Get-LensForestNc } catch { }
+                    }
+                    $json = ''
+                    try {
+                        $json = Resolve-UserSoftware -identity $identity -sam $sam -server $server
+                    }
+                    catch {
+                        $reason = "software: $($_.Exception.Message)"
+                        $json = @{ deployments = @(); error = $reason } | ConvertTo-Json -Compress
+                    }
+                    Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
+                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
+                ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
+            }
+            else {
+                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
                     param($commonPath, $exchangeDir, $keyIv, $forestNc, $identity, $samHint, $server, $reqId)
                     Import-Module ThreadJob -ErrorAction SilentlyContinue
                     . $commonPath
                     $script:KeyIv = $keyIv
                     $script:ForestNc = $forestNc
                     $ExchangeDir = $exchangeDir
+                    # The warm may not have landed yet, and one RootDSE read is cheap.
+                    if (-not $script:ForestNc) { try { $script:ForestNc = Get-LensForestNc } catch { } }
                     Resolve-Lens -identity $identity -samHint $samHint -server $server -reqId $reqId
                 } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
                 ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
-                $lookupJobs.Add($job)
-                $offloaded = $true
             }
-            catch { $offloaded = $false }
-            if (-not $offloaded) {
-                Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) `
-                    -server ([string]$req.siteServer) -reqId $reqId
-            }
+            $lookupJobs.Add(@{ Job = $job; Started = [datetime]::UtcNow })
         }
         catch {
             # Never leave the parent hanging: always answer, even if only with the error.
@@ -188,12 +247,15 @@ while ($true) {
         }
     }
 
-    # Reap finished lookup ThreadJobs (each wrote its own result-<id>.bin).
+    # Reap finished request jobs, and cut loose any stuck past 90 seconds: the parent
+    # stops listening at 60, so an older job only hogs a throttle slot.
     for ($i = $lookupJobs.Count - 1; $i -ge 0; $i--) {
-        if ([string]$lookupJobs[$i].State -in @('Completed', 'Failed', 'Stopped')) {
-            Remove-Job -Job $lookupJobs[$i] -Force -ErrorAction SilentlyContinue
-            $lookupJobs.RemoveAt($i)
-        }
+        $entry = $lookupJobs[$i]
+        $done = [string]$entry.Job.State -in @('Completed', 'Failed', 'Stopped')
+        if (-not $done -and ([datetime]::UtcNow - $entry.Started).TotalSeconds -lt 90) { continue }
+        if (-not $done) { Stop-Job -Job $entry.Job -ErrorAction SilentlyContinue }
+        Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
+        $lookupJobs.RemoveAt($i)
     }
 
     # Sweep responses a parent abandoned (e.g. it timed out and moved on).
@@ -205,5 +267,5 @@ while ($true) {
     Start-Sleep -Milliseconds 150
 }
 
-foreach ($j in $lookupJobs) { Remove-Job -Job $j -Force -ErrorAction SilentlyContinue }
-if ($script:HeartbeatJob) { Remove-Job -Job $script:HeartbeatJob -Force -ErrorAction SilentlyContinue }
+foreach ($entry in $lookupJobs) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+if ($script:WarmJob) { Remove-Job -Job $script:WarmJob -Force -ErrorAction SilentlyContinue }

@@ -11,11 +11,14 @@
     one of three stages:
 
       - heartbeat climbing past ~4s / stop.flag present / no agent process
-            -> the agent is dying (lifecycle bug).
-      - request-*.bin lingers unconsumed
-            -> the serve loop isn't reading it (agent wedged / wrong dir).
+            -> the agent is dead or wedged (the serve loop writes the beat, so a
+               stale beat means it stopped serving and the next pick recycles it).
+      - request-*.bin lingers while the beat stays fresh
+            -> the serve loop isn't reading it (wrong dir).
       - request consumed but no result-*.bin within ~60s
-            -> Resolve-Lens is failing or hanging (AD / SCCM environmental).
+            -> a lookup job is failing or hanging (AD / SCCM environmental).
+      - timeouts.txt at 2 or more
+            -> the parent force-recycles the agent on the next pick.
       - result-*.bin appears but the UI stays loading
             -> parent-side key or poll mismatch (not the agent).
 
@@ -44,7 +47,7 @@ param(
 )
 
 $dir  = Join-Path $env:ProgramData  'DONUT\lens-agent'
-$log  = Join-Path $env:LOCALAPPDATA 'DONUT\logs\Donut.log'
+$log  = Join-Path $env:ProgramData 'DONUT\data\logs\Donut.log'
 $beat = Join-Path $dir 'heartbeat.txt'
 $stop = Join-Path $dir 'stop.flag'
 
@@ -74,6 +77,14 @@ function Show-Snapshot {
         Write-Host ("  PRESENT -> '{0}'  (agent was told to exit)" -f ((Get-Content -LiteralPath $stop -Raw -ErrorAction SilentlyContinue) -replace '\s+$', '')) -ForegroundColor Red
     }
     else { Write-Host '  absent' -ForegroundColor Green }
+
+    Write-Host '=== timeouts.txt (2+ forces a recycle on the next pick) ===' -ForegroundColor Cyan
+    $strikes = Join-Path $dir 'timeouts.txt'
+    if (Test-Path -LiteralPath $strikes) {
+        $count = (Get-Content -LiteralPath $strikes -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
+        Write-Host ("  {0} consecutive lookup timeout(s)" -f $count) -ForegroundColor Yellow
+    }
+    else { Write-Host '  absent (no consecutive lookup timeouts)' -ForegroundColor Green }
 
     Write-Host '=== agent process (pwsh running LensAgent.ps1) ===' -ForegroundColor Cyan
     $procs = Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
@@ -116,7 +127,8 @@ if (Test-Path -LiteralPath $log) {
 else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
 
 Write-Host "`nInterpretation:" -ForegroundColor White
-Write-Host '  heartbeat climbing past ~4s / stop.flag present / no agent process -> the agent is dying (lifecycle bug).'
-Write-Host '  request-*.bin lingers unconsumed                                    -> serve loop not reading (agent wedged / wrong dir).'
-Write-Host '  request consumed but no result-*.bin within ~60s                    -> Resolve-Lens failing/hanging (AD / SCCM).'
-Write-Host '  result-*.bin appears but the UI stays loading                       -> parent-side key/poll mismatch (not the agent).'
+Write-Host '  heartbeat past ~4s / stop.flag present / no agent process -> agent dead or wedged (next pick recycles it).'
+Write-Host '  request-*.bin lingers while the beat stays fresh          -> serve loop not reading it (wrong dir).'
+Write-Host '  request consumed but no result-*.bin within ~60s          -> a lookup job failing/hanging (AD / SCCM).'
+Write-Host '  timeouts.txt at 2+                                        -> the next pick force-recycles despite a fresh beat.'
+Write-Host '  result-*.bin appears but the UI stays loading             -> parent-side key/poll mismatch (not the agent).'

@@ -26,13 +26,22 @@
     because it aggregates users from EVERY forest the site covers, while Find-Gc reads the
     agent's own forest's GC and can never name a sibling-forest user - which is exactly how
     owner chips shipped showing SAMs. The GC stays as the fallback for its one forest, and
-    the SAM stands in when both reads fail. Names memoize per agent session (OwnerNameCache).
+    the SAM stands in when both reads fail. Names memoize per batch (OwnerNameCache
+    lives in the request job's runspace).
 
-    It takes the WHOLE list in one request and resolves it serially, deliberately. The
-    serve loop below sleeps 150ms between passes, so N separate requests would cost N of
-    those sleeps plus N files, N AES round trips and N parent polls - more wall clock than
-    doing them back to back here, while holding N of the three interactive runspaces. Thread
-    jobs would only be worth it if one query got slow enough to be felt on its own.
+    It takes the WHOLE list in one request and resolves it serially, deliberately. N
+    separate requests would cost N files, N AES round trips and N parent polls, while
+    holding N of the three interactive runspaces. The agent runs the whole batch on one
+    ThreadJob off its serve loop, so a slow batch never delays a person lookup.
+
+    Resolve-UserSoftware walks the user direction (user -> application installs):
+    SMS_R_User names the ResourceIDs (endswith, exact tail client side),
+    SMS_FullCollectionMembership the collections, then one $select-trimmed
+    SMS_DeploymentSummary fetch is filtered client side - an or-filter over the
+    collections 404s on this route. Install-intent applications and every package
+    deployment make the list, packages carrying their program name so an operator
+    can tell software from maintenance. It rides its own request kind, dispatched
+    in parallel with the person lookup, so neither ever waits on the other.
 
 .NOTES
     Crypto format MUST match PersonLensService.ProtectText/UnprotectText. The Lens
@@ -74,6 +83,8 @@ function Find-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
+    # An unreachable DC hangs a searcher indefinitely without this cap.
+    $s.ClientTimeout = [TimeSpan]::FromSeconds(15)
     # No PageSize: it only enables paging, and every caller here takes FindOne.
     [void]$s.PropertiesToLoad.Add('distinguishedName')
     return $s.FindOne()
@@ -86,7 +97,7 @@ $script:AffinityScript = {
         Uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$samValue')") +
         "&`$select=UniqueUserName,ResourceName,ResourceID"
-        UseDefaultCredentials = $true; ErrorAction = 'Stop'
+        UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
     }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     return @((Invoke-RestMethod @p).value)
@@ -102,7 +113,7 @@ $script:HardwareScript = {
             "https://$srv/AdminService/wmi/${class}?`$filter=" +
             [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
         }
-        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $r = Invoke-RestMethod @p
         if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
@@ -125,9 +136,11 @@ $script:HardwareScript = {
     $script:FilterError = ''
     $results = @()
     foreach ($pair in $pairs) {
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
         if (-not $pair.resourceId) {
             $out.error = 'no ResourceID in the affinity rows'
+            $out.ms = $sw.ElapsedMilliseconds
             $results += $out
             continue
         }
@@ -148,9 +161,89 @@ $script:HardwareScript = {
             }
         }
         catch { $out.error = $_.Exception.Message }
+        $out.ms = $sw.ElapsedMilliseconds
         $results += $out
     }
     return $results
+}
+
+# One device's AD detail, self contained: nested jobs do not inherit Common's functions.
+$script:DeviceScript = {
+    param($forestNc, $wsid)
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
+        model = ''; serial = ''; manufacturer = ''
+        note = ''; bitLockerKeys = @()
+    }
+    try {
+        $gc = New-Object System.DirectoryServices.DirectorySearcher
+        $gc.SearchRoot = [ADSI]"GC://$forestNc"
+        $gc.Filter = "(&(objectCategory=computer)(cn=$wsid))"
+        $gc.ClientTimeout = [TimeSpan]::FromSeconds(15)
+        [void]$gc.PropertiesToLoad.Add('distinguishedName')
+        $cHit = $gc.FindOne()
+        if ($cHit) {
+            $compDn = [string]$cHit.Properties['distinguishedname'][0]
+            $dev.domain = (($compDn -split ',' |
+                        Where-Object { $_ -match '^DC=' } |
+                        ForEach-Object { $_.Substring(3) }) -join '.')
+
+            # lastLogonTimestamp is replicated, so it can be up to 14 days coarse.
+            $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
+            $cs.SearchScope = 'Base'
+            $cs.Filter = '(objectClass=*)'
+            $cs.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            'operatingsystem', 'lastlogontimestamp' |
+                ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
+            $c = $cs.FindOne()
+            if ($c) {
+                if ($c.Properties['operatingsystem'].Count -gt 0) {
+                    $dev.os = [string]$c.Properties['operatingsystem'][0]
+                }
+                if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
+                    $ft = [int64]$c.Properties['lastlogontimestamp'][0]
+                    if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
+                }
+            }
+
+            $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
+            $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
+            $bl.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            'msfve-recoverypassword', 'whencreated' |
+                ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
+            $keys = @($bl.FindAll())
+            if ($keys.Count -gt 0) {
+                $dev.bitLockerKeys = @($keys | ForEach-Object {
+                        # ISO8601 UTC keeps the DTO contract and newest-first order.
+                        $wc = $_.Properties['whencreated'][0]
+                        $iso = ''
+                        if ($wc -is [datetime]) {
+                            $iso = $wc.ToUniversalTime().ToString('o')
+                        }
+                        elseif ($wc) {
+                            $dt = [datetime]::MinValue
+                            if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
+                                $iso = $dt.ToUniversalTime().ToString('o')
+                            }
+                            else { $iso = [string]$wc }
+                        }
+                        @{
+                            password = [string]$_.Properties['msfve-recoverypassword'][0]
+                            created  = $iso
+                        }
+                    })
+            }
+            elseif (-not $dev.note) {
+                $dev.note = 'BitLocker not escrowed to AD (or not readable)'
+            }
+        }
+        elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+    }
+    catch {
+        if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
+    }
+    $dev.ms = $sw.ElapsedMilliseconds
+    return $dev
 }
 
 # Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
@@ -177,12 +270,12 @@ $script:OwnerScript = {
     param($server, $wsid)
     $uri = "https://$server/AdminService/wmi/SMS_UserMachineRelationship?`$filter=" +
     [uri]::EscapeDataString("ResourceName eq '$wsid'") + "&`$select=UniqueUserName,ResourceName"
-    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
     if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
     return @((Invoke-RestMethod @p).value)
 }
 
-# The agent is persistent and a name does not change mid-session, so memoize it.
+# A name does not change mid-batch, so memoize it for this runspace's lifetime.
 $script:OwnerNameCache = @{}
 
 # UniqueUserName to display name. SCCM first: SMS_R_User.FullUserName covers every
@@ -199,7 +292,7 @@ function Get-OwnerDisplayName {
         $uri = "https://$server/AdminService/wmi/SMS_R_User?`$filter=" +
         [uri]::EscapeDataString("endswith(UniqueUserName,'$uniqueUserName')") +
         "&`$select=FullUserName,UniqueUserName"
-        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop' }
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $rows = @((Invoke-RestMethod @p).value)
         if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
@@ -263,6 +356,85 @@ function Resolve-MachineOwnerBatch {
     return ($bundle | ConvertTo-Json -Compress -Depth 4)
 }
 
+# User to application installs: ResourceIDs, collection memberships, one summary fetch.
+$script:SoftwareScript = {
+    param($server, $sam)
+    function Invoke-SoftwareQuery([string]$srv, [string]$query) {
+        $p = @{ Uri = "https://$srv/AdminService/wmi/$query"
+            UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
+        }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        return @((Invoke-RestMethod @p).value)
+    }
+    # endswith keeps the domain backslash out of the URL, and the exact tail match is ours.
+    $users = Invoke-SoftwareQuery $server ("SMS_R_User?`$filter=" +
+        [uri]::EscapeDataString("endswith(UniqueUserName,'$sam')") +
+        "&`$select=ResourceID,UniqueUserName")
+    $ids = @($users | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam } |
+            ForEach-Object { [string]$_.ResourceID })
+    if ($ids.Count -eq 0) { return @() }
+    # ponytail: no keyed fallback here, so a 200-empty rejection reads as no collections.
+    $collections = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($id in $ids) {
+        $rows = Invoke-SoftwareQuery $server ("SMS_FullCollectionMembership?`$filter=" +
+            [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=CollectionID")
+        foreach ($r in $rows) { [void]$collections.Add([string]$r.CollectionID) }
+    }
+    if ($collections.Count -eq 0) { return @() }
+    # One site-wide fetch beats a query per collection, and or-filters 404 on this route.
+    $sum = Invoke-SoftwareQuery $server ("SMS_DeploymentSummary?`$select=" +
+        'SoftwareName,CollectionName,CollectionID,FeatureType,DesiredConfigType,ProgramName')
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    $rows = foreach ($d in $sum) {
+        # Applications count when the intent is install, packages whatever their program.
+        $ft = [int]$d.FeatureType
+        if ($ft -ne 1 -and $ft -ne 2) { continue }
+        if ($ft -eq 1 -and [int]$d.DesiredConfigType -ne 1) { continue }
+        if (-not $collections.Contains([string]$d.CollectionID)) { continue }
+        # The program rides package rows, since no generic filter can sort those apart.
+        $prog = if ($ft -eq 2) { [string]$d.ProgramName } else { '' }
+        if (-not $seen.Add("$($d.SoftwareName)|$($d.CollectionName)|$prog")) { continue }
+        @{ software = [string]$d.SoftwareName; collection = [string]$d.CollectionName
+            program = $prog
+        }
+    }
+    return @($rows | Sort-Object { $_.software })
+}
+
+# The user's whole software list in one request, mirroring the owner batch shape.
+function Resolve-UserSoftware {
+    param([string]$identity, [string]$sam, [string]$server)
+    $bundle = [ordered]@{ deployments = @(); error = '' }
+    if (-not $server) {
+        $bundle.error = 'no AdminService host configured'
+        return ($bundle | ConvertTo-Json -Compress -Depth 4)
+    }
+    try {
+        $resolved = $sam
+        if (-not $resolved) {
+            # A UPN or display name pick carries no SAM, so one GC read supplies it.
+            if ($identity -match '\\') { $resolved = $identity.Split('\')[-1] }
+            elseif ($identity -notmatch '[@\s]') { $resolved = $identity }
+            else {
+                $uFilter =
+                if ($identity -match '@') {
+                    "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))"
+                }
+                else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+                $hit = Find-Gc $uFilter
+                if ($hit) {
+                    $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+                    $resolved = [string]$user.Properties['samaccountname'][0]
+                }
+            }
+        }
+        if (-not $resolved) { throw "no SAM resolved for '$identity'." }
+        $bundle.deployments = @(& $script:SoftwareScript $server $resolved)
+    }
+    catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
+    return ($bundle | ConvertTo-Json -Compress -Depth 4)
+}
+
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
 function Resolve-Lens {
     # "Lens" is singular, and the rule misreads the trailing 's'.
@@ -272,6 +444,9 @@ function Resolve-Lens {
         upn = ''; sam = ''; displayName = ''; email = ''; manager = ''; office = ''
         devices = @(); errors = @()
     }
+    # Cumulative stage marks ride the bundle, so debug logging can split the gather.
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $marks = [ordered]@{}
 
     # Affinity can start early only when the SAM is already trustworthy.
     $samGuess =
@@ -319,6 +494,7 @@ function Resolve-Lens {
 
     # Partial 1: directory facts.
     Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 1
+    $marks.user = $sw.ElapsedMilliseconds
 
     # On a UPN or display-name pick, the SAM only became known from the AD read.
     if (-not $affinityJob -and $sam -and $server) {
@@ -354,6 +530,7 @@ function Resolve-Lens {
         }
         $wsids = @($wsMap.Keys)
     }
+    $marks.affinity = $sw.ElapsedMilliseconds
 
     # Partial 2: name-only device rows the moment affinity lands.
     if ($wsids.Count -gt 0) {
@@ -366,105 +543,111 @@ function Resolve-Lens {
         Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 2
     }
 
-    # Hardware runs on a thread job parallel to the per-WSID AD loop below.
-    $hwJob = $null
+    # One hardware job per device, beside the AD loop: the provider is slow per call,
+    # so serial pairs were the whole lookup's tail.
+    $hwJobs = [System.Collections.Generic.List[hashtable]]::new()
     $hwPairs = @()
     if ($wsids.Count -gt 0 -and $server) {
         $hwPairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
-        try { $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript -ArgumentList $server, $hwPairs } catch { $hwJob = $null }
+        foreach ($hwPair in $hwPairs) {
+            $hwJob = $null
+            try {
+                $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript `
+                    -ArgumentList $server, @($hwPair)
+            }
+            catch { $hwJob = $null }
+            $hwJobs.Add(@{ Job = $hwJob; Pair = $hwPair })
+        }
     }
 
-    # Per WSID: OS / last-logon / BitLocker, all from the computer's AD object.
-    $devices = [System.Collections.Generic.List[object]]::new()
+    # Per WSID: OS / last-logon / BitLocker, one job per device beside the hardware jobs.
+    # ponytail: 2N nested jobs can outgrow the throttle, and overflow queues in this lane only.
+    $devJobs = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($wsid in $wsids) {
-        $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
-            model = ''; serial = ''; manufacturer = ''
-            note = ''; bitLockerKeys = @()
-        }
+        $devJob = $null
         try {
-            $cHit = Find-Gc "(&(objectCategory=computer)(cn=$wsid))"
-            if ($cHit) {
-                $compDn = [string]$cHit.Properties['distinguishedname'][0]
-                $dev.domain = (($compDn -split ',' |
-                            Where-Object { $_ -match '^DC=' } |
-                            ForEach-Object { $_.Substring(3) }) -join '.')
+            $devJob = Start-ThreadJob -ScriptBlock $script:DeviceScript `
+                -ArgumentList $script:ForestNc, $wsid
+        }
+        catch { $devJob = $null }
+        $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })
+    }
 
-                # lastLogonTimestamp is replicated, so it can be up to 14 days coarse.
-                $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
-                $cs.SearchScope = 'Base'
-                $cs.Filter = '(objectClass=*)'
-                'operatingsystem', 'lastlogontimestamp' |
-                    ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
-                $c = $cs.FindOne()
-                if ($c) {
-                    if ($c.Properties['operatingsystem'].Count -gt 0) {
-                        $dev.os = [string]$c.Properties['operatingsystem'][0]
-                    }
-                    if ($c.Properties['lastlogontimestamp'].Count -gt 0) {
-                        $ft = [int64]$c.Properties['lastlogontimestamp'][0]
-                        if ($ft -gt 0) { $dev.lastLogon = [datetime]::FromFileTimeUtc($ft).ToString('o') }
-                    }
+    $devices = [System.Collections.Generic.List[object]]::new()
+    $devDeadline = [datetime]::UtcNow.AddSeconds(30)
+    foreach ($entry in $devJobs) {
+        $dev = $null
+        try {
+            if ($entry.Job) {
+                $left = [int][Math]::Max(1, ($devDeadline - [datetime]::UtcNow).TotalSeconds)
+                if (Wait-Job -Job $entry.Job -Timeout $left) {
+                    $dev = @(Receive-Job -Job $entry.Job -ErrorAction Stop) | Select-Object -Last 1
                 }
-
-                $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
-                $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
-                'msfve-recoverypassword', 'whencreated' |
-                    ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
-                $keys = @($bl.FindAll())
-                if ($keys.Count -gt 0) {
-                    $dev.bitLockerKeys = @($keys | ForEach-Object {
-                            # ISO8601 UTC keeps the DTO contract and newest-first order.
-                            $wc = $_.Properties['whencreated'][0]
-                            $iso = ''
-                            if ($wc -is [datetime]) {
-                                $iso = $wc.ToUniversalTime().ToString('o')
-                            }
-                            elseif ($wc) {
-                                $dt = [datetime]::MinValue
-                                if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
-                                    $iso = $dt.ToUniversalTime().ToString('o')
-                                }
-                                else { $iso = [string]$wc }
-                            }
-                            @{
-                                password = [string]$_.Properties['msfve-recoverypassword'][0]
-                                created  = $iso
-                            }
-                        })
-                }
-                elseif (-not $dev.note) {
-                    $dev.note = 'BitLocker not escrowed to AD (or not readable)'
-                }
+                else { throw 'timed out after 30s.' }
             }
-            elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+            # No job means it would not start, and inline keeps the row filled.
+            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid }
         }
         catch {
-            if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
+            $dev = [ordered]@{ name = $entry.Wsid; os = ''; lastLogon = ''; domain = ''
+                model = ''; serial = ''; manufacturer = ''
+                note = "AD detail: $($_.Exception.Message)"; bitLockerKeys = @()
+            }
+        }
+        finally {
+            if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+        }
+        # Each device's AD wall time joins the stage marks, then leaves the bundle row.
+        if ($null -ne $dev.ms) {
+            $marks["ad $($entry.Wsid)"] = [long]$dev.ms
+            $dev.Remove('ms')
         }
         $devices.Add($dev)
     }
+    $marks.devices = $sw.ElapsedMilliseconds
 
     # Merges the parallel hardware results, where a failed source degrades to blanks.
     if ($hwPairs.Count -gt 0) {
-        $hwRows = $null
-        try {
-            if ($hwJob) {
-                if (Wait-Job -Job $hwJob -Timeout 30) { $hwRows = Receive-Job -Job $hwJob -ErrorAction Stop }
-                else { throw 'timed out after 30s.' }
+        $hwRows = [System.Collections.Generic.List[object]]::new()
+        # One shared deadline: the jobs run side by side, so they never earn 30s each.
+        $hwDeadline = [datetime]::UtcNow.AddSeconds(30)
+        foreach ($entry in $hwJobs) {
+            try {
+                if ($entry.Job) {
+                    $left = [int][Math]::Max(1, ($hwDeadline - [datetime]::UtcNow).TotalSeconds)
+                    if (Wait-Job -Job $entry.Job -Timeout $left) {
+                        $got = @(Receive-Job -Job $entry.Job -ErrorAction Stop)
+                        foreach ($r in $got) { $hwRows.Add($r) }
+                    }
+                    else { throw 'timed out after 30s.' }
+                }
+                # No job means it would not start, and inline keeps the cards filled.
+                else {
+                    $got = @(& $script:HardwareScript $server @($entry.Pair))
+                    foreach ($r in $got) { $hwRows.Add($r) }
+                }
             }
-            # No job means it would not start, and inline keeps the cards filled.
-            else { $hwRows = & $script:HardwareScript $server $hwPairs }
+            catch {
+                $bundle.errors += "SCCM hardware ($($entry.Pair.name)): $($_.Exception.Message)"
+            }
+            finally {
+                if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+            }
         }
-        catch { $bundle.errors += "SCCM hardware inventory: $($_.Exception.Message)" }
-        finally { if ($hwJob) { Remove-Job -Job $hwJob -Force -ErrorAction SilentlyContinue } }
 
         $hwErrors = @()
         foreach ($row in @($hwRows)) {
+            # Each device's provider wall time rides the stage marks for the debug line.
+            if ($null -ne $row.ms) { $marks["hw $($row.name)"] = [long]$row.ms }
             $dev = $devices | Where-Object { $_.name -eq [string]$row.name } | Select-Object -First 1
             if ($null -eq $dev) { continue }
             $dev.manufacturer = [string]$row.manufacturer
             $dev.model = [string]$row.model
             $dev.serial = [string]$row.serial
+            # A virtual machine does not escrow to AD, so the missing key note is noise there.
+            if ($dev.model -match 'virtual' -and $dev.note -like 'BitLocker not escrowed*') {
+                $dev.note = ''
+            }
             if ($row.error) { $hwErrors += "$($row.name): $($row.error)" }
         }
         # One class-wide failure (e.g. a 404 on every device) collapses to a single entry.
@@ -477,6 +660,8 @@ function Resolve-Lens {
         }
     }
     $bundle.devices = $devices.ToArray()
+    $marks.hardware = $sw.ElapsedMilliseconds
+    $bundle.timings = $marks
 
     $json = $bundle | ConvertTo-Json -Depth 6
     # Only the agent has an exchange to write to. A de-elevated DONUT takes the return.

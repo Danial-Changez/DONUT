@@ -23,10 +23,10 @@ activate TASK
 TASK -> AG : run LensAgent.ps1 -ExchangeDir -ParentPid -SiteServer
 deactivate TASK
 activate AG
-AG -> AG : write heartbeat, then pre-warm\n(GC bind, ThreadJob, AdminService TLS/Kerberos)
+AG -> AG : write heartbeat, then pre-warm on a THREAD JOB\n(GC + domain binds, AdminService affinity + hardware\nroutes) so the serve loop starts serving at once
 PW --> P : '' (agent ready) — reaped on first pick
 deactivate PW
-note over AG : agent idle; a BACKGROUND thread beats every ~2s\n(so a busy lookup never looks dead), exits when\nParentPid dies / stop.flag appears / dir purged
+note over AG : agent idle; the SERVE LOOP beats every ~2s and\nnever blocks (a fresh beat proves it serves), exits when\nParentPid dies / stop.flag appears / dir purged
 
 == Pick a user in the AD finder ==
 OP -> P : click a USER row  (OnPickUser)
@@ -40,7 +40,7 @@ PW -> AG : write request-<id>.bin (AES, atomic)
 activate AG
 
 == Gather (as the regular user) ==
-AG ->> SCCM : affinity on a THREAD JOB at t=0 (the Sam hint):\nendswith(UniqueUserName,'<SAM>') - the ONLY SCCM call\n(the /wmi route 404s richer filters)
+AG ->> SCCM : affinity on a THREAD JOB at t=0 (the Sam hint):\nendswith(UniqueUserName,'<SAM>')\n(the /wmi route 404s richer filters)
 AG -> AD : GC-locate the user (forest-wide) -> bind home domain\n(parallel with the affinity job)
 AD --> AG : UPN / SAM / email / manager / office
 AG -> AG : write partial-<id>-1.bin (directory facts)
@@ -73,6 +73,18 @@ P -> P : EnsureRow + PrefetchIp + StartInventory + MoveRowToTop
 P -> OP : machine added to the list (toast); Lens stays open
 deactivate P
 
+== Software list (-SoftwareFor, dispatched beside the pick) ==
+P -> PW : BeginInvoke(-SoftwareFor identity)  on the pool,\nin PARALLEL with the person lookup above
+activate PW
+PW -> AG : write request-<id>.bin (kind = 'software')
+activate AG
+AG ->> SCCM : on a THREAD JOB: SMS_R_User -> \nSMS_FullCollectionMembership -> one SMS_DeploymentSummary\nfetch, filtered client-side (installs of applications)
+SCCM --> AG : the user's software + collection rows
+AG -> AG : write result-<id>.bin
+deactivate AG
+PW --> P : deployments bundle -> the Software toggle's list
+deactivate PW
+
 == Machine-owner batch (-OwnerOf) ==
 P -> PW : BeginInvoke(-OwnerOf machines)  on the pool
 activate PW
@@ -80,7 +92,7 @@ PW -> AG : write request-<id>.bin (kind = 'owner',\nthe whole machine list in ON
 activate AG
 AG -> SCCM : Resolve-MachineOwnerBatch (primary users)
 SCCM --> AG : owner per machine
-AG -> AG : write result-<id>.bin — answered INLINE on the\nserve loop, no thread job, no partials
+AG -> AG : write result-<id>.bin — answered on a THREAD JOB\nlike person lookups, no partials
 deactivate AG
 PW --> P : owners bundle (machine -> owner)
 deactivate PW

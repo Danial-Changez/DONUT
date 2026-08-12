@@ -28,6 +28,8 @@ Describe "Lens hardware inventory query" {
             $rows[0].manufacturer | Should -Be 'Dell Inc.'
             $rows[0].serial | Should -Be '9XKQ2Z3'
             $rows[0].error | Should -BeNullOrEmpty
+            # The per-device wall time feeds the stage marks debug logging prints.
+            ($rows[0].ms -ge 0) | Should-BeTrue
             Should -Invoke Invoke-RestMethod -Times 2 -Exactly
             Should -Not -Invoke Invoke-RestMethod -ParameterFilter { $Uri -match '\(16777345\)' }
         }

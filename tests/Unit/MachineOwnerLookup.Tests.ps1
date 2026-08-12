@@ -12,7 +12,7 @@ Describe "Machine owner lookup" {
     }
 
     BeforeEach {
-        # The memo is deliberately session-long in the agent, so tests must not share it.
+        # The memo lives for a batch job's runspace in the agent, so tests must not share it.
         $script:OwnerNameCache = @{}
     }
 
