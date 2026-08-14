@@ -30,6 +30,10 @@
     analyzer cannot resolve because it parses each file without its `using module`
     graph. Both stay visible in the summary, and neither is a defect.
 
+    PSUseCmdletCorrectly is reported but never gates: it flaps between runs on
+    valid positional calls (e.g. Split-Path -Parent $x) when the analyzer session
+    fails to resolve the cmdlet's metadata, so a hit proves nothing by itself.
+
 .EXAMPLE
     pwsh -File tools\Invoke-Lint.ps1
 .EXAMPLE
@@ -72,125 +76,28 @@ if ($results) {
 }
 
 # --- Comment length ---
-# Finds comment blocks over coding-style.md's line limit. PSScriptAnalyzer has no
-# such rule and cannot parse C# at all, so both languages are swept here.
-function Get-LongComment {
-    param(
-        [System.IO.FileInfo[]] $Files,
-        [string] $Marker,      # comment prefix regex, e.g. '//(?!/)' or '#'
-        [string] $ExemptNext,  # a two-line block is allowed above a line matching this
-        [switch] $PowerShell   # skip <# #> help blocks and here-strings
-    )
-    foreach ($file in $Files) {
-        $lines = @(Get-Content $file.FullName)
-        $run = 0; $inHelp = $false; $inHere = $false
-        for ($i = 0; $i -le $lines.Count; $i++) {
-            $line = if ($i -lt $lines.Count) { $lines[$i] } else { '' }
-            if ($PowerShell) {
-                # Help blocks carry the long rationale by design, and a here-string
-                # is shipped payload rather than commentary.
-                if ($inHere) {
-                    if ($line -match "^\s*('@|""@)") { $inHere = $false }
-                    $run = 0; continue
-                }
-                if ($inHelp) {
-                    if ($line -match '#>') { $inHelp = $false }
-                    $run = 0; continue
-                }
-                if ($line -match "@'|@""") { $inHere = $true; $run = 0; continue }
-                if ($line -match '^\s*<#') {
-                    if ($line -notmatch '#>') { $inHelp = $true }
-                    $run = 0; continue
-                }
-            }
-            $isComment = $line -match "^\s*$Marker" -and
-            $line -notmatch '^\s*#(requires|region|endregion)' -and
-            $line -notmatch '^\s*(#|//)\s*-{3,}'
-            if ($i -lt $lines.Count -and $isComment) { $run++; continue }
-            if ($run -ge 2) {
-                $next = $line
-                $exempt = ($i - $run) -eq 0 -or $next -match $ExemptNext
-                # A dashed list may run long when it replaces denser prose.
-                $bullets = @($lines[($i - $run)..($i - 1)] -match "^\s*$Marker\s+-\s").Count
-                $limit = if ($bullets -ge 2) { $run } elseif ($exempt) { 2 } else { 1 }
-                if ($run -gt $limit) {
-                    [pscustomobject]@{
-                        File  = $file.Name
-                        Line  = $i - $run + 1
-                        Lines = $run
-                        Max   = $limit
-                    }
-                }
-            }
-            $run = 0
-        }
-    }
-}
-
-# XAML has no per-line marker, so a block is measured from <!-- to its -->.
-function Get-LongXamlComment {
-    param([System.IO.FileInfo[]] $Files)
-    foreach ($file in $Files) {
-        $lines = @(Get-Content $file.FullName)
-        $open = -1
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($open -lt 0 -and $lines[$i] -match '<!--') { $open = $i }
-            if ($open -lt 0 -or $lines[$i] -notmatch '-->') { continue }
-            $len = $i - $open + 1
-            if ($len -ge 2) {
-                $next = if ($i + 1 -lt $lines.Count) { $lines[$i + 1] } else { '' }
-                # A header opens the file, and a section comment precedes an element.
-                $exempt = $open -eq 0 -or $next -match '^\s*<[A-Za-z]'
-                $bullets = @($lines[$open..$i] -match '^\s*-\s').Count
-                $limit = if ($bullets -ge 2) { $len } elseif ($exempt) { 2 } else { 1 }
-                if ($len -gt $limit) {
-                    [pscustomobject]@{
-                        File  = $file.Name
-                        Line  = $open + 1
-                        Lines = $len
-                        Max   = $limit
-                    }
-                }
-            }
-            $open = -1
-        }
-    }
-}
-
-# Swept repo-wide rather than over -Path, because the rule is not src-only. The
-# docs site's own sources count too, since they share the // comment style.
+# One scanner (CommentRules.ps1) serves this sweep and the per-edit style hook.
+. (Join-Path $PSScriptRoot 'CommentRules.ps1')
+# Swept repo-wide rather than over -Path, because the rule is not src-only.
 $repo = Split-Path $PSScriptRoot -Parent
 $excluded = '\\(bin|obj|\.cache|node_modules|dist|\.astro|\.diag)\\'
 $sweep = Get-ChildItem -Path $repo -Recurse -File `
     -Include *.ps1, *.psm1, *.cs, *.mjs, *.js, *.ts, *.astro, *.xaml |
     Where-Object { $_.FullName -notmatch $excluded }
-$psFiles = @($sweep | Where-Object { $_.Extension -eq '.ps1' -or $_.Extension -eq '.psm1' })
-$xamlFiles = @($sweep | Where-Object Extension -EQ '.xaml')
-$slashFiles = @($sweep | Where-Object { $_ -notin $psFiles -and $_ -notin $xamlFiles })
-$slashExempt = '^\s*(namespace|#nullable|export|import|const|function|class)|' +
-'^\s*((public|internal|sealed|static|abstract|partial)\s+)*(class|record|struct|interface|enum)\s'
-# A PowerShell method is a return type then a name, and a constructor is bare. The
-# type class allows nested brackets so an array return like [string[]] still matches.
-$psExempt = '^\s*(class|enum|function)\s|' +
-'^\s*(hidden\s+)?(static\s+)?(\[[\w\.\[\]]+\]\s*)?[\w-]+\s*\('
-$longComments = @(
-    Get-LongComment -Files $slashFiles -Marker '//(?!/)' -ExemptNext $slashExempt
-    Get-LongComment -Files $psFiles -Marker '#' -ExemptNext $psExempt -PowerShell
-    Get-LongXamlComment -Files $xamlFiles
-)
+$longComments = @(Get-CommentFinding -Files $sweep)
 if ($longComments) {
     Write-Host "Comments over the line limit ($($longComments.Count)):"
     $longComments | Sort-Object File, Line | Format-Table -AutoSize | Out-Host
 }
 else {
-    Write-Host ("Comment length clean across {0} PowerShell, {1} C#/JS and {2} XAML files.`n" -f
-        $psFiles.Count, $slashFiles.Count, $xamlFiles.Count)
+    Write-Host "Comment length clean across $($sweep.Count) source files.`n"
 }
 
 if ($FailOn -ne 'None') {
     $order = @{ Information = 1; Warning = 2; Error = 3 }
-    # The gate skips what the listing skips, plus TypeNotFound. See .NOTES.
-    $nonGating = @('PSAvoidTrailingWhitespace', 'PSAvoidLongLines', 'TypeNotFound')
+    # The gate skips what the listing skips, plus the flaky rules. See .NOTES.
+    $nonGating = @('PSAvoidTrailingWhitespace', 'PSAvoidLongLines', 'TypeNotFound',
+        'PSUseCmdletCorrectly')
     $gate = $results | Where-Object {
         $order[[string]$_.Severity] -ge $order[$FailOn] -and $_.RuleName -notin $nonGating
     }
