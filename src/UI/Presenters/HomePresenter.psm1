@@ -53,7 +53,7 @@ using module "..\..\Models\MachineListShaper.psm1"
     from the last 24h is reused (ScanCacheDecision) instead of re-scanning. The
     search bar's live AD finder + user Lens are delegated to FinderPresenter, which
     calls back into the machine seams (PrefetchIp, EnsureRow, StartInventory,
-    MoveRowToTop, UpdateEmptyHint) via a duck-typed reference.
+    MoveRowToTop) via a duck-typed reference.
 
 .NOTES
     Must never block the STA UI thread: all remote work is queued as AsyncJobs on
@@ -84,7 +84,6 @@ class HomePresenter : AsyncJobPresenter {
     [Button] $RunAllButton
     [ListBox] $MachineList
     [HomeViewModel] $HomeVm        # bound to HomeView.DataContext (Machines + SelectedMachine)
-    [System.Windows.UIElement] $EmptyHint
     [TextBlock] $ModePill
     [Button] $ModeButton
     [RemoteUpdateService] $UpdateService
@@ -245,7 +244,6 @@ class HomePresenter : AsyncJobPresenter {
         $pane = $this.RegionRoots['machinePane']
         $this.ClearButton = $pane.FindName('btnClearTabs')
         $this.MachineList = $pane.FindName('MachineList')
-        $this.EmptyHint = $pane.FindName('FleetEmptyHint')
 
         # The detail panel is owned by InventoryPresenter and wired in its own Initialize.
         $presenter = $this
@@ -274,7 +272,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.SeedRowPalette()
 
         if ($this.Store.Count() -eq 0) {
-            $this.Store.SeedFrom($this.ReadWsidHosts())
+            $this.Store.SeedFrom($this.HostListSource.ReadHosts())
         }
         $rowsSw = [System.Diagnostics.Stopwatch]::StartNew()
         $this.BuildRows()
@@ -283,7 +281,7 @@ class HomePresenter : AsyncJobPresenter {
         $this.InitMachineListShaping()
 
         $this.UpdateModePill()
-        $this.RefreshAll()
+        $this.RefreshIdleTimes()
 
         # Seeded from the last run so the first selects resolve now. A stale DC falls back.
         $savedDc = [string]$this.Config.Settings['activeDomainController']
@@ -376,15 +374,6 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateModePill()
     }
 
-    # Backwards-compatible name used by MainPresenter on navigation.
-    [void] UpdateSearchButtonLabel() {
-        $this.UpdateModePill()
-    }
-
-    [string[]] ReadWsidHosts() {
-        return $this.HostListSource.ReadHosts()
-    }
-
     # Builds an idle row for every persisted recent connection (newest first).
     [void] BuildRows() {
         foreach ($rc in $this.Store.GetAll()) {
@@ -394,7 +383,6 @@ class HomePresenter : AsyncJobPresenter {
             $inv = $this.Detail.GetInventory($rc.Hostname)
             if ($inv) { $vm.ApplyInventory($inv) }
         }
-        $this.UpdateEmptyHint()
     }
 
     # Add never scans or applies. Running the active command is a separate step.
@@ -413,12 +401,11 @@ class HomePresenter : AsyncJobPresenter {
             $this.Resolution.PrefetchIp($hostName)        # the row then shows reachability on Add
             $this.StartInventory($hostName, $true)
         }
-        # Moved in reverse so the first typed host ends up topmost.
+        # Touched in reverse so the first typed host ranks newest on the next launch.
         $ordered = @($targetHosts)
         [array]::Reverse($ordered)
         foreach ($hostName in $ordered) { $this.MoveRowToTop($hostName) }
         $this.Detail.SelectMachine($targetHosts[0])
-        $this.UpdateEmptyHint()
 
         $this.SearchBar.Text = ""
     }
@@ -593,10 +580,8 @@ class HomePresenter : AsyncJobPresenter {
 
             if ($jobParams) {
                 $this.AttachResolvedIp($jobParams.Prep, $hostName)
-                $job = [AsyncJob]::new($hostName, $jobParams.Type, $this.Logger)
-                $job.Start($jobParams.Prep.ScriptPath, $jobParams.Prep.Arguments,
-                    $jobParams.Prep.TempConfigPath)
-                $this.ActiveJobs.Add($job)
+                $job = $this.StartJob(
+                    [AsyncJob]::new($hostName, $jobParams.Type, $this.Logger), $jobParams.Prep)
                 $this.RefreshCardStatus($job)
                 # Apply is destructive: run the identity check in parallel to gate it.
                 if ($command -eq 'applyUpdates') { $this.Resolution.StartVerifyName($hostName) }
@@ -671,14 +656,13 @@ class HomePresenter : AsyncJobPresenter {
             elseif ($latestPct -ge 0) { $row.SetPercent($latestPct) }
         }
 
-        # An apply's own percent lines own the bar, so the step contributes -1.
+        # An apply's own percent lines own the bar, so a scan milestone drives it only on scans.
         $prev = [int]$this.ScanSteps[$job.HostName]   # missing key -> $null -> 0
         if ($row -and $latestStep -gt $prev) {
             $this.ScanSteps[$job.HostName] = $latestStep
-            $label = [DcuProgress]::ScanStepLabel($latestStep)
-            $stepPct = if ($job.JobType -eq 'UpdateApply') { -1 }
-            else { $latestStep * 100.0 / [DcuProgress]::ScanStepCount }
-            $row.SetScanStep("$latestStep/$([DcuProgress]::ScanStepCount) $label", $stepPct)
+            if ($job.JobType -ne 'UpdateApply') {
+                $row.SetPercent($latestStep * 100.0 / [DcuProgress]::ScanStepCount)
+            }
         }
 
         $this.RefreshCardStatus($job)
@@ -921,9 +905,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.ScanSteps.Remove($hostName)
             $prep = $this.UpdateService.PrepareApplyUpdates($hostName, @{})
             $this.AttachResolvedIp($prep, $hostName)
-            $applyJob = [AsyncJob]::new($hostName, 'UpdateApply', $this.Logger)
-            $applyJob.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.ActiveJobs.Add($applyJob)
+            $applyJob = $this.StartJob([AsyncJob]::new($hostName, 'UpdateApply', $this.Logger), $prep)
             $this.RefreshCardStatus($applyJob)
             return $true
         }
@@ -964,7 +946,6 @@ class HomePresenter : AsyncJobPresenter {
 
         $this.Rows[$hostName] = $vm
         $this.HomeVm.Machines.Add($vm)   # UI thread only (every caller runs on the dispatcher)
-        $this.UpdateEmptyHint()
         $this.RequestOwners()
         return $vm
     }
@@ -975,7 +956,7 @@ class HomePresenter : AsyncJobPresenter {
         foreach ($name in @($this.Rows.Keys)) {
             $vm = $this.Rows[$name]
             if ($vm.OwnerName) { continue }
-            $cached = $this.Store.GetAll() | Where-Object { $_.Hostname -eq $name } | Select-Object -First 1
+            $cached = $this.Store.GetByHost($name)
             if ($cached -and $cached.Owner) {
                 $vm.SetOwner($cached.Owner)
                 # A one-token owner is a SAM cached before SCCM naming, so re-ask once to heal it.
@@ -1016,14 +997,12 @@ class HomePresenter : AsyncJobPresenter {
         [void]$view.SortDescriptions.Add([System.ComponentModel.SortDescription]::new('HostName', $asc))
     }
 
-    # Operator actions only, background completions never reorder the list.
+    # Stamps the row's recency so the next launch seeds it near the top. The live
+    # list keeps its status-then-name sort, so nothing visibly reorders now.
     [void] MoveRowToTop([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
-        $vm = $this.GetRow($hostName)
-        if ($null -eq $vm) { return }
+        if ($null -eq $this.GetRow($hostName)) { return }
         $this.Store.Touch($hostName)
-        $idx = $this.HomeVm.Machines.IndexOf($vm)
-        if ($idx -gt 0) { $this.HomeVm.Machines.Move($idx, 0) }
     }
 
     # --- Detail panel + inventory probe ---
@@ -1092,24 +1071,7 @@ class HomePresenter : AsyncJobPresenter {
     }
 
     hidden [void] FinishRemoval() {
-        $this.UpdateEmptyHint()
         $this.Store.FlushSave()
-    }
-
-    [void] UpdateEmptyHint() {
-        if (-not $this.EmptyHint) { return }
-        $this.EmptyHint.Visibility = if ($this.Rows.Count -eq 0) {
-            [System.Windows.Visibility]::Visible
-        }
-        else {
-            [System.Windows.Visibility]::Collapsed
-        }
-    }
-
-    # Re-probes the selected machine if one is open. Called once on Initialize.
-    [void] RefreshAll() {
-        if ($this.SelectedHost) { $this.Detail.RefreshInventory($this.SelectedHost) }
-        $this.RefreshIdleTimes()
     }
 
     # Re-probes verdicts past the TTL so reachability never rots. PrefetchIp is single-flight.
@@ -1176,11 +1138,8 @@ class HomePresenter : AsyncJobPresenter {
 
     [void] CopyUpdatesToClipboard([string]$hostName, [array]$updatesList) {
         try {
-            $clipboardText = "Scanned in DONUT, found and installed the following $($updatesList.Count) updates on $hostName`n"
-            foreach ($item in $updatesList) {
-                $clipboardText += "- $item`n"
-            }
-            Set-Clipboard -Value $clipboardText
+            $header = "Scanned in DONUT, found and installed the following $($updatesList.Count) updates on $hostName"
+            Set-Clipboard -Value ((@($header) + @($updatesList | ForEach-Object { "- $_" })) -join "`n")
         }
         catch {
             $this.Logger.LogWarning("Failed to copy to clipboard: $($_.Exception.Message)")

@@ -25,8 +25,7 @@
         <Border CornerRadius="0"
                 BorderThickness="1"
                 Background="Transparent"
-                BorderBrush="{DynamicResource PanelBorder}"
-                x:Name="rootBorder">
+                BorderBrush="{DynamicResource PanelBorder}">
             <Grid>
                 <Border CornerRadius="0">
                     <Border.Background>
@@ -60,8 +59,7 @@
                                     <Path Style="{DynamicResource controlButtonIcon}"
                                           Data="{DynamicResource xMark}" />
                                 </Button>
-                                <Button x:Name="btnMaximize"
-                                        Command="{Binding MaximizeCommand}"
+                                <Button Command="{Binding MaximizeCommand}"
                                         Style="{DynamicResource controlButton}"
                                         Tag="{DynamicResource AccentYellow}"
                                         ToolTip="Maximize / restore">
@@ -85,8 +83,7 @@
                                 <StackPanel x:Name="panelHelpButtons"
                                             Orientation="Horizontal"
                                             FlowDirection="LeftToRight">
-                                    <Button x:Name="btnSettings"
-                                            Command="{Binding OpenSettingsCommand}"
+                                    <Button Command="{Binding OpenSettingsCommand}"
                                             Style="{DynamicResource controlButton}"
                                             Tag="{DynamicResource Primary}"
                                             ToolTip="Settings">
@@ -96,8 +93,7 @@
                                               StrokeThickness="1.17"
                                               Data="{DynamicResource Config}" />
                                     </Button>
-                                    <Button x:Name="btnHelp"
-                                            Command="{Binding OpenTourCommand}"
+                                    <Button Command="{Binding OpenTourCommand}"
                                             Style="{DynamicResource controlButton}"
                                             Tag="{DynamicResource Primary}"
                                             ToolTip="Take a tour">
@@ -107,8 +103,7 @@
                                               StrokeThickness="1.17"
                                               Data="{DynamicResource Help}" />
                                     </Button>
-                                    <Button x:Name="btnDocs"
-                                            Command="{Binding OpenDocsCommand}"
+                                    <Button Command="{Binding OpenDocsCommand}"
                                             Style="{DynamicResource controlButton}"
                                             Tag="{DynamicResource Primary}"
                                             ToolTip="Documentation">
@@ -151,8 +146,7 @@
             </Grid>
         </Border>
         <!-- Not a ShowDialog, so background scans keep pumping behind the settings card. -->
-        <Grid x:Name="settingsOverlay"
-              Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVis}}">
+        <Grid Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVis}}">
             <Grid.InputBindings>
                 <KeyBinding Key="Escape" Command="{Binding CloseSettingsCommand}" />
             </Grid.InputBindings>
@@ -163,15 +157,9 @@
                 </Border.InputBindings>
             </Border>
             <Border x:Name="settingsCard"
+                    Style="{DynamicResource OverlayCard}"
                     Width="560"
-                    MaxHeight="640"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    CornerRadius="10"
-                    Focusable="True"
-                    Background="{DynamicResource PrimaryBackground}"
-                    BorderBrush="{DynamicResource PanelBorder}"
-                    BorderThickness="1">
+                    MaxHeight="640">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -225,8 +213,7 @@
             </Border>
         </Grid>
         <!-- Declared before qrOverlay so the password QR pops on top of this card. -->
-        <Grid x:Name="resetOverlay"
-              Visibility="{Binding IsResetOpen, Converter={StaticResource BoolToVis}}">
+        <Grid Visibility="{Binding IsResetOpen, Converter={StaticResource BoolToVis}}">
             <Grid.InputBindings>
                 <KeyBinding Key="Escape" Command="{Binding CloseResetCommand}" />
             </Grid.InputBindings>
@@ -237,14 +224,8 @@
                 </Border.InputBindings>
             </Border>
             <Border x:Name="resetCard"
-                    Width="440"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    CornerRadius="10"
-                    Focusable="True"
-                    Background="{DynamicResource PrimaryBackground}"
-                    BorderBrush="{DynamicResource PanelBorder}"
-                    BorderThickness="1">
+                    Style="{DynamicResource OverlayCard}"
+                    Width="440">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -450,14 +431,8 @@
                 </Border.InputBindings>
             </Border>
             <Border x:Name="qrCard"
-                    Width="360"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    CornerRadius="10"
-                    Focusable="True"
-                    Background="{DynamicResource PrimaryBackground}"
-                    BorderBrush="{DynamicResource PanelBorder}"
-                    BorderThickness="1">
+                    Style="{DynamicResource OverlayCard}"
+                    Width="360">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

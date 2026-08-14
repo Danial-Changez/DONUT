@@ -24,7 +24,6 @@
 #>
 
 using module "..\Models\AppConfig.psm1"
-using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AdSearchResult.psm1"
 using module "..\Models\TempPassword.psm1"
 using module "..\Core\AsyncJob.psm1"
@@ -80,7 +79,7 @@ try {
     }
     # Provenance first: every field log must name the exact code that produced it.
     $logger.LogInfo([BuildProvenance]::Stamp($srcRoot))
-    [RunspaceManager]::SetLogger($logger)
+    [RunspaceManager]::Logger = $logger
 
     # The launcher sets $global:StartHidden, and the dev path sets $global:TrayStart.
     $hidden = [bool]$global:StartHidden -or [bool]$global:TrayStart

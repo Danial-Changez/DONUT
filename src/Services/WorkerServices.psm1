@@ -2,7 +2,6 @@ using module "..\Core\LogService.psm1"
 using module "..\Core\NetworkProbe.psm1"
 using module ".\DriverMatchingService.psm1"
 using module ".\RemoteServices.psm1"
-using module "..\Models\DeviceContext.psm1"
 using module "..\Models\AppConfig.psm1"
 using module "..\Models\DiskUsage.psm1"
 using module "..\Models\FolderDeletionPolicy.psm1"
@@ -134,25 +133,23 @@ class ExecutionService {
             $service.JobIp = $ResolvedIp
         }
 
-        $device = [DeviceContext]::new($HostName)
-
         if ($JobType -eq 'Scan') {
-            return $service.RunScanPhase($device)
+            return $service.RunScanPhase($HostName)
         }
         elseif ($JobType -eq 'Apply') {
-            return $service.RunApplyPhase($device, $Options)
+            return $service.RunApplyPhase($HostName, $Options)
         }
         elseif ($JobType -eq 'Inventory') {
-            return $service.RunInventoryPhase($device, $Options)
+            return $service.RunInventoryPhase($HostName)
         }
         elseif ($JobType -eq 'DiskScan') {
-            return $service.RunDiskScanPhase($device, $Options)
+            return $service.RunDiskScanPhase($HostName, $Options)
         }
         elseif ($JobType -eq 'DeleteFolders') {
-            return $service.RunDeleteFoldersPhase($device, $Options)
+            return $service.RunDeleteFoldersPhase($HostName, $Options)
         }
         elseif ($JobType -eq 'Resolve') {
-            return $service.RunResolvePhase($device, $Options)
+            return $service.RunResolvePhase($HostName, $Options)
         }
         else {
             throw "Unknown JobType: $JobType"
@@ -161,7 +158,7 @@ class ExecutionService {
 
     # Pool-side resolution. 'Warm' discovers the live DC list once at startup, and 'Host'
     # fresh-resolves one host and probes RPC 135, returning Ip and Online for HostResolver.
-    [hashtable] RunResolvePhase([DeviceContext] $device, [hashtable] $options) {
+    [hashtable] RunResolvePhase([string] $hostName, [hashtable] $options) {
         $mode = if ($null -ne $options) { [string]$options.Mode } else { 'Host' }
 
         if ($mode -eq 'Warm') {
@@ -178,7 +175,7 @@ class ExecutionService {
 
         # Warming the assemblies here keeps later jobs from cold-loading under the loader lock.
         if ($mode -eq 'WarmRunspace') {
-            $this.WarmTag = [string]$device.HostName
+            $this.WarmTag = $hostName
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $this.WarmRuntimeAssemblies()
             $runtimeMs = $sw.ElapsedMilliseconds
@@ -195,23 +192,23 @@ class ExecutionService {
         if ($mode -eq 'Name') {
             $ip = if ($null -ne $options) { [string]$options.Ip } else { '' }
             $actual = $this.Probe.ResolveComputerName($ip)
-            return @{ Mode = 'Name'; HostName = $device.HostName; ActualName = [string]$actual }
+            return @{ Mode = 'Name'; HostName = $hostName; ActualName = [string]$actual }
         }
 
         # Breadcrumbs so a stalled host resolve names its last step (TTL keeps the volume low).
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
-        $this.Logger.LogDebug("[$($device.HostName)] Host resolve: DC='$dc' - DNS lookup...")
-        $ip = $this.Probe.ResolveWith($device.HostName, $dc)
+        $this.Logger.LogDebug("[$hostName] Host resolve: DC='$dc' - DNS lookup...")
+        $ip = $this.Probe.ResolveWith($hostName, $dc)
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
         $online = $false
         if (-not [string]::IsNullOrWhiteSpace($ipStr)) {
             $this.Logger.LogDebug(
-                "[$($device.HostName)] Host resolve: ip='$ipStr' - probing RPC 135...")
+                "[$hostName] Host resolve: ip='$ipStr' - probing RPC 135...")
             $online = $this.Probe.IsRpcAvailable($ipStr)
         }
         $this.Logger.LogDebug(
-            "[$($device.HostName)] Host resolve verdict: ip='$ipStr', online=$online.")
-        return @{ Mode = 'Host'; HostName = $device.HostName; Ip = $ipStr; Online = $online }
+            "[$hostName] Host resolve verdict: ip='$ipStr', online=$online.")
+        return @{ Mode = 'Host'; HostName = $hostName; Ip = $ipStr; Online = $online }
     }
 
     # Exercises the heavy stacks (DNS/TCP/CIM/LDAP) against localhost so a live job's
@@ -290,8 +287,8 @@ class ExecutionService {
         return $this.JobIp
     }
 
-    [hashtable] RunScanPhase([DeviceContext] $device) {
-        $this.Logger.LogInfo("[$($device.HostName)] Starting preliminary scan.")
+    [hashtable] RunScanPhase([string] $hostName) {
+        $this.Logger.LogInfo("[$hostName] Starting preliminary scan.")
 
         $remoteOverrides = @{
             report    = 'C:\temp\DONUT'
@@ -306,10 +303,10 @@ class ExecutionService {
 
         # Pins which segment between the scan start and psexec stopped logging.
         $this.Logger.LogDebug(
-            "[$($device.HostName)] Scan arguments built - invoking psexec launcher.")
+            "[$hostName] Scan arguments built - invoking psexec launcher.")
 
         $params = @{
-            ComputerName = $device.HostName
+            ComputerName = $hostName
             Command      = 'scan'
             Arguments    = $scanArgs
             OutputLog    = 'C:\temp\DONUT\scan.log'
@@ -317,16 +314,16 @@ class ExecutionService {
 
         # A "start" with no "done" pins the hang to the psexec wait, not to argument-building.
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $this.Logger.LogInfo("[$($device.HostName)] Scan: psexec launch start.")
+        $this.Logger.LogInfo("[$hostName] Scan: psexec launch start.")
         $exit = $this.InvokePsExec($params)
         $this.Logger.LogInfo(
-            "[$($device.HostName)] Scan: psexec launch done in $($sw.ElapsedMilliseconds) ms (exit $exit).")
+            "[$hostName] Scan: psexec launch done in $($sw.ElapsedMilliseconds) ms (exit $exit).")
 
         # Skip the copy on a clean no-updates, or a stale XML masquerades as this scan's result.
         $noUpdates = ([DcuLog]::Classify('scan', $exit) -eq [DcuCommandOutcome]::NoUpdates)
-        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog, (-not $noUpdates))
+        $artifact = $this.CopyRemoteArtifacts($hostName, [string]$params.OutputLog, (-not $noUpdates))
         if ($noUpdates) {
-            $this.Logger.LogInfo("[$($device.HostName)] Scan clean (DCU $exit): no updates found.")
+            $this.Logger.LogInfo("[$hostName] Scan clean (DCU $exit): no updates found.")
         }
 
         return @{
@@ -338,8 +335,8 @@ class ExecutionService {
         }
     }
 
-    [hashtable] RunApplyPhase([DeviceContext] $device, [hashtable] $options) {
-        $this.Logger.LogInfo("[$($device.HostName)] Starting apply updates.")
+    [hashtable] RunApplyPhase([string] $hostName, [hashtable] $options) {
+        $this.Logger.LogInfo("[$hostName] Starting apply updates.")
 
         # The Options bag also carries control data that dcu-cli would reject with 105.
         $remoteOverrides = @{
@@ -357,55 +354,47 @@ class ExecutionService {
         $applyArgs = $this.Config.BuildDcuArgs('applyUpdates', $remoteOverrides)
 
         $params = @{
-            ComputerName = $device.HostName
+            ComputerName = $hostName
             Command      = 'applyUpdates'
             Arguments    = $applyArgs
             OutputLog    = 'C:\temp\DONUT\apply.log'
         }
 
         $applyCode = $this.InvokePsExec($params)
-        $artifact = $this.CopyRemoteArtifacts($device.HostName, [string]$params.OutputLog)
+        $artifact = $this.CopyRemoteArtifacts($hostName, [string]$params.OutputLog)
         # dcu-cli 1/5 means the apply landed but needs a reboot, which the presenter flags.
         $artifact['RebootRequired'] = [DcuLog]::NeedsReboot($applyCode)
         return $artifact
     }
 
-    # Inventory. Fast path: query WMI over a remote DCOM CIM session (no psexec deploy,
-    # no SMB copy). If that cannot connect, fall back to the proven psexec probe.
-    [hashtable] RunInventoryPhase([DeviceContext] $device, [hashtable] $options) {
-        $this.Logger.LogInfo("[$($device.HostName)] Starting inventory probe.")
-        $ip = $this.ResolvedIpFor($device.HostName)
+    # Inventory: queries the host's WMI over a remote DCOM CIM session (no psexec
+    # deploy, no SMB copy) and writes the result JSON locally.
+    [hashtable] RunInventoryPhase([string] $hostName) {
+        $this.Logger.LogInfo("[$hostName] Starting inventory probe.")
+        $ip = $this.ResolvedIpFor($hostName)
 
         # Bounded gate (TCP 135) so an offline host fails in seconds, not on the CIM connect.
         if (-not $this.Probe.IsRpcAvailable($ip)) {
-            throw [RemoteJobService]::Fail($this.Logger, [HostOfflineException]::new($device.HostName))
+            throw [RemoteJobService]::Fail($this.Logger, [HostOfflineException]::new($hostName))
         }
 
-        # Null, all-null, or a throw all count as failure and fall to the psexec probe.
+        # Null, all-null, or a throw all count as failure.
         $inv = $null
         try {
             $inv = $this.GatherRemoteInventory($ip)
         }
         catch {
-            $this.Logger.LogException("[$($device.HostName)] CIM inventory threw; falling back to the psexec probe", $_)
+            $this.Logger.LogException("[$hostName] CIM inventory threw", $_)
             $inv = $null
         }
 
-        if ([ExecutionService]::IsUsableInventory($inv)) {
-            $local = Join-Path $this.LocalReportsDir "$($device.HostName)-inventory.json"
-            $inv | ConvertTo-Json -Depth 4 | Set-Content -Path $local -Encoding UTF8
-            return @{ InventoryPath = $local }
+        if (-not [ExecutionService]::IsUsableInventory($inv)) {
+            throw "Remote CIM inventory unavailable or empty for $hostName."
         }
 
-        # Fallback: the original psexec probe (e.g. DCOM/WMI blocked on the target).
-        $this.Logger.LogWarning("[$($device.HostName)] Remote CIM unavailable or empty; using psexec probe.")
-        $scriptText = if ($null -ne $options) { [string]$options.ScriptText } else { '' }
-        if ([string]::IsNullOrWhiteSpace($scriptText)) {
-            throw "No inventory script supplied for $($device.HostName)."
-        }
-        $this.InvokeRemotePwsh($ip, $scriptText, 'DonutProbe', 10)
-        $localPath = $this.CopyInventoryArtifact($device.HostName)
-        return @{ InventoryPath = $localPath }
+        $local = Join-Path $this.LocalReportsDir "$hostName-inventory.json"
+        $inv | ConvertTo-Json -Depth 4 | Set-Content -Path $local -Encoding UTF8
+        return @{ InventoryPath = $local }
     }
 
     # A CIM gather "succeeded" only if it produced at least one identifying fact.
@@ -585,18 +574,12 @@ class ExecutionService {
         return $local
     }
 
-    # Copies the inventory JSON the probe wrote on the remote back locally.
-    [string] CopyInventoryArtifact([string] $hostName) {
-        return $this.CopyBackArtifact($hostName, "$hostName-inventory.json",
-            "$hostName-inventory.json")
-    }
-
     # Deploys WizTree, runs a fast MFT folder scan as SYSTEM, and copies the trimmed CSV back.
     # The only place DONUT pushes a file to the target, and the exe stays there for reuse.
-    [hashtable] RunDiskScanPhase([DeviceContext] $device, [hashtable] $options) {
-        $this.Logger.LogInfo("[$($device.HostName)] Starting disk-usage scan.")
+    [hashtable] RunDiskScanPhase([string] $hostName, [hashtable] $options) {
+        $this.Logger.LogInfo("[$hostName] Starting disk-usage scan.")
 
-        $ip = $this.ResolvedIpFor($device.HostName)
+        $ip = $this.ResolvedIpFor($hostName)
         # A blocked 445 (not ruled out by RPC 135) makes DeployWizTree's UNC copy hang forever.
         if (-not $this.Probe.IsSmbAvailable($ip)) {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot deploy WizTree for the disk scan.")
@@ -616,13 +599,13 @@ class ExecutionService {
         $this.InvokeRemotePwsh($ip, [ExecutionService]::BuildScanCommand($topN), 'DonutDisk', 20)
         $this.Logger.LogInfo("[$ip] DiskScan: WizTree run (PsExec) done in $($sw.ElapsedMilliseconds) ms.")
 
-        $csvPath = $this.CopyDiskUsageArtifact($device.HostName)
+        $csvPath = $this.CopyBackArtifact($hostName, 'folders-top.csv', "$hostName-folders.csv")
         return @{ FoldersPath = $csvPath }
     }
 
     # Clears the contents of the operator-selected folders on the target as SYSTEM (psexec),
     # keeping the folders. Each path is re-validated here and again in the remote script.
-    [hashtable] RunDeleteFoldersPhase([DeviceContext] $device, [hashtable] $options) {
+    [hashtable] RunDeleteFoldersPhase([string] $hostName, [hashtable] $options) {
         $paths = @()
         if ($null -ne $options -and $options.Paths) { $paths = @($options.Paths) }
         # Canonical form past this point, so what the remote script re-checks is what it deletes.
@@ -630,12 +613,12 @@ class ExecutionService {
                 Where-Object { [FolderDeletionPolicy]::IsDeletable($_) } |
                 ForEach-Object { [FolderDeletionPolicy]::Canonicalize($_) })
         if ($paths.Count -eq 0) {
-            $this.Logger.LogWarning("[$($device.HostName)] ClearFolders: no deletable paths after the safety filter.")
+            $this.Logger.LogWarning("[$hostName] ClearFolders: no deletable paths after the safety filter.")
             return @{ Deleted = 0 }
         }
-        $this.Logger.LogInfo("[$($device.HostName)] Clearing $($paths.Count) folder(s).")
+        $this.Logger.LogInfo("[$hostName] Clearing $($paths.Count) folder(s).")
 
-        $ip = $this.ResolvedIpFor($device.HostName)
+        $ip = $this.ResolvedIpFor($hostName)
         if (-not $this.Probe.IsSmbAvailable($ip)) {
             $this.Logger.LogWarning("[$ip] Admin share (SMB/445) not reachable - cannot delete folders.")
             throw [RpcUnavailableException]::new($ip)
@@ -772,11 +755,6 @@ Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
 "@
     }
 
-    # Only the local copy is host-qualified, and a missing remote file surfaces here.
-    [string] CopyDiskUsageArtifact([string] $hostName) {
-        return $this.CopyBackArtifact($hostName, 'folders-top.csv', "$hostName-folders.csv")
-    }
-
     [hashtable] CopyRemoteArtifacts([string] $hostName, [string] $outputLog) {
         return $this.CopyRemoteArtifacts($hostName, $outputLog, $true)
     }
@@ -871,11 +849,6 @@ Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
         catch {
             return $result
         }
-    }
-
-    # Thin wrapper for the live tick, which only needs the advanced offset.
-    hidden [int] EmitNewDcuLogLines([string]$ip, [string]$remoteLog, [int]$seenChars) {
-        return [int]($this.TailAndScanLog($ip, $remoteLog, $seenChars)).Seen
     }
 
     # Maps a target-local drive path (C:\temp\DONUT\apply.log) to its admin-share UNC
@@ -1004,7 +977,7 @@ exit `$LASTEXITCODE
         $svc = $this
         $tickState = @{ Seen = 0; Ticks = 0; LastReportedSeen = 0 }
         $onTick = {
-            $tickState.Seen = $svc.EmitNewDcuLogLines($ip, $remoteLogUnc, [int]$tickState.Seen)
+            $tickState.Seen = [int]($svc.TailAndScanLog($ip, $remoteLogUnc, [int]$tickState.Seen)).Seen
             $tickState.Ticks++
             # No growth while SMB is reachable means dcu-cli runs but produces nothing.
             if ($tickState.Ticks % 20 -eq 0) {
@@ -1017,7 +990,7 @@ exit `$LASTEXITCODE
         }.GetNewClosure()
         $exitCode = $this.WaitForRemoteProcess($p, $computer, "DCU /$command", $maxMinutes, $onTick)
         # Final flush for output that landed between the last poll and exit.
-        $tickState.Seen = $this.EmitNewDcuLogLines($ip, $remoteLogUnc, [int]$tickState.Seen)
+        $tickState.Seen = [int]($this.TailAndScanLog($ip, $remoteLogUnc, [int]$tickState.Seen)).Seen
 
         # The remote script signals "dcu-cli not installed" with a reserved sentinel.
         if ($exitCode -eq [ExecutionService]::DcuNotFoundExit) {

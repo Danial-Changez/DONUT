@@ -2,19 +2,12 @@ using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\DiskUsage.psm1"
 using module "..\..\src\Core\NetworkProbe.psm1"
 using module "..\..\src\Services\DiskUsageService.psm1"
+using module "..\Helpers\MockNetworkProbe.psm1"
 using namespace System.Net
-
-# Same fake probe as InventoryService.Tests: connectivity without real network.
-class MockNetworkProbe : NetworkProbe {
-    MockNetworkProbe() {}
-    [bool] IsOnline([string]$hostName) { return $true }
-    [bool] IsRpcAvailable([string]$hostName) { return $true }
-    [IPAddress] ResolveHost([string]$hostName) { return [IPAddress]::Parse('127.0.0.1') }
-}
 
 Describe "DiskUsageService" {
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_DiskUsage_$(Get-Random)"
+        $script:tempDir = Join-Path $TestDrive "DiskUsage"
         $scriptsDir = Join-Path $script:tempDir 'Scripts'
         New-Item -Path $scriptsDir -ItemType Directory -Force | Out-Null
         New-Item -Path (Join-Path $scriptsDir 'RemoteWorker.ps1') -ItemType File -Force | Out-Null
@@ -24,10 +17,6 @@ Describe "DiskUsageService" {
         $script:config = [AppConfig]::new(
             $script:tempDir, (Join-Path $script:tempDir 'Logs'), $script:reportsDir, @{})
         $script:service = [DiskUsageService]::new($script:config, [MockNetworkProbe]::new())
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Context "PrepareDiskScan" {

@@ -25,17 +25,6 @@ class AdSearchResult {
     [string] Key() {
         return ($this.Kind + '|' + $this.Domain + '\' + $this.SamAccountName).ToLowerInvariant()
     }
-
-    # Best label for the dropdown: UPN for users (fallback sam), name for computers.
-    [string] Label() {
-        if ($this.Kind -eq 'User') {
-            if (-not [string]::IsNullOrWhiteSpace($this.UserPrincipalName)) {
-                return $this.UserPrincipalName
-            }
-            return $this.SamAccountName
-        }
-        return $this.Name
-    }
 }
 
 <#

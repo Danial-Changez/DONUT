@@ -78,9 +78,7 @@ class ResolutionCoordinator {
     [void] StartWarm() {
         try {
             $prep = $this.Resolver.PrepareWarm()
-            $job = [AsyncJob]::new('', [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new('', [JobKind]::Resolve, $this.Logger), $prep)
             # Diagnostic: free 0 means a starved pool, free > 0 means the worker hung.
             $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
             $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
@@ -267,9 +265,7 @@ class ResolutionCoordinator {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolveFast($hostName)
-            $job = $this.NewFastResolveJob($hostName)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob($this.NewFastResolveJob($hostName), $prep)
             $this.FastResolveActive++
             $this.Logger.LogDebug("[$hostName] fast IP pre-resolve submitted (direct child, no pool slot).")
         }
@@ -291,9 +287,7 @@ class ResolutionCoordinator {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolve($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger), $prep)
             $this.Logger.LogDebug("[$hostName] IP pre-resolve job submitted (worker path).")
         }
         catch {
@@ -325,9 +319,7 @@ class ResolutionCoordinator {
         $this.Resolver.ClearVerifiedName($hostName)
         try {
             $prep = $this.Resolver.PrepareName($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger), $prep)
         }
         catch {
             $this.Logger.LogException("[$hostName] identity check could not start", $_)
@@ -414,7 +406,8 @@ class ResolutionCoordinator {
                 $this.Home.RenderReachability($hn)
                 # Surface the fresh IP in the detail subtitle if this host's panel is open.
                 if ($hn -eq $this.Home.SelectedHost) {
-                    $this.Home.Detail.RenderDetailSubtitle($hn)
+                    $row = $this.Home.GetRow($hn)
+                    if ($row) { $row.SetResolvedIp($this.Resolver.GetCachedIp($hn)) }
                 }
                 # HomePresenter owns the queue: hand the verdict back to re-issue queued work.
                 $this.Home.ReissueAfterResolve($hn, $online)

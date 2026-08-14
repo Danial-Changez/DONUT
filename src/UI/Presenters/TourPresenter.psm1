@@ -95,7 +95,7 @@ class TourPresenter {
         # Defer so the overlay has laid out, and catch render errors before they kill startup.
         $self = $this
         $action = {
-            try { $self.ShowStep($self.GetIndex()) }
+            try { $self.ShowStep($self.Index) }
             catch { $self.OnTourError($_) }
         }.GetNewClosure()
         $this.Window.Dispatcher.BeginInvoke(
@@ -115,8 +115,6 @@ class TourPresenter {
         $this.AutoRan = $true
         $this.Start()
     }
-
-    hidden [int] GetIndex() { return $this.Index }
 
     [void] Next() {
         if ($this.Index -ge ($this.Steps.Count - 1)) { $this.Finish(); return }

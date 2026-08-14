@@ -55,20 +55,13 @@ function Resolve-TargetIp {
 }
 
 # NetworkProbe.IsPortOpen port for RPC 135: bounded 2 s TCP connect. The breadcrumb
-# logs before BeginConnect, because a security-stack-hooked connect never returns.
+# logs before the connect, because a security-stack-hooked connect never returns.
 function Test-RpcPort {
     param([string]$Ip, [object]$Log, [int]$Port = 135)
     try {
         $Log.LogDebug("[$Ip] fast resolve: RPC probe connecting to port $Port (2 s cap)...")
         $client = [System.Net.Sockets.TcpClient]::new()
-        try {
-            $async = $client.BeginConnect($Ip, $Port, $null, $null)
-            if ($async.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))) {
-                $client.EndConnect($async)
-                return $true
-            }
-            return $false
-        }
+        try { return $client.ConnectAsync($Ip, $Port).Wait(2000) }
         finally { $client.Close() }
     }
     catch {

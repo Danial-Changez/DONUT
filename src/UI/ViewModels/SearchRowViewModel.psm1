@@ -22,10 +22,8 @@ class SearchRowViewModel {
     [string] $HeaderText = ''
     [string] $Primary = ''
     [string] $Secondary = ''
-    [bool]   $IsComputer = $false
     [bool]   $CanUnlock = $false
     [bool]   $CanReset = $false   # any user row: password reset is not lock-gated
-    [object] $Result        # the raw worker row, for the presenter's handlers
     [object] $PickCommand   # RelayCommand (computers), assigned by the presenter
     [object] $UnlockCommand # RelayCommand (locked users), assigned by the presenter
     [object] $ResetCommand  # RelayCommand (users), assigned by the presenter
@@ -41,7 +39,6 @@ class SearchRowViewModel {
     # A result row from an AdSearchWorker hit (Kind = 'Computer' | 'User').
     static [SearchRowViewModel] FromResult([object]$r) {
         $vm = [SearchRowViewModel]::new()
-        $vm.Result = $r
         if ([string]$r.Kind -eq 'User') {
             $label = if ([string]::IsNullOrWhiteSpace($r.UserPrincipalName)) { [string]$r.SamAccountName }
             else { [string]$r.UserPrincipalName }
@@ -57,7 +54,6 @@ class SearchRowViewModel {
         else {
             $vm.Primary = [string]$r.Name
             $vm.Secondary = "$([string]$r.Domain)  -  computer"
-            $vm.IsComputer = $true
         }
         return $vm
     }

@@ -75,9 +75,4 @@ class LogLine {
         }
         return [LogLine]::Build($sev, $ts, $body)
     }
-
-    # Same stamp and severity, different text (a reconnect line with its marker stripped).
-    [LogLine] WithText([string]$newText) {
-        return [LogLine]::Build($this.Severity, $this.Stamp, $newText)
-    }
 }

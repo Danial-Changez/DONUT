@@ -50,11 +50,6 @@ class ResourceService {
                 $this.Logger.LogDebug("Updated ShutdownMode to: $([System.Windows.Application]::Current.ShutdownMode)")
             }
             $this.LoadStylesInto([System.Windows.Application]::Current.Resources)
-            $dictCount = [System.Windows.Application]::Current.Resources.MergedDictionaries.Count
-            $this.Logger.LogDebug("App.Current Resources MergedDictionaries Count: $dictCount")
-            if ($dictCount -eq 0) {
-                $this.Logger.LogWarning("No resources loaded into App.Current.")
-            }
         }
         else {
             $this.Logger.LogWarning("Skipping global resource loading because Application.Current is not accessible.")

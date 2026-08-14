@@ -23,18 +23,15 @@ Describe "BuildProvenance" {
     }
 
     It "never throws outside a repo and still reports the runtime" {
-        $root = Join-Path ([System.IO.Path]::GetTempPath()) `
-            ("DonutProv-" + [guid]::NewGuid().ToString('N'))
+        # TestDrive sits under the system temp dir, so no enclosing repo answers the SHA probe.
+        $root = Join-Path $TestDrive ("DonutProv-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Force -Path (Join-Path $root 'src') | Out-Null
-        try {
-            $stamp = [BuildProvenance]::Stamp((Join-Path $root 'src'))
-            $stamp | Should -Not -BeNullOrEmpty
-            $stamp | Should -Match 'pwsh='
-            $stamp | Should -Match 'clr='
-        }
-        finally {
-            Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
-        }
+
+        $stamp = [BuildProvenance]::Stamp((Join-Path $root 'src'))
+
+        $stamp | Should -Not -BeNullOrEmpty
+        $stamp | Should -Match 'pwsh='
+        $stamp | Should -Match 'clr='
     }
 
     It "always names the machine the log came from" {

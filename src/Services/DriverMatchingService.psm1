@@ -25,19 +25,9 @@ class DriverMatchingService {
     }
 
     hidden [void] InitializePatterns() {
+        # Dell only: the fleet is Dell and DCU reports never name another machine brand.
         $this.BrandPatterns = @{
-            "Dell"      = @("Dell Inc.", "Dell", "DELL")
-            "HP"        = @("Hewlett-Packard", "HP", "HP Inc.", "Hewlett Packard")
-            "Lenovo"    = @("Lenovo", "LENOVO")
-            "Microsoft" = @("Microsoft Corporation", "Microsoft", "Surface")
-            "Asus"      = @("ASUSTeK", "ASUS", "ASUSTek Computer")
-            "Acer"      = @("Acer", "Acer Inc.", "Gateway")
-            "Toshiba"   = @("Toshiba", "TOSHIBA")
-            "Samsung"   = @("Samsung", "SAMSUNG ELECTRONICS")
-            "Intel"     = @("Intel", "Intel Corporation", "Intel Corp")
-            "AMD"       = @("AMD", "Advanced Micro Devices")
-            "Nvidia"    = @("NVIDIA", "Nvidia Corporation")
-            "Realtek"   = @("Realtek", "Realtek Semiconductor")
+            "Dell" = @("Dell Inc.", "Dell", "DELL")
         }
 
         $this.CategoryPatterns = @{

@@ -33,6 +33,13 @@ class AsyncJobPresenter {
         $this.ActiveJobs = [List[AsyncJob]]::new()
     }
 
+    # Starts a constructed job from its Prepare* hashtable and registers it with the pump.
+    [AsyncJob] StartJob([AsyncJob]$job, [hashtable]$prep) {
+        $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+        $this.ActiveJobs.Add($job)
+        return $job
+    }
+
     # Drives one polling pass over all active jobs. Safe to call when idle.
     [void] PumpJobs() {
         if (-not $this.ActiveJobs -or $this.ActiveJobs.Count -eq 0) { return }

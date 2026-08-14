@@ -174,8 +174,7 @@ pooled in Xms`, so render cost is visible instead of hiding inside somebody's
 - **Startup provenance stamp:** `BuildProvenance::Stamp` logs the git short SHA
   (+`dirty`) on clones, plus pwsh/CLR versions, machine name, and OS build. On an
   MSI install the stamp reads `unknown` and the build is identified by the
-  uninstall key's `DisplayVersion`; a `version.txt` in the data root is an optional
-  hand-placed override — nothing writes it.
+  uninstall key's `DisplayVersion`.
 - **Debug-log gate:** `[DEBUG]` breadcrumbs are opt-in (`debugLogging`, default
   off; `Start-Donut -DebugLog` forces a session on). INFO/WARN/ERROR always flow;
   workers receive the parent's effective state per job. Any field diagnosis needs

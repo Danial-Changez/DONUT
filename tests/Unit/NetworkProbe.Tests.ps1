@@ -39,7 +39,7 @@ class FakeNetworkProbe : NetworkProbe {
         return $this.DnsDCs
     }
 
-    hidden [bool] TestServerOnline([string]$server) {
+    [bool] IsOnline([string]$server) {
         return [bool]$this.OnlineMap[$server]
     }
 

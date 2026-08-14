@@ -1,7 +1,14 @@
 using module "..\..\src\Models\DiskUsage.psm1"
 
-Describe "WizTreeCsv.ParseTopFolders" {
+Describe "WizTreeCsv.ParseTopFoldersFromFile" {
     BeforeAll {
+        # Writes CSV text to a TestDrive file and streams it through the parser.
+        function Invoke-Parse([string]$csv, [int]$topN) {
+            $path = Join-Path $TestDrive 'wiztree.csv'
+            Set-Content -Path $path -Value $csv -Encoding UTF8
+            return [WizTreeCsv]::ParseTopFoldersFromFile($path, $topN)
+        }
+
         # A real WizTree export in bytes: banner, header, volume-root total, then folders.
         $script:Csv = @'
 WizTree (4.0.0) (c) 2024 Antibody Software - https://wiztree.com [Generated 2026-06-28]
@@ -14,17 +21,17 @@ WizTree (4.0.0) (c) 2024 Antibody Software - https://wiztree.com [Generated 2026
     }
 
     It "skips the banner + header and parses the folder rows" {
-        $r = [WizTreeCsv]::ParseTopFolders($script:Csv, 12)
+        $r = Invoke-Parse $script:Csv 12
         $r.Folders.Count | Should -Be 3
     }
 
     It "excludes the volume-root row" {
-        $r = [WizTreeCsv]::ParseTopFolders($script:Csv, 12)
+        $r = Invoke-Parse $script:Csv 12
         ($r.Folders.Path) | Should -Not -Contain 'C:\'
     }
 
     It "ranks folders by size descending" {
-        $r = [WizTreeCsv]::ParseTopFolders($script:Csv, 12)
+        $r = Invoke-Parse $script:Csv 12
         $r.Folders[0].Path | Should -Be 'C:\Users\'
         $r.Folders[0].SizeBytes | Should -Be 53687091200
         $r.Folders[1].Path | Should -Be 'C:\Windows\'
@@ -32,67 +39,39 @@ WizTree (4.0.0) (c) 2024 Antibody Software - https://wiztree.com [Generated 2026
     }
 
     It "caps the result at topN" {
-        $r = [WizTreeCsv]::ParseTopFolders($script:Csv, 2)
+        $r = Invoke-Parse $script:Csv 2
         $r.Folders.Count | Should -Be 2
         $r.Folders[0].Path | Should -Be 'C:\Users\'
         $r.Folders[1].Path | Should -Be 'C:\Windows\'
     }
 
-    It "stamps ScannedAt with a parseable ISO8601 time" {
-        $r = [WizTreeCsv]::ParseTopFolders($script:Csv, 12)
-        { [datetime]::Parse($r.ScannedAt) } | Should -Not -Throw
-    }
-
     It "parses a quoted path containing a comma without splitting it" {
-        $csv = @'
+        $r = Invoke-Parse @'
 "File Name","Size","Allocated","Modified","Attributes","Files","Folders"
 "C:\Data, Archived\",2147483648,2147483648,2026-06-28,16,10,2
-'@
-        $r = [WizTreeCsv]::ParseTopFolders($csv, 12)
+'@ 12
         $r.Folders.Count | Should -Be 1
         $r.Folders[0].Path | Should -Be 'C:\Data, Archived\'
         $r.Folders[0].SizeBytes | Should -Be 2147483648
     }
 
-    It "returns an empty report (no throw) for empty or whitespace input" {
-        { [WizTreeCsv]::ParseTopFolders('', 12) }    | Should -Not -Throw
-        { [WizTreeCsv]::ParseTopFolders($null, 12) } | Should -Not -Throw
-        ([WizTreeCsv]::ParseTopFolders('', 12)).Folders.Count | Should -Be 0
+    It "returns an empty report (no throw) for an empty file" {
+        { Invoke-Parse '' 12 } | Should -Not -Throw
+        (Invoke-Parse '' 12).Folders.Count | Should -Be 0
     }
 
     It "returns an empty report when no header row is present" {
-        $r = [WizTreeCsv]::ParseTopFolders("just some garbage`nwith no header", 12)
+        $r = Invoke-Parse "just some garbage`nwith no header" 12
         $r.Folders.Count | Should -Be 0
     }
 
     It "tolerates a Size column that is not immediately after File Name" {
-        $csv = @'
+        $r = Invoke-Parse @'
 "Files","File Name","Size"
 10,"C:\Users\",53687091200
-'@
-        $r = [WizTreeCsv]::ParseTopFolders($csv, 12)
+'@ 12
         $r.Folders.Count | Should -Be 1
         $r.Folders[0].SizeBytes | Should -Be 53687091200
-    }
-}
-
-Describe "WizTreeCsv.ParseTopFoldersFromFile" {
-    It "streams the same result as the in-memory parse" {
-        $csv = @'
-WizTree (4.0.0) banner line
-"File Name","Size","Allocated","Modified","Attributes","Files","Folders"
-"C:\",274877906944,274877906944,2026-06-28,16,500000,40000
-"C:\Users\",53687091200,53687091200,2026-06-28,16,200000,15000
-"C:\Data, Archived\",2147483648,2147483648,2026-06-28,16,10,2
-'@
-        $path = Join-Path $TestDrive 'wiztree.csv'
-        Set-Content -Path $path -Value $csv -Encoding UTF8
-
-        $r = [WizTreeCsv]::ParseTopFoldersFromFile($path, 12)
-        $r.Folders.Count | Should -Be 2
-        $r.Folders[0].Path | Should -Be 'C:\Users\'
-        $r.Folders[1].Path | Should -Be 'C:\Data, Archived\'
-        $r.Folders[1].SizeBytes | Should -Be 2147483648
     }
 
     It "returns an empty report (no throw) for a missing file" {

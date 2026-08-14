@@ -36,11 +36,6 @@ Describe "DriverMatchingService" {
             $service.DetectBrand("Dell Inc.") | Should -Be "Dell"
         }
 
-        It "Should detect HP brand" {
-            $service = [DriverMatchingService]::new()
-            $service.DetectBrand("Hewlett-Packard") | Should -Be "HP"
-        }
-
         It "Should return Unknown for unrecognized manufacturer" {
             $service = [DriverMatchingService]::new()
             $service.DetectBrand("SomeUnknownBrand") | Should -Be "Unknown"

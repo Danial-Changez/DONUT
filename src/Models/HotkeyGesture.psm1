@@ -34,9 +34,13 @@ class HotkeyGesture {
         ',' = 'OemComma'; '.' = 'OemPeriod'; '/' = 'OemQuestion'; ';' = 'OemSemicolon'
         '-' = 'OemMinus'; '=' = 'OemPlus'; '[' = 'OemOpenBrackets'; ']' = 'Oem6'
     }
-    static [hashtable] $KeyToPunct = @{
-        'OemComma' = ','; 'OemPeriod' = '.'; 'OemQuestion' = '/'; 'OemSemicolon' = ';'
-        'OemMinus' = '-'; 'OemPlus' = '='; 'OemOpenBrackets' = '['; 'Oem6' = ']'
+    # Derived inverse of PunctToKey, so the two directions can never drift apart.
+    static [hashtable] $KeyToPunct = [HotkeyGesture]::Invert([HotkeyGesture]::PunctToKey)
+
+    hidden static [hashtable] Invert([hashtable]$map) {
+        $out = @{}
+        foreach ($k in $map.Keys) { $out[$map[$k]] = $k }
+        return $out
     }
 
     static [HotkeyGesture] Parse([string]$text) {

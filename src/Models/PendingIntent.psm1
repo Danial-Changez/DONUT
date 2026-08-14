@@ -49,13 +49,8 @@ class PendingIntent {
 
     # Stale notes are ignored so a file left by a crash cannot fire days later.
     [bool] IsFresh([datetime]$nowUtc, [timespan]$ttl) {
-        if ([string]::IsNullOrWhiteSpace($this.CreatedUtc)) { return $false }
-        $created = [datetime]::MinValue
-        $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
-        if (-not [datetime]::TryParse($this.CreatedUtc, [System.Globalization.CultureInfo]::InvariantCulture,
-                $styles, [ref]$created)) {
-            return $false
-        }
+        $created = [TimeFormat]::ParseIso($this.CreatedUtc)
+        if ($created -eq [datetime]::MinValue) { return $false }
         $age = $nowUtc.ToUniversalTime() - $created.ToUniversalTime()
         return ($age -ge [timespan]::Zero) -and ($age -le $ttl)
     }

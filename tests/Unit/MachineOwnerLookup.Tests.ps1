@@ -14,6 +14,8 @@ Describe "Machine owner lookup" {
     BeforeEach {
         # The memo lives for a batch job's runspace in the agent, so tests must not share it.
         $script:OwnerNameCache = @{}
+        # Default directory stub finds nothing, tests that need more redefine it inline.
+        function Find-Gc { param([string]$Filter) return $null }
     }
 
     Context "the whole list travels in one call" {
@@ -77,7 +79,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return [pscustomobject]@{ value = @() } }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com') | ConvertFrom-Json
 
@@ -90,7 +91,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return New-SccmUser 'Jane Doe' }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
@@ -105,7 +105,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'WS-BAD') { throw 'Response status code does not indicate success: 500.' }
                 return New-Affinity @()
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-BAD', 'WS-NONE') -server 'sccm.corp.com') | ConvertFrom-Json
 
@@ -129,7 +128,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return New-SccmUser 'Jane Doe' }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1', '', $null) -server 'sccm.corp.com') | ConvertFrom-Json
 

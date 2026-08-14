@@ -8,14 +8,11 @@ namespace Donut.Launcher;
 /// <summary>
 /// Minimal owner-painted progress bar, because the stock <see cref="ProgressBar"/>
 /// locks its fill to the theme green. On screen for about two seconds, so it earns no
-/// animation machinery. Starts as a dim full-width tint for the module-parse phase,
-/// which reports no percentage, and the first <see cref="Value"/> assignment switches
-/// it to a plain percent fill.
+/// animation machinery: a plain percent fill over a dim track.
 /// </summary>
 public sealed class SmoothProgressBar : Control
 {
     private int _value;
-    private bool _indeterminate = true;
 
     // Set in code only, not via the designer, so mark them non-serialized (satisfies WFO1000).
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -24,12 +21,12 @@ public sealed class SmoothProgressBar : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color TrackColor { get; set; } = Color.FromArgb(38, 255, 255, 255);
 
-    /// <summary>Completion 0-100. Assigning leaves the indeterminate phase.</summary>
+    /// <summary>Completion 0-100.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Value
     {
         get => _value;
-        set { _value = Math.Clamp(value, 0, 100); _indeterminate = false; Invalidate(); }
+        set { _value = Math.Clamp(value, 0, 100); Invalidate(); }
     }
 
     public SmoothProgressBar()
@@ -44,9 +41,9 @@ public sealed class SmoothProgressBar : Control
         using (var track = new SolidBrush(TrackColor))
             e.Graphics.FillRectangle(track, 0, 0, Width, Height);
 
-        int w = _indeterminate ? Width : (int)Math.Round(Width * _value / 100.0);
+        int w = (int)Math.Round(Width * _value / 100.0);
         if (w <= 0) return;
-        using var fill = new SolidBrush(_indeterminate ? Color.FromArgb(70, FillColor) : FillColor);
+        using var fill = new SolidBrush(FillColor);
         e.Graphics.FillRectangle(fill, 0, 0, w, Height);
     }
 }

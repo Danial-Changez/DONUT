@@ -5,34 +5,19 @@ using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Services\DriverMatchingService.psm1"
 using module "..\..\src\Services\RemoteServices.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
+using module "..\Helpers\MockNetworkProbe.psm1"
 using namespace System.Net
-
-class MockNetworkProbe : NetworkProbe {
-    [bool] $IsOnlineResult = $true
-    [bool] $IsRpcAvailableResult = $true
-    [IPAddress] $ResolveHostResult = [IPAddress]::Parse("127.0.0.1")
-
-    MockNetworkProbe() {}
-
-    [bool] IsOnline([string]$hostName) { return $this.IsOnlineResult }
-    [bool] IsRpcAvailable([string]$hostName) { return $this.IsRpcAvailableResult }
-    [IPAddress] ResolveHost([string]$hostName) { return $this.ResolveHostResult }
-}
 
 Describe "RemoteServices" {
     
     BeforeAll {
-        $tempDir = Join-Path $env:TEMP "DonutTests_Remote"
+        $tempDir = Join-Path $TestDrive "DonutTests_Remote"
         if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
         $scriptsDir = Join-Path $tempDir "Scripts"
         if (-not (Test-Path $scriptsDir)) { New-Item -Path $scriptsDir -ItemType Directory -Force | Out-Null }
         New-Item -Path (Join-Path $scriptsDir "RemoteWorker.ps1") -ItemType File -Force | Out-Null
         
         $config = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{})
-    }
-
-    AfterAll {
-        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Context "Scan preparation" {
@@ -317,16 +302,16 @@ Describe "RemoteServices" {
             # A mashed InnerText/tag-name read would never produce these exact fields.
             $rows[0].Name | Should -Be "Dell Latitude 5330 System BIOS"
             $rows[0].SizeText | Should -Be "26.7 MB"
-            $rows[2].Type | Should -Be "Firmware"
+            $rows[2].Urgency | Should -Be "Optional"
         }
 
         It "Merges a driver match: version transition, IsNewer, and category backfill" {
             $rows = $script:rowsService.GetUpdateRows("RowsHost")
             $audio = $rows | Where-Object Name -Like "Realtek*"
 
-            $audio.HasMatch | Should -BeTrue
             $audio.IsNewer | Should -BeTrue
-            $audio.VersionText | Should -Match "6\.0\.9000\.1"    # installed baseline shown
+            # A matched row shows the installed baseline as "current -> new".
+            $audio.VersionText | Should -Match "6\.0\.9000\.1.+→"
             $audio.Category | Should -Not -BeNullOrEmpty          # backfilled from the match
         }
 
@@ -334,7 +319,6 @@ Describe "RemoteServices" {
             $rows = $script:rowsService.GetUpdateRows("RowsHost")
             $bios = $rows | Where-Object Name -Like "*BIOS*"
 
-            $bios.HasMatch | Should -BeFalse
             $bios.VersionText | Should -Be "1.36.0"
         }
     }
@@ -369,16 +353,14 @@ Describe "RemoteServices" {
 
     Context "BuildWorkerArgs" {
         It "Should throw when RemoteWorker script is missing" {
-            $emptyDir = Join-Path $env:TEMP "DonutTests_Empty_$(Get-Random)"
+            $emptyDir = Join-Path $TestDrive "DonutTests_Empty_$(Get-Random)"
             New-Item -Path $emptyDir -ItemType Directory -Force | Out-Null
-            
+
             $emptyConfig = [AppConfig]::new($emptyDir, (Join-Path $emptyDir "Logs"), (Join-Path $emptyDir "Reports"), @{})
             $probe = [MockNetworkProbe]::new()
             $service = [RemoteUpdateService]::new($emptyConfig, $probe, $null)
 
             { $service.PrepareScanForUpdates("TestHost") } | Should -Throw "*RemoteWorker script not found*"
-
-            Remove-Item -Path $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
         }
 
         It "Should include SourceRoot in arguments" {

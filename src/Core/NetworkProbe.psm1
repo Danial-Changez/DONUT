@@ -18,7 +18,7 @@ using module ".\LogService.psm1"
 
 .NOTES
     The raw AD/DNS calls are isolated in overridable seam methods
-    (QueryDomainControllers, ResolveViaServer, TestServerOnline) so the
+    (QueryDomainControllers, ResolveViaServer, IsOnline) so the
     discovery/selection logic can be unit-tested off a domain by subclassing
     this type and faking those seams.
 
@@ -95,7 +95,7 @@ class NetworkProbe {
         $controllers = $this.GetDomainControllers()
         foreach ($dc in $controllers) {
             $this.Logger.LogDebug("DC discovery: probing '$dc'...")
-            if ($this.TestServerOnline($dc)) {
+            if ($this.IsOnline($dc)) {
                 $this.ActiveDomainController = $dc
                 $this.Logger.LogInfo("Selected active domain controller: $dc")
                 return $dc
@@ -153,15 +153,8 @@ class NetworkProbe {
 
     # --- Connectivity probes ---
 
-    # Shared bounded (2s) TCP connect probe behind IsRpcAvailable/IsSmbAvailable. The two
-    # label params preserve each wrapper's exact log strings. Logs a DEBUG line on failure.
-    hidden [bool] IsPortOpen([string]$hostName, [int]$port,
-        [string]$portDesc, [string]$checkLabel) {
-        return $this.IsPortOpen($hostName, $port, $portDesc, $checkLabel, $true)
-    }
-
-    # $logFailure=$false silences the failure DEBUG line for hot, high-frequency callers
-    # (the per-tick tail gate) that would otherwise log every ~1.5s while a host is down.
+    # Shared bounded (2s) TCP connect probe behind the wrappers below. $logFailure=$false
+    # keeps hot per-tick callers from logging a failure DEBUG line every ~1.5s.
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
@@ -195,13 +188,13 @@ class NetworkProbe {
 
     # TCP 135 (RPC endpoint mapper) is what psexec and CIM need to connect.
     [bool] IsRpcAvailable([string]$hostName) {
-        return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC')
+        return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC', $true)
     }
 
     # TCP 445 (SMB) is the admin share and psexec transport. An open 135 does not imply
     # 445, and a blocked 445 hangs UNC operations with no timeout, so check it up front.
     [bool] IsSmbAvailable([string]$hostName) {
-        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
+        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $true)
     }
 
     # Same 445 reachability check, but silent on failure. The live-tail gate calls it every
@@ -303,11 +296,6 @@ class NetworkProbe {
             return [IPAddress]::Parse($aRecord.IPAddress)
         }
         return $null
-    }
-
-    # Reports whether a server is reachable (used to pick an active DC).
-    hidden [bool] TestServerOnline([string]$server) {
-        return $this.IsOnline($server)
     }
 
     # --- First-run org discovery ---

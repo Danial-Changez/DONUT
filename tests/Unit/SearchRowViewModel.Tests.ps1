@@ -7,7 +7,6 @@ Describe "SearchRowViewModel" {
         })
         $vm.Primary    | Should -Be 'WS-5330'
         $vm.Secondary  | Should -Be 'prod.contoso.com  -  computer'
-        $vm.IsComputer | Should -BeTrue
         $vm.CanUnlock  | Should -BeFalse
         $vm.IsHeader   | Should -BeFalse
     }
@@ -20,7 +19,6 @@ Describe "SearchRowViewModel" {
         $vm.Primary   | Should -Be 'bob@contoso.com'
         $vm.Secondary | Should -Be 'Bob B  -  prod.contoso.com'
         $vm.CanUnlock | Should -BeFalse
-        $vm.IsComputer | Should -BeFalse
     }
 
     It "falls back to SamAccountName and appends the locked suffix for a locked user" {
@@ -38,6 +36,5 @@ Describe "SearchRowViewModel" {
         $h.IsHeader   | Should -BeTrue
         $h.HeaderText | Should -Be 'COMPUTERS'
         $h.CanUnlock  | Should -BeFalse
-        $h.IsComputer | Should -BeFalse
     }
 }

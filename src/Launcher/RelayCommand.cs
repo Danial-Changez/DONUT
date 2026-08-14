@@ -35,14 +35,8 @@ namespace Donut.Mvvm
         public event EventHandler? CanExecuteChanged;
 
         /// <summary>Raises <see cref="CanExecuteChanged"/> so bindings re-query the command.</summary>
-        public void RaiseCanExecuteChanged()
-        {
-            var handler = CanExecuteChanged;
-            if (handler != null)
-            {
-                handler(this, EventArgs.Empty);
-            }
-        }
+        public void RaiseCanExecuteChanged() =>
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 
         /// <inheritdoc/>
         public bool CanExecute(object? parameter)

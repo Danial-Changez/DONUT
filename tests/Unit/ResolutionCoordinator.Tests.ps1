@@ -72,6 +72,12 @@ class FakeHome {
         $this.DroppedRuns = [System.Collections.Generic.List[string]]::new()
         $this.Rendered = [System.Collections.Generic.List[string]]::new()
     }
+    # Mirrors AsyncJobPresenter.StartJob, the seam the coordinator launches jobs through.
+    [object] StartJob([object]$job, [hashtable]$prep) {
+        $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+        $this.ActiveJobs.Add($job)
+        return $job
+    }
     [void] ReissueAfterResolve([string]$h, [bool]$online) { $this.Reissued.Add(@($h, $online)) }
     [void] DropPendingRunOnResolveFailure([string]$h) { $this.DroppedRuns.Add($h) }
     [void] RenderReachability([string]$h) { $this.Rendered.Add($h) }

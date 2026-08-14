@@ -22,14 +22,8 @@ namespace Donut.Mvvm
         public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>Raises change notification for one property.</summary>
-        public void Raise(string propertyName)
-        {
-            var handler = PropertyChanged;
-            if (handler != null)
-            {
-                handler(this, new PropertyChangedEventArgs(propertyName));
-            }
-        }
+        public void Raise(string propertyName) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         /// <summary>
         /// Set a public property by name, raising PropertyChanged only when the value

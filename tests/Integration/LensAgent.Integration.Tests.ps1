@@ -23,10 +23,9 @@ class LiveAgentLensService : PersonLensService {
 Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
 
     BeforeAll {
-        $script:originalProgramData = $env:ProgramData
-        $stamp = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-        $script:testRoot = Join-Path $env:TEMP "DonutLensAgentIntegration_$stamp"
-        $env:ProgramData = $script:testRoot
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutLensAgentIntegration' -ProgramDataOnly
+        $script:testRoot = $script:redirect.Root
         $script:exchangeDir = Join-Path $script:testRoot 'DONUT\lens-agent'
         New-Item -ItemType Directory -Path $script:exchangeDir -Force | Out-Null
 
@@ -62,8 +61,7 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
             if ($script:agent -and -not $script:agent.HasExited) { $script:agent.Kill($true) }
         }
         catch { }
-        $env:ProgramData = $script:originalProgramData
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     It "comes up and heartbeats within 10s" {

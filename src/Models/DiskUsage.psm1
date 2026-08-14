@@ -27,44 +27,21 @@ class FolderUsage {
     }
 }
 
-# The result of a disk-usage scan: when it ran + the ranked top folders.
+# The result of a disk-usage scan: the ranked top folders.
 class DiskUsageReport {
-    [string]        $ScannedAt = ''     # ISO8601 UTC when the scan was parsed
     [FolderUsage[]] $Folders = @()
 }
 
 # Pure parser for WizTree's CSV export, streaming one line at a time: -Raw on a
 # full-drive export caused gen-2 GC storms that froze the UI. Static and WPF-free.
 class WizTreeCsv {
-    # Parses a WizTree export into a ranked DiskUsageReport: find the real header row
-    # ("File Name"), drop the volume-root total, rank by size, cap at topN. Never throws.
-    static [DiskUsageReport] ParseTopFolders([string]$csvText, [int]$topN) {
-        if ([string]::IsNullOrWhiteSpace($csvText)) { return [WizTreeCsv]::EmptyReport() }
-        $reader = [System.IO.StringReader]::new($csvText)
-        try { return [WizTreeCsv]::ParseReader($reader, $topN) }
-        finally { $reader.Dispose() }
-    }
-
-    # Same parse, streamed straight off the file, so the copied-back export never
-    # exists in memory as one string. A missing or unreadable file gives an empty report.
+    # Streams a WizTree export into a ranked DiskUsageReport: find the "File Name" header
+    # row, drop the volume-root total, rank by size, cap at topN. Never throws.
     static [DiskUsageReport] ParseTopFoldersFromFile([string]$csvPath, [int]$topN) {
-        try { $reader = [System.IO.StreamReader]::new($csvPath) }
-        catch { return [WizTreeCsv]::EmptyReport() }
-        try { return [WizTreeCsv]::ParseReader($reader, $topN) }
-        finally { $reader.Dispose() }
-    }
-
-    hidden static [DiskUsageReport] EmptyReport() {
         $report = [DiskUsageReport]::new()
-        $report.ScannedAt = [datetime]::UtcNow.ToString('o')
-        $report.Folders = @()
-        return $report
-    }
-
-    # Shared streaming core: skip to the header row, locate the File Name / Size
-    # columns, then fold each data row into a small FolderUsage as it is read.
-    hidden static [DiskUsageReport] ParseReader([System.IO.TextReader]$reader, [int]$topN) {
-        $report = [WizTreeCsv]::EmptyReport()
+        $reader = $null
+        try { $reader = [System.IO.StreamReader]::new($csvPath) }
+        catch { return $report }
 
         $list = [System.Collections.Generic.List[FolderUsage]]::new()
         $nameIdx = -1
@@ -104,6 +81,7 @@ class WizTreeCsv {
             # Never throws: rank what parsed, and the warning reaches the detail-pane log.
             Write-Warning "WizTree CSV parse stopped early: $($_.Exception.Message)"
         }
+        finally { $reader.Dispose() }
 
         $ranked = $list | Sort-Object -Property SizeBytes -Descending
         if ($topN -gt 0) { $ranked = $ranked | Select-Object -First $topN }

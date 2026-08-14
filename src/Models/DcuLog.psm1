@@ -74,7 +74,6 @@ class DcuLog {
     # Scan-only: dcu-cli exits 500 when the scan ran clean and found nothing to install.
     static [int[]] $ScanNoUpdateCodes = @(500)
 
-    static [bool] IsSuccess([int]$code) { return [DcuLog]::SuccessCodes -contains $code }
     static [bool] NeedsReboot([int]$code) { return [DcuLog]::RebootCodes -contains $code }
 
     # The per-command verdict InvokePsExec gates on. Only Failed should throw.

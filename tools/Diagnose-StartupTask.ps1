@@ -158,6 +158,57 @@ function Get-ResultMeaning([uint32]$code) {
     return "$hex (see winerror.h)"
 }
 
+function Write-PolicySection {
+    Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
+    # ProgramData is user-writable, so allowlisting can block the app tree. See .NOTES.
+    $script:policyBlocked = $false
+    $appId = Get-Service AppIDSvc -ErrorAction SilentlyContinue
+    Write-Host "AppIDSvc (AppLocker enforcement): $(if ($appId) { $appId.Status } else { 'not present' })"
+    try {
+        $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+        $modes = @($pol.AppLockerPolicy.RuleCollection |
+                ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
+        Write-Host "effective policy : $($modes -join '  ')"
+        if ($modes -match 'Script=(Enabled|AuditOnly)') {
+            Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
+        }
+    }
+    catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
+
+    # Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
+    foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
+        'Microsoft-Windows-AppLocker/MSI and Script') {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
+                -MaxEvents 40 -ErrorAction SilentlyContinue |
+                Where-Object { $_.Message -match 'DONUT' })
+        if ($ev.Count -gt 0) {
+            $script:policyBlocked = $true
+            Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
+            $ev | Select-Object -First 5 | ForEach-Object {
+                Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
+            }
+        }
+        else { Write-Host "$log - no DONUT events" }
+    }
+
+    # WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
+    $ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
+            -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
+    if ($ci.Count -gt 0) {
+        $script:policyBlocked = $true
+        Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
+    }
+
+    # A filtered token still lists Administrators, but deny-only, so grants to it do not apply.
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Host ""
+    Write-Host "this shell       : $($id.Name)  elevated=$elevated"
+    Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
+    Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
+}
+
 Write-Section "1. Installed build (is your fix even running?)"
 $svcPath = Join-Path $srcRoot 'Services\StartupTaskService.psm1'
 $script:codeSplitsTrigger = $false
@@ -357,57 +408,6 @@ if ($action.Arguments -like '*--tray*') {
     Write-Host "Then the same thing WITHOUT --tray, which proves whether that instance can draw on your desktop at all:"
     Write-Host "  & `"$($action.Execute)`" $(($action.Arguments -replace '\s--tray\b', ''))" -ForegroundColor Gray
     Write-Host "A window here but no tray icon = the tray call is the problem; neither = the session/desktop is."
-}
-
-function Write-PolicySection {
-    Write-Section "6. APPLICATION ALLOWLISTING (AppLocker / WDAC)"
-    # ProgramData is user-writable, so allowlisting can block the app tree. See .NOTES.
-    $script:policyBlocked = $false
-    $appId = Get-Service AppIDSvc -ErrorAction SilentlyContinue
-    Write-Host "AppIDSvc (AppLocker enforcement): $(if ($appId) { $appId.Status } else { 'not present' })"
-    try {
-        $pol = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
-        $modes = @($pol.AppLockerPolicy.RuleCollection |
-                ForEach-Object { "$($_.Type)=$($_.EnforcementMode)" })
-        Write-Host "effective policy : $($modes -join '  ')"
-        if ($modes -match 'Script=(Enabled|AuditOnly)') {
-            Write-Host "Script rules are active, and the app tree lives under ProgramData." -ForegroundColor Yellow
-        }
-    }
-    catch { Write-Host "effective policy : none readable ($($_.Exception.Message))" }
-
-    # Did it actually block us? 8004/8007 are the "was prevented from running" IDs.
-    foreach ($log in 'Microsoft-Windows-AppLocker/EXE and DLL',
-        'Microsoft-Windows-AppLocker/MSI and Script') {
-        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = 8003, 8004, 8006, 8007 } `
-                -MaxEvents 40 -ErrorAction SilentlyContinue |
-                Where-Object { $_.Message -match 'DONUT' })
-        if ($ev.Count -gt 0) {
-            $script:policyBlocked = $true
-            Write-Host "$log - $($ev.Count) DONUT event(s):" -ForegroundColor Red
-            $ev | Select-Object -First 5 | ForEach-Object {
-                Write-Host ("  {0}  id={1}  {2}" -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0]) -ForegroundColor Red
-            }
-        }
-        else { Write-Host "$log - no DONUT events" }
-    }
-
-    # WDAC/Code Integrity is the other allowlisting engine and blocks the same way.
-    $ci = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3076, 3077 } `
-            -MaxEvents 40 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DONUT' })
-    if ($ci.Count -gt 0) {
-        $script:policyBlocked = $true
-        Write-Host "CodeIntegrity (WDAC) - $($ci.Count) DONUT block event(s)" -ForegroundColor Red
-    }
-
-    # A filtered token still lists Administrators, but deny-only, so grants to it do not apply.
-    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole(
-        [Security.Principal.WindowsBuiltInRole]::Administrator)
-    Write-Host ""
-    Write-Host "this shell       : $($id.Name)  elevated=$elevated"
-    Write-Host "NOTE: run this script BOTH elevated and not. A path that resolves in one and not"
-    Write-Host "the other is a policy/token difference, never a file ACL - the ACL is identical."
 }
 
 Write-PolicySection

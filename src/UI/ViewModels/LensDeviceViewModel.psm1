@@ -14,12 +14,8 @@ using module "..\..\Models\PersonLens.psm1"
 #>
 class LensDeviceViewModel : ObservableObject {
     [string] $Name = ''
-    [string] $Os = ''
     [string] $LastSeenText = ''
-    [string] $Domain = ''
     [string] $Model = ''
-    [string] $Serial = ''
-    [string] $Manufacturer = ''
     [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
     # $null rather than '' so an unknown OS/manufacturer pair shows no tooltip at all.
     [object] $DetailTip
@@ -37,11 +33,7 @@ class LensDeviceViewModel : ObservableObject {
     LensDeviceViewModel([LensDevice]$d) {
         if ($null -ne $d) {
             $this.Name = $d.Name
-            $this.Os = $d.Os
-            $this.Domain = $d.Domain
             $this.Model = $d.Model
-            $this.Serial = $d.Serial
-            $this.Manufacturer = $d.Manufacturer
             # "Tag" spelled out matches the MACHINE stat tile, so one fact keeps one name.
             if ($d.Serial) { $this.TagText = "Tag $($d.Serial)" }
             # OS lives in the tooltip: usually shared, but it still spots a Windows 10 holdout.

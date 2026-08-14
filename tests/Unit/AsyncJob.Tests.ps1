@@ -8,11 +8,10 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "AsyncJob" {
 
     BeforeAll {
-        $script:testScriptDir = Join-Path $env:TEMP "DonutAsyncJobTests"
-        if (-not (Test-Path $script:testScriptDir)) {
-            New-Item -Path $script:testScriptDir -ItemType Directory -Force | Out-Null
-        }
-        
+        $script:testScriptDir = Join-Path $TestDrive "DonutAsyncJobTests"
+        New-Item -Path $script:testScriptDir -ItemType Directory -Force | Out-Null
+
+
         # Stubs follow AsyncJob's child protocol: -ArgsFile in, -ResultFile out, non-zero to fail.
         $script:simpleScript = Join-Path $script:testScriptDir "SimpleScript.ps1"
         @'
@@ -43,10 +42,6 @@ exit 1
 
     AfterAll {
         [RunspaceManager]::Close()
-        
-        if (Test-Path $script:testScriptDir) {
-            Remove-Item -Path $script:testScriptDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
     }
 
     Context "Constructor" {
@@ -308,39 +303,4 @@ exit 1
         }
     }
 
-    Context "ThreadPool self-heal backstop" {
-        BeforeEach {
-            # Reset the process-wide latch so each case starts un-healed.
-            [AsyncJob]::ThreadPoolHealed = $false
-        }
-        AfterAll {
-            [AsyncJob]::ThreadPoolHealed = $false
-        }
-
-        It "raises the floor once when a stall shows the starvation signature" {
-            $logger = [CapturingLogService]::new()
-            $job = [AsyncJob]::new("StarvedHost", "Resolve", $logger)
-
-            # Idle runspaces + ~0 free worker threads = dispatch starvation.
-            $job.HealThreadPoolIfStarved(2, 0)
-            $logger.Contains("raised ThreadPool floor") | Should -BeTrue
-            [AsyncJob]::ThreadPoolHealed | Should -BeTrue
-
-            # Latched: a second stall must not re-bump.
-            $before = @($logger.Entries | Where-Object { $_ -like "*raised ThreadPool floor*" }).Count
-            $job.HealThreadPoolIfStarved(2, 0)
-            @($logger.Entries | Where-Object { $_ -like "*raised ThreadPool floor*" }).Count |
-                Should -Be $before
-        }
-
-        It "does NOT fire on a busy-runspace stall (healthy ThreadPool)" {
-            $logger = [CapturingLogService]::new()
-            $job = [AsyncJob]::new("BusyHost", "Scan", $logger)
-
-            # 0 idle runspaces with plenty of free workers is the scan case, not starvation.
-            $job.HealThreadPoolIfStarved(0, 8)
-            $logger.Contains("raised ThreadPool floor") | Should -BeFalse
-            [AsyncJob]::ThreadPoolHealed | Should -BeFalse
-        }
-    }
 }

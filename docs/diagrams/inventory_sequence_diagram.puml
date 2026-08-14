@@ -29,7 +29,7 @@ group Prefetch inventory (background, if stale)
     Detail -> Inv: PrepareInventory("PC-01")
     Inv --> Detail: worker args (CIM probe script)
     Detail -> Job: queue Inventory job
-    note right of Job: The worker tries a DCOM CIM session first\n(bounded 15s); the psexec probe is only\nthe fallback when CIM is unavailable/empty.
+    note right of Job: The worker gathers over a DCOM CIM session\n(bounded 15s). Unavailable or empty CIM\nfails the job, with no fallback probe.
 end
 deactivate Presenter
 

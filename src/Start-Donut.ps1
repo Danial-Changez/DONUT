@@ -19,10 +19,9 @@
 
 .NOTES
     Hosted by Donut.Launcher.exe in production. Must run under PowerShell 7+ in
-    STA; Windows PowerShell 5.1 fails to load the XAML. The guard below covers
-    hosts that don't qualify (e.g. right-click "Run with PowerShell" picks up
-    5.1, and some hosts start MTA) by relaunching itself via pwsh -Sta, so the
-    script can be started from any shell or Explorer without touching the exe.
+    STA; Windows PowerShell 5.1 fails to load the XAML. Every production host
+    (launcher runspace, elevation relaunch, startup task) already passes -Sta,
+    and pwsh defaults to STA on Windows, so an unqualified host just errors.
 
     There is no data-root redirect here any more. DONUT's data lives at a single
     machine-wide root (DonutPaths), so every instance reads the same config, token
@@ -31,21 +30,12 @@
 
 param([switch]$Tray, [switch]$DebugLog, [int]$AwaitPid = 0)
 
-# WPF needs pwsh 7+ on an STA thread, so relaunch rather than fail in the XAML load.
+# WPF needs pwsh 7+ on an STA thread, so fail plainly rather than in the XAML load.
 if ($PSVersionTable.PSVersion.Major -lt 7 -or
     [System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
-    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
-    if (-not $pwsh) {
-        Write-Error "DONUT requires PowerShell 7+ (pwsh). Install it from https://aka.ms/powershell"
-        exit 1
-    }
-    # The param() block empties $args, so forward the switches explicitly.
-    $childArgs = @('-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
-    if ($Tray) { $childArgs += '-Tray' }
-    if ($DebugLog) { $childArgs += '-DebugLog' }
-    if ($AwaitPid -gt 0) { $childArgs += @('-AwaitPid', $AwaitPid) }
-    & $pwsh.Source @childArgs
-    exit $LASTEXITCODE
+    Write-Error ("DONUT requires PowerShell 7+ on an STA thread. " +
+        "Run: pwsh -Sta -File `"$PSCommandPath`" (install pwsh from https://aka.ms/powershell)")
+    exit 1
 }
 
 # The mutex below is Local\-scoped, so per-session and not per-token.

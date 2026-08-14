@@ -35,7 +35,7 @@ end box
 P -> J : Resolve{Warm}  +  Resolve{WarmRunspace}
 J -> W : StartWorker -> RunResolvePhase
 W -> N : GetActiveDomainController()
-N -> DC : Get-ADDomainController + TestServerOnline
+N -> DC : Get-ADDomainController + IsOnline
 W -> W : WarmRuntimeAssemblies()\n(exercise DNS/CIM/TCP/LDAP against localhost so no live\njob pays a first-use cost; the barrier parks + reaps an\noverrunning warm, so a wedge here can't hold up the app)
 J --> P : CompleteResolve -> Resolver.SetActiveDc(dc)
 note over P,R #13291D

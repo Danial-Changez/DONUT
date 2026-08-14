@@ -14,11 +14,8 @@ BeforeAll {
 
 Describe 'App tree pruning' {
     BeforeEach {
-        $script:root = Join-Path ([IO.Path]::GetTempPath()) "donut-prune-$([guid]::NewGuid())"
+        $script:root = Join-Path $TestDrive "donut-prune-$([guid]::NewGuid())"
         New-Item -ItemType Directory -Path $script:root -Force | Out-Null
-    }
-    AfterEach {
-        Remove-Item $script:root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It 'spares the downloaded WizTree and deletes what is no longer embedded' {

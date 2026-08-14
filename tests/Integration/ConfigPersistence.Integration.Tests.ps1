@@ -11,19 +11,15 @@ using module "..\..\src\Services\RecentConnectionsStore.psm1"
 Describe "Config persistence on the real data root" {
 
     BeforeAll {
-        $script:originalProgramData = $env:ProgramData
-        $script:originalLocalAppData = $env:LOCALAPPDATA
-        $script:testRoot = Join-Path $env:TEMP "DonutConfigIntegration_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutConfigIntegration'
+        $script:testRoot = $script:redirect.Root
         $script:testSourceRoot = Join-Path $script:testRoot 'src'
         New-Item -Path $script:testSourceRoot -ItemType Directory -Force | Out-Null
-        $env:ProgramData = $script:testRoot
-        $env:LOCALAPPDATA = $script:testRoot
     }
 
     AfterAll {
-        $env:ProgramData = $script:originalProgramData
-        $env:LOCALAPPDATA = $script:originalLocalAppData
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     It "recent hosts and their owners survive an app restart via recents.json" {

@@ -12,8 +12,7 @@
   </Border.Resources>
   <!-- Three modes, switched by HomeVm.DetailMode: Empty hint / Machine detail / user Lens. -->
   <Grid Margin="14,12,14,12">
-    <TextBlock x:Name="DetailEmptyHint"
-               Text="Select a machine, or search a person to open their Lens."
+    <TextBlock Text="Select a machine, or search a person to open their Lens."
                Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="14"
                TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
       <TextBlock.Style>
@@ -28,7 +27,7 @@
       </TextBlock.Style>
     </TextBlock>
 
-    <Grid x:Name="DetailContent">
+    <Grid>
       <Grid.Style>
         <Style TargetType="Grid">
           <Setter Property="Visibility" Value="Collapsed" />
@@ -55,11 +54,11 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0" VerticalAlignment="Center">
-          <TextBox x:Name="txtDetailHost" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
                    ToolTip="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18"
                    FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
           <!-- IP only, since probe freshness already shows on the machine card. -->
-          <TextBox x:Name="txtDetailIp" Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailIp}"
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailIp}"
                    ToolTip="{Binding SelectedMachine.DetailIp}" FontFamily="{DynamicResource FontSans}" FontSize="11"
                    Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
         </StackPanel>
@@ -301,33 +300,9 @@
                               IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                               Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
                               ToolTip="Clear this folder's contents" />
-                    <TextBox Grid.Column="1" Text="{Binding Label}" ToolTip="{Binding Path}"
-                             FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center">
-                      <TextBox.Style>
-                        <!-- Inlined rather than BasedOn on SelectableText, which needs StaticResource. -->
-                        <Style TargetType="TextBox">
-                          <Setter Property="IsReadOnly" Value="True" />
-                          <Setter Property="IsReadOnlyCaretVisible" Value="False" />
-                          <Setter Property="IsTabStop" Value="False" />
-                          <Setter Property="AcceptsReturn" Value="False" />
-                          <Setter Property="TextWrapping" Value="NoWrap" />
-                          <Setter Property="Background" Value="Transparent" />
-                          <Setter Property="BorderThickness" Value="0" />
-                          <Setter Property="Padding" Value="0" />
-                          <Setter Property="Margin" Value="0" />
-                          <Setter Property="Cursor" Value="IBeam" />
-                          <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                          <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
-                          <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
-                          <Setter Property="Foreground" Value="{DynamicResource BodyTextSecondary}" />
-                          <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsRoot}" Value="True">
-                              <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
-                            </DataTrigger>
-                          </Style.Triggers>
-                        </Style>
-                      </TextBox.Style>
-                    </TextBox>
+                    <TextBox Grid.Column="1" Style="{DynamicResource SelectableTreeLabel}"
+                             Text="{Binding Label}" ToolTip="{Binding Path}"
+                             FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center" />
                     <TextBox Grid.Column="2" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                              Foreground="{DynamicResource BodyTextSecondary}"

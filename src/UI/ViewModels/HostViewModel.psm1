@@ -40,12 +40,10 @@ class HostViewModel : ObservableObject {
     [double] $Percent = 0
     [bool]   $ProgressVisible = $false
     [bool]   $ProgressIndeterminate = $false
-    [string] $StepText = ''   # live milestone beside the bar, e.g. "2/5 scanning devices"
     [Brush]  $DotBrush
     [Brush]  $ChipForeground
     [Brush]  $ChipBackground
     [Brush]  $ChipBorderBrush
-    [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
     [object] $RemoveCommand   # RelayCommand, assigned by the coordinator (card's X)
@@ -107,7 +105,6 @@ class HostViewModel : ObservableObject {
             $this.Set('ProgressVisible', $false)
             $this.Set('ProgressIndeterminate', $false)
             $this.Set('Percent', [double]0)
-            $this.Set('StepText', '')
         }
         $this.RefreshShape()
     }
@@ -120,13 +117,6 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressIndeterminate', $false)
         $this.Set('ProgressVisible', $true)
         $this.Set('Percent', $pct)
-    }
-
-    # Shows a scan milestone beside the bar. $pct also drives the bar for percent-less
-    # jobs, and -1 leaves it alone because an apply owns its own bar.
-    [void] SetScanStep([string]$text, [double]$pct) {
-        $this.Set('StepText', $text)
-        if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
     # Switches the bar to indeterminate for a phase that reports activity but no
@@ -281,7 +271,6 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipForeground', [HostViewModel]::BrushFor($key))
         $this.Set('ChipBackground', [HostViewModel]::TintFor($key))
         $this.Set('ChipBorderBrush', [HostViewModel]::TintBorderFor($key))
-        $this.Set('ProgressBrush', [HostViewModel]::BrushFor($key))
     }
 
     # --- Pure status mapping (idle rows; running rows go through FleetCardStatus) ---------

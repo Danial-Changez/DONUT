@@ -7,9 +7,11 @@ using module "..\..\src\Models\AppConfig.psm1"
 Describe "Core Module Integration" {
 
     BeforeAll {
-        $script:testRoot = Join-Path $env:TEMP "DonutCoreIntegration_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
-        New-Item -Path $script:testRoot -ItemType Directory -Force | Out-Null
-        
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        # ConfigManager anchors on %ProgramData%, so an unredirected run edits the real config.
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutCoreIntegration'
+        $script:testRoot = $script:redirect.Root
+
         $script:testSourceRoot = Join-Path $script:testRoot "src"
         New-Item -Path $script:testSourceRoot -ItemType Directory -Force | Out-Null
         
@@ -29,24 +31,13 @@ if ($a.ConfigPath -and (Test-Path $a.ConfigPath)) {
 $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 '@ | Set-Content -Path $script:testWorker
 
-        # ConfigManager anchors on %ProgramData%, so an unredirected run edits the real config.
-        $script:originalProgramData = $env:ProgramData
-        $env:ProgramData = $script:testRoot
-        $script:originalLocalAppData = $env:LOCALAPPDATA
-        $env:LOCALAPPDATA = $script:testRoot
-        
         [RunspaceManager]::Initialize(1, 5)
     }
 
     AfterAll {
         [RunspaceManager]::Close()
-        
-        $env:ProgramData = $script:originalProgramData
-        $env:LOCALAPPDATA = $script:originalLocalAppData
-        
-        if (Test-Path $script:testRoot) {
-            Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     Context "RunspaceManager + AsyncJob Integration" {

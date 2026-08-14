@@ -25,7 +25,6 @@ package "Donut.Services" #221634 {
         +EnsureAgent(): string
         +{static} AgentDir(): string
         +{static} StopAndPurgeAgent(): void
-        +{static} SweepStaleExchanges(minutes): void
         +{static} NewKeyIv(): byte[]
         +{static} ProtectText(text, keyIv): byte[]
         +{static} UnprotectText(blob, keyIv): string
@@ -43,7 +42,6 @@ package "Donut.Models" #15233B {
         +Enabled: bool
         +LockedOut: bool
         +Key(): string
-        +Label(): string
     }
 
     class AdFilter {

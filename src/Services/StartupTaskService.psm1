@@ -61,11 +61,6 @@ class StartupTaskService {
         return "DONUT-$(($user -split '\\')[-1])"
     }
 
-    # Whose logon fires the task: always the signed-in console user, '' when nobody is.
-    [hashtable] ResolveOwner() {
-        return @{ User = $this.GetInteractiveUser() }
-    }
-
     # Pure: the task action for the current host. A pwsh.exe host (dev) re-launches the
     # script with -Tray, and any other exe is the launcher and takes --tray.
     [hashtable] BuildLaunchSpec([string]$processPath, [string]$sourceRoot) {
@@ -116,19 +111,20 @@ class StartupTaskService {
     [bool] Apply([bool]$enabled) {
         $this.LastFailure = ''
         try {
-            $owner = $this.ResolveOwner()
+            # Always the signed-in console user, whose logon fires the task.
+            $user = $this.GetInteractiveUser()
             # Both values decide whether the task fires, so a dead task stays diagnosable.
             $this.Logger.LogInfo(("Startup task: runs-as '{0}', signed-in console user '{1}'." -f
-                    $this.GetProcessIdentity().Name, $owner.User))
-            if (-not $owner.User) {
+                    $this.GetProcessIdentity(), $user))
+            if (-not $user) {
                 return $this.Fail('no signed-in console user was found, so there is no logon to start DONUT at.')
             }
             $spec = $this.BuildLaunchSpec([Environment]::ProcessPath, $this.SourceRoot)
-            $name = [StartupTaskService]::TaskNameFor($owner.User)
+            $name = [StartupTaskService]::TaskNameFor($user)
             $existing = $this.GetExistingTask($name)
             switch ($this.ReconcileDecision($enabled, $existing, $spec)) {
-                'Register' { $this.RegisterTask($name, $owner.User, $spec) }
-                'Reregister' { $this.RegisterTask($name, $owner.User, $spec) }
+                'Register' { $this.RegisterTask($name, $user, $spec) }
+                'Reregister' { $this.RegisterTask($name, $user, $spec) }
                 'Unregister' { $this.UnregisterTask($name) }
                 default { }
             }
@@ -154,14 +150,9 @@ class StartupTaskService {
 
     # --- CIM/identity seams (overridden by the test fake) ---
 
-    # IsElevated rides along because registering a task for another principal needs it,
-    # and the failure toast used to guess at the reason instead of asking.
-    hidden [hashtable] GetProcessIdentity() {
-        return @{
-            Name       = [ElevationContext]::CurrentIdentityName()
-            IsSystem   = [ElevationContext]::IsSystem()
-            IsElevated = [ElevationContext]::IsElevated()
-        }
+    # The account DONUT runs as, logged beside the console user for diagnosability.
+    hidden [string] GetProcessIdentity() {
+        return [ElevationContext]::CurrentIdentityName()
     }
 
     # Who is signed in to the desktop DONUT shows on, never who DONUT runs as. The

@@ -158,7 +158,7 @@ package "Donut.UI.Presenters" #2B1A12 {
     }
 
     class DialogPresenter {
-        +ShowConfirmation(title, message, listItems): bool
+        +ShowConfirmation(title, message, listItems, primaryText, isDestructive): bool
         +ShowAlert(title, message, listItems): void
         +ShowUpdatePrompt(currentVer, newVer, isRollback): bool
     }
@@ -211,20 +211,20 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
 
     class HostViewModel {
-        +HostName / Subtitle / ChipText / StepText: string
+        +HostName / Subtitle / ChipText: string
         +OwnerName / OwnerTip: string
         +SortStatusRank: int
         +Updates: DcuUpdate[]
         +UpdatesIdentityText / IdentityState: string
         +Percent: double
         +ProgressVisible / ProgressIndeterminate: bool
-        +DotBrush / ChipForeground / ProgressBrush: Brush
+        +DotBrush / ChipForeground: Brush
         +Ov* (overview facts): string
         +Folders: FolderNodeViewModel[]
         +RunCommand / GatherCommand / RemoveCommand: RelayCommand
         +ApplyStatus(fleetStatus) / ApplyIdle(rc): void
         +ApplyInventory(inv) / ApplyFolders(report): void
-        +SetPercent(pct) / SetScanStep(text, pct): void
+        +SetPercent(pct): void
         +SetReachability(state) / SetResolvedIp(ip): void
         +SetOwner(displayName): void
         +{static} SetPalette(palette): void
@@ -239,7 +239,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
 
     class SearchRowViewModel {
-        +IsHeader / IsComputer / CanUnlock / CanReset: bool
+        +IsHeader / CanUnlock / CanReset: bool
         +Primary / Secondary / HeaderText: string
         +PickCommand / UnlockCommand / ResetCommand: RelayCommand
         +{static} Header(text) / FromResult(r): SearchRowViewModel

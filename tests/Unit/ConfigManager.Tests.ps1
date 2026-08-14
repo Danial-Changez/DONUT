@@ -6,24 +6,16 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "ConfigManager" {
 
     BeforeAll {
-        $script:testRoot = Join-Path $env:TEMP "DonutConfigManagerTests_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        # ConfigManager anchors on DonutPaths, so an unredirected run edits the real config.
+        $script:redirect = New-RedirectedDataRoot -Prefix 'ConfigManager' -Under $TestDrive
+        $script:testRoot = $script:redirect.Root
         $script:testSourceRoot = Join-Path $testRoot "src"
         New-Item -Path $testSourceRoot -ItemType Directory -Force | Out-Null
-        
-        # ConfigManager anchors on DonutPaths, so an unredirected run edits the real config.
-        $script:originalProgramData = $env:ProgramData
-        $env:ProgramData = $testRoot
-        $script:originalLocalAppData = $env:LOCALAPPDATA
-        $env:LOCALAPPDATA = $testRoot
     }
 
     AfterAll {
-        $env:ProgramData = $script:originalProgramData
-        $env:LOCALAPPDATA = $script:originalLocalAppData
-
-        if (Test-Path $script:testRoot) {
-            Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     BeforeEach {

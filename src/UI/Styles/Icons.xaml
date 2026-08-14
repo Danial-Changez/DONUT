@@ -23,6 +23,19 @@
         <Setter Property="FlowDirection"
                 Value="LeftToRight" />
     </Style>
+    <!-- Window control glyph: Lucide weight is size/12, so a wider icon needs a thicker stroke. -->
+    <Style x:Key="controlButtonIcon"
+           TargetType="Path"
+           BasedOn="{StaticResource lucideIcon}">
+        <Setter Property="Width"
+                Value="10" />
+        <Setter Property="Height"
+                Value="10" />
+        <Setter Property="StrokeThickness"
+                Value="0.85" />
+        <Setter Property="Stroke"
+                Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+    </Style>
 
     <Geometry x:Key="xMark">M18 6 6 18 M6,6 l12,12</Geometry>
     <!-- x -->

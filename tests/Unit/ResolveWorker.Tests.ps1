@@ -11,17 +11,12 @@ Describe "ResolveWorker" {
     BeforeAll {
         $script:workerPath = [System.IO.Path]::GetFullPath(
             (Join-Path $PSScriptRoot '../../src/Scripts/ResolveWorker.ps1'))
-        $script:root = Join-Path ([System.IO.Path]::GetTempPath()) `
-            ("DonutResolveWorker-" + [guid]::NewGuid().ToString('N'))
+        $script:root = Join-Path $TestDrive 'DonutResolveWorker'
         New-Item -ItemType Directory -Force -Path $script:root | Out-Null
 
         # Load the functions only (no -ResultFile = the main body returns early).
         . $script:workerPath
         $script:log = [NullLogService]::new()
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Context "Resolve-TargetIp" {

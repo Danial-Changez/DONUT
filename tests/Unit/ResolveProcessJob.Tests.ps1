@@ -11,8 +11,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "ResolveProcessJob" {
 
     BeforeAll {
-        $script:root = Join-Path ([System.IO.Path]::GetTempPath()) `
-            ("DonutFastJob-" + [guid]::NewGuid().ToString('N'))
+        $script:root = Join-Path $TestDrive 'DonutFastJob'
         New-Item -ItemType Directory -Force -Path $script:root | Out-Null
 
         function New-Stub([string]$name, [string]$body) {
@@ -32,10 +31,6 @@ Describe "ResolveProcessJob" {
         }
 
         $script:fastArgs = @{ HostName = 'PC1'; Dc = 'DC1'; LogsDir = $script:root }
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It "completes with the verdict from the result file and cleans its temp file up" {

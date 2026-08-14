@@ -127,7 +127,7 @@ public sealed class SplashForm : Form
     public void SetProgress(int percent, string status)
     {
         _status.Text = status;
-        _bar.Value = percent;               // leaves the indeterminate phase
+        _bar.Value = percent;
         _pct.Text = percent + "%";
     }
 

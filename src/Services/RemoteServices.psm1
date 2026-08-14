@@ -171,7 +171,7 @@ class RemoteUpdateService : RemoteJobService {
                 if ([string]::IsNullOrWhiteSpace($category)) { $category = $match.Category }
             }
             $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
-                $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
+                $this.NodeText($node, 'urgency'), $category, $bytes)
         }
         # Show most-urgent first (Urgent -> Recommended -> Optional -> unknown), then by name.
         return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)

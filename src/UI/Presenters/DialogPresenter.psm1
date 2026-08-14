@@ -58,10 +58,6 @@ class DialogPresenter {
         }
     }
 
-    [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems) {
-        return $this.ShowConfirmation($title, $message, $listItems, 'Confirm', $false)
-    }
-
     # Destructive-aware confirmation: $primaryText names the action rather than a generic
     # "Confirm", and $isDestructive paints the primary button red.
     [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems,

@@ -7,8 +7,8 @@ skinparam classAttributeIconSize 0
 package "Donut.Core" #102A20 {
     class RunspaceManager {
         +{static} InteractiveSize: int
+        +{static} Logger: LogService
         +{static} Initialize(min, max): void
-        +{static} SetLogger(logger): void
         +{static} GetPool(): RunspacePool
         +{static} GetInteractivePool(): RunspacePool
         +{static} Close(): void
@@ -27,7 +27,6 @@ package "Donut.Core" #102A20 {
         +DrainStream(stream, severity): void
         +Cleanup(): void
         -LogStallHeartbeat(): void
-        -HealThreadPoolIfStarved(freeRunspaces, freeWorkers): void
     }
 
     class WorkerProcess {
@@ -92,7 +91,6 @@ package "Donut.Models" #15233B {
         +DisplayText: string
         +{static} Donut(severity, text): LogLine
         +{static} FromWorkerLine(text, streamSeverity): LogLine
-        +WithText(newText): LogLine
     }
 }
 

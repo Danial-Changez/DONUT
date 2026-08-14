@@ -8,7 +8,7 @@
     to exist on disk; a dev run (plain pwsh over the checkout) falls back to the
     file under SourceRoot. Each returned root owns its file's namescope -
     FindName works on that root and cannot see into other loaded roots, which is
-    what keeps composed views (shell + regions, SettingsView + settings views) from
+    what keeps composed views (shell + regions, the settings option views) from
     reaching across their seams.
 
 .NOTES
@@ -17,23 +17,21 @@
     the boot loudly - while the page-level callers keep their own catch + null.
 #>
 class ViewLoader {
-    # An open stream for an app-tree file: the launcher's embedded copy when that
-    # type is loaded (prod), else the file under SourceRoot (dev).
-    static [System.IO.Stream] OpenAppFile([string]$sourceRoot, [string]$relativePath) {
+    # Streams the launcher's embedded copy when that type is loaded (prod), else
+    # the file under SourceRoot (dev).
+    static [object] Load([string]$sourceRoot, [string]$relativePath) {
+        $stream = $null
         $assets = 'Donut.Launcher.EmbeddedAssets' -as [type]
         if ($assets) {
             $stream = $assets::Open('src/' + ($relativePath -replace '\\', '/'))
-            if ($stream) { return $stream }
         }
-        $path = Join-Path $sourceRoot $relativePath
-        if (-not (Test-Path $path)) {
-            throw [System.IO.FileNotFoundException]::new("View not found: $relativePath", $path)
+        if (-not $stream) {
+            $path = Join-Path $sourceRoot $relativePath
+            if (-not (Test-Path $path)) {
+                throw [System.IO.FileNotFoundException]::new("View not found: $relativePath", $path)
+            }
+            $stream = [System.IO.File]::OpenRead($path)
         }
-        return [System.IO.File]::OpenRead($path)
-    }
-
-    static [object] Load([string]$sourceRoot, [string]$relativePath) {
-        $stream = [ViewLoader]::OpenAppFile($sourceRoot, $relativePath)
         try { return [System.Windows.Markup.XamlReader]::Load($stream) }
         finally { $stream.Dispose() }
     }

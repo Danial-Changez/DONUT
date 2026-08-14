@@ -19,7 +19,7 @@
                             no machine policy is touched)
       - stacks.txt          runspace call stacks captured before killing a child
                             that blew its deadline (Get-DonutRunspaceStacks.ps1)
-      - app-donut-tail.log  tail of the real app's %LOCALAPPDATA% Donut.log
+      - app-donut-tail.log  tail of the real app's machine-wide Donut.log
 
     Self-contained by design: it imports nothing from src/, so a fixed copy of
     this script can drive `git bisect run` against any checkout via -SourceRoot
@@ -379,10 +379,14 @@ if (-not $SkipEventLog -and $IsWindows) {
 }
 
 # --- Cross-reference: the real app's log tail ---------------------------------
-$appLog = if ($env:LOCALAPPDATA) {
-    Join-Path $env:LOCALAPPDATA 'DONUT\logs\Donut.log'
+# The checkout's DonutPaths names the app log dir, loaded late to stay self-contained.
+$appLog = ''
+$donutPathsModule = Join-Path $SourceRoot 'Core\DonutPaths.psm1'
+if (Test-Path $donutPathsModule) {
+    $appLogsDir = & ([scriptblock]::Create(
+            "using module '$donutPathsModule'`n[DonutPaths]::LogsDir()"))
+    $appLog = Join-Path $appLogsDir 'Donut.log'
 }
-else { '' }
 if ($appLog -and (Test-Path $appLog)) {
     Get-Content $appLog -Tail 2000 |
         Set-Content -Path (Join-Path $OutDir 'app-donut-tail.log')

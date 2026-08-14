@@ -3,26 +3,12 @@ using module "..\..\src\Core\LogService.psm1"
 Describe "LogService" {
 
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_LogService_$(Get-Random)"
-    }
-
-    AfterAll {
-        if (Test-Path $script:tempDir) {
-            Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        $script:tempDir = Join-Path $TestDrive 'LogService'
     }
 
     BeforeEach {
         $script:testLogDir = Join-Path $script:tempDir "Logs_$(Get-Random)"
-        if (-not (Test-Path $script:testLogDir)) {
-            New-Item -Path $script:testLogDir -ItemType Directory -Force | Out-Null
-        }
-    }
-
-    AfterEach {
-        if (Test-Path $script:testLogDir) {
-            Remove-Item -Path $script:testLogDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        New-Item -Path $script:testLogDir -ItemType Directory -Force | Out-Null
     }
 
     Context "Constructor" {
@@ -30,10 +16,8 @@ Describe "LogService" {
             $newLogDir = Join-Path $script:tempDir "NewLogDir_$(Get-Random)"
             
             $logger = [LogService]::new($newLogDir)
-            
+
             Test-Path $newLogDir | Should -Be $true
-            
-            Remove-Item -Path $newLogDir -Recurse -Force -ErrorAction SilentlyContinue
         }
 
         It "Should set LogFilePath to Donut.log in the directory" {

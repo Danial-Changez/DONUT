@@ -34,6 +34,26 @@
                 Value="16,14" />
     </Style>
 
+    <!-- The centered card every overlay pops. Instances set Width and x:Name only. -->
+    <Style x:Key="OverlayCard"
+           TargetType="Border">
+        <Setter Property="Background"
+                Value="{DynamicResource PrimaryBackground}" />
+        <Setter Property="BorderBrush"
+                Value="{DynamicResource PanelBorder}" />
+        <Setter Property="BorderThickness"
+                Value="1" />
+        <Setter Property="CornerRadius"
+                Value="10" />
+        <Setter Property="HorizontalAlignment"
+                Value="Center" />
+        <Setter Property="VerticalAlignment"
+                Value="Center" />
+        <!-- Focusable so opening an overlay can scope its Esc key binding to the card. -->
+        <Setter Property="Focusable"
+                Value="True" />
+    </Style>
+
     <!-- Text roles, so headings and body copy stop being styled inline at each call site. -->
     <!-- The tier above TextTitle, used for pane and dialog headings. -->
     <Style x:Key="TextPaneTitle"

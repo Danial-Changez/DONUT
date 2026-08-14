@@ -4,16 +4,10 @@ using module "..\..\src\Services\ResourceService.psm1"
 Describe "ResourceService" {
 
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_ResourceService_$(Get-Random)"
+        $script:tempDir = Join-Path $TestDrive "ResourceService"
         $script:stylesDir = Join-Path $script:tempDir "UI\Styles"
-        
-        New-Item -Path $script:stylesDir -ItemType Directory -Force | Out-Null
-    }
 
-    AfterAll {
-        if (Test-Path $script:tempDir) {
-            Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        New-Item -Path $script:stylesDir -ItemType Directory -Force | Out-Null
     }
 
     Context "Constructor" {
@@ -62,14 +56,12 @@ Describe "ResourceService" {
         }
 
         It "Should handle missing styles directory gracefully" {
-            $emptyRoot = Join-Path $env:TEMP "EmptyRoot_$(Get-Random)"
+            $emptyRoot = Join-Path $TestDrive "EmptyRoot_$(Get-Random)"
             New-Item -Path $emptyRoot -ItemType Directory -Force | Out-Null
-            
-            $service = [ResourceService]::new($emptyRoot)
-            
-            $service.SourceRoot | Should -Be $emptyRoot
 
-            Remove-Item -Path $emptyRoot -Recurse -Force -ErrorAction SilentlyContinue
+            $service = [ResourceService]::new($emptyRoot)
+
+            $service.SourceRoot | Should -Be $emptyRoot
         }
     }
 

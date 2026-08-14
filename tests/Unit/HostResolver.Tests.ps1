@@ -4,17 +4,13 @@ using module "..\..\src\Services\HostResolver.psm1"
 
 Describe "HostResolver" {
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_Resolver_$(Get-Random)"
+        $script:tempDir = Join-Path $TestDrive "Resolver"
         New-Item -Path (Join-Path $script:tempDir "Scripts") -ItemType Directory -Force | Out-Null
         New-Item -Path (Join-Path $script:tempDir "Scripts\RemoteWorker.ps1") -ItemType File -Force | Out-Null
         New-Item -Path (Join-Path $script:tempDir "Scripts\ResolveWorker.ps1") -ItemType File -Force | Out-Null
         $script:config = [AppConfig]::new($script:tempDir, (Join-Path $script:tempDir "Logs"), (Join-Path $script:tempDir "Reports"), @{})
 
         function New-Resolver { [HostResolver]::new($script:config, [NetworkProbe]::new()) }
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Context "IP cache" {

@@ -192,12 +192,6 @@ class InventoryPresenter {
         $this.Home.SelectedHost = $null
     }
 
-    # Sets the detail-header subtitle (the resolved IP) on the host's view-model.
-    hidden [void] RenderDetailSubtitle([string]$hostName) {
-        $vm = $this.Home.GetRow($hostName)
-        if ($vm) { $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName)) }
-    }
-
     # The exception type dies at the runspace boundary, so re-derive the reason from the
     # message and flip offline-class rows. The next re-probe self-corrects.
     hidden [void] ReflectFailure([string]$hostName, [string]$failureMessage) {
@@ -344,9 +338,7 @@ class InventoryPresenter {
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.InventoryService.PrepareInventory($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger), $prep)
         }
         catch {
             $this.AppendLog($hostName, "Inventory probe could not start: $_")
@@ -419,9 +411,7 @@ class InventoryPresenter {
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger), $prep)
         }
         catch {
             $this.AppendLog($hostName, "Disk scan could not start: $_")
@@ -491,9 +481,7 @@ class InventoryPresenter {
             $paths = @($selected | ForEach-Object { $_.Path })
             $prep = $this.DiskUsageService.PrepareDeleteFolders($hostName, $paths)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::DeleteFolders, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::DeleteFolders, $this.Logger), $prep)
         }
         catch {
             $this.AppendLog($hostName, "Clear could not start: $_")

@@ -118,7 +118,6 @@ class MainPresenter {
 
         $this.Controls = @{}
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
-        $this.Controls['settingsContent'] = $this.Window.FindName("settingsContent")
         $this.Controls['settingsCard'] = $this.Window.FindName("settingsCard")
         $this.Controls['badgeLimited'] = $this.Window.FindName("badgeLimited")
         $this.ShowElevationBadge()
@@ -398,7 +397,8 @@ class MainPresenter {
         }
 
         if ($this.SpawnElevated()) { return }
-        $this.RevertRunAsAdmin()
+        # Put the setting back after the failed elevation so the switch matches reality.
+        $this.PersistRunAsAdmin($false)
     }
 
     # A gated action clicked without rights: confirm, record it, elevate, and let the new
@@ -431,7 +431,7 @@ class MainPresenter {
     # Spawns the elevated replacement and, on success, closes this instance so the new one
     # can take the mutex. $false means we are still running and still de-elevated.
     hidden [bool] SpawnElevated() {
-        $result = [ElevationRelaunch]::Spawn($this.BuildRelaunchSpec())
+        $result = [ElevationRelaunch]::Spawn([ElevationRelaunch]::BuildSpec($this.Config.SourceRoot))
         if (-not $result.Ok) {
             $this.ReportElevationFailure($result.Declined, $result.Reason)
             return $false
@@ -467,16 +467,6 @@ class MainPresenter {
         'are unavailable until it restarts elevated. Any fleet action will offer to do that, ' +
         'or use Run as administrator in Settings.'
         $badge.Visibility = [System.Windows.Visibility]::Visible
-    }
-
-    # Shared with the startup check in DonutApp.ps1, which has no presenter to ask.
-    hidden [hashtable] BuildRelaunchSpec() {
-        return [ElevationRelaunch]::BuildSpec($this.Config.SourceRoot)
-    }
-
-    # Puts the setting back after a failed elevation so the switch matches reality.
-    hidden [void] RevertRunAsAdmin() {
-        $this.PersistRunAsAdmin($false)
     }
 
     hidden [void] PersistRunAsAdmin([bool]$value) {
@@ -576,36 +566,28 @@ class MainPresenter {
         return $null
     }
 
-    # Builds the settings view + presenter once, on first open, and hosts it in
-    # the overlay card. SettingsPresenter persists edits live (no Save button).
+    # Builds the settings presenter once, on first open. It composes the option views
+    # straight into the overlay card, and persists edits live (no Save button).
     hidden [void] EnsureSettingsView() {
-        if ($this.Views.ContainsKey('Settings') -and $this.Views['Settings']) { return }
+        if ($this.SettingsPresenter) { return }
 
-        $settingsView = $this.LoadView("SettingsView.xaml")
-        $this.Views['Settings'] = $settingsView
-        if ($settingsView) {
-            $presenter = $this
-            # These re-apply the bits that live outside the config file as each control changes.
-            $sideEffects = @{
-                Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
-                WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
-                # Ungated, this reached Register-ScheduledTask and died on access denied.
-                StartupTask    = {
-                    if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
-                        $presenter.ApplyStartupTask()
-                    }
-                }.GetNewClosure()
-                DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
-                RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
-            }
-            # The page segments sit in MainWindow's overlay header, not in the settings body.
-            $this.SettingsPresenter = [SettingsPresenter]::new(
-                $this.Config, $this.ConfigManager, $settingsView, $this.Window,
-                $this.ToastService, $sideEffects)
-            if ($this.Controls['settingsContent']) {
-                $this.Controls['settingsContent'].Content = $settingsView
-            }
+        $presenter = $this
+        # These re-apply the bits that live outside the config file as each control changes.
+        $sideEffects = @{
+            Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
+            WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
+            # Ungated, this reached Register-ScheduledTask and died on access denied.
+            StartupTask    = {
+                if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
+                    $presenter.ApplyStartupTask()
+                }
+            }.GetNewClosure()
+            DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
+            RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
         }
+        $this.SettingsPresenter = [SettingsPresenter]::new(
+            $this.Config, $this.ConfigManager, $this.Window,
+            $this.ToastService, $sideEffects)
     }
 
     # Home is the shell's only page, shown with a gentle fade-in.
@@ -616,7 +598,7 @@ class MainPresenter {
         $fade = [System.Windows.Media.Animation.DoubleAnimation]::new(
             0, 1, [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180)))
         $content.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
-        if ($this.HomePresenter) { $this.HomePresenter.UpdateSearchButtonLabel() }
+        if ($this.HomePresenter) { $this.HomePresenter.UpdateModePill() }
     }
 
     # Opens the settings overlay, building the settings view lazily on first use. A

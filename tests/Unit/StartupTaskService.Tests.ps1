@@ -8,7 +8,7 @@ using module "..\Helpers\CapturingLogService.psm1"
 # - Registered/Unregistered: how many times each seam ran
 # - LastName/LastUser/LastSpec: what RegisterTask received
 class FakeStartupTaskService : StartupTaskService {
-    [hashtable] $Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false; IsElevated = $true }
+    [string] $Identity = 'PROD\jdoe'
     [string] $ConsoleUser = 'PROD\jdoe'
     [object] $Existing = $null
     [int] $Registered = 0
@@ -22,7 +22,7 @@ class FakeStartupTaskService : StartupTaskService {
 
     [int] $StaleSweeps = 0
 
-    hidden [hashtable] GetProcessIdentity() { return $this.Identity }
+    hidden [string] GetProcessIdentity() { return $this.Identity }
     hidden [string] GetInteractiveUser() { return $this.ConsoleUser }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
@@ -59,7 +59,7 @@ class ThrowingStartupTaskService : StartupTaskService {
     [object] $Existing = $null
     ThrowingStartupTaskService([LogService]$logger, [string]$sourceRoot)
     : base($logger, $null, $sourceRoot) { }
-    hidden [hashtable] GetProcessIdentity() { return @{ Name = 'PROD\jdoe'; IsSystem = $false; IsElevated = $true } }
+    hidden [string] GetProcessIdentity() { return 'PROD\jdoe' }
     hidden [string] GetInteractiveUser() { return 'PROD\jdoe' }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) { throw "access denied (not elevated)" }
@@ -92,22 +92,6 @@ Describe "StartupTaskService" {
         }
         It "Passes a domainless account through unchanged" {
             [StartupTaskService]::TaskNameFor('jdoe') | Should -Be 'DONUT-jdoe'
-        }
-    }
-
-    Context "ResolveOwner (whose logon fires the task)" {
-        It "Names the signed-in console user, never the account DONUT runs as" {
-            # Over-the-shoulder UAC once bound the trigger to jdoe-admin, so the task sat Ready.
-            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
-            $fake.ConsoleUser = 'PROD\jdoe'
-            $fake.ResolveOwner().User | Should -Be 'PROD\jdoe'
-        }
-
-        It "Reports no user when no one is signed in at the console" {
-            $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.ConsoleUser = $null
-            $fake.ResolveOwner().User | Should -BeNullOrEmpty
         }
     }
 
@@ -213,7 +197,7 @@ Describe "StartupTaskService" {
 
         It "Registers with the console account and its per-user task name" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Identity = @{ Name = 'PROD\jdoe'; IsSystem = $false }
+            $fake.Identity = 'PROD\jdoe'
             $fake.ConsoleUser = 'PROD\jdoe'
             $fake.Apply($true) | Should -BeTrue
             $fake.LastUser | Should -Be 'PROD\jdoe'
@@ -222,7 +206,7 @@ Describe "StartupTaskService" {
 
         It "Names and triggers the task for the console user when DONUT runs as a separate admin" {
             $fake = [FakeStartupTaskService]::new([CapturingLogService]::new(), 'C:\App\src')
-            $fake.Identity = @{ Name = 'PROD\jdoe-admin'; IsSystem = $false }
+            $fake.Identity = 'PROD\jdoe-admin'
             $fake.ConsoleUser = 'PROD\jdoe'
             $fake.Apply($true) | Should -BeTrue
             $fake.LastName | Should -Be 'DONUT-jdoe' -Because 'DONUT-jdoe-admin would never fire'
@@ -239,7 +223,7 @@ Describe "StartupTaskService" {
         It "Fails with a reason (no throw) when no one is signed in at the console" {
             $logger = [CapturingLogService]::new()
             $fake = [FakeStartupTaskService]::new($logger, 'C:\App\src')
-            $fake.Identity = @{ Name = 'NT AUTHORITY\SYSTEM'; IsSystem = $true }
+            $fake.Identity = 'NT AUTHORITY\SYSTEM'
             $fake.ConsoleUser = $null
             $fake.Apply($true) | Should -BeFalse
             $fake.Registered | Should -Be 0

@@ -12,7 +12,6 @@ consumes the result and exposes it to the bindings.
 | Class | Purpose |
 |-------|---------|
 | `AppConfig` | Configuration container with defaults, settings merge, and DCU CLI argument building |
-| `DeviceContext` | Remote device state: hostname, IP, online status, status message |
 | `JobStatus` / `JobKind` (enums, `JobEnums.psm1`) | Job lifecycle state and the kind of remote operation |
 | `LogLine` (+ `LogSeverity`) | One typed terminal line: severity + normalized `HH:mm:ss` stamp + text |
 | `FleetCardStatus` | Pure mapper: a job's (type, status, reboot) → card label, colour key, busy flag |
@@ -121,6 +120,17 @@ See [the coordinator seam](../decisions.md#the-coordinator-seam).
 
 ### Home page regions (`src/UI/Views/Home/`)
 
+The split exists because the old single-file HomeView.xaml had grown into a
+1,065-line monolith (the detail pane alone was 588 lines): the presenter layer
+had already split (`HomePresenter` → `InventoryPresenter` / `FinderPresenter` /
+`ResolutionCoordinator`) but the XAML never followed, so every presenter
+FindNamed into one shared namescope.
+
+WPF namescopes now enforce the region ↔ presenter boundary: each `ViewLoader`
+root owns its file's namescope, so a presenter handed its region root physically
+cannot reach another region's names. Cross-region lookups (the tour) go through
+`HomePresenter.FindHomeElement`, which probes the shell plus each region root.
+
 The Home page is a slot-frame shell (`HomeView.xaml`) composing one file per
 region; each region root owns its file's namescope, and exactly one presenter
 adopts each root:
@@ -129,7 +139,7 @@ adopts each root:
 |-------------|-----------|------------|---------------|
 | `ActionBar.xaml` | — | `FinderPresenter` (+ `HomePresenter` for mode/run-all) | `SearchBox`, `GoogleSearchBar`, `SearchResultsPopup`, `SearchResultsList`, `btnMode`, `txtMode`, `btnRunAll` |
 | `StatCards.xaml` | — | binding-only (`SelectedMachine.Ov*`) | — |
-| `MachinePane.xaml` | `MachinePanel` | `HomePresenter` | `btnClearTabs`, `MachineList`, `FleetEmptyHint` |
+| `MachinePane.xaml` | `MachinePanel` | `HomePresenter` | `btnClearTabs`, `MachineList` |
 | `DetailPane.xaml` | `DetailPane` | `InventoryPresenter` | `btnDetailRefresh`, `btnFindFolders`, `btnDeleteFolders`, `lstDetailLog`, `btnCopyLog`, `DetailProgress`, `DiskFoldersList`, `slotLens` |
 | `LensPane.xaml` (nested in DetailPane) | `LensPanel` | binding-only (`SelectedPerson`) | — |
 

@@ -144,12 +144,7 @@ class SelfUpdateService {
     }
 
     [PSCustomObject] GetReleaseAsset([PSCustomObject]$Release, [string]$Pattern) {
-        foreach ($asset in $Release.assets) {
-            if ($asset.name -like $Pattern) {
-                return $asset
-            }
-        }
-        return $null
+        return ($Release.assets | Where-Object { $_.name -like $Pattern } | Select-Object -First 1)
     }
 
     [string] DownloadAsset([string]$Token, [PSCustomObject]$Asset, [string]$DestDir) {
