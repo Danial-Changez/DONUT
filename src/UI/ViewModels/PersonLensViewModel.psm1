@@ -77,6 +77,10 @@ class PersonLensViewModel : ObservableObject {
     [void] SetLoading([string]$who) {
         $this.Set('DisplayName', $who)
         $this.Set('Upn', '')
+        $this.Set('Sam', '')
+        $this.Set('Email', '')
+        $this.Set('Manager', '')
+        $this.Set('Office', '')
         $this.Set('IsLoading', $true)
         $this.Set('HasError', $false)
         $this.Set('StatusText', 'Looking up directory + SCCM…')
@@ -125,6 +129,13 @@ class PersonLensViewModel : ObservableObject {
     [void] Apply([PersonLens]$lens) {
         $this.Set('IsLoading', $false)
         if ($null -eq $lens) { return }
+        # An error-only result keeps whatever the partials painted under the banner.
+        if ($lens.Errors.Count -gt 0 -and -not $lens.DisplayName -and -not $lens.Upn -and
+            -not $lens.Sam -and $lens.Devices.Count -eq 0) {
+            $this.Set('HasError', $true)
+            $this.Set('StatusText', ($lens.Errors -join '  |  '))
+            return
+        }
         $this.Set('Upn', $lens.Upn)
         $this.Set('Sam', $lens.Sam)
         $this.Set('DisplayName', $(if ($lens.DisplayName) { $lens.DisplayName } else { $lens.Upn }))

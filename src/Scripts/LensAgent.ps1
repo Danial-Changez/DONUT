@@ -19,8 +19,9 @@
     Protocol over the ACL-locked exchange dir (every payload AES-256-CBC with the
     session key.bin; writes atomic tmp+rename):
       request-<id>.bin    <- { identity, sam, siteServer }   (parent writes)
-      partial-<id>-1.bin  -> directory facts                 (agent writes)
-      partial-<id>-2.bin  -> name-only device rows
+      partial-<id>-N.bin  -> cumulative bundle snapshots in completion order
+                             (directory facts and name-only device rows as each
+                             lands, then AD-detailed rows, hardware still pending)
       result-<id>.bin     -> lookup bundle
     The agent deletes each request once read; the parent deletes the responses it
     consumed; anything older than 10 minutes is swept as abandoned.
@@ -117,7 +118,7 @@ try {
             try { $null = & $script:AffinityScript $siteServer 'zzz-donut-warm' } catch { }
             # A throwaway inventory read wakes the hardware route on the site server too.
             $pair = @{ name = 'zzz-donut-warm'; resourceId = '0' }
-            try { $null = & $script:HardwareScript $siteServer @($pair) } catch { }
+            try { $null = & $script:HardwareScript $siteServer $pair } catch { }
             # One SMS_R_User miss warms the software route's first hop as well.
             try { $null = & $script:SoftwareScript $siteServer 'zzz-donut-warm' } catch { }
         }
@@ -131,6 +132,7 @@ catch { $script:WarmJob = $null }
 $lookupJobs = [System.Collections.Generic.List[object]]::new()
 $lastBeat = [datetime]::MinValue
 $lastParentCheck = [datetime]::MinValue
+$lastWarmPing = [datetime]::UtcNow   # the startup warm above just covered this slot
 while ($true) {
     if (Test-Path -LiteralPath $stopPath) { break }
     # Dir purged out from under us -> exit.
@@ -168,6 +170,27 @@ while ($true) {
         }
     }
 
+    # The startup warm decays while DONUT idles and the next pick repays it as
+    # seconds, so a cheap ping keeps the AdminService route and the AD binds hot.
+    if (($now - $lastWarmPing).TotalMinutes -ge 4) {
+        $lastWarmPing = $now
+        try {
+            $ping = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+                param($commonPath, $server)
+                . $commonPath
+                # The GC read walks RootDSE first, evicting any socket that died in sleep.
+                try {
+                    $script:ForestNc = Get-LensForestNc
+                    $null = Find-Gc '(objectClass=domain)'
+                }
+                catch { }
+                if ($server) { try { $null = & $script:AffinityScript $server 'zzz-donut-warm' } catch { } }
+            } -ArgumentList $commonPath, $SiteServer
+            $lookupJobs.Add(@{ Job = $ping; Started = [datetime]::UtcNow })
+        }
+        catch { }
+    }
+
     $requests = @(Get-ChildItem -Path $ExchangeDir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
             Sort-Object CreationTimeUtc)
     foreach ($reqFile in $requests) {
@@ -178,63 +201,38 @@ while ($true) {
         Remove-Item -LiteralPath $reqFile.FullName -Force -ErrorAction SilentlyContinue
         if ($null -eq $req) { continue }
         try {
-            $job =
-            if ([string]$req.kind -eq 'owner') {
-                # One batched owner request still beats N single ones through this loop.
-                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
-                    param($commonPath, $exchangeDir, $keyIv, $forestNc, $machines, $server, $reqId)
-                    . $commonPath
-                    $script:KeyIv = $keyIv
-                    $script:ForestNc = $forestNc
-                    $ExchangeDir = $exchangeDir
-                    # The warm may not have landed yet, and one RootDSE read is cheap.
-                    if (-not $script:ForestNc) { try { $script:ForestNc = Get-LensForestNc } catch { } }
-                    $json = ''
-                    try { $json = Resolve-MachineOwnerBatch -wsids @($machines) -server $server }
-                    catch { $json = @{ owners = @(); error = "owner batch: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
-                    Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
-                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
-                @($req.machines), ([string]$req.siteServer), $reqId
-            }
-            elseif ([string]$req.kind -eq 'software') {
-                # The user's whole software list rides one request, like the owner batch.
-                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
-                    param($commonPath, $exchangeDir, $keyIv, $forestNc,
-                        $identity, $sam, $server, $reqId)
-                    . $commonPath
-                    $script:KeyIv = $keyIv
-                    $script:ForestNc = $forestNc
-                    $ExchangeDir = $exchangeDir
-                    # The warm may not have landed yet, and one RootDSE read is cheap.
-                    if (-not $script:ForestNc) {
-                        try { $script:ForestNc = Get-LensForestNc } catch { }
+            # One launch shape for every request; the job dispatches on $req.kind itself.
+            $job = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+                param($commonPath, $exchangeDir, $keyIv, $forestNc, $req, $reqId)
+                Import-Module ThreadJob -ErrorAction SilentlyContinue
+                . $commonPath
+                $script:KeyIv = $keyIv
+                $script:ForestNc = $forestNc
+                $ExchangeDir = $exchangeDir
+                # The warm may not have landed yet, and one RootDSE read is cheap.
+                if (-not $script:ForestNc) { try { $script:ForestNc = Get-LensForestNc } catch { } }
+                $server = [string]$req.siteServer
+                $resultPath = Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)
+                switch ([string]$req.kind) {
+                    'owner' {
+                        # One batched owner request still beats N single ones through this loop.
+                        $json = ''
+                        try { $json = Resolve-MachineOwnerBatch -wsids @($req.machines) -server $server }
+                        catch { $json = @{ owners = @(); error = "owner batch: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
+                        Write-LensBundle $resultPath $json
                     }
-                    $json = ''
-                    try {
-                        $json = Resolve-UserSoftware -identity $identity -sam $sam -server $server
+                    'software' {
+                        # The user's whole software list rides one request, like the owner batch.
+                        $json = ''
+                        try { $json = Resolve-UserSoftware -identity ([string]$req.identity) -sam ([string]$req.sam) -server $server }
+                        catch { $json = @{ deployments = @(); error = "software: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
+                        Write-LensBundle $resultPath $json
                     }
-                    catch {
-                        $reason = "software: $($_.Exception.Message)"
-                        $json = @{ deployments = @(); error = $reason } | ConvertTo-Json -Compress
+                    default {
+                        Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) -server $server -reqId $reqId
                     }
-                    Write-LensBundle (Join-Path $exchangeDir ("result-{0}.bin" -f $reqId)) $json
-                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
-                ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
-            }
-            else {
-                Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
-                    param($commonPath, $exchangeDir, $keyIv, $forestNc, $identity, $samHint, $server, $reqId)
-                    Import-Module ThreadJob -ErrorAction SilentlyContinue
-                    . $commonPath
-                    $script:KeyIv = $keyIv
-                    $script:ForestNc = $forestNc
-                    $ExchangeDir = $exchangeDir
-                    # The warm may not have landed yet, and one RootDSE read is cheap.
-                    if (-not $script:ForestNc) { try { $script:ForestNc = Get-LensForestNc } catch { } }
-                    Resolve-Lens -identity $identity -samHint $samHint -server $server -reqId $reqId
-                } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc,
-                ([string]$req.identity), ([string]$req.sam), ([string]$req.siteServer), $reqId
-            }
+                }
+            } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc, $req, $reqId
             $lookupJobs.Add(@{ Job = $job; Started = [datetime]::UtcNow })
         }
         catch {

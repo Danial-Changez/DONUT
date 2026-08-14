@@ -37,6 +37,11 @@ no partials, so the pane fills in one step. See
   path — and the serve loop starts serving before the warm lands. `WarmLens` also
   runs a `-WarmOnly` pass on every interactive runspace, so the worker's class
   graph is parsed before the first pick instead of by it.
+- That warm decays while DONUT idles (the site server's IIS pool spins down, and
+  the process's pooled LDAP sockets die across sleep or a VPN change), so every 4
+  minutes the serve loop re-runs a throwaway affinity query and a GC read to keep
+  both routes hot for the next pick. `Find-Gc` also retries once over a fresh
+  RootDSE bind, so a pick that races the ping still heals instead of erroring.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
@@ -119,9 +124,11 @@ agent/task I/O is the overridable `RunLookupJson` seam.
 Fixed `%ProgramData%\DONUT\lens-agent` dir:
 
 1. The parent drops `request-<id>.bin`.
-2. The agent answers `partial-<id>-1.bin` (directory facts), `partial-<id>-2.bin`
-   (name-only device rows), then `result-<id>.bin` (the filled detail) — so the UI
-   paints progressively.
+2. The agent answers `partial-<id>-N.bin` — cumulative bundle snapshots numbered in
+   completion order: directory facts and name-only device rows as each lane lands
+   (AD and SCCM affinity run beside each other, so neither gates the other), then
+   AD-detailed rows — and finally `result-<id>.bin` (the filled detail), so the UI
+   paints progressively and the slow hardware inventory only ever adds model/serial.
 3. Each side deletes what it consumed; the agent sweeps anything older than 10
    minutes.
 4. The parent counts consecutive lookup timeouts in `timeouts.txt` (no secrets,

@@ -87,18 +87,15 @@ Describe "PersonLensService" {
 
         It "WriteEncrypted lands an atomic file the agent format decrypts (no plaintext on disk)" {
             $keyIv = [PersonLensService]::NewKeyIv()
-            $path = Join-Path ([IO.Path]::GetTempPath()) ("lens-wire-" + [guid]::NewGuid().ToString('N') + ".bin")
+            $path = Join-Path $TestDrive ("lens-wire-" + [guid]::NewGuid().ToString('N') + ".bin")
             $json = '{ "identity": "jane@corp.com", "sam": "U0001", "siteServer": "s" }'
-            try {
-                [PersonLensService]::WriteEncrypted($path, $json, $keyIv)
-                Test-Path -LiteralPath "$path.tmp" | Should -BeFalse   # rename cleaned the tmp up
-                $blob = [IO.File]::ReadAllBytes($path)
-                [System.Text.Encoding]::UTF8.GetString($blob) | Should -Not -Match 'jane@corp.com'
-                [PersonLensService]::UnprotectText($blob, $keyIv) | Should -Be $json
-            }
-            finally {
-                Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-            }
+
+            [PersonLensService]::WriteEncrypted($path, $json, $keyIv)
+
+            Test-Path -LiteralPath "$path.tmp" | Should -BeFalse   # rename cleaned the tmp up
+            $blob = [IO.File]::ReadAllBytes($path)
+            [System.Text.Encoding]::UTF8.GetString($blob) | Should -Not -Match 'jane@corp.com'
+            [PersonLensService]::UnprotectText($blob, $keyIv) | Should -Be $json
         }
     }
 
@@ -113,34 +110,20 @@ Describe "PersonLensService" {
 
     Context "exchange round trip (stubbed agent, TestDrive exchange dir)" {
 
+        BeforeAll {
+            . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        }
+
         BeforeEach {
-            $script:savedProgramData = $env:ProgramData
-            $env:ProgramData = Join-Path $TestDrive ([guid]::NewGuid().ToString('N').Substring(0, 8))
-            New-Item -ItemType Directory -Path $env:ProgramData -Force | Out-Null
+            $script:redirect = New-RedirectedDataRoot -Prefix 'lens' -Under $TestDrive -ProgramDataOnly
         }
 
         AfterEach {
-            $env:ProgramData = $script:savedProgramData
+            Remove-RedirectedDataRoot $script:redirect
         }
 
         It "anchors the exchange under ProgramData" {
             [PersonLensService]::AgentDir() | Should -Be (Join-Path $env:ProgramData 'DONUT\lens-agent')
-        }
-
-        It "sweeps only stale per-lookup exchanges, never the live agent dir" {
-            $root = Join-Path $env:ProgramData 'DONUT'
-            foreach ($n in 'lens-agent', 'lens-stale', 'lens-fresh') {
-                New-Item -ItemType Directory -Path (Join-Path $root $n) -Force | Out-Null
-            }
-            # Even a stale-aged agent dir survives, and only per-lookup lens-* dirs sweep.
-            (Get-Item (Join-Path $root 'lens-stale')).LastWriteTime = (Get-Date).AddMinutes(-30)
-            (Get-Item (Join-Path $root 'lens-agent')).LastWriteTime = (Get-Date).AddMinutes(-30)
-
-            [PersonLensService]::SweepStaleExchanges(15)
-
-            Test-Path (Join-Path $root 'lens-stale') | Should -BeFalse
-            Test-Path (Join-Path $root 'lens-agent') | Should -BeTrue
-            Test-Path (Join-Path $root 'lens-fresh') | Should -BeTrue
         }
 
         It "wraps an agent startup failure as a parseable error bundle" {
@@ -230,6 +213,8 @@ Describe "PersonLensService" {
                     try {
                         $aes.Key = [byte[]]($keyIv[0..31]); $aes.IV = [byte[]]($keyIv[32..47])
                         foreach ($msg in @(@{ name = "partial-$id-1.bin"; text = '{ "sam": "U1" }' },
+                                @{ name = "partial-$id-2.bin"; text = '{ "sam": "U1", "devices": [{ "name": "WS1" }] }' },
+                                @{ name = "partial-$id-3.bin"; text = '{ "sam": "U1", "devices": [{ "name": "WS1", "os": "Windows 11" }] }' },
                                 @{ name = "result-$id.bin"; text = $response })) {
                             $enc = $aes.CreateEncryptor()
                             $plain = [System.Text.Encoding]::UTF8.GetBytes($msg.text)

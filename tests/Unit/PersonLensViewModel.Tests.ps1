@@ -1,4 +1,5 @@
 using module "..\..\src\UI\ViewModels\PersonLensViewModel.psm1"
+using module "..\..\src\Models\PersonLens.psm1"
 
 Describe "PersonLensViewModel software view" {
 
@@ -41,5 +42,36 @@ Describe "PersonLensViewModel software view" {
         $script:vm.SoftwareStatusText | Should-Be 'Looking up software…'
         $script:vm.ListLabel | Should-Be 'DEVICES'
         $script:vm.ToggleLabel | Should-Be 'Software'
+    }
+}
+
+Describe "PersonLensViewModel partial resilience" {
+
+    BeforeEach {
+        $script:vm = [PersonLensViewModel]::new()
+    }
+
+    It "keeps the partial paint under the banner when the result is error-only" {
+        $script:vm.SetLoading('Jane Doe')
+        $partial = [PersonLens]::FromJson('{"sam":"jdoe","displayName":"Jane Doe","devices":[{"name":"WS1"}]}')
+        $script:vm.ApplyPartial($partial)
+        $script:vm.Apply([PersonLens]::FromError('Lens lookup failed: locked'))
+        $script:vm.Sam | Should-Be 'jdoe'
+        @($script:vm.Devices).Count | Should-Be 1
+        $script:vm.HasError | Should-BeTrue
+        $script:vm.StatusText | Should-Be 'Lens lookup failed: locked'
+        $script:vm.IsLoading | Should-BeFalse
+    }
+
+    It "SetLoading clears the previous person's fields before a new pick" {
+        $script:vm.SetLoading('Jane Doe')
+        $script:vm.ApplyPartial([PersonLens]::FromJson(
+                '{"sam":"jdoe","email":"jdoe@example.com","manager":"M","office":"O"}'))
+        $script:vm.SetLoading('John Roe')
+        $script:vm.Sam | Should-Be ''
+        $script:vm.Email | Should-Be ''
+        $script:vm.Manager | Should-Be ''
+        $script:vm.Office | Should-Be ''
+        $script:vm.DisplayName | Should-Be 'John Roe'
     }
 }

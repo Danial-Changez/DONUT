@@ -101,16 +101,6 @@ class PersonLensService {
     static [string] AgentDir() { return (Join-Path $env:ProgramData 'DONUT\lens-agent') }
     static [string] $AgentTaskName = 'DONUT-LensAgent'
 
-    # Deletes per-lookup lens-* dirs older than $minutes, left by previous builds or
-    # crashes. Never the live agent's own dir, which EnsureAgent manages itself.
-    static [void] SweepStaleExchanges([int]$minutes) {
-        $root = Join-Path $env:ProgramData 'DONUT'
-        Get-ChildItem -Path $root -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ne 'lens-agent' -and
-                $_.LastWriteTime -lt (Get-Date).AddMinutes(-$minutes) } |
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
     # Two straight lookup timeouts mean a poisoned agent that still beats (dead binds
     # after sleep), so EnsureAgent recycles it. File state outlives per-call services.
     hidden static [string] TimeoutsPath([string]$dir) { return (Join-Path $dir 'timeouts.txt') }
@@ -186,7 +176,6 @@ class PersonLensService {
             if (-not $interactiveUser) { return 'no interactive desktop session to de-elevate into.' }
 
             # Cold start: replace any previous instance and rebuild the exchange dir.
-            [PersonLensService]::SweepStaleExchanges(15)
             $taskName = [PersonLensService]::AgentTaskName
             Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
@@ -248,22 +237,32 @@ class PersonLensService {
         }
     }
 
-    # The same lookup the agent runs, called here instead of handed across the exchange.
-    # No partials: the pane fills in one step rather than progressively.
-    hidden [string] RunLookupInProcess([string]$identity) {
+    # Shared in-process path: loads the Lens helpers and runs one resolver as the
+    # current de-elevated user. $bundleErrors wraps failures as parseable bundles.
+    hidden [string] RunInProcess([string]$label, [bool]$bundleErrors,
+        [string]$resolver, [hashtable]$resolverArgs) {
         try {
             $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
             if (-not (Test-Path -LiteralPath $common)) {
-                return [PersonLensService]::ErrorBundle("Lens helpers not found at $common")
+                if ($bundleErrors) { return [PersonLensService]::ErrorBundle("Lens helpers not found at $common") }
+                return ''
             }
             . $common
             $script:ForestNc = Get-LensForestNc
-            return [string](Resolve-Lens $identity $this.SamHint $this.SiteServer '')
+            return [string](& $resolver @resolverArgs)
         }
         catch {
-            $this.Logger.LogException("In-process Lens lookup failed for $identity", $_)
-            return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
+            $this.Logger.LogException("In-process $label failed", $_)
+            if ($bundleErrors) { return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)") }
+            return ''
         }
+    }
+
+    # The same lookup the agent runs, called here instead of handed across the exchange.
+    # No partials: the pane fills in one step rather than progressively.
+    hidden [string] RunLookupInProcess([string]$identity) {
+        return $this.RunInProcess("Lens lookup for $identity", $true, 'Resolve-Lens',
+            @{ identity = $identity; samHint = $this.SamHint; server = $this.SiteServer; reqId = '' })
     }
 
     # --- Env-coupled seam (overridden in tests) ---
@@ -273,17 +272,8 @@ class PersonLensService {
     [string] RunOwnerLookupJson([string[]]$machines) {
         if (@($machines).Count -eq 0) { return '' }
         if (-not [ElevationContext]::IsElevated()) {
-            try {
-                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
-                if (-not (Test-Path -LiteralPath $common)) { return '' }
-                . $common
-                $script:ForestNc = Get-LensForestNc
-                return [string](Resolve-MachineOwnerBatch -wsids $machines -server $this.SiteServer)
-            }
-            catch {
-                $this.Logger.LogException('In-process owner lookup failed', $_)
-                return ''
-            }
+            return $this.RunInProcess('owner lookup', $false, 'Resolve-MachineOwnerBatch',
+                @{ wsids = @($machines); server = $this.SiteServer })
         }
         return $this.ExchangeRoundTrip(
             @{ kind = 'owner'; machines = @($machines); siteServer = $this.SiteServer }, $false)
@@ -294,18 +284,8 @@ class PersonLensService {
     [string] RunSoftwareLookupJson([string]$identity) {
         if ([string]::IsNullOrWhiteSpace($identity)) { return '' }
         if (-not [ElevationContext]::IsElevated()) {
-            try {
-                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
-                if (-not (Test-Path -LiteralPath $common)) { return '' }
-                . $common
-                $script:ForestNc = Get-LensForestNc
-                $sw = @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer }
-                return [string](Resolve-UserSoftware @sw)
-            }
-            catch {
-                $this.Logger.LogException('In-process software lookup failed', $_)
-                return ''
-            }
+            return $this.RunInProcess('software lookup', $false, 'Resolve-UserSoftware',
+                @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer })
         }
         return $this.ExchangeRoundTrip(
             @{ kind = 'software'; identity = $identity; sam = $this.SamHint
@@ -338,20 +318,27 @@ class PersonLensService {
             [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
                 ($request | ConvertTo-Json -Compress), $keyIv)
 
-            # The agent's writes are atomic (tmp + rename), so the poll needs no settle wait.
+            # Writes are atomic (tmp + rename), but a scanner can hold a fresh file briefly.
             $deadline = (Get-Date).AddSeconds($this.TimeoutSec)
             $partialIndex = 1
+            $warnedIndex = 0
             while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
                 $partialPath = Join-Path $dir ("partial-{0}-{1}.bin" -f $reqId, $partialIndex)
                 if ($streamPartials -and (Test-Path -LiteralPath $partialPath)) {
-                    $partialIndex++
                     try {
                         $partialText = [PersonLensService]::UnprotectText(
                             [IO.File]::ReadAllBytes($partialPath), $keyIv)
                         Write-Information -MessageData $partialText -Tags 'LensPartial'
+                        $partialIndex++
+                        continue   # Check for the next partial before sleeping.
                     }
-                    catch { $this.Logger.LogWarning("Lens partial $partialIndex was unreadable; the final bundle still lands.") }
-                    continue   # Check for the next partial before sleeping.
+                    catch {
+                        # The index holds so the next tick retries instead of skipping.
+                        if ($warnedIndex -ne $partialIndex) {
+                            $warnedIndex = $partialIndex
+                            $this.Logger.LogWarning("Lens partial $partialIndex is locked or torn, retrying.")
+                        }
+                    }
                 }
                 Start-Sleep -Milliseconds 100
             }
@@ -361,7 +348,20 @@ class PersonLensService {
                 return [PersonLensService]::ErrorBundle("The lens lookup did not complete within $($this.TimeoutSec)s (agent heartbeat may have died mid-lookup - retry).")
             }
             [PersonLensService]::ClearLensTimeouts($dir)
-            return [PersonLensService]::UnprotectText([IO.File]::ReadAllBytes($resultPath), $keyIv)
+            # A scanner can hold the fresh result briefly, so the read gets a few tries.
+            $resultText = ''
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+                try {
+                    $resultText = [PersonLensService]::UnprotectText(
+                        [IO.File]::ReadAllBytes($resultPath), $keyIv)
+                    break
+                }
+                catch {
+                    if ($attempt -eq 5) { throw }
+                    Start-Sleep -Milliseconds 100
+                }
+            }
+            return $resultText
         }
         catch {
             return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
