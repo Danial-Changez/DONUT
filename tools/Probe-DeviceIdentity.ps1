@@ -134,15 +134,18 @@ if ($SiteServer) {
         Write-Host "`n  -- keyed segment SMS_R_System($resourceId), the exact read the Lens device job makes --" -ForegroundColor White
         $sccmDn = ''
         $fullDomain = ''
+        $sid = ''
         try {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            $row = Invoke-AdminServiceGet "SMS_R_System($resourceId)?`$select=DistinguishedName,FullDomainName" |
+            $row = Invoke-AdminServiceGet "SMS_R_System($resourceId)?`$select=DistinguishedName,FullDomainName,SID" |
                 Select-Object -First 1
             Write-Host "  OK  ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
             $sccmDn = [string]$row.DistinguishedName
             $fullDomain = [string]$row.FullDomainName
+            $sid = [string]$row.SID
             Write-Host "  DistinguishedName : '$sccmDn'"
             Write-Host "  FullDomainName    : '$fullDomain'"
+            Write-Host "  SID               : '$sid'"
             if (-not $sccmDn) {
                 Write-Host '  DistinguishedName is EMPTY: AD System Discovery does not populate it here, or the property is named differently.' -ForegroundColor Yellow
                 $full = Invoke-AdminServiceGet "SMS_R_System($resourceId)" | Select-Object -First 1
@@ -164,6 +167,21 @@ if ($SiteServer) {
                 Write-Host "  DN's domain '$dnDomain'  vs FullDomainName '$fullDomain'  vs -Domain '$Domain'"
             }
             catch { Write-Host "  ERR  bind failed (stale DN after an OU move, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
+        }
+
+        if ($sid) {
+            Write-Host "`n  -- SID bind: LDAP://<domain>/<SID=...>, which survives renames and OU moves --" -ForegroundColor White
+            try {
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                $path = if ($fullDomain) { "LDAP://$fullDomain/<SID=$sid>" } else { "LDAP://<SID=$sid>" }
+                $entry = [ADSI]$path
+                $entry.psbase.RefreshCache()
+                Write-Host "  OK  '$path' is '$($entry.Properties['distinguishedname'][0])'  ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
+                if ([string]$entry.Properties['name'][0] -ne $HostName) {
+                    Write-Host "  NAME MISMATCH: SCCM's SID belongs to '$($entry.Properties['name'][0])', not '$HostName'." -ForegroundColor Red
+                }
+            }
+            catch { Write-Host "  ERR  SID bind failed (not the AD account SID, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
         }
     }
 
@@ -191,6 +209,7 @@ Write-Host "`nInterpretation:" -ForegroundColor White
 Write-Host '  1: bare and FQDN agree                          -> no behaviour change for this machine.'
 Write-Host '  1: bare fails or disagrees, FQDN resolves       -> the domain hint fixes a real false-Offline or wrong-machine case.'
 Write-Host '  2: DistinguishedName populated and the DN binds -> the GC-miss path pins the exact machine in one read.'
-Write-Host '  2: DistinguishedName empty                      -> report the related property names; FullDomainName alone still leads the sweep.'
+Write-Host '  2: DistinguishedName empty or its bind fails    -> FullDomainName alone still leads the sweep (one targeted search).'
+Write-Host '  2: SID bind OK, name matches                     -> the SID replaces the DN as the pin: it survives OU moves and renames.'
 Write-Host '  2: keyed segment ERR                            -> report the message; the filter form is the fallback to wire.'
 Write-Host '  2: keyed segment fast (well under a second)     -> say so, and the SCCM read can move ahead of the GC search.'
