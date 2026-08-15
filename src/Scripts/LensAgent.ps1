@@ -18,7 +18,7 @@
 
     Protocol over the ACL-locked exchange dir (every payload AES-256-CBC with the
     session key.bin; writes atomic tmp+rename):
-      request-<id>.bin    <- { identity, sam, siteServer }   (parent writes)
+      request-<id>.bin    <- { identity, sam, dn, domains, siteServer }   (parent writes)
       partial-<id>-N.bin  -> cumulative bundle snapshots in completion order
                              (directory facts and name-only device rows as each
                              lands, then AD-detailed rows, hardware still pending)
@@ -229,7 +229,8 @@ while ($true) {
                         Write-LensBundle $resultPath $json
                     }
                     default {
-                        Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) -server $server -reqId $reqId
+                        Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) -server $server -reqId $reqId `
+                            -dn ([string]$req.dn) -domains @($req.domains | Where-Object { $_ })
                     }
                 }
             } -ArgumentList $commonPath, $ExchangeDir, $script:KeyIv, $script:ForestNc, $req, $reqId

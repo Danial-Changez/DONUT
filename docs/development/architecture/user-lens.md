@@ -63,8 +63,11 @@ no partials, so the pane fills in one step. See
 `Resolve-Lens` in `LensAgent.Common.ps1` is the data-access composition point — a
 future source (e.g. an Intune API) slots in beside the existing ones:
 
-1. The AD user read runs forest-wide via the Global Catalog, then a home-domain
-   bind for the full attribute set.
+1. The AD user read binds the picked row's `distinguishedName` directly — a
+   serverless DN bind the locator routes to the right domain over the trust, so
+   the exact account you clicked resolves even in a sibling forest, and a
+   multi-account person never lands on the wrong twin. The forest-wide GC search
+   (UPN / SAM / display name) stays as the fallback for DN-less callers.
 2. The SCCM affinity query (person → WSIDs, `SMS_UserMachineRelationship`) runs on
    a thread job in parallel with the AD read.
 3. A hardware-inventory pass (model/serial/manufacturer, keyed by the affinity
@@ -73,7 +76,9 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    pairs were the whole lookup's tail.
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
    computer's AD object, one thread job per device running beside the hardware
-   jobs, so the gather's tail is one device's cost rather than the sum.
+   jobs, so the gather's tail is one device's cost rather than the sum. A
+   computer the agent forest's GC cannot see is retried against the finder's
+   configured domain list, the person's own domain first.
 
 The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path —

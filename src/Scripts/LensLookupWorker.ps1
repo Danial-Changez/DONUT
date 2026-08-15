@@ -40,6 +40,14 @@
     Optional sAMAccountName hint from the finder row, so the agent can start SCCM
     affinity before the AD user read resolves it.
 
+.PARAMETER Dn
+    Optional distinguishedName from the finder row. The agent binds it directly,
+    which pins the exact picked account and works across sibling forests.
+
+.PARAMETER Domains
+    The finder's configured domain list. Device AD reads fall back to these when
+    the agent forest's GC does not hold a computer object.
+
 .PARAMETER TimeoutSec
     Max seconds to wait for a lookup result. Default 60.
 
@@ -60,6 +68,8 @@ param(
     [Parameter(Mandatory)] [string] $SiteServer,
     [Parameter(Mandatory)] [string] $SourceRoot,
     [string] $Sam = '',
+    [string] $Dn = '',
+    [string[]] $Domains = @(),
     [string[]] $OwnerOf = @(),
     [string] $SoftwareFor = '',
     [int] $TimeoutSec = 60,
@@ -78,6 +88,8 @@ if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
+$svc.DnHint = $Dn
+$svc.SearchDomains = @($Domains)
 if ($WarmOnly) {
     # There is no agent to warm when DONUT is already the interactive user.
     if (-not [ElevationContext]::IsElevated()) { return '' }

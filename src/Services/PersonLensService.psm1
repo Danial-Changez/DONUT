@@ -31,6 +31,8 @@ class PersonLensService {
     [string]     $SiteServer
     [string]     $SourceRoot
     [string]     $SamHint = ''    # Finder-supplied SAM so SCCM affinity can start early.
+    [string]     $DnHint = ''     # Picked row's DN, binding the exact account cross-forest.
+    [string[]]   $SearchDomains = @()   # Finder domain list, the device read's GC-miss fallback.
     [int]        $TimeoutSec = 60
 
     PersonLensService([string]$siteServer, [string]$sourceRoot) {
@@ -262,7 +264,9 @@ class PersonLensService {
     # No partials: the pane fills in one step rather than progressively.
     hidden [string] RunLookupInProcess([string]$identity) {
         return $this.RunInProcess("Lens lookup for $identity", $true, 'Resolve-Lens',
-            @{ identity = $identity; samHint = $this.SamHint; server = $this.SiteServer; reqId = '' })
+            @{ identity = $identity; samHint = $this.SamHint; server = $this.SiteServer; reqId = ''
+                dn = $this.DnHint; domains = @($this.SearchDomains)
+            })
     }
 
     # --- Env-coupled seam (overridden in tests) ---
@@ -298,7 +302,9 @@ class PersonLensService {
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }
 
         return $this.ExchangeRoundTrip(
-            @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer }, $true)
+            @{ identity = $identity; sam = $this.SamHint; siteServer = $this.SiteServer
+                dn = $this.DnHint; domains = @($this.SearchDomains)
+            }, $true)
     }
 
     # The encrypted round trip both lookups share: write request-<id>, wait for

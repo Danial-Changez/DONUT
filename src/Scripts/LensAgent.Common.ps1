@@ -185,21 +185,40 @@ $script:HardwareScript = {
 
 # One device's AD detail, self contained: nested jobs do not inherit Common's functions.
 $script:DeviceScript = {
-    param($forestNc, $wsid)
+    param($forestNc, $wsid, $fallbackDomains)
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
         model = ''; serial = ''; manufacturer = ''
         note = ''; bitLockerKeys = @()
     }
     try {
+        $compDn = ''
         $gc = New-Object System.DirectoryServices.DirectorySearcher
         $gc.SearchRoot = [ADSI]"GC://$forestNc"
         $gc.Filter = "(&(objectCategory=computer)(cn=$wsid))"
         $gc.ClientTimeout = [TimeSpan]::FromSeconds(15)
         [void]$gc.PropertiesToLoad.Add('distinguishedName')
-        $cHit = $gc.FindOne()
-        if ($cHit) {
-            $compDn = [string]$cHit.Properties['distinguishedname'][0]
+        try {
+            $cHit = $gc.FindOne()
+            if ($cHit) { $compDn = [string]$cHit.Properties['distinguishedname'][0] }
+        }
+        catch { }
+        # A sibling-forest machine is invisible to this GC, so ask each domain directly.
+        if (-not $compDn) {
+            foreach ($fd in @($fallbackDomains)) {
+                if (-not $fd) { continue }
+                try {
+                    $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$fd")
+                    $ds.Filter = "(&(objectCategory=computer)(cn=$wsid))"
+                    $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+                    [void]$ds.PropertiesToLoad.Add('distinguishedName')
+                    $hit = $ds.FindOne()
+                    if ($hit) { $compDn = [string]$hit.Properties['distinguishedname'][0]; break }
+                }
+                catch { }
+            }
+        }
+        if ($compDn) {
             $dev.domain = (($compDn -split ',' |
                         Where-Object { $_ -match '^DC=' } |
                         ForEach-Object { $_.Substring(3) }) -join '.')
@@ -448,9 +467,9 @@ function Resolve-UserSoftware {
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
-# The AD person read (forest GC find, then home-domain bind): a fields-plus-error
-# hashtable, never a throw, so job and inline callers fold it the same way.
-function Read-LensUser([string]$identity, [string]$samGuess) {
+# The AD person read: the picked row's DN binds the exact account in whichever
+# forest it lives, and the GC search stays as the fallback for DN-less callers.
+function Read-LensUser([string]$identity, [string]$samGuess, [string]$dn) {
     $r = [ordered]@{ upn = ''; sam = ''; displayName = ''; email = ''
         manager = ''; office = ''; error = ''
     }
@@ -460,10 +479,22 @@ function Read-LensUser([string]$identity, [string]$samGuess) {
     elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
     else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
     try {
-        $uHit = Find-Gc $uFilter
-        if (-not $uHit) { throw "no AD user matched '$identity'." }
-        # Binding the DN reaches the user's home domain.
-        $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"
+        $user = $null
+        if ($dn) {
+            # Serverless DN bind: the locator reaches the right domain over the trust.
+            try {
+                $bound = [ADSI]"LDAP://$dn"
+                $bound.psbase.RefreshCache()
+                $user = $bound
+            }
+            catch { $user = $null }
+        }
+        if ($null -eq $user) {
+            $uHit = Find-Gc $uFilter
+            if (-not $uHit) { throw "no AD user matched '$identity'." }
+            # Binding the DN reaches the user's home domain.
+            $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"
+        }
         $r.sam         = [string]$user.Properties['samaccountname'][0]
         $r.displayName = [string]$user.Properties['displayname'][0]
         $r.upn         = [string]$user.Properties['userprincipalname'][0]
@@ -487,7 +518,8 @@ function Read-LensUser([string]$identity, [string]$samGuess) {
 function Resolve-Lens {
     # "Lens" is singular, and the rule misreads the trailing 's'.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '')]
-    param([string]$identity, [string]$samHint, [string]$server, [string]$reqId)
+    param([string]$identity, [string]$samHint, [string]$server, [string]$reqId,
+        [string]$dn = '', [string[]]$domains = @())
     $bundle = [ordered]@{
         upn = ''; sam = ''; displayName = ''; email = ''; manager = ''; office = ''
         devices = @(); errors = @()
@@ -509,14 +541,15 @@ function Resolve-Lens {
     $userJob = $null
     try {
         $userJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
-            param($commonSelf, $forestNc, $identity, $samGuess)
+            param($commonSelf, $forestNc, $identity, $samGuess, $dn)
             . $commonSelf
             $script:ForestNc = $forestNc
-            Read-LensUser $identity $samGuess
-        } -ArgumentList $script:CommonSelf, $script:ForestNc, $identity, $samGuess
+            Read-LensUser -identity $identity -samGuess $samGuess -dn $dn
+        } -ArgumentList $script:CommonSelf, $script:ForestNc, $identity, $samGuess, $dn
     }
     catch { $userJob = $null }
-    $user = if ($userJob) { $null } else { Read-LensUser $identity $samGuess }
+    $user = if ($userJob) { $null }
+    else { Read-LensUser -identity $identity -samGuess $samGuess -dn $dn }
 
     # Each lane writes the next partial as it lands, so seq follows completion order.
     $wsids = @()
@@ -636,6 +669,18 @@ function Resolve-Lens {
         }
     }
 
+    # Computers can live outside the agent's forest, so on a GC miss the device read
+    # falls back to these domains directly, the user's own domain first.
+    $adFallback = @()
+    if ($dn) {
+        $ud = (($dn -split ',' | Where-Object { $_ -match '^DC=' } |
+                    ForEach-Object { $_.Substring(3) }) -join '.')
+        if ($ud) { $adFallback += $ud }
+    }
+    foreach ($d in @($domains)) {
+        if ($d -and $adFallback -notcontains $d) { $adFallback += $d }
+    }
+
     # Per WSID: OS / last-logon / BitLocker, one job per device beside the hardware jobs.
     # ThrottleLimit 16 everywhere: on the default 5, device jobs queue behind slow
     # hardware jobs from 3 devices up, which held partial 3 to the hardware's pace.
@@ -644,7 +689,7 @@ function Resolve-Lens {
         $devJob = $null
         try {
             $devJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:DeviceScript `
-                -ArgumentList $script:ForestNc, $wsid
+                -ArgumentList $script:ForestNc, $wsid, $adFallback
         }
         catch { $devJob = $null }
         $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })
@@ -663,7 +708,7 @@ function Resolve-Lens {
                 else { throw 'timed out after 30s.' }
             }
             # No job means it would not start, and inline keeps the row filled.
-            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid }
+            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid $adFallback }
         }
         catch {
             $dev = [ordered]@{ name = $entry.Wsid; os = ''; lastLogon = ''; domain = ''

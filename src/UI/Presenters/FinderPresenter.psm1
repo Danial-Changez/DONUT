@@ -784,8 +784,10 @@ class FinderPresenter {
         $this.LensJobs.Clear()
 
         try {
-            # The Sam hint lets the child run the SCCM query in parallel with its AD user read.
-            $job = $this.StartLensWorker(@{ Identity = $identity; Sam = [string]$r.SamAccountName })
+            # Sam starts SCCM early, and the DN pins the exact account across forests.
+            $job = $this.StartLensWorker(@{ Identity = $identity; Sam = [string]$r.SamAccountName
+                    Dn = [string]$r.DistinguishedName; Domains = @($this.AdService.Domains)
+                })
             $job.Token = $token
             $job.Key = $cacheKey
             $job.InfoSeen = 0

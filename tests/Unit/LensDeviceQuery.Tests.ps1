@@ -17,4 +17,11 @@ Describe "Lens device detail query" {
         # The wall time feeds the stage marks debug logging prints.
         ($dev.ms -ge 0) | Should-BeTrue
     }
+
+    It "unreachable fallback domains still end in a noted row, not a throw" {
+        $dev = & $script:Device 'DC=invalid,DC=example' 'WS-X' @('invalid.example', '')
+
+        $dev.name | Should-Be 'WS-X'
+        $dev.note | Should-Be 'computer object not found in AD'
+    }
 }
