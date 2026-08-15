@@ -80,6 +80,38 @@ function Write-LensBundle([string]$path, [string]$json) {
     Move-Item -LiteralPath $tmp -Destination $path -Force
 }
 
+# Builds the sidecar script that raises one Action Center toast. Pure for testing:
+# title and body are XML-escaped, so no input can break out of the toast payload.
+function New-LensToastScript([string]$title, [string]$body) {
+    $t = [Security.SecurityElement]::Escape($title)
+    $b = [Security.SecurityElement]::Escape($body)
+    $xml = "<toast><visual><binding template=""ToastGeneric""><text>$t</text><text>$b</text></binding></visual></toast>"
+    $raise = @'
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
+$doc = New-Object Windows.Data.Xml.Dom.XmlDocument
+$doc.LoadXml('{XML}')
+$toast = New-Object Windows.UI.Notifications.ToastNotification $doc
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('DONUT').Show($toast)
+'@
+    return $raise.Replace('{XML}', $xml)
+}
+
+# Raises one Action Center toast as the current user, for KEY job outcomes only.
+# The stock powershell.exe does the WinRT projection, since pwsh has none inbox.
+function Show-LensToast([string]$title, [string]$body) {
+    # HKCU here is the interactive user, the only hive whose toasts the shell shows.
+    $reg = 'HKCU:\SOFTWARE\Classes\AppUserModelId\DONUT'
+    if (-not (Test-Path -LiteralPath $reg)) {
+        $null = New-Item -Path $reg -Force
+        $null = New-ItemProperty -Path $reg -Name 'DisplayName' -Value 'DONUT' -PropertyType String -Force
+    }
+    $script = New-LensToastScript -title $title -body $body
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @(
+        '-NoProfile', '-NonInteractive', '-EncodedCommand', $b64)
+}
+
 function Get-Cn([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
 
 # The cheap SAM guess both lookups share: the hint, a domain-slash tail, or a bare

@@ -122,6 +122,7 @@ class FinderPresenter {
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
     [object]              $SoftwareJob      # the one in-flight software lookup, or $null
+    [List[hashtable]]     $ToastJobs        # fire-and-forget key-outcome toast workers
     hidden [string]       $SoftwareKey = '' # the pick whose software the reap may apply
     # identity -> @{ At; Json }, memory only beside LensCache (no secrets, same lifetime).
     hidden [hashtable] $SoftwareCache = @{}
@@ -183,6 +184,7 @@ class FinderPresenter {
         # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
+        $this.ToastJobs = [List[hashtable]]::new()
         $this.LensWarmExtras = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
         # Gated on in-flight lookups, so a fast tick is free and it halves partial paint lag.
@@ -271,6 +273,8 @@ class FinderPresenter {
     # Tears the Lens agent down through the pool worker, so the UI never parse-loads
     # PersonLensService. The Closed handler awaits $global:LensTeardownJob.
     [void] OnAppClosing() {
+        $triggers = 'Donut.Interop.LensWarmTriggers' -as [type]
+        if ($triggers) { try { $triggers::Unregister() } catch { } }
         try {
             $global:LensTeardownJob = $this.StartLensWorker(@{ StopAgent = $true })
         }
@@ -330,6 +334,16 @@ class FinderPresenter {
 
     # Never blocks. The handle is reaped on the first pick, and failures are logged then.
     [void] WarmLens() {
+        # Resume/network events drop the warm flag, healing binds before the 4-min ping.
+        try {
+            # Resolved by name, since the type only exists once Start-Donut compiles it.
+            $triggers = 'Donut.Interop.LensWarmTriggers' -as [type]
+            if ($triggers) {
+                $flag = Join-Path (Join-Path $env:ProgramData 'DONUT\lens-agent') 'warm.flag'
+                $triggers::Register($flag)
+            }
+        }
+        catch { $this.Logger.LogException('Lens warm triggers could not register', $_) }
         try {
             $this.LensWarmJob = $this.StartLensWorker(@{ WarmOnly = $true })
             # A pick dispatches two jobs onto any free runspace, so every runspace must
@@ -340,6 +354,27 @@ class FinderPresenter {
         }
         catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
+        }
+    }
+
+    # Raises one Action Center toast for a KEY job outcome (fire and forget, on the
+    # pool like every lens call, so the UI thread never parse-loads the service).
+    [void] NotifyKeyEvent([string]$title, [string]$body) {
+        try {
+            $this.ToastJobs.Add($this.StartLensWorker(@{ ToastTitle = $title; ToastBody = $body }))
+            $this.LensPollTimer.Start()
+        }
+        catch { $this.Logger.LogException('Key toast could not start', $_) }
+    }
+
+    # Disposes finished toast workers. They return nothing the UI needs.
+    hidden [void] ReapToasts() {
+        for ($i = $this.ToastJobs.Count - 1; $i -ge 0; $i--) {
+            $job = $this.ToastJobs[$i]
+            if (-not $job.Handle.IsCompleted) { continue }
+            try { $null = $job.Ps.EndInvoke($job.Handle) } catch { }
+            $this.DisposeJob($job.Ps)
+            $this.ToastJobs.RemoveAt($i)
         }
     }
 
@@ -811,6 +846,7 @@ class FinderPresenter {
         # Shares this tick rather than owning a second timer: all wait on the same agent.
         $this.ReapOwners()
         $this.ReapSoftware()
+        $this.ReapToasts()
         foreach ($job in @($this.LensJobs)) {
             # The partial lands before the SCCM/BitLocker crawl, so the pane fills early.
             if ($job.Token -eq $this.LensToken) {
@@ -869,9 +905,10 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        # Owner and software lookups outlive the pick that started them, so they keep it alive.
+        # Owner, software and toast calls outlive the pick that started them, so each
+        # keeps the shared tick alive until it lands.
         if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob -and
-            $null -eq $this.SoftwareJob) { $this.LensPollTimer.Stop() }
+            $null -eq $this.SoftwareJob -and $this.ToastJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup past LensDeadline is never coming back, so retire it with a reason.

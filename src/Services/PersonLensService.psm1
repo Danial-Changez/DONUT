@@ -297,6 +297,36 @@ class PersonLensService {
             }, $false)
     }
 
+    # Raises one Action Center toast for a KEY job outcome. Callers keep them rare.
+    # Fire and forget both ways: a toast that cannot be raised is silently dropped.
+    [void] ShowKeyToast([string]$title, [string]$body) {
+        if ([string]::IsNullOrWhiteSpace($title)) { return }
+        # De-elevated, DONUT already is the identity whose Action Center the shell shows.
+        if (-not [ElevationContext]::IsElevated()) {
+            try {
+                $common = Join-Path $this.SourceRoot 'Scripts\LensAgent.Common.ps1'
+                if (Test-Path -LiteralPath $common) {
+                    . $common
+                    Show-LensToast -title $title -body $body
+                }
+            }
+            catch { $this.Logger.LogException('Key toast failed', $_) }
+            return
+        }
+        # Elevated, the de-elevated agent raises it: same reason the whole lens exists.
+        if ($this.EnsureAgent()) { return }
+        $dir = [PersonLensService]::AgentDir()
+        $keyIv = $null
+        try { $keyIv = [IO.File]::ReadAllBytes((Join-Path $dir 'key.bin')) } catch { }
+        if (-not $keyIv -or $keyIv.Length -ne 48) { return }
+        $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
+        try {
+            [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
+                (@{ kind = 'toast'; title = $title; body = $body } | ConvertTo-Json -Compress), $keyIv)
+        }
+        catch { $this.Logger.LogException('Key toast could not be sent', $_) }
+    }
+
     [string] RunLookupJson([string]$identity) {
         # De-elevated, DONUT is already the user whose rights this data needs.
         if (-not [ElevationContext]::IsElevated()) { return $this.RunLookupInProcess($identity) }

@@ -727,25 +727,35 @@ class HomePresenter : AsyncJobPresenter {
 
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
             $this.CheckForManualReboot($job)
-            if ($this.Toasts) {
-                if ($this.ManualRebootQueue.Contains($job.HostName)) {
-                    $this.Toasts.ShowWarning($job.HostName, "Updates applied. A manual reboot is required.")
-                }
-                else {
-                    $this.Toasts.ShowSuccess($job.HostName, "Updates applied.")
-                }
+            if ($this.ManualRebootQueue.Contains($job.HostName)) {
+                if ($this.Toasts) { $this.Toasts.ShowWarning($job.HostName, "Updates applied. A manual reboot is required.") }
+                $this.NotifySystem($job.HostName, "Updates applied. A manual reboot is required.")
+            }
+            elseif ($this.Toasts) {
+                $this.Toasts.ShowSuccess($job.HostName, "Updates applied.")
             }
         }
 
         if ($job.Status -eq 'Failed') {
             $this.Resolution.InvalidateResolved($job.HostName)
             if ($this.Toasts) { $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.") }
+            if ($job.JobType -eq 'UpdateApply') {
+                $this.NotifySystem($job.HostName, "Apply failed. Open the log for details.")
+            }
         }
 
         # Persist + settle the row unless we just kicked off an apply.
         if (-not $transitioned) {
             $this.SettleHost($job)
         }
+    }
+
+    # Action Center is for KEY outcomes only (reboot needed, apply failed), and only
+    # while the operator is away: a focused window already shows the in-app toast.
+    hidden [void] NotifySystem([string]$hostName, [string]$message) {
+        if ($null -eq $this.Finder) { return }
+        if ($this.HostWindow -and $this.HostWindow.IsActive) { return }
+        $this.Finder.NotifyKeyEvent($hostName, $message)
     }
 
     # End of tick: once the batch drains, persist the coalesced recents in one write.

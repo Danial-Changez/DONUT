@@ -125,6 +125,18 @@ try {
         Add-Type -Path "$PSScriptRoot\Launcher\HotkeyManager.cs" -ReferencedAssemblies $refs
     }
 
+    # Writes the lens warm flag from system events. Prod compiles it into the launcher.
+    if (-not ('Donut.Interop.LensWarmTriggers' -as [type])) {
+        # Both load lazily, so touch one type from each for the path resolution below.
+        [void][Microsoft.Win32.SystemEvents]
+        [void][System.Net.NetworkInformation.NetworkChange]
+        $refs = @(
+            Get-RuntimeAssemblyPath 'Microsoft.Win32.SystemEvents'
+            Get-RuntimeAssemblyPath 'System.Net.NetworkInformation'
+        )
+        Add-Type -Path "$PSScriptRoot\Launcher\LensWarmTriggers.cs" -ReferencedAssemblies $refs
+    }
+
     # The one WinForms surface WPF styles cannot reach. Prod compiles it into the launcher.
     if (-not ('Donut.Interop.TrayTheme' -as [type])) {
         Add-Type -AssemblyName System.Windows.Forms

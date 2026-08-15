@@ -24,7 +24,11 @@
                              lands, then AD-detailed rows, hardware still pending)
       result-<id>.bin     -> lookup bundle
     The agent deletes each request once read; the parent deletes the responses it
-    consumed; anything older than 10 minutes is swept as abandoned.
+    consumed; anything older than 10 minutes is swept as abandoned. Two extras ride
+    the same dir: warm.flag (plain, parent drops it on resume or a network change,
+    the loop answers with an immediate keep-warm ping) and kind='toast' requests
+    (key job outcomes raised as Action Center toasts here, because only the
+    interactive user's toasts reach the operator's shell).
 
     A lookup takes tens of seconds, so every request (person lookups, owner batches
     and software lists alike) runs on a ThreadJob and the serve loop stays free to
@@ -82,6 +86,7 @@ $commonPath = Join-Path $PSScriptRoot 'LensAgent.Common.ps1'
 # --- pre-warm (parallel with DONUT's startup; heartbeat first so the parent unblocks) --
 $heartbeatPath = Join-Path $ExchangeDir 'heartbeat.txt'
 $stopPath = Join-Path $ExchangeDir 'stop.flag'
+$warmFlagPath = Join-Path $ExchangeDir 'warm.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
 try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
@@ -170,6 +175,12 @@ while ($true) {
         }
     }
 
+    # The parent drops warm.flag on resume or a network change, so the ping runs now.
+    if (Test-Path -LiteralPath $warmFlagPath) {
+        Remove-Item -LiteralPath $warmFlagPath -Force -ErrorAction SilentlyContinue
+        $lastWarmPing = [datetime]::MinValue
+    }
+
     # The startup warm decays while DONUT idles and the next pick repays it as
     # seconds, so a cheap ping keeps the AdminService route and the AD binds hot.
     if (($now - $lastWarmPing).TotalMinutes -ge 4) {
@@ -227,6 +238,11 @@ while ($true) {
                         try { $json = Resolve-UserSoftware -identity ([string]$req.identity) -sam ([string]$req.sam) -server $server }
                         catch { $json = @{ deployments = @(); error = "software: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
                         Write-LensBundle $resultPath $json
+                    }
+                    'toast' {
+                        # Fire and forget: only this identity's toasts reach the operator's shell.
+                        try { Show-LensToast -title ([string]$req.title) -body ([string]$req.body) }
+                        catch { }
                     }
                     default {
                         Resolve-Lens -identity ([string]$req.identity) -samHint ([string]$req.sam) -server $server -reqId $reqId `

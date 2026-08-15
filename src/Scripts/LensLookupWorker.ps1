@@ -48,6 +48,14 @@
     The finder's configured domain list. Device AD reads fall back to these when
     the agent forest's GC does not hold a computer object.
 
+.PARAMETER ToastTitle
+    With ToastBody: raise one Action Center toast for a KEY job outcome instead of
+    running a lookup. Routed through the de-elevated agent when DONUT is elevated,
+    since only the interactive user's toasts reach the operator's shell.
+
+.PARAMETER ToastBody
+    The toast's second line (the title carries the host name).
+
 .PARAMETER TimeoutSec
     Max seconds to wait for a lookup result. Default 60.
 
@@ -72,6 +80,8 @@ param(
     [string[]] $Domains = @(),
     [string[]] $OwnerOf = @(),
     [string] $SoftwareFor = '',
+    [string] $ToastTitle = '',
+    [string] $ToastBody = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
     [switch] $StopAgent
@@ -95,6 +105,8 @@ if ($WarmOnly) {
     if (-not [ElevationContext]::IsElevated()) { return '' }
     return $svc.EnsureAgent()
 }
+# Key-outcome toasts ride the agent too, since only its identity reaches the shell.
+if ($ToastTitle) { $svc.ShowKeyToast($ToastTitle, $ToastBody); return '' }
 # Owner lookups ride the same agent and RBAC scope, so they are a mode, not a worker.
 if (@($OwnerOf).Count -gt 0) { return $svc.RunOwnerLookupJson($OwnerOf) }
 # Software lookups too, dispatched beside the person lookup they never wait on.

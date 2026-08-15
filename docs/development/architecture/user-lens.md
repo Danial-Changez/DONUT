@@ -40,8 +40,12 @@ no partials, so the pane fills in one step. See
 - That warm decays while DONUT idles (the site server's IIS pool spins down, and
   the process's pooled LDAP sockets die across sleep or a VPN change), so every 4
   minutes the serve loop re-runs a throwaway affinity query and a GC read to keep
-  both routes hot for the next pick. `Find-Gc` also retries once over a fresh
-  RootDSE bind, so a pick that races the ping still heals instead of erroring.
+  both routes hot for the next pick. Resume-from-sleep and network-change events
+  (hooked in `LensWarmTriggers.cs`, debounced 30s) drop a `warm.flag` in the
+  exchange dir, and the loop answers with the same ping immediately — so the exact
+  moments that kill pooled binds re-warm them, instead of waiting out the timer.
+  `Find-Gc` also retries once over a fresh RootDSE bind, so a pick that races the
+  ping still heals instead of erroring.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
@@ -139,6 +143,13 @@ Fixed `%ProgramData%\DONUT\lens-agent` dir:
 4. The parent counts consecutive lookup timeouts in `timeouts.txt` (no secrets,
    just a counter); a completed lookup deletes it, and at two `EnsureAgent`
    recycles the agent.
+5. Two extras ride the same dir: `warm.flag` (plain, dropped by the parent's
+   resume/network hooks, answered with an immediate keep-warm ping) and
+   `kind='toast'` requests — the two KEY job outcomes (apply failed, manual
+   reboot required) raised as Action Center toasts by the agent, because only
+   the interactive user's toasts reach the operator's shell. The parent skips
+   them entirely while the DONUT window is focused, so they never spam an
+   operator who is already watching the in-app toasts.
 
 ## Securing the exchange
 
