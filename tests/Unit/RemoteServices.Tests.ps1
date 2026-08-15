@@ -260,6 +260,14 @@ Describe "RemoteServices" {
         <category></category>
         <bytes>264884984</bytes>
     </update>
+    <update>
+        <name>Realtek Audio Console Application</name>
+        <version>9.9.9</version>
+        <urgency>Optional</urgency>
+        <type>Application</type>
+        <category>Audio</category>
+        <bytes>1024</bytes>
+    </update>
 </updates>
 "@
             $script:rowsService = [RemoteUpdateService]::new(
@@ -290,10 +298,11 @@ Describe "RemoteServices" {
         It "Sorts rows most-urgent first (Urgent -> Recommended -> Optional)" {
             $rows = $script:rowsService.GetUpdateRows("RowsHost")
 
-            $rows.Count | Should -Be 3
+            $rows.Count | Should -Be 4
             $rows[0].Urgency | Should -Be "Urgent"
             $rows[1].Urgency | Should -Be "Recommended"
             $rows[2].Urgency | Should -Be "Optional"
+            $rows[3].Urgency | Should -Be "Optional"
         }
 
         It "Reads child elements explicitly (never the XmlElement.Name collision)" {
@@ -307,7 +316,7 @@ Describe "RemoteServices" {
 
         It "Merges a driver match: version transition, IsNewer, and category backfill" {
             $rows = $script:rowsService.GetUpdateRows("RowsHost")
-            $audio = $rows | Where-Object Name -Like "Realtek*"
+            $audio = $rows | Where-Object Name -Like "Realtek High Definition*"
 
             $audio.IsNewer | Should -BeTrue
             # A matched row shows the installed baseline as "current -> new".
@@ -320,6 +329,14 @@ Describe "RemoteServices" {
             $bios = $rows | Where-Object Name -Like "*BIOS*"
 
             $bios.VersionText | Should -Be "1.36.0"
+        }
+
+        It "Never lends a driver's baseline to an application update" {
+            # The Console row shares the audio driver's category and words, but not its type.
+            $rows = $script:rowsService.GetUpdateRows("RowsHost")
+            $app = $rows | Where-Object Name -Like "*Console*"
+
+            $app.VersionText | Should -Be "9.9.9"
         }
     }
 

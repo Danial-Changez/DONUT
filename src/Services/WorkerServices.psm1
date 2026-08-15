@@ -949,6 +949,7 @@ try {
                 $d.SetAttribute('name', [string]$_.DeviceName)
                 $d.SetAttribute('provider', [string]$_.Manufacturer)
                 $d.SetAttribute('version', [string]$_.DriverVersion)
+                $d.SetAttribute('class', [string]$_.DeviceClass)
                 $date = ''
                 if ($_.DriverDate -is [datetime]) { $date = $_.DriverDate.ToString('yyyy-MM-dd') }
                 $d.SetAttribute('date', $date)
@@ -960,6 +961,7 @@ try {
             $d.SetAttribute('name', 'Dell System BIOS')
             $d.SetAttribute('provider', [string]$bios.Manufacturer)
             $d.SetAttribute('version', [string]$bios.SMBIOSBIOSVersion)
+            $d.SetAttribute('class', 'BIOS')
             $d.SetAttribute('date', '')
             [void]$sec.AppendChild($d)
         }

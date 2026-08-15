@@ -160,7 +160,8 @@ class RemoteUpdateService : RemoteJobService {
             [long]$bytes = 0
             [void][long]::TryParse($bytesText, [ref]$bytes)
 
-            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
+            $type = $this.NodeText($node, 'type')
+            $match = $this.DriverMatcher.FindBestDriverMatch($name, $type, $category, $installedDrivers)
             $currentVersion = ''
             $isNewer = $false
             $hasMatch = $false
@@ -194,6 +195,7 @@ class RemoteUpdateService : RemoteJobService {
                 ProviderName  = $_.GetAttribute("provider")
                 DriverVersion = $_.GetAttribute("version")
                 DriverDate    = $_.GetAttribute("date")
+                DeviceClass   = $_.GetAttribute("class")
             }
         }
     }

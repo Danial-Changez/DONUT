@@ -2,16 +2,19 @@ using module "..\Core\LogService.psm1"
 
 <#
 .SYNOPSIS
-    Matches Dell Command Update results to installed drivers by brand/category.
+    Matches Dell Command Update results to installed drivers by type and category.
 
 .DESCRIPTION
-    Pattern tables (brand, category) plus version comparison, used to enrich the
-    update report with "what is this, and is it newer than what's installed?"
-    detail.
+    Pairs each DCU update with the installed driver it would replace, so a card
+    can show the installed version beside the new one. Only driver-type updates
+    are fuzzy-matched, since applications and firmware have no PnP baseline to
+    diff against, and a BIOS update pairs exactly with the scan's own Win32_BIOS
+    row. A wrong pairing misleads worse than a blank, so a match requires the
+    categories to agree and the names to share at least one real word.
 #>
 class DriverMatchingService {
     [hashtable] $BrandPatterns
-    [hashtable] $CategoryPatterns
+    [System.Collections.Specialized.OrderedDictionary] $CategoryPatterns
     [LogService] $Logger
 
     DriverMatchingService() {
@@ -30,20 +33,21 @@ class DriverMatchingService {
             "Dell" = @("Dell Inc.", "Dell", "DELL")
         }
 
-        $this.CategoryPatterns = @{
+        # Ordered because the first hit wins, with the scanned device classes up front.
+        $this.CategoryPatterns = [ordered]@{
             "BIOS"        = @("BIOS", "System BIOS", "UEFI", "Firmware")
             "Chipset"     = @("Chipset", "Intel Management Engine", "ME", "AMT")
+            "Bluetooth"   = @("Bluetooth", "BT")
             "Audio"       = @("Audio", "Sound", "Realtek Audio", "High Definition Audio", "MEDIA")
             "Network"     = @("Network", "Ethernet", "WiFi", "Wireless", "LAN", "WLAN",
                 "Intel Dual Band", "NET", "Docks/Stands")
             "Graphics"    = @("Graphics", "Display", "Video", "VGA", "Intel HD", "Intel UHD",
                 "GeForce", "Radeon", "DISPLAY")
+            "Thunderbolt" = @("Thunderbolt", "TB3", "TB4")
             "Storage"     = @("Storage", "RAID", "AHCI", "NVMe", "SSD", "Intel RST")
             "USB"         = @("USB", "USB Controller", "USB 3.0", "USB-C")
-            "Bluetooth"   = @("Bluetooth", "BT")
             "Camera"      = @("Camera", "Webcam", "IR Camera", "Integrated Camera")
             "Touchpad"    = @("Touchpad", "Trackpad", "Mouse", "Pointing Device", "Input")
-            "Thunderbolt" = @("Thunderbolt", "TB3", "TB4")
             "Application" = @("Application", "App")
             "Others"      = @("Others", "Other")
         }
@@ -60,10 +64,11 @@ class DriverMatchingService {
         return "Unknown"
     }
 
+    # Word-bounded, so a short pattern like ME can never hit inside Enumerator.
     [string] DetectCategory([string]$updateName) {
         foreach ($category in $this.CategoryPatterns.Keys) {
             foreach ($pattern in $this.CategoryPatterns[$category]) {
-                if ($updateName -like "*$pattern*") {
+                if ($updateName -match "\b$([regex]::Escape($pattern))\b") {
                     return $category
                 }
             }
@@ -71,65 +76,83 @@ class DriverMatchingService {
         return "Other"
     }
 
-    # Scores every installed driver and returns the best above the confidence floor.
-    [object] FindBestDriverMatch([string]$updateName, [array]$installedDrivers) {
+    # Pairs one update with the installed driver it would replace, or null when unsure.
+    # Unsure always beats a best guess, since a wrong baseline misreads as an upgrade.
+    [object] FindBestDriverMatch([string]$updateName, [string]$updateType,
+        [string]$updateCategory, [array]$installedDrivers) {
         if ($null -eq $installedDrivers -or $installedDrivers.Count -eq 0) {
             return $null
         }
 
-        $updateCategory = $this.DetectCategory($updateName)
-        $updateNameLower = $updateName.ToLower()
+        $type = "$updateType".Trim().ToLowerInvariant()
+        $category = $this.ResolveUpdateCategory($updateName, $updateCategory)
 
+        if ($type -eq 'bios' -or $category -eq 'BIOS') {
+            return $this.MatchBiosRow($installedDrivers)
+        }
+        # Applications, firmware and utilities have no PnP driver row to diff against.
+        if ($type -and $type -ne 'driver') { return $null }
+        if ($category -eq 'Other') { return $null }
+
+        $updateWords = $this.NameWords($updateName)
         $bestMatch = $null
         $bestScore = 0
-
         foreach ($driver in $installedDrivers) {
-            $score = 0
-            $driverName = $driver.DriverName
-            $driverProvider = $driver.ProviderName
-
-            if ([string]::IsNullOrEmpty($driverName)) { continue }
-
-            $driverNameLower = $driverName.ToLower()
-
-            $driverCategory = $this.DetectCategory($driverName)
-            if ($driverCategory -eq $updateCategory -and $updateCategory -ne "Other") {
-                $score += 50
-            }
-
-            $updateBrand = $this.DetectBrand($updateName)
-            $driverBrand = $this.DetectBrand($driverProvider)
-            if ($updateBrand -eq $driverBrand -and $updateBrand -ne "Unknown") {
-                $score += 30
-            }
-
-            # Words of two letters or less match too many drivers to be evidence.
-            $updateWords = $updateNameLower -split '\s+|[-_]'
-            $driverWords = $driverNameLower -split '\s+|[-_]'
-            $commonWords = $updateWords |
-                Where-Object { $driverWords -contains $_ -and $_.Length -gt 2 }
-            $score += ($commonWords.Count * 5)
-
-            if ($updateNameLower -match '\d+\.\d+' -and $driverNameLower -match '\d+\.\d+') {
-                $score += 10
-            }
-
-            if ($score -gt $bestScore) {
-                $bestScore = $score
+            if ([string]::IsNullOrEmpty($driver.DriverName)) { continue }
+            if ($this.GetDriverCategory($driver) -ne $category) { continue }
+            # A shared category alone is not evidence: the names must share a word too.
+            $common = @($this.NameWords([string]$driver.DriverName) |
+                    Where-Object { $updateWords -contains $_ })
+            if ($common.Count -gt $bestScore) {
+                $bestScore = $common.Count
                 $bestMatch = @{
                     Driver   = $driver
-                    Score    = $score
-                    Category = $driverCategory
-                    Brand    = $driverBrand
+                    Score    = $bestScore
+                    Category = $category
+                    Brand    = $this.DetectBrand([string]$driver.ProviderName)
                 }
             }
         }
+        return $bestMatch
+    }
 
-        if ($bestScore -ge 20) {
-            return $bestMatch
+    # BIOS pairs with the scan's own Win32_BIOS row, never a fuzzy PnP guess.
+    hidden [object] MatchBiosRow([array]$installedDrivers) {
+        foreach ($driver in $installedDrivers) {
+            if ([string]$driver.DriverName -eq 'Dell System BIOS') {
+                return @{
+                    Driver   = $driver
+                    Score    = 100
+                    Category = 'BIOS'
+                    Brand    = $this.DetectBrand([string]$driver.ProviderName)
+                }
+            }
         }
-
         return $null
+    }
+
+    # DCU's own category element outranks name sniffing when it maps to a known bucket.
+    hidden [string] ResolveUpdateCategory([string]$updateName, [string]$updateCategory) {
+        $fromReport = $this.DetectCategory("$updateCategory".Trim())
+        if ($fromReport -ne 'Other') { return $fromReport }
+        return $this.DetectCategory($updateName)
+    }
+
+    # The scan records each row's PnP device class, and old reports fall back to names.
+    hidden [string] GetDriverCategory([object]$driver) {
+        $map = @{
+            'MEDIA' = 'Audio'; 'NET' = 'Network'; 'NETWORK' = 'Network'
+            'BLUETOOTH' = 'Bluetooth'; 'DISPLAY' = 'Graphics'; 'BIOS' = 'BIOS'
+        }
+        $cls = "$($driver.DeviceClass)".Trim().ToUpperInvariant()
+        if ($cls -and $map.Contains($cls)) { return [string]$map[$cls] }
+        return $this.DetectCategory([string]$driver.DriverName)
+    }
+
+    # Words of two letters or less match too many drivers to be evidence.
+    hidden [string[]] NameWords([string]$name) {
+        return @("$name".ToLowerInvariant() -split '[^a-z0-9]+' |
+                Where-Object { $_.Length -gt 2 })
     }
 
     [hashtable] CompareVersions([string]$installedVersion, [string]$updateVersion) {
