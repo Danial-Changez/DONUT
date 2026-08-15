@@ -228,7 +228,7 @@ Describe "RemoteServices" {
             if (-not (Test-Path $script:rowsReportsDir)) {
                 New-Item -Path $script:rowsReportsDir -ItemType Directory -Force | Out-Null
             }
-            # Real DCU shape: update fields are child elements, installed drivers are attributes.
+            # Real DCU updates are child elements, and the drivers section is DONUT's scan-time add.
             $script:rowsXml = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <updates>

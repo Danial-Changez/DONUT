@@ -914,6 +914,8 @@ Remove-Item 'C:\temp\DONUT\folders.csv' -Force -ErrorAction SilentlyContinue
         }
         else { '' }
         $notFound = [ExecutionService]::DcuNotFoundExit
+        # Scan only: the report gains the <drivers> section the update matcher reads.
+        $enrich = if ($command -eq 'scan') { [ExecutionService]::BuildDriverSectionScript() } else { '' }
         # Double-quoted here-string: bare $names interpolate here, backticked ones stay literal.
         return @"
 Stop-Process -Name 'DellCommandUpdate' -Force -ErrorAction SilentlyContinue
@@ -922,8 +924,51 @@ $clearLine
 `$dcu = @('C:\Program Files (x86)\Dell\CommandUpdate\dcu-cli.exe', 'C:\Program Files\Dell\CommandUpdate\dcu-cli.exe') | Where-Object { Test-Path -LiteralPath `$_ } | Select-Object -First 1
 if (-not `$dcu) { exit $notFound }
 & `$dcu /$command $argsString
-exit `$LASTEXITCODE
+`$code = `$LASTEXITCODE
+$enrich
+exit `$code
 "@
+    }
+
+    # The scan tail run on the target: appends installed-driver rows (plus the BIOS)
+    # to DCU's report, so BuildUpdateRows can show the installed baseline per update.
+    hidden static [string] BuildDriverSectionScript() {
+        # Single-quoted so nothing interpolates: every $ below belongs to the target.
+        return @'
+try {
+    $report = Get-ChildItem -Path 'C:\temp\DONUT' -Filter '*.xml' -File -ErrorAction Stop |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($report) {
+        [xml]$x = Get-Content -LiteralPath $report.FullName
+        $sec = $x.CreateElement('drivers')
+        $classes = @('MEDIA', 'NET', 'NETWORK', 'Bluetooth', 'DISPLAY')
+        Get-CimInstance -ClassName Win32_PnPSignedDriver -ErrorAction Stop |
+            Where-Object { $_.DeviceClass -in $classes -and $_.DeviceName -and $_.DriverVersion } |
+            ForEach-Object {
+                $d = $x.CreateElement('driver')
+                $d.SetAttribute('name', [string]$_.DeviceName)
+                $d.SetAttribute('provider', [string]$_.Manufacturer)
+                $d.SetAttribute('version', [string]$_.DriverVersion)
+                $date = ''
+                if ($_.DriverDate -is [datetime]) { $date = $_.DriverDate.ToString('yyyy-MM-dd') }
+                $d.SetAttribute('date', $date)
+                [void]$sec.AppendChild($d)
+            }
+        $bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction SilentlyContinue
+        if ($bios -and $bios.SMBIOSBIOSVersion) {
+            $d = $x.CreateElement('driver')
+            $d.SetAttribute('name', 'Dell System BIOS')
+            $d.SetAttribute('provider', [string]$bios.Manufacturer)
+            $d.SetAttribute('version', [string]$bios.SMBIOSBIOSVersion)
+            $d.SetAttribute('date', '')
+            [void]$sec.AppendChild($d)
+        }
+        [void]$x.DocumentElement.PrependChild($sec)
+        $x.Save($report.FullName)
+    }
+}
+catch { }
+'@
     }
 
     # Runs dcu-cli via psexec and returns the effective dcu-cli return code (0 = done,

@@ -525,6 +525,25 @@ Describe "WorkerServices" {
             $s.Contains('/scan -silent') | Should -BeTrue
         }
 
+        It "a scan appends the installed-driver section after capturing dcu-cli's code" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('scan', '-silent', 'C:\temp\DONUT\scan.log')
+            $s.Contains('Win32_PnPSignedDriver') | Should -BeTrue
+            $s.Contains('Win32_BIOS') | Should -BeTrue
+            # The enrichment sits between the code capture and the exit, never after it.
+            $s.IndexOf('$code = $LASTEXITCODE') | Should -BeLessThan $s.IndexOf('Win32_PnPSignedDriver')
+            $s.IndexOf('Win32_PnPSignedDriver') | Should -BeLessThan $s.IndexOf('exit $code')
+            # The payload only ever runs on a field machine, so pin its syntax here.
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$null, [ref]$errors)
+            @($errors) | Should -BeNullOrEmpty
+        }
+
+        It "an apply ships no driver enrichment but keeps the captured exit" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('applyUpdates', '-silent', 'C:\temp\DONUT\apply.log')
+            $s.Contains('Win32_PnPSignedDriver') | Should -BeFalse
+            $s.Contains('exit $code') | Should -BeTrue
+        }
+
         It "uses a not-found sentinel outside every dcu-cli and psexec transport code" {
             # Past the driver-install range (2000-2007) and clear of the transport codes.
             [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
