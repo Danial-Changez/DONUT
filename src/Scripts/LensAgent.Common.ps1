@@ -235,26 +235,27 @@ $script:DeviceScript = {
             if ($cHit) { $compDn = [string]$cHit.Properties['distinguishedname'][0] }
         }
         catch { }
-        # A sibling-forest machine is invisible to this GC, and SCCM's discovery DN pins it.
+        # A sibling-forest machine is invisible to this GC, and SCCM's heartbeat SID pins it.
         if (-not $compDn -and $resourceId -and $server) {
             try {
-                $p = @{ Uri = "https://$server/AdminService/wmi/SMS_R_System($resourceId)?`$select=DistinguishedName,FullDomainName"
+                $p = @{ Uri = "https://$server/AdminService/wmi/SMS_R_System($resourceId)?`$select=SID,FullDomainName"
                     UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
                 }
                 if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
                 $r = Invoke-RestMethod @p
                 if ($null -ne $r.PSObject.Properties['value']) { $r = @($r.value) | Select-Object -First 1 }
-                # Discovery's domain leads the sweep either way, so a stale DN costs one bind.
+                # The heartbeat's domain leads the sweep either way, so a stale SID costs one bind.
                 $fullDomain = [string]$r.FullDomainName
                 if ($fullDomain) {
                     $fallbackDomains = @($fullDomain) + @($fallbackDomains | Where-Object { $_ -ne $fullDomain })
                 }
-                $sccmDn = [string]$r.DistinguishedName
-                if ($sccmDn) {
-                    # A DN gone stale since discovery (an OU move) fails to bind, and the sweep runs.
-                    $probe = [ADSI]"LDAP://$sccmDn"
+                $sid = [string]$r.SID
+                if ($sid) {
+                    # objectSid outlives renames and OU moves, which is what rots a discovery DN.
+                    $path = if ($fullDomain) { "LDAP://$fullDomain/<SID=$sid>" } else { "LDAP://<SID=$sid>" }
+                    $probe = [ADSI]$path
                     $probe.psbase.RefreshCache()
-                    $compDn = $sccmDn
+                    $compDn = [string]$probe.Properties['distinguishedname'][0]
                 }
             }
             catch { }

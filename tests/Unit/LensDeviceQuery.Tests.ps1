@@ -25,11 +25,9 @@ Describe "Lens device detail query" {
         $dev.note | Should-Be 'computer object not found in AD'
     }
 
-    It "reads SCCM's DN for the affinity's ResourceID on a GC miss, and still degrades" {
+    It "reads SCCM's SID for the affinity's ResourceID on a GC miss, and still degrades" {
         Mock Invoke-RestMethod {
-            [pscustomobject]@{ DistinguishedName = 'CN=WS-X,OU=Devices,DC=invalid,DC=example'
-                FullDomainName = 'invalid.example'
-            }
+            [pscustomobject]@{ SID = 'S-1-5-21-1-2-3-4242'; FullDomainName = 'invalid.example' }
         }
 
         $dev = & $script:Device 'DC=invalid,DC=example' 'WS-X' @('other.invalid') '4242' 'sccm.invalid'
@@ -37,7 +35,7 @@ Describe "Lens device detail query" {
         Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
             $Uri -like 'https://sccm.invalid/AdminService/wmi/SMS_R_System(4242)?*'
         }
-        # Off-domain the DN cannot bind and the sweep misses, so the row is noted, not thrown.
+        # Off-domain the SID cannot bind and the sweep misses, so the row is noted, not thrown.
         $dev.name | Should-Be 'WS-X'
         $dev.note | Should-Be 'computer object not found in AD'
     }

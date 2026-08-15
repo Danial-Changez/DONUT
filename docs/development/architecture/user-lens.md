@@ -82,11 +82,13 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    computer's AD object, one thread job per device running beside the hardware
    jobs, so the gather's tail is one device's cost rather than the sum. A
    computer the agent forest's GC cannot see is pinned by the affinity row's own
-   ResourceID: one keyed `SMS_R_System` read supplies the discovery DN (bound
-   directly, so the pane shows the exact machine SCCM asserted) and its
-   `FullDomainName`, which then leads the fallback sweep over the finder's
-   configured domain list, the person's own domain next — so a stale DN after
-   an OU move costs one bind, not the whole sweep.
+   ResourceID: one keyed `SMS_R_System` read supplies the client heartbeat's
+   `SID` (bound as `LDAP://<domain>/<SID=...>`, so the pane shows the exact
+   machine SCCM asserted, and it outlives renames and OU moves, which is what
+   rots a discovery DN) and its `FullDomainName`, which then leads the fallback
+   sweep over the finder's configured domain list, the person's own domain next
+   — so a stale SID costs one bind, not the whole sweep. Both fields answered
+   and bound on the site this ships to (`tools/Probe-DeviceIdentity.ps1`).
 
 The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path —
