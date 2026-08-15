@@ -73,4 +73,18 @@ Describe "InventoryService" {
         }
     }
 
+    Context "DeleteReport" {
+        It "Removes the host's inventory file and tolerates a missing one" {
+            $service = [InventoryService]::new($script:config, [MockNetworkProbe]::new())
+            $path = Join-Path $script:reportsDir "GONE-inventory.json"
+            Set-Content -Path $path -Value '{}'
+
+            # The second call proves a missing file is a no-op, not a throw.
+            $service.DeleteReport("GONE")
+            $service.DeleteReport("GONE")
+
+            Test-Path $path | Should -BeFalse
+        }
+    }
+
 }

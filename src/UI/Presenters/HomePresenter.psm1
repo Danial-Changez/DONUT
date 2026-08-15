@@ -1056,13 +1056,17 @@ class HomePresenter : AsyncJobPresenter {
         $this.FinishRemoval()
     }
 
-    # One machine out of the list, recents, and every queue that could resurrect it.
+    # One machine out of the list, recents, reports, and every queue that could resurrect it.
     hidden [void] RemoveRowCore([string]$hostName) {
         $row = $this.Rows[$hostName]
         if ($row) { [void]$this.HomeVm.Machines.Remove($row) }
         $this.Rows.Remove($hostName)
         $this.Store.Remove($hostName)
         $this.Detail.RemoveHostLog($hostName)
+        # On-disk reports go too, or reports\ accretes one set of files per cleared host.
+        $this.UpdateService.DeleteReport($hostName)
+        $this.InventoryService.DeleteReport($hostName)
+        $this.DiskUsageService.DeleteReport($hostName)
         # Drop queued work so a pending run/gather can't re-create the removed card.
         $this.PendingRuns.Remove($hostName)
         $this.PendingGathers.Remove($hostName)

@@ -127,6 +127,12 @@ class RemoteUpdateService : RemoteJobService {
         }
     }
 
+    # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
+    [void] DeleteReport([string]$hostName) {
+        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-Updates.xml"
+        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+    }
+
     [hashtable] PrepareApplyUpdates([string]$hostName, [hashtable]$selectedUpdates) {
         return $this.BuildWorkerArgs($hostName, "Apply", $selectedUpdates)
     }

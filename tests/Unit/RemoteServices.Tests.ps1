@@ -188,6 +188,28 @@ Describe "RemoteServices" {
         }
     }
 
+    Context "DeleteReport" {
+        BeforeAll {
+            $script:delReportsDir = Join-Path $tempDir "Reports"
+            if (-not (Test-Path $script:delReportsDir)) {
+                New-Item -Path $script:delReportsDir -ItemType Directory -Force | Out-Null
+            }
+        }
+
+        It "Removes the host's update report and tolerates a missing one" {
+            $probe = [MockNetworkProbe]::new()
+            $service = [RemoteUpdateService]::new($config, $probe, [DriverMatchingService]::new())
+            $path = Join-Path $script:delReportsDir "GONE-Updates.xml"
+            Set-Content -Path $path -Value "<updates></updates>"
+
+            # The second call proves a missing file is a no-op, not a throw.
+            $service.DeleteReport("GONE")
+            $service.DeleteReport("GONE")
+
+            Test-Path $path | Should -BeFalse
+        }
+    }
+
     Context "CountUpdates" {
         It "Returns 0 for a null report" {
             $probe = [MockNetworkProbe]::new()

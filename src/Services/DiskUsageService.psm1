@@ -35,6 +35,12 @@ class DiskUsageService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "DeleteFolders", @{ Paths = $paths })
     }
 
+    # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
+    [void] DeleteReport([string]$hostName) {
+        $csvPath = Join-Path $this.Config.ReportsPath "$hostName-folders.csv"
+        Remove-Item -LiteralPath $csvPath -Force -ErrorAction SilentlyContinue
+    }
+
     # Parses the top-rows CSV the worker copied back into a typed report. Returns $null
     # when no scan has run, and a corrupt file parses to an empty report.
     [DiskUsageReport] ParseDiskUsage([string]$hostName) {

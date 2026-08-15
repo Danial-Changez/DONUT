@@ -47,6 +47,19 @@ Describe "DiskUsageService" {
         }
     }
 
+    Context "DeleteReport" {
+        It "removes the host's folders CSV and tolerates a missing one" {
+            $path = Join-Path $script:reportsDir 'GONE-folders.csv'
+            Set-Content -Path $path -Value 'x'
+
+            # The second call proves a missing file is a no-op, not a throw.
+            $script:service.DeleteReport('GONE')
+            $script:service.DeleteReport('GONE')
+
+            Test-Path $path | Should-BeFalse
+        }
+    }
+
     Context "ParseDiskUsage" {
         It "parses the worker's top-rows CSV into a typed report (volume root dropped)" {
             Set-Content -Path (Join-Path $script:reportsDir 'DUHOST-folders.csv') -Value @'

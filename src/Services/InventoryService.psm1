@@ -26,6 +26,12 @@ class InventoryService : RemoteJobService {
         return $this.BuildWorkerArgs($hostName, "Inventory", @{})
     }
 
+    # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
+    [void] DeleteReport([string]$hostName) {
+        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-inventory.json"
+        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+    }
+
     # Reads the copied-back inventory JSON into a typed MachineInventory. Returns $null
     # when missing or unparseable, mirroring RemoteUpdateService.ParseUpdateReport.
     [MachineInventory] ParseInventory([string]$hostName) {
