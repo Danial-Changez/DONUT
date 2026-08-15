@@ -29,6 +29,8 @@ class HostResolver : RemoteJobService {
     hidden [hashtable] $InFlight = @{}   # host -> $true while a resolve job is queued
     # host -> the name the box at its IP reported (identity check).
     hidden [hashtable] $VerifiedNames = @{}
+    # ponytail: host -> home domain from the pick, memory only, so a restart re-picks.
+    hidden [hashtable] $DomainHints = @{}
 
     # A DHCP IP can move, so a verdict older than this re-resolves on the next select.
     [timespan] $Ttl = [timespan]::FromMinutes(5)
@@ -89,6 +91,19 @@ class HostResolver : RemoteJobService {
         $this.InFlight.Remove($hostName.Trim())
     }
 
+    # The pick's home domain: a resolve tries "<host>.<domain>" before the bare name.
+    [void] SetDomainHint([string]$hostName, [string]$domain) {
+        if ([string]::IsNullOrWhiteSpace($hostName) -or [string]::IsNullOrWhiteSpace($domain)) { return }
+        $this.DomainHints[$hostName.Trim()] = $domain.Trim()
+    }
+
+    [string] GetDomainHint([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return '' }
+        $name = $hostName.Trim()
+        if ($this.DomainHints.ContainsKey($name)) { return [string]$this.DomainHints[$name] }
+        return ''
+    }
+
     # Drops a host's cached verdict so the next attempt re-resolves after a failed job.
     [void] Invalidate([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName)) { return }
@@ -132,10 +147,12 @@ class HostResolver : RemoteJobService {
 
     # Per-host job: resolve $hostName against the already-warmed active DC.
     [hashtable] PrepareResolve([string]$hostName) {
-        return $this.BuildWorkerArgs($hostName, 'Resolve', @{ Mode = 'Host'; Dc = $this.ActiveDc })
+        return $this.BuildWorkerArgs($hostName, 'Resolve', @{
+                Mode = 'Host'; Dc = $this.ActiveDc; Domain = $this.GetDomainHint($hostName)
+            })
     }
 
-    # Fast-lane variant: args for the slim ResolveWorker child, which takes three CLI
+    # Fast-lane variant: args for the slim ResolveWorker child, which takes plain CLI
     # strings and no Settings snapshot, so no per-resolve DeepClone on the UI thread.
     [hashtable] PrepareResolveFast([string]$hostName) {
         $scriptPath = Join-Path $this.Config.SourceRoot "Scripts\ResolveWorker.ps1"
@@ -149,6 +166,7 @@ class HostResolver : RemoteJobService {
             Arguments      = @{
                 HostName = $hostName
                 Dc       = $this.ActiveDc
+                Domain   = $this.GetDomainHint($hostName)
                 LogsDir  = $this.Config.LogsPath
                 DebugLog = $this.Logger.DebugEnabled
             }

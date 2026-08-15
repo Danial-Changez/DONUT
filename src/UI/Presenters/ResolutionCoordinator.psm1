@@ -261,6 +261,12 @@ class ResolutionCoordinator {
         $this.StartFastResolve($hostName)
     }
 
+    # The pick's home domain rides along, so a sibling-forest name resolves as its FQDN.
+    [void] PrefetchIp([string]$hostName, [string]$domain) {
+        $this.Resolver.SetDomainHint($hostName, $domain)
+        $this.PrefetchIp($hostName)
+    }
+
     hidden [void] StartFastResolve([string]$hostName) {
         try {
             $this.Resolver.MarkInFlight($hostName)

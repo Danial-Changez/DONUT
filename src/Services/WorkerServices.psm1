@@ -197,8 +197,12 @@ class ExecutionService {
 
         # Breadcrumbs so a stalled host resolve names its last step (TTL keeps the volume low).
         $dc = if ($null -ne $options) { [string]$options.Dc } else { '' }
-        $this.Logger.LogDebug("[$hostName] Host resolve: DC='$dc' - DNS lookup...")
-        $ip = $this.Probe.ResolveWith($hostName, $dc)
+        $domain = if ($null -ne $options) { [string]$options.Domain } else { '' }
+        $this.Logger.LogDebug("[$hostName] Host resolve: DC='$dc', domain='$domain' - DNS lookup...")
+        # The pick's home domain qualifies the name first, as ResolveWorker does (its DESCRIPTION).
+        $ip = $null
+        if ($domain -and $hostName -notmatch '\.') { $ip = $this.Probe.ResolveWith("$hostName.$domain", $dc) }
+        if ($null -eq $ip) { $ip = $this.Probe.ResolveWith($hostName, $dc) }
         $ipStr = if ($null -ne $ip) { $ip.ToString() } else { '' }
         $online = $false
         if (-not [string]::IsNullOrWhiteSpace($ipStr)) {

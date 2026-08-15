@@ -81,7 +81,7 @@ class UpdatePresenter {
             $remoteVer = [version]$release.tag_name.TrimStart('v')
 
             if ($remoteVer -ne $localVer) {
-                $this.ShowUpdateWindow($release, $localVer, $remoteVer)
+                $this.ShowUpdateWindow($release, $localVer, $remoteVer, $token)
             }
         }
         catch {
@@ -91,22 +91,23 @@ class UpdatePresenter {
 
     # --- Update UI ---
 
-    [void] ShowUpdateWindow($Release, $LocalVer, $RemoteVer) {
+    [void] ShowUpdateWindow($Release, $LocalVer, $RemoteVer, $token) {
         $isRollback = ($LocalVer -gt $RemoteVer)
         $result = $this.Dialog.ShowUpdatePrompt($LocalVer.ToString(), $RemoteVer.ToString(),
             $isRollback)
 
         if ($result) {
-            $this.PerformUpdate($Release)
+            $this.PerformUpdate($Release, $isRollback, $token)
         }
     }
 
-    [void] PerformUpdate($Release) {
+    # The rollback verdict and token are the ones the prompt was built from, so what
+    # the operator consented to is what runs, whatever a re-read would say now.
+    [void] PerformUpdate($Release, [bool]$isRollback, $token) {
         try {
             $asset = $this.Service.GetReleaseAsset($Release, '*.msi')
             if (-not $asset) { throw "No MSI asset found." }
 
-            $token = $this.Service.GetStoredToken()
             $stage = [DonutPaths]::DataRoot()
 
             # A blocking download is fine here: the window is closed and the app exits after.
@@ -125,10 +126,6 @@ class UpdatePresenter {
             else {
                 $this.Logger.LogWarning("No checksum file found. Skipping verification.")
             }
-
-            $localVer = $this.Service.GetLocalVersion()
-            $remoteVer = [version]$Release.tag_name.TrimStart('v')
-            $isRollback = ($localVer -gt $remoteVer)
 
             $this.Service.ApplyUpdate($msiPath, $isRollback, $this.Resources.SourceRoot)
 

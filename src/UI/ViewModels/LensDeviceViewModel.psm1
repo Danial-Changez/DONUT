@@ -14,6 +14,7 @@ using module "..\..\Models\PersonLens.psm1"
 #>
 class LensDeviceViewModel : ObservableObject {
     [string] $Name = ''
+    [string] $Domain = ''                 # home AD domain, so Add resolves the FQDN first
     [string] $LastSeenText = ''
     [string] $Model = ''
     [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
@@ -33,6 +34,7 @@ class LensDeviceViewModel : ObservableObject {
     LensDeviceViewModel([LensDevice]$d) {
         if ($null -ne $d) {
             $this.Name = $d.Name
+            $this.Domain = $d.Domain
             $this.Model = $d.Model
             # "Tag" spelled out matches the MACHINE stat tile, so one fact keeps one name.
             if ($d.Serial) { $this.TagText = "Tag $($d.Serial)" }

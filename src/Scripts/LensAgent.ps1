@@ -235,7 +235,7 @@ while ($true) {
                     'software' {
                         # The user's whole software list rides one request, like the owner batch.
                         $json = ''
-                        try { $json = Resolve-UserSoftware -identity ([string]$req.identity) -sam ([string]$req.sam) -server $server }
+                        try { $json = Resolve-UserSoftware -identity ([string]$req.identity) -sam ([string]$req.sam) -server $server -dn ([string]$req.dn) }
                         catch { $json = @{ deployments = @(); error = "software: $($_.Exception.Message)" } | ConvertTo-Json -Compress }
                         Write-LensBundle $resultPath $json
                     }

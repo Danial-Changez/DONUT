@@ -81,8 +81,12 @@ future source (e.g. an Intune API) slots in beside the existing ones:
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
    computer's AD object, one thread job per device running beside the hardware
    jobs, so the gather's tail is one device's cost rather than the sum. A
-   computer the agent forest's GC cannot see is retried against the finder's
-   configured domain list, the person's own domain first.
+   computer the agent forest's GC cannot see is pinned by the affinity row's own
+   ResourceID: one keyed `SMS_R_System` read supplies the discovery DN (bound
+   directly, so the pane shows the exact machine SCCM asserted) and its
+   `FullDomainName`, which then leads the fallback sweep over the finder's
+   configured domain list, the person's own domain next — so a stale DN after
+   an OU move costs one bind, not the whole sweep.
 
 The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path —
@@ -101,9 +105,11 @@ Rules the AdminService imposes (each learned the hard way — see
   segment, and a device empty from both records `no inventory rows for ResourceID
   N` rather than a blank card.
 - Owner naming: `SMS_R_User.FullUserName` first (the site aggregates every forest),
-  the agent's own-forest GC as fallback, the SAM as last resort; names memoize per
-  batch, and the batched owner lookup is one request for all machines, served on a
-  thread job off the serve loop.
+  the agent's own-forest GC as fallback — accepted only when the hit's
+  `msDS-PrincipalName` equals the `DOMAIN\sam` SCCM handed over, so a same-SAM
+  twin in this forest never names a sibling-forest machine's owner — the SAM as
+  last resort; names memoize per batch, and the batched owner lookup is one
+  request for all machines, served on a thread job off the serve loop.
 - The software list (`Resolve-UserSoftware`, request kind `software`) walks the user
   direction: `SMS_R_User` names the ResourceIDs (endswith, exact tail client-side),
   `SMS_FullCollectionMembership` the collections (`ResourceID eq N`, with no keyed
@@ -112,8 +118,10 @@ Rules the AdminService imposes (each learned the hard way — see
   deployment (packages carry their program name, since no generic filter can sort
   them apart) — an or-filter over the collections would 404. It rides its own
   request, dispatched in parallel with the person lookup, so neither ever waits on
-  the other; the optional `lensSoftwareCollectionFilter` config regex narrows the
-  rows parent-side at render time, blank by default.
+  the other, and carries the same SAM and DN hints: a SAM-less pick binds the DN
+  for its SAM before any GC guess, exactly as the person read does; the optional
+  `lensSoftwareCollectionFilter` config regex narrows the rows parent-side at
+  render time, blank by default.
 - Every AdminService call carries a 15 s timeout and every searcher a 15 s
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.

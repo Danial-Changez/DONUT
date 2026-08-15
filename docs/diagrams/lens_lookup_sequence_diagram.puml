@@ -69,7 +69,7 @@ deactivate P
 
 == Act on a device ==
 OP -> VM : click "Add" on a device
-VM -> P : OnAddDeviceToList(wsid)
+VM -> P : OnAddDeviceToList(wsid, domain)
 activate P
 P -> P : EnsureRow + PrefetchIp + StartInventory + MoveRowToTop
 P -> OP : machine added to the list (toast); Lens stays open

@@ -217,7 +217,7 @@ $script:HardwareScript = {
 
 # One device's AD detail, self contained: nested jobs do not inherit Common's functions.
 $script:DeviceScript = {
-    param($forestNc, $wsid, $fallbackDomains)
+    param($forestNc, $wsid, $fallbackDomains, $resourceId = '', $server = '')
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
         model = ''; serial = ''; manufacturer = ''
@@ -235,7 +235,31 @@ $script:DeviceScript = {
             if ($cHit) { $compDn = [string]$cHit.Properties['distinguishedname'][0] }
         }
         catch { }
-        # A sibling-forest machine is invisible to this GC, so ask each domain directly.
+        # A sibling-forest machine is invisible to this GC, and SCCM's discovery DN pins it.
+        if (-not $compDn -and $resourceId -and $server) {
+            try {
+                $p = @{ Uri = "https://$server/AdminService/wmi/SMS_R_System($resourceId)?`$select=DistinguishedName,FullDomainName"
+                    UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
+                }
+                if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+                $r = Invoke-RestMethod @p
+                if ($null -ne $r.PSObject.Properties['value']) { $r = @($r.value) | Select-Object -First 1 }
+                # Discovery's domain leads the sweep either way, so a stale DN costs one bind.
+                $fullDomain = [string]$r.FullDomainName
+                if ($fullDomain) {
+                    $fallbackDomains = @($fullDomain) + @($fallbackDomains | Where-Object { $_ -ne $fullDomain })
+                }
+                $sccmDn = [string]$r.DistinguishedName
+                if ($sccmDn) {
+                    # A DN gone stale since discovery (an OU move) fails to bind, and the sweep runs.
+                    $probe = [ADSI]"LDAP://$sccmDn"
+                    $probe.psbase.RefreshCache()
+                    $compDn = $sccmDn
+                }
+            }
+            catch { }
+        }
+        # Every domain the finder knows, the person's own first, asked directly.
         if (-not $compDn) {
             foreach ($fd in @($fallbackDomains)) {
                 if (-not $fd) { continue }
@@ -371,7 +395,12 @@ function Get-OwnerDisplayName {
             $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$sam))"
             if ($hit) {
                 $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
-                $r.owner = [string]$user.Properties['displayname'][0]
+                # SCCM's DOMAIN\sam is in hand, so a same-SAM twin in this forest never names it.
+                $user.psbase.RefreshCache([string[]]@('msDS-PrincipalName', 'displayName'))
+                $principal = [string]$user.Properties['msDS-PrincipalName'][0]
+                if (-not $principal -or $principal -ieq $uniqueUserName) {
+                    $r.owner = [string]$user.Properties['displayname'][0]
+                }
             }
         }
         catch { $r.error = "AD user: $($_.Exception.Message)" }
@@ -468,9 +497,16 @@ $script:SoftwareScript = {
     return @($rows | Sort-Object { $_.software })
 }
 
+# The picked row's DN to its SAM: one serverless bind, '' when it cannot bind.
+function Get-DnSam([string]$dn) {
+    if (-not $dn) { return '' }
+    try { return [string]([ADSI]"LDAP://$dn").Properties['samaccountname'][0] }
+    catch { return '' }
+}
+
 # The user's whole software list in one request, mirroring the owner batch shape.
 function Resolve-UserSoftware {
-    param([string]$identity, [string]$sam, [string]$server)
+    param([string]$identity, [string]$sam, [string]$server, [string]$dn = '')
     $bundle = [ordered]@{ deployments = @(); error = '' }
     if (-not $server) {
         $bundle.error = 'no AdminService host configured'
@@ -478,6 +514,8 @@ function Resolve-UserSoftware {
     }
     try {
         $resolved = Get-SamGuess $identity $sam
+        # The DN pins the exact account, as Read-LensUser does, ahead of any GC guess.
+        if (-not $resolved) { $resolved = Get-DnSam $dn }
         if (-not $resolved) {
             # A UPN or display name pick carries no SAM, so one GC read supplies it.
             $uFilter =
@@ -720,8 +758,9 @@ function Resolve-Lens {
     foreach ($wsid in $wsids) {
         $devJob = $null
         try {
+            # The affinity's ResourceID rides along, so a GC miss reads SCCM's DN for it.
             $devJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:DeviceScript `
-                -ArgumentList $script:ForestNc, $wsid, $adFallback
+                -ArgumentList $script:ForestNc, $wsid, $adFallback, ([string]$wsMap[$wsid]), $server
         }
         catch { $devJob = $null }
         $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })

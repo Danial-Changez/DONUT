@@ -43,6 +43,7 @@ class ResolveProcessJob : AsyncJob {
             $psi = [System.Diagnostics.ProcessStartInfo]::new($pwsh)
             foreach ($a in @('-NoProfile', '-NoLogo', '-NonInteractive', '-File', $scriptPath,
                     '-HostName', [string]$arguments.HostName, '-Dc', [string]$arguments.Dc,
+                    '-Domain', [string]$arguments.Domain,
                     '-LogsDir', [string]$arguments.LogsDir, '-ResultFile', $this.FastResultFile)) {
                 $psi.ArgumentList.Add($a)
             }

@@ -34,7 +34,7 @@
 
 .PARAMETER SoftwareFor
     Identity: return their SCCM application deployments instead of running a person
-    lookup. Dispatched beside the person lookup, and it rides the same -Sam hint.
+    lookup. Dispatched beside the person lookup, and it rides the same -Sam and -Dn hints.
 
 .PARAMETER Sam
     Optional sAMAccountName hint from the finder row, so the agent can start SCCM

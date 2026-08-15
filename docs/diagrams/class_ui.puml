@@ -84,7 +84,7 @@ package "Donut.UI.Presenters" #2B1A12 {
         -ConfigManager: object
         -Home: object
         +StartWarm() / WarmPool(): void
-        +PrefetchIp(host): void
+        +PrefetchIp(host) / PrefetchIp(host, domain): void
         +InvalidateResolved(host): void
         +StartVerifyName(host): void
         +CompleteResolve(job): void
@@ -102,12 +102,12 @@ package "Donut.UI.Presenters" #2B1A12 {
         +Initialize(): void
         +WarmAdSearch() / WarmLens(): void
         +RunAdSearch() / PollSearch(): void
-        +OnPickComputer(name): void
+        +OnPickComputer(name, domain): void
         +OnUnlockUser(r) / PollUnlock(): void
         +OnResetPassword(r): void
         +OnShowQr / OnShowReset: scriptblock
         +OnPickUser(r) / PollLens(): void
-        +OnAddDeviceToList(wsid): void
+        +OnAddDeviceToList(wsid, domain): void
         +OwnerJob: object
         +ResolveOwners(machines, onResolved): void
         -ReapOwners(): void
@@ -171,7 +171,8 @@ package "Donut.UI.Presenters" #2B1A12 {
 
     class UpdatePresenter {
         +CheckAndPrompt(): void
-        -ShowUpdateWindow(release, localVer, remoteVer): void
+        -ShowUpdateWindow(release, localVer, remoteVer, token): void
+        -PerformUpdate(release, isRollback, token): void
     }
 
     class ToastService {

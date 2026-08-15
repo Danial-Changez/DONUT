@@ -49,6 +49,13 @@ Per-host IP resolves skip the pool entirely (`ResolveProcessJob` +
   and 3 consecutive faults latch the lane off for the session.
 - DC discovery (`Warm`, needs the AD module) and the identity check (`Name`, DCOM
   CIM) stay on the worker path.
+- When the pick knew the machine's home domain (a finder row's `Domain`, a Lens
+  device's), `HostResolver` keeps it as a domain hint and both resolve paths ask
+  for `<host>.<domain>` first, bare name as the fallback — so a sibling-forest
+  machine resolves in its own zone instead of riding this box's DNS suffix list,
+  which either fails (a false Offline) or, on a name collision, answers with the
+  home forest's twin. Hosts added by typing or from recents carry no hint and
+  resolve exactly as before.
 
 ## Two pools: worker and interactive
 

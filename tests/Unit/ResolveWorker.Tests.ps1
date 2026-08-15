@@ -51,6 +51,42 @@ Describe "ResolveWorker" {
             }
             Resolve-TargetIp -TargetHost 'PC1' -Server '' -Log $script:log | Should -Be ''
         }
+
+        It "asks for the FQDN first when the pick's domain is known, and only that on a hit" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                [pscustomobject]@{ IPAddress = '10.9.9.9' }
+            }
+            Resolve-TargetIp -TargetHost 'PC1' -Server 'DC1' -Log $script:log -Domain 'sibling.local' |
+                Should -Be '10.9.9.9'
+            @($script:asked) | Should -Be @('PC1.sibling.local')
+        }
+
+        It "falls back to the bare name when the FQDN has no answer" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                if ($Name -match '\.') { throw 'DNS name does not exist' }
+                [pscustomobject]@{ IPAddress = '10.1.2.3' }
+            }
+            Resolve-TargetIp -TargetHost 'PC1' -Server 'DC1' -Log $script:log -Domain 'sibling.local' |
+                Should -Be '10.1.2.3'
+            @($script:asked) | Should -Be @('PC1.sibling.local', 'PC1')
+        }
+
+        It "never re-qualifies a name that already carries a dot" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                [pscustomobject]@{ IPAddress = '10.1.2.3' }
+            }
+            $null = Resolve-TargetIp -TargetHost 'pc1.corp.local' -Server 'DC1' -Log $script:log -Domain 'other.local'
+            @($script:asked) | Should -Be @('pc1.corp.local')
+        }
     }
 
     Context "Test-RpcPort" {

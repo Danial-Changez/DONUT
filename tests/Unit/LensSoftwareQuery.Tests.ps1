@@ -154,5 +154,33 @@ Describe "Lens software query" {
             @($bundle.deployments).Count | Should-Be 1
             $bundle.deployments[0].software | Should-Be 'Zoom Workplace'
         }
+
+        It "binds the picked DN for the SAM ahead of any GC search, as the person read does" {
+            Mock Invoke-RestMethod {
+                if ($Uri -match 'SMS_R_User') { return New-Collection @((New-SccmUser 'CORP\jdoe' 100)) }
+                if ($Uri -match 'SMS_FullCollectionMembership') { return New-Collection @((New-Membership 'WSH001')) }
+                return New-Collection @((New-Deployment 'Zoom Workplace' 'Zoom Deploy - WASH' 'WSH001'))
+            }
+            function Get-DnSam { param([string]$dn) if ($dn -eq 'CN=J Doe,DC=corp') { 'jdoe' } else { '' } }
+            function Find-Gc { param([string]$Filter) throw 'the DN in hand must win over a GC guess' }
+
+            $bundle = Resolve-UserSoftware -identity 'J Doe' -sam '' -server 'sccm.corp.com' -dn 'CN=J Doe,DC=corp' |
+                ConvertFrom-Json
+
+            @($bundle.deployments).Count | Should-Be 1
+            $bundle.deployments[0].software | Should-Be 'Zoom Workplace'
+        }
+
+        It "still falls back to the GC when the DN cannot bind" {
+            Mock Invoke-RestMethod { throw 'should not be reached' }
+            function Get-DnSam { param([string]$dn) '' }
+            function Find-Gc { param([string]$Filter) throw 'GC unreachable' }
+
+            $bundle = Resolve-UserSoftware -identity 'J Doe' -sam '' -server 'sccm.corp.com' -dn 'CN=stale,DC=corp' |
+                ConvertFrom-Json
+
+            @($bundle.deployments).Count | Should-Be 0
+            ($bundle.error -match 'GC unreachable') | Should-BeTrue
+        }
     }
 }

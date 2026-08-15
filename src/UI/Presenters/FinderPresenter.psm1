@@ -419,7 +419,7 @@ class FinderPresenter {
     }
 
     # The pick's parallel software lookup: a cache hit applies at once, else one job runs.
-    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$cacheKey) {
+    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$dn, [string]$cacheKey) {
         $this.SoftwareKey = $cacheKey
         $cached = $this.SoftwareCache[$cacheKey]
         if ($null -ne $cached -and
@@ -436,7 +436,8 @@ class FinderPresenter {
             $this.SoftwareJob = $null
         }
         try {
-            $job = $this.StartLensWorker(@{ Sam = $sam; SoftwareFor = $identity })
+            # The DN rides along as on the person job, so a SAM-less pick still pins one account.
+            $job = $this.StartLensWorker(@{ Sam = $sam; Dn = $dn; SoftwareFor = $identity })
             $job.Key = $cacheKey
             $this.SoftwareJob = $job
             $this.LensPollTimer.Start()
@@ -665,7 +666,9 @@ class FinderPresenter {
             foreach ($c in ($computers | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($c)
                 $cap = [string]$c.Name
-                $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
+                # The row's forest rides along, so the resolve never guesses the domain.
+                $capDomain = [string]$c.Domain
+                $pick = { param($p) $presenter.OnPickComputer($cap, $capDomain) }.GetNewClosure()
                 $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
                 $items.Add($vm)
             }
@@ -710,11 +713,11 @@ class FinderPresenter {
     }
 
     # The pick is the add: straight onto the machine pane, and the dropdown closes.
-    [void] OnPickComputer([string]$name) {
+    [void] OnPickComputer([string]$name, [string]$domain) {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
         $this.CloseSearchPopup()
         $vm = $this.Home.EnsureRow($name)
-        $this.Home.Resolution.PrefetchIp($name)
+        $this.Home.Resolution.PrefetchIp($name, $domain)
         $this.Home.StartInventory($name, $true)
         $this.Home.MoveRowToTop($name)
         # Shared-VM selection, same as OnSearch's flow: shows the new card's detail pane.
@@ -808,7 +811,7 @@ class FinderPresenter {
             $this.LensToken++   # stales any in-flight lookup, its late result is discarded
             $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
             $this.WireLensDeviceCommands()
-            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
+            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, [string]$r.DistinguishedName, $cacheKey)
             return
         }
 
@@ -838,7 +841,7 @@ class FinderPresenter {
             $this.LensVm.Set('StatusText', "Could not start the lookup: $_")
         }
         # Dispatched last, so software can never queue ahead of the pick on a full pool.
-        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
+        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, [string]$r.DistinguishedName, $cacheKey)
     }
 
     # Streams any 'LensPartial' record into the VM before the final bundle lands.
@@ -931,7 +934,8 @@ class FinderPresenter {
         $presenter = $this
         foreach ($dev in $this.LensVm.Devices) {
             $capName = [string]$dev.Name
-            $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
+            $capDomain = [string]$dev.Domain
+            $add = { param($p) $presenter.OnAddDeviceToList($capName, $capDomain) }.GetNewClosure()
             $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
 
             $vm = $dev
@@ -945,10 +949,10 @@ class FinderPresenter {
     }
 
     # The Lens person seeds the row's owner, so a name on screen is never re-queried.
-    [void] OnAddDeviceToList([string]$wsid) {
+    [void] OnAddDeviceToList([string]$wsid, [string]$domain) {
         if ([string]::IsNullOrWhiteSpace($wsid)) { return }
         $this.Home.EnsureRow($wsid, [string]$this.LensVm.DisplayName)
-        $this.Home.Resolution.PrefetchIp($wsid)
+        $this.Home.Resolution.PrefetchIp($wsid, $domain)
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)
         if ($this.Toasts) { $this.Toasts.ShowInfo($wsid, "Added to the machine list.") }

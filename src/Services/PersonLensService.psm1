@@ -289,11 +289,11 @@ class PersonLensService {
         if ([string]::IsNullOrWhiteSpace($identity)) { return '' }
         if (-not [ElevationContext]::IsElevated()) {
             return $this.RunInProcess('software lookup', $false, 'Resolve-UserSoftware',
-                @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer })
+                @{ identity = $identity; sam = $this.SamHint; server = $this.SiteServer; dn = $this.DnHint })
         }
         return $this.ExchangeRoundTrip(
             @{ kind = 'software'; identity = $identity; sam = $this.SamHint
-                siteServer = $this.SiteServer
+                siteServer = $this.SiteServer; dn = $this.DnHint
             }, $false)
     }
 

@@ -176,15 +176,28 @@ Describe "HostResolver" {
             $prep.Arguments.Options.Ip   | Should -Be "10.0.0.5"
         }
 
-        It "PrepareResolveFast targets ResolveWorker with four CLI args and no Settings" {
+        It "PrepareResolveFast targets ResolveWorker with five CLI args and no Settings" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $prep = $r.PrepareResolveFast("PC-1")
             $prep.ScriptPath | Should -Match 'ResolveWorker\.ps1$'
             $prep.Arguments.HostName | Should -Be "PC-1"
             $prep.Arguments.Dc | Should -Be "DC1"
+            $prep.Arguments.Domain | Should -Be ''
             $prep.Arguments.ContainsKey('DebugLog') | Should -BeTrue
-            $prep.Arguments.Keys.Count | Should -Be 4   # No Settings snapshot rides along.
+            $prep.Arguments.Keys.Count | Should -Be 5   # No Settings snapshot rides along.
+        }
+
+        It "both resolve preps carry the pick's domain hint, blank for an unhinted host" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.SetDomainHint("PC-1", " sibling.corp.local ")
+            $r.PrepareResolveFast("PC-1").Arguments.Domain | Should -Be "sibling.corp.local"
+            $r.PrepareResolve("PC-1").Arguments.Options.Domain | Should -Be "sibling.corp.local"
+            $r.PrepareResolve("PC-2").Arguments.Options.Domain | Should -Be ''
+            # A blank hint never overwrites a known domain (re-adds from recents pass none).
+            $r.SetDomainHint("PC-1", "")
+            $r.GetDomainHint("pc-1 ") | Should -Be "sibling.corp.local"
         }
     }
 
