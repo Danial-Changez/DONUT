@@ -200,10 +200,12 @@ class HostResolver : RemoteJobService {
     }
 
     # Compares the target name to what the machine reported. 'Match' / 'Mismatch' /
-    # 'Unknown' (not checked or query failed). Short-name, case-insensitive.
+    # 'Failed' (checked, no answer) / 'Unknown' (not checked). Short-name, case-insensitive.
     [string] IdentityVerdict([string]$hostName) {
+        if ([string]::IsNullOrWhiteSpace($hostName)) { return 'Unknown' }
+        if (-not $this.VerifiedNames.ContainsKey($hostName.Trim())) { return 'Unknown' }
         $actual = $this.GetVerifiedName($hostName)
-        if ([string]::IsNullOrWhiteSpace($actual)) { return 'Unknown' }
+        if ([string]::IsNullOrWhiteSpace($actual)) { return 'Failed' }
         $target = $hostName.Trim().Split('.')[0]
         $reported = $actual.Trim().Split('.')[0]
         return $(if ($target -ieq $reported) { 'Match' } else { 'Mismatch' })

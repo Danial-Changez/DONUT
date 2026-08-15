@@ -134,6 +134,7 @@ else Unknown OR stale 'Online'
   end note
 else fresh Online
   alt scan cached < 24h (RecentScanIsFresh)  — resume, don't rescan
+    P -> J : Resolve{Name}  (StartVerifyName — no scan to hide behind, so the check runs on its own)
     P -> P : reuse scan -> ProceedWithApply (skips Phase-1 rescan)
   else fresh scan needed
     P -> J : UpdateScan
@@ -149,15 +150,15 @@ end
 
 == Phase 4 — Apply pipeline (ProceedWithApply) ==
 P -> R : IdentityVerdict(host)  (from the parallel Name check)
-alt Mismatch  (the IP now answers as a different machine)
+alt Mismatch (the IP answers as a different machine) OR Failed (no answer)
   P -> P : ABORT apply + InvalidateResolved (drop IP, re-resolve)
-else Match OR Unknown
+else Match OR Unknown (check still running)
   note right of P #13291D
-    [HARDENED] the dialog now STATES the verdict ("identity verified
-    as X" / "not verified yet - proceed with care"), and it is
-    RE-CHECKED after the dialog closes (the pump keeps draining the
-    parallel name-check while it's open) - a late Mismatch aborts
-    before the destructive step. 'Unknown' proceeds by design.
+    [HARDENED] the pill states the verdict and refreshes the moment it
+    lands (OnIdentityVerdict). After consent, GateApply: Match starts
+    the apply, a still-running check QUEUES it (PendingApplies) and the
+    landing verdict starts or drops it, Mismatch/Failed drop it with a
+    reason. Batch applies obey the same gate. No verdict, no apply.
   end note
   P -> P : parse report -> driver match -> ShowConfirmation (MODAL, + identity line)
   note over P #2A2211
@@ -165,7 +166,7 @@ else Match OR Unknown
     completions to a later non-modal tick (avoids stacked dialogs).
   end note
   OP -> P : confirm
-  P -> R : re-check IdentityVerdict  (late Mismatch -> ABORT + re-resolve)
+  P -> R : GateApply: IdentityVerdict  (Match -> apply now; Unknown -> wait; else ABORT + re-resolve)
   P -> J : UpdateApply
   J -> W : RunApplyPhase -> InvokePsExec
   W -> N : InvokePsExec SMB gate -> IsSmbAvailable(ip) (445, 2s) — the ONLY pre-launch touch

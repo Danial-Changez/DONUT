@@ -420,6 +420,8 @@ class ResolutionCoordinator {
             }
             elseif ($mode -eq 'Name') {
                 $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
+                # HomePresenter owns the apply gate: the verdict releases or drops a waiting apply.
+                $this.Home.OnIdentityVerdict([string]$item.HostName)
             }
             elseif ($mode -eq 'WarmRunspace') {
                 # No-op: the job's purpose was loading the module graph into its runspace.

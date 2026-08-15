@@ -81,6 +81,8 @@ class FakeHome {
     [void] ReissueAfterResolve([string]$h, [bool]$online) { $this.Reissued.Add(@($h, $online)) }
     [void] DropPendingRunOnResolveFailure([string]$h) { $this.DroppedRuns.Add($h) }
     [void] RenderReachability([string]$h) { $this.Rendered.Add($h) }
+    [System.Collections.Generic.List[string]] $Verdicts = [System.Collections.Generic.List[string]]::new()
+    [void] OnIdentityVerdict([string]$h) { $this.Verdicts.Add($h) }
     [object] GetRecord([string]$h) { return $null }
     [System.Collections.Generic.List[string]] $DeferredWarmReasons =
     [System.Collections.Generic.List[string]]::new()
@@ -125,6 +127,16 @@ Describe "ResolutionCoordinator" {
             $script:fakeHome.Rendered | Should -Be @('PC1')
             $script:fakeHome.Reissued.Count | Should -Be 1
             $script:fakeHome.Reissued[0] | Should -Be @('PC1', $true)
+        }
+
+        It "hands a Name verdict back to Home, which owns the waiting apply" {
+            $job = [AsyncJob]::new('PC1', [JobKind]::Resolve)
+            $job.Status = 'Completed'
+            $job.Result = @([pscustomobject]@{ Mode = 'Name'; HostName = 'PC1'; ActualName = 'PC1' })
+
+            $script:coord.CompleteResolve($job)
+
+            $script:fakeHome.Verdicts | Should -Be @('PC1')
         }
 
         It "clears the latch and drops the queued run on a failed resolve" {

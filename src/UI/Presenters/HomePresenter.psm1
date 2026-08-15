@@ -68,6 +68,13 @@ using module "..\..\Models\MachineListShaper.psm1"
     when the verdict lands. This keeps the freeze-prone, unbounded CIM/psexec
     connect - and the expensive on-worker AD resolve - away from unreachable hosts.
 
+    Identity gating: an apply (destructive, BIOS included) starts only on a 'Match'
+    from the name check (StartVerifyName, WMI at the cached IP). A fresh scan runs
+    the check beside itself, and a reused scan starts it explicitly, so a consented
+    apply whose verdict is still pending waits in PendingApplies and OnIdentityVerdict
+    starts it, while 'Mismatch' (the IP moved) and 'Failed' (no answer) drop it with a
+    reason. Batch applies obey the same gate, since they skip the confirm dialog.
+
     Cold-loading the worker module graph takes the process-wide CLR loader lock;
     if that happens while the dispatcher is rendering, the UI freezes. WarmPool
     therefore blocks during startup, before the message loop exists, to take that
@@ -138,6 +145,9 @@ class HomePresenter : AsyncJobPresenter {
 
     # Hosts consented in one "Run all" batch, so each applies without its own dialog.
     hidden [HashSet[string]] $BatchApplyHosts = [HashSet[string]]::new()
+
+    # Consented applies waiting on the identity verdict. OnIdentityVerdict starts or drops them.
+    hidden [HashSet[string]] $PendingApplies = [HashSet[string]]::new()
 
     HomePresenter(
         [AppConfig] $config,
@@ -334,12 +344,16 @@ class HomePresenter : AsyncJobPresenter {
         }
     }
 
-    # A queued run can't proceed without a verdict, so drop it with a reason.
+    # A queued run or apply can't proceed without a verdict, so drop it with a reason.
     [void] DropPendingRunOnResolveFailure([string]$hostName) {
         if ($this.PendingRuns.ContainsKey($hostName)) {
             $this.PendingRuns.Remove($hostName)
             $this.Detail.AppendLog($hostName, "Run not started: could not verify reachability (resolve failed).")
             if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Run not started. Could not verify the machine is reachable.") }
+        }
+        if ($this.PendingApplies.Remove($hostName)) {
+            $this.Detail.AppendLog($hostName, "Apply not started: the identity check could not run. Re-select and retry.", [LogSeverity]::Warn)
+            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Apply not started. The identity check could not run.") }
         }
     }
 
@@ -547,6 +561,8 @@ class HomePresenter : AsyncJobPresenter {
             $age = [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
             if ($command -eq 'applyUpdates') {
                 $this.Detail.AppendLog($hostName, "Reusing scan from $age (under 24h); skipping re-scan.")
+                # No scan to hide behind here, so the identity check runs and the apply waits on it.
+                $this.Resolution.StartVerifyName($hostName)
                 $this.ProceedWithApply($hostName)
             }
             else {
@@ -828,19 +844,44 @@ class HomePresenter : AsyncJobPresenter {
             $row.Percent, $row.ProgressIndeterminate)
     }
 
-    # Called twice, since the verdict may land mid-dialog. True aborts the pending apply.
-    hidden [bool] AbortOnIdentityMismatch([string]$hostName) {
-        if ($this.Resolver.IdentityVerdict($hostName) -ne 'Mismatch') { return $false }
-        $actual = $this.Resolver.GetVerifiedName($hostName)
-        $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.", [LogSeverity]::Warn)
-        if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. That address now answers as '$actual'. Re-select and retry.") }
+    # A wrong or silent machine aborts the apply. Called twice, since a verdict may land
+    # mid-dialog, and again when a waiting apply's verdict finally arrives. True aborted.
+    hidden [bool] AbortOnIdentity([string]$hostName) {
+        $verdict = $this.Resolver.IdentityVerdict($hostName)
+        if ($verdict -eq 'Mismatch') {
+            $actual = $this.Resolver.GetVerifiedName($hostName)
+            $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.", [LogSeverity]::Warn)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. That address now answers as '$actual'. Re-select and retry.") }
+        }
+        elseif ($verdict -eq 'Failed') {
+            $this.Detail.AppendLog($hostName, "Apply not started: the machine at that address did not answer the name check. Re-select to re-resolve and retry.", [LogSeverity]::Warn)
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. The machine did not answer the identity check. Re-select and retry.") }
+        }
+        else { return $false }
         $this.Resolution.InvalidateResolved($hostName)
         return $true
     }
 
+    # The consented apply starts on a verified identity, waits on a check still running,
+    # and drops on a wrong or silent machine. Safety first: no verdict, no apply.
+    hidden [bool] GateApply([string]$hostName) {
+        if ($this.Resolver.IdentityVerdict($hostName) -eq 'Match') { return $this.StartApply($hostName) }
+        if ($this.AbortOnIdentity($hostName)) { return $false }
+        [void]$this.PendingApplies.Add($hostName)
+        $this.Detail.AppendLog($hostName, "Waiting for the identity check before applying...")
+        return $false
+    }
+
+    # The identity verdict landed: refresh the pill, then start or drop a waiting apply.
+    [void] OnIdentityVerdict([string]$hostName) {
+        $this.RenderIdentity($hostName)
+        if (-not $this.PendingApplies.Remove($hostName)) { return }
+        [void]$this.GateApply($hostName)
+    }
+
     # Takes a hostName so a reused sub-24h scan can call it. True means the apply started.
     [bool] ProceedWithApply([string]$hostName) {
-        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
+        if ($this.AbortOnIdentity($hostName)) { return $false }
 
         $updateRows = $this.RenderUpdatesFromReport($hostName)
         if ($null -eq $updateRows) {
@@ -856,11 +897,11 @@ class HomePresenter : AsyncJobPresenter {
         $this.Detail.AppendLog($hostName, "Found $($updateRows.Count) update(s).")
         $this.CopyUpdatesToClipboard($hostName, @($updateRows | ForEach-Object { "$($_.Name), $($_.VersionText)" }))
 
-        # Run all consented up front: apply straight away, no per-host dialog.
+        # Run all consented up front: no per-host dialog, only the identity gate.
         if ($this.BatchApplyHosts.Contains($hostName)) {
             [void]$this.BatchApplyHosts.Remove($hostName)
             $this.Detail.AppendLog($hostName, "Applying $($updateRows.Count) update(s)...")
-            return $this.StartApply($hostName)
+            return $this.GateApply($hostName)
         }
 
         # Single run: one small confirm (the list itself lives in the pane, not the dialog).
@@ -873,9 +914,8 @@ class HomePresenter : AsyncJobPresenter {
             return $false
         }
 
-        # Re-check after the dialog: a Mismatch may have landed while it was open.
-        if ($this.AbortOnIdentityMismatch($hostName)) { return $false }
-        return $this.StartApply($hostName)
+        # The gate re-reads the verdict, since one may have landed while the dialog was open.
+        return $this.GateApply($hostName)
     }
 
     # Returns the rows, $null when no report exists, or @() when it holds none (card cleared).
@@ -889,22 +929,29 @@ class HomePresenter : AsyncJobPresenter {
             return @()
         }
 
-        # The name check runs with the apply, so a plain scan usually reads 'Unknown'.
+        if ($null -ne $vm) {
+            $vm.Set('Updates', $updateRows)
+            $vm.Set('HasUpdates', $true)
+        }
+        $this.RenderIdentity($hostName)
+        return $updateRows
+    }
+
+    # The identity pill beside the updates list. A plain scan never runs the check, so
+    # it reads 'Unknown' there, and an apply refreshes it the moment the verdict lands.
+    hidden [void] RenderIdentity([string]$hostName) {
+        $vm = $this.GetRow($hostName)
+        if ($null -eq $vm) { return }
         $verdict = $this.Resolver.IdentityVerdict($hostName)
         $reported = $this.Resolver.GetVerifiedName($hostName)
         $identityLine = switch ($verdict) {
             'Match' { "Identity verified: the machine at this IP answers as '$reported'." }
             'Mismatch' { "Wrong machine: this IP answers as '$reported', not $hostName - do not apply." }
+            'Failed' { "Identity check failed: the machine at this IP did not answer the name query. Re-select and retry before applying." }
             default { "Identity not verified yet - the name check runs before an apply." }
         }
-
-        if ($null -ne $vm) {
-            $vm.Set('Updates', $updateRows)
-            $vm.Set('UpdatesIdentityText', $identityLine)
-            $vm.Set('IdentityState', $verdict)
-            $vm.Set('HasUpdates', $true)
-        }
-        return $updateRows
+        $vm.Set('UpdatesIdentityText', $identityLine)
+        $vm.Set('IdentityState', $verdict)
     }
 
     # Launches the apply (phase 2) job. Shared by the single-confirm and Run-all paths.
@@ -1077,9 +1124,10 @@ class HomePresenter : AsyncJobPresenter {
         $this.UpdateService.DeleteReport($hostName)
         $this.InventoryService.DeleteReport($hostName)
         $this.DiskUsageService.DeleteReport($hostName)
-        # Drop queued work so a pending run/gather can't re-create the removed card.
+        # Drop queued work so a pending run/gather/apply can't re-create the removed card.
         $this.PendingRuns.Remove($hostName)
         $this.PendingGathers.Remove($hostName)
+        [void]$this.PendingApplies.Remove($hostName)
         $this.ScanSteps.Remove($hostName)
         if ($hostName -eq $this.SelectedHost) { $this.Detail.ClearSelection() }
     }

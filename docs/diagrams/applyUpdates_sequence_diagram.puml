@@ -21,6 +21,7 @@ Presenter -> Presenter: StartProcess("PC-01")
 
 alt Scan < 24h old and report cached
     Presenter -> Presenter: RecentScanIsFresh() = true
+    Presenter -> Job: queue Resolve{Name} (StartVerifyName —\nno scan to run beside, so the identity check runs alone)
     note right of Presenter: Reuse the cached scan —\nskip straight to apply.
 else No fresh scan
     Presenter -> Update: PrepareScanForUpdates("PC-01")
@@ -32,7 +33,7 @@ end
 
 Presenter -> Presenter: ProceedWithApply("PC-01")
 activate Presenter
-Presenter -> Presenter: AbortOnIdentityMismatch? (IP moved ->\nabort, drop the stale IP, re-resolve)
+Presenter -> Presenter: AbortOnIdentity? (IP moved, or no answer ->\nabort, drop the stale IP, re-resolve)
 Presenter -> Update: ParseUpdateReport("PC-01")
 activate Update
 Update -> Matcher: FindBestDriverMatch(updates, drivers)
@@ -47,7 +48,7 @@ alt Updates available
     User --> Dialog: Confirm
     Dialog --> Presenter: true
     deactivate Dialog
-    Presenter -> Presenter: re-check AbortOnIdentityMismatch\n(the parallel name-check may land while the dialog is up)
+    Presenter -> Presenter: GateApply: Match -> apply now; check still running ->\nPendingApplies, and OnIdentityVerdict starts or drops it;\nMismatch / Failed -> abort + re-resolve. No verdict, no apply.
 
     Presenter -> Update: PrepareApplyUpdates("PC-01", selected)
     Update --> Presenter: worker args

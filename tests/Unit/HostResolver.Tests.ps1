@@ -222,5 +222,11 @@ Describe "HostResolver" {
             $r.ClearVerifiedName("PC-1")
             $r.IdentityVerdict("PC-1") | Should -Be 'Unknown'
         }
+        It "Failed when the check ran but the box gave no name, unlike a check that never ran" {
+            $r = New-Resolver
+            $r.CacheName("PC-1", "")
+            $r.IdentityVerdict("PC-1") | Should -Be 'Failed'
+            $r.IdentityVerdict("PC-2") | Should -Be 'Unknown'
+        }
     }
 }

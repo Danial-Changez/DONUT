@@ -86,7 +86,7 @@ package "Donut.UI.Presenters" #2B1A12 {
         +StartWarm() / WarmPool(): void
         +PrefetchIp(host) / PrefetchIp(host, domain): void
         +InvalidateResolved(host): void
-        +StartVerifyName(host): void
+        +StartVerifyName(host): void  (verdict -> Home.OnIdentityVerdict)
         +CompleteResolve(job): void
         -StartFastResolve(host): void
         -StartClassicResolve(host): void
