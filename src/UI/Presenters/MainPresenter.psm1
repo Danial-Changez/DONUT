@@ -95,8 +95,7 @@ class MainPresenter {
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.MainWindow = $this.Window
             }
-        }
-        catch {
+        } catch {
             $msg = "Failed to load XAML: $_"
             if ($_.Exception -and $_.Exception.InnerException) {
                 $msg += "`nInner Exception: $($_.Exception.InnerException.Message)"
@@ -111,7 +110,8 @@ class MainPresenter {
         }
 
         $this.Resources.ApplyResourcesToWindow($this.Window)
-        $this.Logger.LogDebug("MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
+        $this.Logger.LogDebug(
+            "MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
         if ($this.Window.Resources.MergedDictionaries.Count -eq 0) {
             $this.Logger.LogWarning("No resources merged into MainWindow.")
         }
@@ -155,8 +155,7 @@ class MainPresenter {
         $max = { param($p)
             if ($presenter.Window.WindowState -eq 'Maximized') {
                 $presenter.Window.WindowState = 'Normal'
-            }
-            else { $presenter.Window.WindowState = 'Maximized' }
+            } else { $presenter.Window.WindowState = 'Maximized' }
         }.GetNewClosure()
         $this.MainVm.MaximizeCommand = [RelayCommand]::new([System.Action[object]]$max)
         $close = { param($p) $presenter.Window.Close() }.GetNewClosure()
@@ -218,8 +217,7 @@ class MainPresenter {
                     try {
                         [void]$global:LensTeardownJob.Handle.AsyncWaitHandle.WaitOne(
                             [TimeSpan]::FromSeconds(5))
-                    }
-                    catch { }
+                    } catch { }
                     try { $global:LensTeardownJob.Ps.Dispose() } catch { }
                     $global:LensTeardownJob = $null
                 }
@@ -261,8 +259,7 @@ class MainPresenter {
                         # The HWND now exists, so RegisterHotKey can bind to it.
                         $presenter.AttachHotkey($hwnd)
                     }
-                }
-                catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
+                } catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
             }.GetNewClosure())
 
         # Permanent diagnostic: logs UI-thread stalls over 1 s with GC-delta fingerprints.
@@ -320,14 +317,12 @@ class MainPresenter {
             }
             if ($this.Hotkey.Attach($this.Hwnd, $gesture.Modifiers, $gesture.VirtualKey)) {
                 $this.Logger.LogInfo("Global hotkey registered: $($gesture.Normalized)")
-            }
-            else {
+            } else {
                 $msg = "Hotkey $($gesture.Normalized) is already in use. Pick another in Settings."
                 $this.Logger.LogWarning("$msg (Win32 error $($this.Hotkey.LastError))")
                 if ($this.ToastService) { $this.ToastService.ShowError('Global Hotkey', $msg) }
             }
-        }
-        catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
+        } catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
     }
 
     # (Re)builds the window-level Open-Settings shortcut from config. In-app only (a WPF
@@ -352,8 +347,7 @@ class MainPresenter {
             $kb = [System.Windows.Input.KeyBinding]::new($this.MainVm.ToggleSettingsCommand, $key, $mods)
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
-        }
-        catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+        } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
     }
 
     # Registers/unregisters the elevated startup task to match the setting. Runs on the
@@ -437,7 +431,8 @@ class MainPresenter {
             return $false
         }
         $this.ExitRequested = $true
-        $this.Logger.LogInfo('Relaunched elevated; this instance is exiting so the new one can take the single-instance mutex.')
+        $this.Logger.LogInfo('Relaunched elevated; ' +
+            'this instance is exiting so the new one can take the single-instance mutex.')
         $this.Window.Close()
         return $true
     }
@@ -498,7 +493,8 @@ class MainPresenter {
     [void] ApplyDebugLogging() {
         $effective = $this.Config.GetDebugLogging() -or [bool]$global:DebugLogStart
         $this.Logger.DebugEnabled = $effective
-        $this.Logger.LogInfo("Debug logging " + $(if ($effective) { 'enabled' } else { 'disabled' }) + " (settings toggle).")
+        $state = if ($effective) { 'enabled' } else { 'disabled' }
+        $this.Logger.LogInfo("Debug logging $state (settings toggle).")
     }
 
     # Runs a pool worker script (a .ps1 whose using-module class types resolve in the
@@ -520,8 +516,7 @@ class MainPresenter {
                 $this.PoolReapTimer.Add_Tick({ $presenter.ReapPoolJobs() }.GetNewClosure())
             }
             if (-not $this.PoolReapTimer.IsEnabled) { $this.PoolReapTimer.Start() }
-        }
-        catch { $this.Logger.LogException("Pool job start failed", $_) }
+        } catch { $this.Logger.LogException("Pool job start failed", $_) }
     }
 
     # Completes finished pool jobs, hands each result to its callback, and stops the
@@ -559,8 +554,7 @@ class MainPresenter {
     [object] LoadView([string]$fileName) {
         try {
             return [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\$fileName")
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to load view $fileName", $_)
         }
         return $null
@@ -693,8 +687,7 @@ class MainPresenter {
             if ($this.ToastService) {
                 $this.ToastService.ShowInfo('Reset Password', 'Temporary password copied.')
             }
-        }
-        catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
     }
 
     hidden [void] OnShowPasswordQr() {
@@ -748,8 +741,7 @@ class MainPresenter {
             $flag = $(if ($vm.ChangeAtLogon) { ' Change required at next logon.' } else { '' })
             $this.ToastService.ShowSuccess('Reset Password',
                 "Password reset for $($vm.TargetSam).$flag")
-        }
-        else {
+        } else {
             $this.ToastService.ShowError('Reset Password',
                 "Could not reset $($vm.TargetSam). Open the log for details.")
         }
@@ -778,8 +770,7 @@ class MainPresenter {
             $img.EndInit()
             $img.Freeze()
             return $img
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("QR render failed", $_)
             return $null
         }
@@ -792,20 +783,17 @@ class MainPresenter {
                 if ($this.Watchdog) { $this.Watchdog.Reset() }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Run($this.Window)
-                }
-                else {
+                } else {
                     $this.Window.ShowDialog() | Out-Null
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Show failed", $_)
                 if ($_.Exception.InnerException) {
                     $this.Logger.LogError("Inner Exception: $($_.Exception.InnerException.Message)")
                 }
                 throw
             }
-        }
-        else {
+        } else {
             $this.Logger.LogError("MainWindow is null.")
         }
     }
@@ -825,8 +813,7 @@ class MainPresenter {
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.Run()
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("ShowHidden failed", $_)
             throw
         }

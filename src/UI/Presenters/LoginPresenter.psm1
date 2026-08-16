@@ -92,7 +92,8 @@ class LoginPresenter {
             $this.DeviceCode = $response.device_code
             $this.Interval = $response.interval
 
-            $this.LoginVm.SetOutput("Please visit:`n$($response.verification_uri)`n`nAnd enter code:`n$($response.user_code)")
+            $this.LoginVm.SetOutput("Please visit:`n$($response.verification_uri)`n`n" +
+                "And enter code:`n$($response.user_code)")
 
             Start-Process $response.verification_uri
 
@@ -101,8 +102,7 @@ class LoginPresenter {
             $this.PollTimer.Interval = [TimeSpan]::FromSeconds($this.Interval)
             $this.PollTimer.Add_Tick({ $presenter.PollToken() }.GetNewClosure())
             $this.PollTimer.Start()
-        }
-        catch {
+        } catch {
             $this.LoginVm.SetOutput("Error starting flow: $_")
         }
     }
@@ -136,8 +136,7 @@ class LoginPresenter {
             $window = [ViewLoader]::Load($this.Resources.SourceRoot, "UI\Views\$FileName")
             $this.Resources.ApplyResourcesToWindow($window)
             return $window
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to load XAML $FileName", $_)
             return $null
         }

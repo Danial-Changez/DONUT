@@ -59,8 +59,7 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
     AfterAll {
         try {
             if ($script:agent -and -not $script:agent.HasExited) { $script:agent.Kill($true) }
-        }
-        catch { }
+        } catch { }
         Remove-RedirectedDataRoot $script:redirect
     }
 

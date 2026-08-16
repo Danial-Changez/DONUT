@@ -79,17 +79,17 @@ $msi = Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.m
 # --- Signing ---
 $cert = if (-not $SkipSigning) {
     Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
-        Where-Object Subject -eq 'CN=Danial Changez' |
+        Where-Object Subject -EQ 'CN=Danial Changez' |
         Sort-Object NotAfter -Descending | Select-Object -First 1
 }
 if ($cert) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse `
         -Filter signtool.exe -ErrorAction SilentlyContinue |
-        Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+        Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
     if (-not $signtool) {
         $toolDir = Join-Path $repo 'tools\.cache\signtool'
         $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-            Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+            Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
         if (-not $signtool) {
             Write-Host 'Fetching signtool (first run only)...' -ForegroundColor Cyan
             $nupkg = Join-Path $env:TEMP 'sdk-buildtools.nupkg.zip'
@@ -98,7 +98,7 @@ if ($cert) {
             Expand-Archive $nupkg -DestinationPath $toolDir -Force
             Remove-Item $nupkg
             $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe |
-                Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+                Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
         }
     }
     Write-Host "Signing as $($cert.Subject) ($($cert.Thumbprint))..." -ForegroundColor Cyan
@@ -110,8 +110,7 @@ if ($cert) {
         & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 $msi.FullName
         if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE." }
     }
-}
-else {
+} else {
     Write-Host 'No signing certificate provisioned - building unsigned (expected until one is sanctioned).'
 }
 

@@ -116,19 +116,17 @@ try {
             $prov.Dirty = @(& git -C $repoRoot status --porcelain 2>$null).Count -gt 0
         }
     }
-}
-catch { $prov.ProvenanceNotes += "git probe failed: $($_.Exception.Message)" }
+} catch { $prov.ProvenanceNotes += "git probe failed: $($_.Exception.Message)" }
 try {
     # Signature versions and ages are the direct test for "the machine changed, not the code".
     $mp = Get-MpComputerStatus -ErrorAction Stop
     $prov.DefenderStatus = [ordered]@{
-        AMServiceVersion            = "$($mp.AMServiceVersion)"
-        AntivirusSignatureVersion   = "$($mp.AntivirusSignatureVersion)"
+        AMServiceVersion              = "$($mp.AMServiceVersion)"
+        AntivirusSignatureVersion     = "$($mp.AntivirusSignatureVersion)"
         AntivirusSignatureLastUpdated = "$($mp.AntivirusSignatureLastUpdated)"
-        RealTimeProtectionEnabled   = $mp.RealTimeProtectionEnabled
+        RealTimeProtectionEnabled     = $mp.RealTimeProtectionEnabled
     }
-}
-catch { $prov.ProvenanceNotes += "Get-MpComputerStatus unavailable: $($_.Exception.Message)" }
+} catch { $prov.ProvenanceNotes += "Get-MpComputerStatus unavailable: $($_.Exception.Message)" }
 [pscustomobject]$prov | ConvertTo-Json -Depth 4 |
     Set-Content -Path (Join-Path $OutDir 'provenance.json')
 Write-Note "provenance: commit=$($prov.Commit) dirty=$($prov.Dirty) machine=$($prov.Machine)"
@@ -321,8 +319,7 @@ function Invoke-StackProbe([int]$targetPid) {
     try {
         & $pwshPath -NoProfile -File $probe -ProcessId $targetPid -OutFile $stacksFile |
             Out-Null
-    }
-    catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
+    } catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
 }
 
 # Probe as soon as the child flags a barrier lapse, while the wedged shells are still alive.
@@ -357,25 +354,25 @@ if (-not $SkipEventLog -and $IsWindows) {
             Get-WinEvent -FilterHashtable @{ LogName = $found; StartTime = $runStart } `
                 -ErrorAction Stop |
                 Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } } |
+                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } 
+                } |
                 Export-Csv -Path (Join-Path $OutDir 'events-powershell.csv') -NoTypeInformation
             Write-Note "exported PowerShell events from '$found'"
-        }
-        catch { Write-Note "PowerShell event export failed: $($_.Exception.Message)" }
-    }
-    else {
+        } catch { Write-Note "PowerShell event export failed: $($_.Exception.Message)" }
+    } else {
         Write-Note "no PowerShell operational channel registered (zip/Store install?) - skipped"
     }
     try {
         Get-WinEvent -FilterHashtable @{
-            LogName = 'Microsoft-Windows-Windows Defender/Operational'
-            StartTime = $runStart } -ErrorAction Stop |
+            LogName   = 'Microsoft-Windows-Windows Defender/Operational'
+            StartTime = $runStart 
+        } -ErrorAction Stop |
             Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } } |
+                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } 
+            } |
             Export-Csv -Path (Join-Path $OutDir 'events-defender.csv') -NoTypeInformation
         Write-Note "exported Defender events"
-    }
-    catch { Write-Note "Defender event export skipped: $($_.Exception.Message)" }
+    } catch { Write-Note "Defender event export skipped: $($_.Exception.Message)" }
 }
 
 # --- Cross-reference: the real app's log tail ---------------------------------
@@ -397,8 +394,7 @@ if ($appLog -and (Test-Path $appLog)) {
 # Broken means no verdict at all, symptom means an executed phase failed or timed out.
 $verdict = if (Test-Path $verdictFile) {
     Get-Content $verdictFile -Raw | ConvertFrom-Json
-}
-else { $null }
+} else { $null }
 
 $outcome = 'pass'
 if ($null -eq $verdict) { $outcome = 'broken' }
@@ -410,8 +406,7 @@ elseif ($null -eq $verdict.Dc -or -not [bool]$verdict.Dc.Completed) { $outcome =
 elseif ($TargetHost -and ($null -eq $verdict.Hosts -or
         -not [bool]$verdict.Hosts.Completed -or -not "$($verdict.Hosts.Ip)")) {
     $outcome = 'symptom'
-}
-elseif ($IncludeDiskScan -and $TargetHost -and ($null -eq $verdict.Disk -or
+} elseif ($IncludeDiskScan -and $TargetHost -and ($null -eq $verdict.Disk -or
         -not [bool]$verdict.Disk.Completed)) {
     $outcome = 'symptom'
 }
@@ -427,8 +422,7 @@ $zipName = "DonutDiag-{0}-{1}-{2}.zip" -f [System.Environment]::MachineName,
 $zipPath = Join-Path (Split-Path $OutDir -Parent) $zipName
 try {
     Compress-Archive -Path (Join-Path $OutDir '*') -DestinationPath $zipPath -Force
-}
-catch { Write-Note "bundle failed: $($_.Exception.Message)"; $zipPath = $OutDir }
+} catch { Write-Note "bundle failed: $($_.Exception.Message)"; $zipPath = $OutDir }
 
 # The zip path is the LAST line on purpose: CI and humans both consume it.
 Write-Host $zipPath

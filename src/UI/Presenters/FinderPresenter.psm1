@@ -277,8 +277,7 @@ class FinderPresenter {
         if ($triggers) { try { $triggers::Unregister() } catch { } }
         try {
             $global:LensTeardownJob = $this.StartLensWorker(@{ StopAgent = $true })
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Lens agent teardown could not start", $_)
         }
     }
@@ -318,8 +317,7 @@ class FinderPresenter {
                 $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
                 $warm.Domain = $domain
                 $this.AdWarmJobs.Add($warm)
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
             }
         }
@@ -342,8 +340,7 @@ class FinderPresenter {
                 $flag = Join-Path (Join-Path $env:ProgramData 'DONUT\lens-agent') 'warm.flag'
                 $triggers::Register($flag)
             }
-        }
-        catch { $this.Logger.LogException('Lens warm triggers could not register', $_) }
+        } catch { $this.Logger.LogException('Lens warm triggers could not register', $_) }
         try {
             $this.LensWarmJob = $this.StartLensWorker(@{ WarmOnly = $true })
             # A pick dispatches two jobs onto any free runspace, so every runspace must
@@ -351,8 +348,7 @@ class FinderPresenter {
             for ($i = 1; $i -lt [RunspaceManager]::InteractiveSize; $i++) {
                 $this.LensWarmExtras.Add($this.StartLensWorker(@{ WarmOnly = $true }))
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
         }
     }
@@ -363,8 +359,7 @@ class FinderPresenter {
         try {
             $this.ToastJobs.Add($this.StartLensWorker(@{ ToastTitle = $title; ToastBody = $body }))
             $this.LensPollTimer.Start()
-        }
-        catch { $this.Logger.LogException('Key toast could not start', $_) }
+        } catch { $this.Logger.LogException('Key toast could not start', $_) }
     }
 
     # Disposes finished toast workers. They return nothing the UI needs.
@@ -387,8 +382,7 @@ class FinderPresenter {
             $job.Count = @($machines).Count
             $this.OwnerJob = $job
             $this.LensPollTimer.Start()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException('Owner lookup could not start', $_)
         }
     }
@@ -410,11 +404,11 @@ class FinderPresenter {
                 # Per-machine cost decides whether this ever stops being one serial batch.
                 $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
                 $each = if ($job.Count -gt 0) { [long]($ms / $job.Count) } else { 0 }
-                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms (~$($each)ms each), $($map.Count) named")
+                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms " +
+                    "(~$($each)ms each), $($map.Count) named")
                 if ($job.OnResolved -and $map.Count -gt 0) { & $job.OnResolved $map }
             }
-        }
-        catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
+        } catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
         finally { $this.DisposeJob($job.Ps) }
     }
 
@@ -441,8 +435,7 @@ class FinderPresenter {
             $job.Key = $cacheKey
             $this.SoftwareJob = $job
             $this.LensPollTimer.Start()
-        }
-        catch { $this.Logger.LogException('Software lookup could not start', $_) }
+        } catch { $this.Logger.LogException('Software lookup could not start', $_) }
     }
 
     # Milliseconds the worker sat queued on the pool before its first statement ran.
@@ -453,8 +446,7 @@ class FinderPresenter {
                 $started = ([datetime]$rec.MessageData).ToUniversalTime()
                 return [long]($started - [datetime]$job.StartedAt).TotalMilliseconds
             }
-        }
-        catch { }
+        } catch { }
         return -1
     }
 
@@ -481,8 +473,7 @@ class FinderPresenter {
                     $this.Config.GetLensSoftwareCollectionFilter())
                 $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
             }
-        }
-        catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
+        } catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
         finally { $this.DisposeJob($job.Ps) }
     }
 
@@ -500,8 +491,7 @@ class FinderPresenter {
             }
             # A hung warm agent must stop asynchronously or it blocks the UI thread.
             $this.DisposeJob($job.Ps)
-        }
-        catch { $this.DisposeJob($job.Ps) }
+        } catch { $this.DisposeJob($job.Ps) }
         # The extra runspace warms carry no result worth reading, so they just retire.
         foreach ($extra in @($this.LensWarmExtras)) { $this.DisposeJob($extra.Ps) }
         $this.LensWarmExtras.Clear()
@@ -558,8 +548,7 @@ class FinderPresenter {
                 $job.Domain = $domain
                 $job.Prefix = $prefix
                 $this.SearchJobs.Add($job)
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("AD search could not start for '$domain'", $_)
             }
         }
@@ -633,7 +622,8 @@ class FinderPresenter {
             $renderAt = [datetime]::UtcNow
             $drawn = $this.RenderDropdown()
             $renderMs = [long]([datetime]::UtcNow - $renderAt).TotalMilliseconds
-            $this.Logger.LogDebug("AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
+            $this.Logger.LogDebug(
+                "AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
@@ -754,8 +744,7 @@ class FinderPresenter {
             $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()
             if ($this.Toasts) { $this.Toasts.ShowInfo("Unlocking...", $upn) }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Unlock could not start for $upn", $_)
             if ($this.Toasts) { $this.Toasts.ShowError("Unlock Failed", "Could not start the unlock for $upn.") }
         }
@@ -768,13 +757,15 @@ class FinderPresenter {
             try {
                 $res = @($job.Ps.EndInvoke($job.Handle))
                 $ok = [bool]($res | Select-Object -Last 1)
-            }
-            catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
+            } catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
             $this.DisposeJob($job.Ps)
             [void]$this.UnlockJobs.Remove($job)
             if ($this.Toasts) {
                 if ($ok) { $this.Toasts.ShowSuccess("Account Unlocked", $job.Upn) }
-                else { $this.Toasts.ShowError("Unlock Failed", "Could not unlock $($job.Upn). Check your rights and connectivity.") }
+                else {
+                    $this.Toasts.ShowError("Unlock Failed",
+                        "Could not unlock $($job.Upn). Check your rights and connectivity.")
+                }
             }
         }
         if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
@@ -790,8 +781,7 @@ class FinderPresenter {
         elseif (-not [string]::IsNullOrWhiteSpace($r.Domain) -and
             -not [string]::IsNullOrWhiteSpace($r.SamAccountName)) {
             "$($r.Domain)\$($r.SamAccountName)"
-        }
-        else { [string]$r.SamAccountName }
+        } else { [string]$r.SamAccountName }
         if ([string]::IsNullOrWhiteSpace($identity)) { return }
         $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName }
         else { $identity }
@@ -832,8 +822,7 @@ class FinderPresenter {
             $job.Who = $who   # Apply() blanks DisplayName on an error lens without it
             $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Lens lookup could not start for $identity", $_)
             $this.LensVm.SetLoading($who)
             $this.LensVm.Set('IsLoading', $false)
@@ -899,8 +888,7 @@ class FinderPresenter {
                 if ($lens.Errors.Count -eq 0 -and $job.Key) {
                     $this.LensCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Lens result could not be applied", $_)
                 $failed = [PersonLens]::FromError(
                     "The lookup finished but its result could not be displayed: $($_.Exception.Message)")

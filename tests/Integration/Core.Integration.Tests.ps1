@@ -47,8 +47,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             for ($i = 1; $i -le 3; $i++) {
                 $job = [AsyncJob]::new("Host$i", "Scan")
                 $job.Start($script:testWorker, @{
-                    HostName = "Host$i"
-                    JobType = "Scan"
+                    HostName   = "Host$i"
+                    JobType    = "Scan"
                     ConfigPath = ""
                 }, "")
                 $jobs += $job
@@ -79,8 +79,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:testWorker, @{
-                HostName = "TestHost"
-                JobType = "Scan"
+                HostName   = "TestHost"
+                JobType    = "Scan"
                 ConfigPath = ""
             }, "")
             
@@ -111,8 +111,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             
             $job = [AsyncJob]::new("ConfigTestHost", "Scan")
             $job.Start($script:testWorker, @{
-                HostName = "ConfigTestHost"
-                JobType = "Scan"
+                HostName   = "ConfigTestHost"
+                JobType    = "Scan"
                 ConfigPath = $tempConfig
             }, $tempConfig)
             
@@ -159,8 +159,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             if ($isOnline) {
                 $job = [AsyncJob]::new("localhost", "Scan")
                 $job.Start($script:testWorker, @{
-                    HostName = "localhost"
-                    JobType = "Scan"
+                    HostName   = "localhost"
+                    JobType    = "Scan"
                     ConfigPath = ""
                 }, "")
                 
@@ -193,16 +193,15 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             $ip = $probe.ResolveHost("localhost")
             if (Get-Command Get-ADDomainController -ErrorAction SilentlyContinue) {
                 $ip | Should -Not -BeNullOrEmpty
-            }
-            else {
+            } else {
                 # Off-domain (no AD module): resolution fails hard, returning null.
                 $ip | Should -BeNullOrEmpty
             }
 
             $job = [AsyncJob]::new("localhost", "Scan")
             $job.Start($script:testWorker, @{
-                HostName = "localhost"
-                JobType = "Scan"
+                HostName   = "localhost"
+                JobType    = "Scan"
                 ConfigPath = ""
             }, "")
             
@@ -236,8 +235,8 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
             
             $job = [AsyncJob]::new($targetHost, $config.Settings.activeCommand)
             $job.Start($script:testWorker, @{
-                HostName = $targetHost
-                JobType = $config.Settings.activeCommand
+                HostName   = $targetHost
+                JobType    = $config.Settings.activeCommand
                 ConfigPath = $tempConfig
             }, $tempConfig)
             

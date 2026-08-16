@@ -120,8 +120,7 @@ class RemoteUpdateService : RemoteJobService {
             $xml = [xml](Get-Content -LiteralPath $reportPath)
             $this.ReportCache[$hostName] = @{ Ticks = $ticks; Xml = $xml }
             return $xml
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to parse update report for $hostName", $_)
             return $null
         }
@@ -130,7 +129,9 @@ class RemoteUpdateService : RemoteJobService {
     # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
     [void] DeleteReport([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-Updates.xml"
-        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $reportPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     [hashtable] PrepareApplyUpdates([string]$hostName, [hashtable]$selectedUpdates) {

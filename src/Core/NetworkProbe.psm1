@@ -53,16 +53,17 @@ class NetworkProbe {
         try {
             $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
             $found = @($this.QueryDomainControllers() | Where-Object { $_ })
-        }
-        catch {
-            $this.Logger.LogWarning("DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
+        } catch {
+            $this.Logger.LogWarning(
+                "DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
         }
         if ($found.Count -eq 0) {
             try {
                 $found = @($this.QueryDomainControllersViaLdap() | Where-Object { $_ })
-                if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).") }
-            }
-            catch {
+                if ($found.Count -gt 0) {
+                    $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).")
+                }
+            } catch {
                 $this.Logger.LogWarning("DC discovery via .NET DirectoryServices failed: $($_.Exception.Message)")
             }
         }
@@ -70,18 +71,18 @@ class NetworkProbe {
             try {
                 $found = @($this.QueryDomainControllersViaDns() | Where-Object { $_ })
                 if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to DNS SRV records.") }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogWarning("DC discovery via DNS SRV failed: $($_.Exception.Message)")
             }
         }
         $this.DomainControllers = $found
 
         if ($this.DomainControllers.Count -eq 0) {
-            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - is the host domain-joined with working DNS?")
-        }
-        else {
-            $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): $($this.DomainControllers -join ', ')")
+            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - " +
+                "is the host domain-joined with working DNS?")
+        } else {
+            $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): " +
+                "$($this.DomainControllers -join ', ')")
         }
         return $this.DomainControllers
     }
@@ -124,8 +125,7 @@ class NetworkProbe {
             }
             $this.Logger.LogError("DNS resolution for '$hostName' via domain controller '$server' returned no address.")
             return $null
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via domain controller '$server' failed", $_)
             return $null
         }
@@ -144,8 +144,7 @@ class NetworkProbe {
             $ipText = if ($null -ne $ip) { $ip.ToString() } else { 'no address' }
             $this.Logger.LogDebug("DNS: '$hostName' via '$dc' -> $ipText.")
             return $ip
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
             return $null
         }
@@ -179,9 +178,10 @@ class NetworkProbe {
             $client.Close()
             if ($logFailure) { $this.Logger.LogDebug("$portDesc (port $port) not reachable on '$hostName'.") }
             return $false
-        }
-        catch {
-            if ($logFailure) { $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)") }
+        } catch {
+            if ($logFailure) {
+                $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)")
+            }
             return $false
         }
     }
@@ -208,17 +208,18 @@ class NetworkProbe {
     [bool] IsLocalOnline() {
         try {
             return [System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()
-        }
-        catch {
+        } catch {
             return $false
         }
     }
 
     [bool] IsOnline([string]$hostName) {
         try {
-            return (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)
-        }
-        catch {
+            return (Test-Connection -ComputerName $hostName `
+                                    -Count 1 `
+                                    -Quiet `
+                                    -ErrorAction SilentlyContinue)
+        } catch {
             $this.Logger.LogDebug("Online check for '$hostName' failed: $($_.Exception.Message)")
             return $false
         }
@@ -234,8 +235,7 @@ class NetworkProbe {
             $actual = $this.QueryComputerName($ip)
             $this.Logger.LogDebug("Identity check: '$ip' reports '$actual'.")
             return $actual
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Computer-name query for '$ip' failed", $_)
             return ''
         }
@@ -257,7 +257,9 @@ class NetworkProbe {
     # Last resort: the DC locator SRV records every domain publishes in DNS.
     hidden [string[]] QueryDomainControllersViaDns() {
         $fqdn = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).Domain
-        return @(Resolve-DnsName -Type SRV -Name "_ldap._tcp.dc._msdcs.$fqdn" -ErrorAction Stop |
+        return @(Resolve-DnsName -Type SRV `
+                                 -Name "_ldap._tcp.dc._msdcs.$fqdn" `
+                                 -ErrorAction Stop |
                 Where-Object NameTarget | Select-Object -ExpandProperty NameTarget -Unique)
     }
 
@@ -282,15 +284,17 @@ class NetworkProbe {
             }
             $cs = Get-CimInstance @query
             return [string]$cs.Name
-        }
-        finally {
+        } finally {
             Remove-CimSession -CimSession $session -ErrorAction SilentlyContinue
         }
     }
 
     # Resolves a host's A record using the given DNS server. Returns $null if none.
     hidden [IPAddress] ResolveViaServer([string]$hostName, [string]$server) {
-        $records = Resolve-DnsName -Name $hostName -Server $server -Type A -ErrorAction Stop
+        $records = Resolve-DnsName -Name $hostName `
+                                   -Server $server `
+                                   -Type A `
+                                   -ErrorAction Stop
         $aRecord = $records | Where-Object { $_.IPAddress } | Select-Object -First 1
         if ($null -ne $aRecord) {
             return [IPAddress]::Parse($aRecord.IPAddress)
@@ -318,13 +322,11 @@ class NetworkProbe {
                         'Forest', [string]$t.TargetName)
                     $partner = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ctx)
                     foreach ($d in @($partner.Domains)) { $found.Add([string]$d.Name) }
-                }
-                catch {
+                } catch {
                     $this.Logger.LogDebug("Trusted forest '$($t.TargetName)' not expandable: $($_.Exception.Message)")
                 }
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug("Search-domain discovery unavailable: $($_.Exception.Message)")
         }
         return @($found | Where-Object { $_ } | Select-Object -Unique)
@@ -334,11 +336,12 @@ class NetworkProbe {
     # AdminService (SMS Provider) host. Config-editable when they differ, '' without SCCM.
     [string] DiscoverSiteServer() {
         try {
-            $auth = Get-CimInstance -Namespace 'root\ccm' -ClassName 'SMS_Authority' -ErrorAction Stop |
+            $auth = Get-CimInstance -Namespace 'root\ccm' `
+                                    -ClassName 'SMS_Authority' `
+                                    -ErrorAction Stop |
                 Select-Object -First 1
             return [string]$auth.CurrentManagementPoint
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug("Site-server discovery unavailable: $($_.Exception.Message)")
             return ''
         }

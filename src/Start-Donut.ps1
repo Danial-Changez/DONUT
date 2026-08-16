@@ -55,8 +55,7 @@ if (-not $global:SingleInstanceOwned) {
             $evt = [System.Threading.EventWaitHandle]::OpenExisting('Local\DONUT.ShowRequest')
             [void]$evt.Set()
             $evt.Dispose()
-        }
-        catch { }
+        } catch { }
         exit 0
     }
 }
@@ -110,8 +109,8 @@ try {
             Add-Type -Path $qrDll
             # Primitives resolves the Color overloads, and nowarn covers QRCoder's .NET 6.
             Add-Type -Path "$PSScriptRoot\Launcher\QrCode.cs" `
-                -ReferencedAssemblies @($qrDll, 'System.Drawing.Primitives') `
-                -CompilerOptions '/nowarn:1701,1702'
+                     -ReferencedAssemblies @($qrDll, 'System.Drawing.Primitives') `
+                     -CompilerOptions '/nowarn:1701,1702'
         }
     }
 
@@ -156,8 +155,7 @@ try {
     }
 
     . "$PSScriptRoot\Scripts\DonutApp.ps1"
-}
-catch {
+} catch {
     # Snapshot the error and host details before anything else can overwrite $_.
     $errMsg = $_.Exception.Message
     $ps = $PSVersionTable.PSVersion
@@ -169,8 +167,7 @@ catch {
         if (-not (Test-Path $crashDir)) {
             New-Item -ItemType Directory -Path $crashDir -Force | Out-Null
         }
-    }
-    catch {
+    } catch {
         Write-Warning "Could not create the crash-log folder '$crashDir': $($_.Exception.Message)"
     }
     $crashFile = Join-Path $crashDir 'startup-crash.log'
@@ -196,8 +193,7 @@ catch {
                 'DONUT - Startup Error',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
-        }
-        catch { }
+        } catch { }
     }
     exit 1
 }

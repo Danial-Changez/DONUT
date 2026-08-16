@@ -96,8 +96,7 @@ Describe "ResolveWorker" {
             try {
                 $open = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
                 Test-RpcPort -Ip '127.0.0.1' -Log $script:log -Port $open | Should -BeTrue
-            }
-            finally { $listener.Stop() }
+            } finally { $listener.Stop() }
 
             # Nothing listens here anymore: refused connect -> $false, no throw.
             Test-RpcPort -Ip '127.0.0.1' -Log $script:log -Port $open | Should -BeFalse

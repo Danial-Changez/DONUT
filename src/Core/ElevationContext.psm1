@@ -41,12 +41,13 @@ class ElevationContext {
                 $explorer = Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
                     Select-Object -First 1
                 if (-not $explorer) { continue }
-                $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+                $owner = Invoke-CimMethod -InputObject $explorer `
+                                          -MethodName GetOwner `
+                                          -ErrorAction SilentlyContinue
                 if ($owner -and $owner.User) { return "$($owner.Domain)\$($owner.User)" }
             }
             return $null
-        }
-        catch {
+        } catch {
             # No CIM at all: callers treat $null as "no interactive session" either way.
             return $null
         }

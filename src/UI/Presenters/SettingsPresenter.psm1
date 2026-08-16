@@ -80,8 +80,7 @@ class SettingsPresenter {
         # Checking a segment fires its Checked handler, which loads the option view.
         if ($this.Config.GetActiveCommand() -eq 'applyUpdates' -and $this.CmdApplyUpdates) {
             $this.CmdApplyUpdates.IsChecked = $true
-        }
-        elseif ($this.CmdScan) {
+        } elseif ($this.CmdScan) {
             $this.CmdScan.IsChecked = $true
         }
     }
@@ -103,8 +102,7 @@ class SettingsPresenter {
             $this.SettingsContent.Content = $this.CurrentSettingsView
             $this.CurrentSection = $viewName
             $this.PopulateFields()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to load option view $fileName", $_)
         }
     }
@@ -141,11 +139,9 @@ class SettingsPresenter {
 
                 if ($ctrl -is [Controls.TextBox]) {
                     $ctrl.Text = $val
-                }
-                elseif ($ctrl -is [Controls.Primitives.ToggleButton]) {
+                } elseif ($ctrl -is [Controls.Primitives.ToggleButton]) {
                     $ctrl.IsChecked = ($val -eq 'enable' -or $val -eq $true -or $val -eq 'true')
-                }
-                elseif ($ctrl -is [Controls.Panel]) {
+                } elseif ($ctrl -is [Controls.Panel]) {
                     # Panels hold multi-checkbox groups (comma-joined values).
                     $values = if ($val) { $val -split "," | ForEach-Object { $_.Trim() } }
                     else { @() }
@@ -183,11 +179,9 @@ class SettingsPresenter {
                 $h = { param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure()
                 $ctrl.Add_Checked($h)
                 $ctrl.Add_Unchecked($h)
-            }
-            elseif ($ctrl -is [Controls.TextBox]) {
+            } elseif ($ctrl -is [Controls.TextBox]) {
                 $ctrl.Add_LostFocus({ param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure())
-            }
-            elseif ($ctrl -is [Controls.Panel]) {
+            } elseif ($ctrl -is [Controls.Panel]) {
                 $panel = $ctrl
                 foreach ($child in $ctrl.Children) {
                     if ($child -is [Controls.CheckBox]) {
@@ -250,7 +244,9 @@ class SettingsPresenter {
         $startWin = $view.FindName('chkStartWithWindows')
         if ($startWin) {
             $startWin.IsChecked = $this.Config.GetStartWithWindows()
-            $h = { param($s, $e) $self.PersistToggle('startWithWindows', [bool]$s.IsChecked, 'StartupTask') }.GetNewClosure()
+            $h = {
+                param($s, $e) $self.PersistToggle('startWithWindows', [bool]$s.IsChecked, 'StartupTask')
+            }.GetNewClosure()
             $startWin.Add_Checked($h)
             $startWin.Add_Unchecked($h)
         }
@@ -285,7 +281,12 @@ class SettingsPresenter {
         $hkClear = $view.FindName('recGlobalHotkeyClear')
         if ($hkValue -and $hkRecord) {
             $commit = { param($v) $self.PersistGesture('globalHotkey', $v, 'Hotkey') }.GetNewClosure()
-            $this.HotkeyRecorder = [KeybindRecorder]::new($hkValue, $hkRecord, $hkClear, $this.Config.GetGlobalHotkey(), $commit)
+            $this.HotkeyRecorder = [KeybindRecorder]::new(
+                $hkValue,
+                $hkRecord,
+                $hkClear,
+                $this.Config.GetGlobalHotkey(),
+                $commit)
         }
 
         $osValue = $view.FindName('recOpenSettingsValue')
@@ -293,7 +294,12 @@ class SettingsPresenter {
         $osClear = $view.FindName('recOpenSettingsClear')
         if ($osValue -and $osRecord) {
             $commit = { param($v) $self.PersistGesture('openSettingsShortcut', $v, 'WindowShortcut') }.GetNewClosure()
-            $this.ShortcutRecorder = [KeybindRecorder]::new($osValue, $osRecord, $osClear, $this.Config.GetOpenSettingsShortcut(), $commit)
+            $this.ShortcutRecorder = [KeybindRecorder]::new(
+                $osValue,
+                $osRecord,
+                $osClear,
+                $this.Config.GetOpenSettingsShortcut(),
+                $commit)
         }
     }
 
@@ -311,8 +317,7 @@ class SettingsPresenter {
             $this.SetFieldError($box, $false)
             $this.Config.$setter([int]$text)
             $this.SaveConfigSafely()
-        }
-        else {
+        } else {
             $this.SetFieldError($box, $true)
             if ($this.Toast) { $this.Toast.ShowError($title, 'Enter a whole number, 1 or more.') }
         }
@@ -327,8 +332,7 @@ class SettingsPresenter {
             $this.SetFieldError($box, $false)
             $this.Config.SetSetting('lensSoftwareCollectionFilter', $text)
             $this.SaveConfigSafely()
-        }
-        else {
+        } else {
             $this.SetFieldError($box, $true)
             if ($this.Toast) {
                 $this.Toast.ShowError('Lens Software Filter', 'Enter a valid regex or leave blank.')
@@ -353,8 +357,7 @@ class SettingsPresenter {
     hidden [void] SaveConfigSafely() {
         try {
             $this.ConfigManager.SaveConfig($this.Config)
-        }
-        catch {
+        } catch {
             $this.Logger.LogException('Config save failed', $_)
             if ($this.Toast) { $this.Toast.ShowError('Save Failed', "$_") }
         }
@@ -379,8 +382,7 @@ class SettingsPresenter {
                     ($ctrl.Children |
                         Where-Object { $_ -is [Controls.CheckBox] -and $_.IsChecked } |
                         ForEach-Object { $_.Content.ToString() }) -join ","
-                }
-                else { $null }
+                } else { $null }
             }
         }
 

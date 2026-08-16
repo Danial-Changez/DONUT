@@ -88,7 +88,7 @@ Describe "ConfigManager" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
             $config = [AppConfig]::new($script:testSourceRoot, $manager.LogsPath, $manager.ReportsPath, @{
                 activeCommand = "scan"
-                commands = @{
+                commands      = @{
                     scan = @{
                         args = @{
                             silent = $true
@@ -195,7 +195,7 @@ Describe "ConfigManager" {
             $originalConfig = [AppConfig]::new($script:testSourceRoot, $manager.LogsPath, $manager.ReportsPath, @{
                 activeCommand = "scan"
                 throttleLimit = 5
-                commands = @{
+                commands      = @{
                     scan = @{
                         args = @{
                             silent = $false

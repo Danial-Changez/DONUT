@@ -95,8 +95,7 @@ try {
             "[$HostName] Worker up: JobType=$JobType Mode=$modeText " +
             "(graph compiled, pipeline starting).")
     }
-}
-catch {
+} catch {
     Write-Warning "Worker start trace unavailable: $($_.Exception.Message)"
 }
 
@@ -106,13 +105,11 @@ try {
     $config = if ($Settings) {
         $configSource = 'ui snapshot'
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, $Settings)
-    }
-    elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
+    } elseif ($ConfigPath -and (Test-Path $ConfigPath)) {
         $configSource = 'config file'
         $mgr = [ConfigManager]::new($SourceRoot)
         $mgr.LoadConfig()
-    }
-    else {
+    } else {
         [AppConfig]::new($SourceRoot, $LogsDir, $ReportsDir, @{})
     }
     if ($null -ne $workerLog) {
@@ -126,12 +123,10 @@ try {
     if ($ResultFile) {
         ($workerResult | ConvertTo-Json -Depth 12) |
             Set-Content -LiteralPath $ResultFile -Encoding UTF8
-    }
-    else {
+    } else {
         $workerResult
     }
-}
-catch {
+} catch {
     # One clean stderr line, so RemoteFailure.ReasonFromMessage can still parse it.
     if ($null -ne $workerLog) {
         $workerLog.LogException("[$HostName] $JobType worker failed", $_)

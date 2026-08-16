@@ -41,8 +41,7 @@ class BuildProvenance {
                     return "commit $sha$dirty"
                 }
             }
-        }
-        catch {
+        } catch {
             $note = " (git probe failed: $($_.Exception.Message))"
         }
         return "unknown$note"

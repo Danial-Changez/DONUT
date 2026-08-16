@@ -78,8 +78,7 @@ class AsyncJob {
             $this.NextStallLogUtc = $this.StartedAtUtc.AddSeconds($this.StallWarnAfterSeconds)
             $this.AsyncResult = $this.PowerShell.BeginInvoke()
             $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job (child process).")
-        }
-        catch {
+        } catch {
             $this.Status = [JobStatus]::Failed
             $this.Logger.LogException("[$($this.HostName)] Failed to start $($this.JobType) job", $_)
             $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
@@ -101,20 +100,17 @@ class AsyncJob {
                     $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, $this.FailureMessage))
                     $this.Logger.LogError("[$($this.HostName)] $($this.JobType) worker failed " +
                         "(exit $($verdict.ExitCode)): $($this.FailureMessage)")
-                }
-                else {
+                } else {
                     $this.Status = [JobStatus]::Completed
                     $this.Logger.LogDebug("[$($this.HostName)] $($this.JobType) job completed.")
                 }
-            }
-            catch {
+            } catch {
                 $this.Status = [JobStatus]::Failed
                 $this.FailureMessage = $_.Exception.Message
                 $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
-        }
-        elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
+        } elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
             [datetime]::UtcNow -ge $this.NextStallLogUtc) {
             # MinValue means Start() never armed the heartbeat (test doubles), not a stall.
             $this.LogStallHeartbeat()
@@ -136,8 +132,7 @@ class AsyncJob {
             $p = [RunspaceManager]::GetPool()
             $freeRunspaces = $p.GetAvailableRunspaces()
             $pool = "$freeRunspaces/$($p.GetMaxRunspaces()) free"
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: pool state unreadable: $($_.Exception.Message)")
         }
@@ -148,8 +143,7 @@ class AsyncJob {
             if ($this.PowerShell.Streams.Error.Count -gt 0) {
                 $firstError = " firstError=$($this.PowerShell.Streams.Error[0])"
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: shell state unreadable: $($_.Exception.Message)")
         }
@@ -159,8 +153,7 @@ class AsyncJob {
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
             $tp = "$w worker / $io IOCP free"
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: threadpool state unreadable: $($_.Exception.Message)")
         }

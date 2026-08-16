@@ -38,20 +38,20 @@ class ResourceService {
                 $app = New-Object System.Windows.Application -ErrorAction Stop
                 $app.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
                 $this.Logger.LogDebug("Created WPF Application. ShutdownMode: $($app.ShutdownMode)")
-            }
-            catch {
-                $this.Logger.LogWarning("Unable to create WPF Application object (one may already exist in this AppDomain on another thread): $($_.Exception.Message)")
+            } catch {
+                $this.Logger.LogWarning("Unable to create WPF Application object " +
+                    "(one may already exist in this AppDomain on another thread): $($_.Exception.Message)")
             }
         }
 
-        if ([System.Windows.Application]::Current) {
-            if ([System.Windows.Application]::Current.ShutdownMode -ne [System.Windows.ShutdownMode]::OnExplicitShutdown) {
-                [System.Windows.Application]::Current.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
-                $this.Logger.LogDebug("Updated ShutdownMode to: $([System.Windows.Application]::Current.ShutdownMode)")
+        $current = [System.Windows.Application]::Current
+        if ($current) {
+            if ($current.ShutdownMode -ne [System.Windows.ShutdownMode]::OnExplicitShutdown) {
+                $current.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown
+                $this.Logger.LogDebug("Updated ShutdownMode to: $($current.ShutdownMode)")
             }
-            $this.LoadStylesInto([System.Windows.Application]::Current.Resources)
-        }
-        else {
+            $this.LoadStylesInto($current.Resources)
+        } else {
             $this.Logger.LogWarning("Skipping global resource loading because Application.Current is not accessible.")
         }
     }
@@ -62,8 +62,7 @@ class ResourceService {
             foreach ($dict in [System.Windows.Application]::Current.Resources.MergedDictionaries) {
                 $window.Resources.MergedDictionaries.Add($dict)
             }
-        }
-        else {
+        } else {
             $this.LoadStylesInto($window.Resources)
         }
     }
@@ -87,8 +86,7 @@ class ResourceService {
                     try { $dict = [System.Windows.Markup.XamlReader]::Load($stream, $context) }
                     finally { $stream.Dispose() }
                     $targetDictionary.MergedDictionaries.Add($dict)
-                }
-                catch {
+                } catch {
                     $this.Logger.LogException("Failed to load style dictionary $logical", $_)
                 }
             }
@@ -110,8 +108,7 @@ class ResourceService {
                 $stream.Close()
 
                 $targetDictionary.MergedDictionaries.Add($dict)
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Failed to load style dictionary", $_)
             }
         }

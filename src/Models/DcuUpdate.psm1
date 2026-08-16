@@ -33,8 +33,7 @@ class DcuUpdate {
         $u.IsNewer = $isNewer
         if ($hasMatch -and -not [string]::IsNullOrWhiteSpace($currentVersion)) {
             $u.VersionText = "$currentVersion  →  $newVersion"
-        }
-        else {
+        } else {
             # Nothing to diff against, and "(latest)" was redundant since every update is latest.
             $u.VersionText = "$newVersion"
         }

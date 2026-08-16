@@ -76,12 +76,10 @@ class WizTreeCsv {
                 $f.SizeBytes = [FolderUsage]::AsLong($cols[$sizeIdx])
                 $list.Add($f)
             }
-        }
-        catch {
+        } catch {
             # Never throws: rank what parsed, and the warning reaches the detail-pane log.
             Write-Warning "WizTree CSV parse stopped early: $($_.Exception.Message)"
-        }
-        finally { $reader.Dispose() }
+        } finally { $reader.Dispose() }
 
         $ranked = $list | Sort-Object -Property SizeBytes -Descending
         if ($topN -gt 0) { $ranked = $ranked | Select-Object -First $topN }
@@ -101,17 +99,13 @@ class WizTreeCsv {
                     if ($i + 1 -lt $line.Length -and $line[$i + 1] -eq '"') {
                         [void]$sb.Append('"')
                         $i++
-                    }
-                    else { $inQuotes = $false }
-                }
-                else { [void]$sb.Append($ch) }
-            }
-            elseif ($ch -eq '"') { $inQuotes = $true }
+                    } else { $inQuotes = $false }
+                } else { [void]$sb.Append($ch) }
+            } elseif ($ch -eq '"') { $inQuotes = $true }
             elseif ($ch -eq ',') {
                 $fields.Add($sb.ToString())
                 [void]$sb.Clear()
-            }
-            else { [void]$sb.Append($ch) }
+            } else { [void]$sb.Append($ch) }
         }
         $fields.Add($sb.ToString())
         return $fields.ToArray()

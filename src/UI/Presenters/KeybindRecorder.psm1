@@ -85,8 +85,7 @@ class KeybindRecorder {
         $g = [HotkeyGesture]::FromKeys([ModifierKeys]$this.CapturedMods, [Key]$this.CapturedKey)
         if ($g.Valid) {
             $this.Commit($g.Normalized)
-        }
-        else {
+        } else {
             if ($this.Display) { $this.Display.Text = $g.Reason }
             $this.CapturedKey = $null   # let them try again without leaving record mode
         }

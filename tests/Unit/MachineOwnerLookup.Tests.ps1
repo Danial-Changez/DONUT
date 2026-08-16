@@ -6,8 +6,10 @@ Describe "Machine owner lookup" {
         $script:Owners = $script:OwnerScript
 
         function New-Affinity { param($Rows) return [pscustomobject]@{ value = @($Rows) } }
-        function New-SccmUser { param([string]$Full) return [pscustomobject]@{ value = @(
-                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' }) }
+        function New-SccmUser {
+ param([string]$Full) return [pscustomobject]@{ value = @(
+                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' }) 
+        }
         }
     }
 
@@ -62,7 +64,8 @@ Describe "Machine owner lookup" {
             }
             # The stub hit proves the order: SCCM answered empty, so the directory is asked next.
             # Its [ADSI] bind fails off Windows, so the catch falls back to the SAM.
-            function Find-Gc { param([string]$Filter)
+            function Find-Gc {
+ param([string]$Filter)
                 return [pscustomobject]@{ Properties = @{ distinguishedname = @('CN=x') } }
             }
 

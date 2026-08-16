@@ -58,8 +58,7 @@ class LensDeviceViewModel : ObservableObject {
             $this.BitLockerText = (@($ordered | ForEach-Object {
                         if ($_.At -gt [datetime]::MinValue) {
                             "$($_.Key.Password)  ($($_.At.ToString('yyyy-MM-dd HH:mm')))"
-                        }
-                        elseif ($_.Key.Created) { "$($_.Key.Password)  ($($_.Key.Created))" }
+                        } elseif ($_.Key.Created) { "$($_.Key.Password)  ($($_.Key.Created))" }
                         else { $_.Key.Password }
                     }) -join "`n")
             if ($ordered.Count -gt 0) { $this.LatestKey = $ordered[0].Key.Password }

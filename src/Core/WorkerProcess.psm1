@@ -102,7 +102,8 @@ class WorkerProcess {
             # Exit 0 with no result means the wrong child ran and the guard bowed out.
             if ($null -eq $launch.Result) {
                 return @{ Result = $null; Succeeded = $false; ExitCode = 0
-                    FailureMessage = 'Worker exited 0 but produced no result (was the wrong executable spawned as the worker?).'
+                    FailureMessage = 'Worker exited 0 but produced no result ' +
+                    '(was the wrong executable spawned as the worker?).'
                 }
             }
             return @{ Result = $launch.Result; Succeeded = $true; ExitCode = 0; FailureMessage = '' }

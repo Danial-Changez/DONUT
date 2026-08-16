@@ -42,10 +42,12 @@ class LogService {
             $log = Join-Path $logDirectory 'Donut.log'
             $file = Get-Item -LiteralPath $log -ErrorAction Stop
             if ($file.Length -gt $maxBytes) {
-                Move-Item -LiteralPath $log -Destination (Join-Path $logDirectory 'Donut.old.log') -Force -ErrorAction Stop
+                Move-Item -LiteralPath $log `
+                          -Destination (Join-Path $logDirectory 'Donut.old.log') `
+                          -Force `
+                          -ErrorAction Stop
             }
-        }
-        catch {
+        } catch {
             # No log yet, or another process holds it open, so skip this launch.
         }
     }
@@ -89,8 +91,7 @@ class LogService {
                 [System.IO.FileShare]::ReadWrite)
             try { $fs.Write($bytes, 0, $bytes.Length) }
             finally { $fs.Dispose() }
-        }
-        catch {
+        } catch {
             # A failed log write has nowhere to log itself, so swallowing cannot recurse.
         }
     }

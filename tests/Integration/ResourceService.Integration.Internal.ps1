@@ -180,8 +180,7 @@ Describe "ResourceService Integration" -Tag "Integration", "WPF" {
                 $dict = $null
                 try {
                     $dict = [System.Windows.Markup.XamlReader]::Load($stream, $context)
-                }
-                finally {
+                } finally {
                     $stream.Close()
                 }
                 

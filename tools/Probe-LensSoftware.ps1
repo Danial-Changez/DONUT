@@ -62,8 +62,7 @@ try {
             ForEach-Object { [string]$_.ResourceID })
     Write-Host "  exact-tail ResourceID(s): $($ids -join ', ')" -ForegroundColor White
     if ($ids.Count -eq 0) { Write-Host '  NO EXACT MATCH - check the SAM spelling' -ForegroundColor Red }
-}
-catch { Write-Host "  ERR  $($_.Exception.Message)" -ForegroundColor Red }
+} catch { Write-Host "  ERR  $($_.Exception.Message)" -ForegroundColor Red }
 
 Write-Host "`n=== 2. SMS_FullCollectionMembership: ResourceID eq N ===" -ForegroundColor Cyan
 $collections = [System.Collections.Generic.HashSet[string]]::new()
@@ -73,8 +72,7 @@ foreach ($id in $ids) {
             [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=CollectionID")
         Write-Host "  OK  ResourceID $id is in $($rows.Count) collection(s)" -ForegroundColor Green
         foreach ($r in $rows) { [void]$collections.Add([string]$r.CollectionID) }
-    }
-    catch { Write-Host "  ERR  ResourceID ${id}: $($_.Exception.Message)" -ForegroundColor Red }
+    } catch { Write-Host "  ERR  ResourceID ${id}: $($_.Exception.Message)" -ForegroundColor Red }
 }
 if ($collections.Count -gt 0) {
     Write-Host "  first few: $((@($collections) | Select-Object -First 8) -join ', ')"
@@ -97,8 +95,7 @@ try {
     $mine | Sort-Object SoftwareName |
         Format-Table SoftwareName, CollectionName, FeatureType, ProgramName -AutoSize |
         Out-String | Write-Host
-}
-catch { Write-Host "  ERR  $($_.Exception.Message)" -ForegroundColor Red }
+} catch { Write-Host "  ERR  $($_.Exception.Message)" -ForegroundColor Red }
 
 Write-Host "`nInterpretation:" -ForegroundColor White
 Write-Host '  all three hops OK + final rows match the console Deployments tab -> design confirmed as is.'

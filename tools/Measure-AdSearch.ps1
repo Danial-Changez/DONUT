@@ -135,8 +135,7 @@ function Invoke-Timed([string]$domain, [string]$filter, [string]$referral) {
         finally { $found.Dispose() }
         $sw.Stop()
         return @{ Ms = [long]$sw.ElapsedMilliseconds; Count = $count }
-    }
-    catch { return @{ Error = $_.Exception.Message } }
+    } catch { return @{ Error = $_.Exception.Message } }
     finally {
         if ($searcher) { $searcher.Dispose() }
         if ($entry) { $entry.Dispose() }
@@ -177,11 +176,9 @@ function Get-IdentityRow([string]$domain, [string]$filter) {
                 }
                 $rows.Add($h)
             }
-        }
-        finally { $found.Dispose() }
+        } finally { $found.Dispose() }
         return @{ Rows = $rows.ToArray(); Capped = ($rows.Count -ge 50) }
-    }
-    catch { return @{ Error = $_.Exception.Message } }
+    } catch { return @{ Error = $_.Exception.Message } }
     finally {
         if ($searcher) { $searcher.Dispose() }
         if ($entry) { $entry.Dispose() }

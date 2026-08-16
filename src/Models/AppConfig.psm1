@@ -98,12 +98,10 @@ class AppConfig {
                     if (-not $merged['commands'].ContainsKey($cmd)) {
                         if ($userCmd -is [hashtable]) {
                             $merged['commands'][$cmd] = [AppConfig]::DeepClone($userCmd)
-                        }
-                        else {
+                        } else {
                             $merged['commands'][$cmd] = $userCmd
                         }
-                    }
-                    elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
+                    } elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
                         $userCmd['args'] -is [hashtable]) {
                         # Snapshot the keys: never enumerate a collection being written to.
                         foreach ($argKey in @($userCmd['args'].Keys)) {
@@ -111,8 +109,7 @@ class AppConfig {
                         }
                     }
                 }
-            }
-            else {
+            } else {
                 $merged[$key] = $userSettings[$key]
             }
         }
@@ -138,8 +135,7 @@ class AppConfig {
             $v = $source[$k]
             if ($v -is [hashtable]) {
                 $copy[$k] = [AppConfig]::DeepCloneCore($v, $seen)
-            }
-            else {
+            } else {
                 $copy[$k] = $v
             }
         }
@@ -312,20 +308,17 @@ class AppConfig {
                     # Some flags are just present (like -silent), others need =enable
                     if ($key -in @('silent')) {
                         $argList.Add("-$key") | Out-Null
-                    }
-                    else {
+                    } else {
                         $argList.Add("-$key=enable") | Out-Null
                     }
                 }
                 # $false means the flag is simply omitted.
-            }
-            elseif ($val -is [string]) {
+            } elseif ($val -is [string]) {
                 # Double quotes close the remote -c wrapper, a bare comma is the array operator.
                 if ($val -match '[\s,]') {
                     $escaped = $val -replace "'", "''"
                     $argList.Add("-$key='$escaped'") | Out-Null
-                }
-                else {
+                } else {
                     $argList.Add("-$key=$val") | Out-Null
                 }
             }

@@ -37,8 +37,7 @@ Write-Host "`n=== Donut.log, last $LogLines line(s) ===" -ForegroundColor Cyan
 if (Test-Path -LiteralPath $log) {
     Get-Content -LiteralPath $log -Tail $LogLines -ErrorAction SilentlyContinue |
         ForEach-Object { Write-Host "  $_" }
-}
-else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
+} else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
 
 Write-Host "`n=== Application event log, last $Hours hour(s) ===" -ForegroundColor Cyan
 $since = (Get-Date).AddHours(-$Hours)
@@ -49,8 +48,7 @@ foreach ($p in $providers) {
         $events += @(Get-WinEvent -FilterHashtable @{
                 LogName = 'Application'; ProviderName = $p; StartTime = $since
             } -ErrorAction Stop)
-    }
-    catch { }
+    } catch { }
 }
 $hits = @($events | Where-Object { $_.Message -match 'pwsh|donut' } |
         Sort-Object TimeCreated)

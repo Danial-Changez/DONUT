@@ -336,8 +336,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.PendingRuns.Remove($hostName)
             if ($online) {
                 $this.StartProcess($hostName)
-            }
-            else {
+            } else {
                 $this.Detail.AppendLog($hostName, "Machine is offline - queued run skipped.", [LogSeverity]::Warn)
                 if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Offline, so the run was skipped.") }
             }
@@ -349,11 +348,17 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.PendingRuns.ContainsKey($hostName)) {
             $this.PendingRuns.Remove($hostName)
             $this.Detail.AppendLog($hostName, "Run not started: could not verify reachability (resolve failed).")
-            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Run not started. Could not verify the machine is reachable.") }
+            if ($this.Toasts) {
+                $this.Toasts.ShowWarning($hostName, "Run not started. Could not verify the machine is reachable.")
+            }
         }
         if ($this.PendingApplies.Remove($hostName)) {
-            $this.Detail.AppendLog($hostName, "Apply not started: the identity check could not run. Re-select and retry.", [LogSeverity]::Warn)
-            if ($this.Toasts) { $this.Toasts.ShowWarning($hostName, "Apply not started. The identity check could not run.") }
+            $this.Detail.AppendLog($hostName,
+                "Apply not started: the identity check could not run. Re-select and retry.",
+                [LogSeverity]::Warn)
+            if ($this.Toasts) {
+                $this.Toasts.ShowWarning($hostName, "Apply not started. The identity check could not run.")
+            }
         }
     }
 
@@ -496,7 +501,9 @@ class HomePresenter : AsyncJobPresenter {
         if ($this.IsRunning($hostName)) {
             # A storage scan also holds the row busy, and a silent return reads as a dead button.
             $this.Detail.AppendLog($hostName, "A job is already running for $hostName - wait for it to finish.")
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Already running. Wait for the current job to finish.") }
+            if ($this.Toasts) {
+                $this.Toasts.ShowInfo($hostName, "Already running. Wait for the current job to finish.")
+            }
             return
         }
 
@@ -550,7 +557,8 @@ class HomePresenter : AsyncJobPresenter {
             }
             $this.PendingRuns[$hostName] = $true
             $this.Resolution.PrefetchIp($hostName)
-            $this.Detail.AppendLog($hostName, "Verifying $hostName is reachable - the run starts automatically once confirmed.")
+            $this.Detail.AppendLog($hostName,
+                "Verifying $hostName is reachable - the run starts automatically once confirmed.")
             return
         }
 
@@ -564,8 +572,7 @@ class HomePresenter : AsyncJobPresenter {
                 # No scan to hide behind here, so the identity check runs and the apply waits on it.
                 $this.Resolution.StartVerifyName($hostName)
                 $this.ProceedWithApply($hostName)
-            }
-            else {
+            } else {
                 $this.Detail.AppendLog($hostName, "Scanned $age - results are current; skipping re-scan.")
                 if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Scanned $age, so the results are current.") }
             }
@@ -602,8 +609,7 @@ class HomePresenter : AsyncJobPresenter {
                 # Apply is destructive: run the identity check in parallel to gate it.
                 if ($command -eq 'applyUpdates') { $this.Resolution.StartVerifyName($hostName) }
             }
-        }
-        catch {
+        } catch {
             $this.Detail.AppendLog($hostName, "Error starting process: $_", [LogSeverity]::Error)
             $row.ApplyStatus([FleetCardStatus]::FromJob('Scan', 'Failed', $false))
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
@@ -616,8 +622,7 @@ class HomePresenter : AsyncJobPresenter {
             $this.PumpJobs()
             # A late finisher is a warmed runspace and returns the capacity the lapse raised.
             if ($null -ne $this.Resolution) { $this.Resolution.ReapWarmShells() }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Error during job pump", $_)
         }
     }
@@ -717,8 +722,7 @@ class HomePresenter : AsyncJobPresenter {
             if ($this.ScanFoundNoUpdates($job)) {
                 $this.Detail.AppendLog($job.HostName, "No updates found.", [LogSeverity]::Success)
                 if ($this.Toasts) { $this.Toasts.ShowInfo($job.HostName, "No updates found.") }
-            }
-            else {
+            } else {
                 $transitioned = $this.ProceedWithApply($job.HostName)
             }
         }
@@ -730,8 +734,7 @@ class HomePresenter : AsyncJobPresenter {
                 $row = $this.GetRow($job.HostName)
                 if ($null -ne $row) { $row.Set('HasUpdates', $false) }
                 $this.Detail.AppendLog($job.HostName, "Scan complete: no updates found.", [LogSeverity]::Success)
-            }
-            else {
+            } else {
                 $scanRows = $this.RenderUpdatesFromReport($job.HostName)
                 $summary = if ($null -eq $scanRows) { 'no report generated' }
                 elseif ($scanRows.Count -eq 0) { 'no updates found' }
@@ -744,17 +747,20 @@ class HomePresenter : AsyncJobPresenter {
         if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
             $this.CheckForManualReboot($job)
             if ($this.ManualRebootQueue.Contains($job.HostName)) {
-                if ($this.Toasts) { $this.Toasts.ShowWarning($job.HostName, "Updates applied. A manual reboot is required.") }
+                if ($this.Toasts) {
+                    $this.Toasts.ShowWarning($job.HostName, "Updates applied. A manual reboot is required.")
+                }
                 $this.NotifySystem($job.HostName, "Updates applied. A manual reboot is required.")
-            }
-            elseif ($this.Toasts) {
+            } elseif ($this.Toasts) {
                 $this.Toasts.ShowSuccess($job.HostName, "Updates applied.")
             }
         }
 
         if ($job.Status -eq 'Failed') {
             $this.Resolution.InvalidateResolved($job.HostName)
-            if ($this.Toasts) { $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.") }
+            if ($this.Toasts) {
+                $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
+            }
             if ($job.JobType -eq 'UpdateApply') {
                 $this.NotifySystem($job.HostName, "Apply failed. Open the log for details.")
             }
@@ -796,19 +802,16 @@ class HomePresenter : AsyncJobPresenter {
                 ([RemoteFailureReason]::ConnectionLost) { 'ConnectionLost' }
                 default { 'Failed' }
             }
-        }
-        elseif ($reboot) {
+        } elseif ($reboot) {
             'RebootRequired'
-        }
-        else {
+        } else {
             'Completed'
         }
 
         # applyUpdates leaves the scan report stale, so re-parsing would keep the old count.
         $updateCount = if ($job.JobType -eq 'UpdateApply' -and $job.Status -eq 'Completed') {
             0
-        }
-        else {
+        } else {
             $this.UpdateService.CountUpdates($this.UpdateService.ParseUpdateReport($job.HostName))
         }
 
@@ -850,14 +853,24 @@ class HomePresenter : AsyncJobPresenter {
         $verdict = $this.Resolver.IdentityVerdict($hostName)
         if ($verdict -eq 'Mismatch') {
             $actual = $this.Resolver.GetVerifiedName($hostName)
-            $this.Detail.AppendLog($hostName, "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. Re-select to re-resolve.", [LogSeverity]::Warn)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. That address now answers as '$actual'. Re-select and retry.") }
-        }
-        elseif ($verdict -eq 'Failed') {
-            $this.Detail.AppendLog($hostName, "Apply not started: the machine at that address did not answer the name check. Re-select to re-resolve and retry.", [LogSeverity]::Warn)
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Apply stopped. The machine did not answer the identity check. Re-select and retry.") }
-        }
-        else { return $false }
+            $this.Detail.AppendLog($hostName,
+                "Apply aborted: that address answers as '$actual', not '$hostName' - its IP changed. " +
+                "Re-select to re-resolve.",
+                [LogSeverity]::Warn)
+            if ($this.Toasts) {
+                $this.Toasts.ShowError($hostName,
+                    "Apply stopped. That address now answers as '$actual'. Re-select and retry.")
+            }
+        } elseif ($verdict -eq 'Failed') {
+            $this.Detail.AppendLog($hostName,
+                "Apply not started: the machine at that address did not answer the name check. " +
+                "Re-select to re-resolve and retry.",
+                [LogSeverity]::Warn)
+            if ($this.Toasts) {
+                $this.Toasts.ShowError($hostName,
+                    "Apply stopped. The machine did not answer the identity check. Re-select and retry.")
+            }
+        } else { return $false }
         $this.Resolution.InvalidateResolved($hostName)
         return $true
     }
@@ -906,9 +919,13 @@ class HomePresenter : AsyncJobPresenter {
 
         # Single run: one small confirm (the list itself lives in the pane, not the dialog).
         $this.Detail.AppendLog($hostName, "Review the updates in the pane, then confirm.")
-        $confirmed = $this.DialogPresenter.ShowConfirmation("Apply Updates",
-            "Apply $($updateRows.Count) update(s) to ${hostName}, listed in the detail pane. BIOS and firmware installs cannot be rolled back.",
-            @(), 'Apply', $true)
+        $confirmed = $this.DialogPresenter.ShowConfirmation(
+            "Apply Updates",
+            "Apply $($updateRows.Count) update(s) to ${hostName}, listed in the detail pane. " +
+            "BIOS and firmware installs cannot be rolled back.",
+            @(),
+            'Apply',
+            $true)
         if (-not $confirmed) {
             $this.Detail.AppendLog($hostName, "Cancelled by user.")
             return $false
@@ -947,7 +964,10 @@ class HomePresenter : AsyncJobPresenter {
         $identityLine = switch ($verdict) {
             'Match' { "Identity verified: the machine at this IP answers as '$reported'." }
             'Mismatch' { "Wrong machine: this IP answers as '$reported', not $hostName - do not apply." }
-            'Failed' { "Identity check failed: the machine at this IP did not answer the name query. Re-select and retry before applying." }
+            'Failed' {
+                "Identity check failed: the machine at this IP did not answer the name query. " +
+                "Re-select and retry before applying."
+            }
             default { "Identity not verified yet - the name check runs before an apply." }
         }
         $vm.Set('UpdatesIdentityText', $identityLine)
@@ -965,8 +985,7 @@ class HomePresenter : AsyncJobPresenter {
             $applyJob = $this.StartJob([AsyncJob]::new($hostName, 'UpdateApply', $this.Logger), $prep)
             $this.RefreshCardStatus($applyJob)
             return $true
-        }
-        catch {
+        } catch {
             $this.Detail.AppendLog($hostName, "Error starting apply phase: $_", [LogSeverity]::Error)
             return $false
         }
@@ -1106,7 +1125,9 @@ class HomePresenter : AsyncJobPresenter {
     [void] RemoveMachine([string]$hostName) {
         if ([string]::IsNullOrWhiteSpace($hostName) -or -not $this.Rows.ContainsKey($hostName)) { return }
         if ($this.IsRunning($hostName)) {
-            if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Still running. Wait for the job to finish before removing it.") }
+            if ($this.Toasts) {
+                $this.Toasts.ShowInfo($hostName, "Still running. Wait for the job to finish before removing it.")
+            }
             return
         }
         $this.RemoveRowCore($hostName)
@@ -1202,8 +1223,7 @@ class HomePresenter : AsyncJobPresenter {
         try {
             $header = "Scanned in DONUT, found and installed the following $($updatesList.Count) updates on $hostName"
             Set-Clipboard -Value ((@($header) + @($updatesList | ForEach-Object { "- $_" })) -join "`n")
-        }
-        catch {
+        } catch {
             $this.Logger.LogWarning("Failed to copy to clipboard: $($_.Exception.Message)")
         }
     }

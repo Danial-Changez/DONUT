@@ -121,8 +121,7 @@ class HotkeyGesture {
             $conv = [KeyConverter]::new()
             $key = $conv.ConvertFromInvariantString($token)
             if ($null -ne $key -and [Key]$key -ne [Key]::None) { return $key }
-        }
-        catch { }
+        } catch { }
         return $null
     }
 

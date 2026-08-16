@@ -57,8 +57,7 @@ class ResolveProcessJob : AsyncJob {
             $this.Process = [System.Diagnostics.Process]::Start($psi)
             $this.Logger.LogDebug(
                 "[$($this.HostName)] Started fast Resolve child (pid $($this.Process.Id), no pool slot).")
-        }
-        catch {
+        } catch {
             $this.Status = [JobStatus]::Failed
             $this.ProcessFault = $true
             $this.FailureMessage = $_.Exception.Message
@@ -86,13 +85,11 @@ class ResolveProcessJob : AsyncJob {
                 $this.Result = $json | ConvertFrom-Json -AsHashtable
                 $this.Status = [JobStatus]::Completed
                 $this.Logger.LogDebug("[$($this.HostName)] Fast resolve completed (exit $($this.Process.ExitCode)).")
-            }
-            else {
+            } else {
                 # Exited without a verdict: crash or infrastructure fault in the child.
                 $this.Fault("fast resolve child exited $($this.Process.ExitCode) with no verdict (see Donut.log)")
             }
-        }
-        catch {
+        } catch {
             $this.Fault("fast resolve result unreadable: $($_.Exception.Message)")
         }
     }
@@ -116,11 +113,12 @@ class ResolveProcessJob : AsyncJob {
             try {
                 if (-not $this.Process.HasExited) { $this.Process.Kill($true) }
                 $this.Process.Dispose()
-            }
-            catch { $this.Logger.LogDebug("[$($this.HostName)] fast resolve cleanup: $($_.Exception.Message)") }
+            } catch { $this.Logger.LogDebug("[$($this.HostName)] fast resolve cleanup: $($_.Exception.Message)") }
         }
         if ($this.FastResultFile -and (Test-Path -LiteralPath $this.FastResultFile)) {
-            Remove-Item -LiteralPath $this.FastResultFile -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $this.FastResultFile `
+                        -Force `
+                        -ErrorAction SilentlyContinue
         }
     }
 }

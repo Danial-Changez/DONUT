@@ -118,8 +118,7 @@ catch { $result.Error = $_.Exception.Message }
         }
         $script:Smoke = if (Test-Path $script:OutJson) {
             Get-Content $script:OutJson -Raw | ConvertFrom-Json
-        }
-        else { $null }
+        } else { $null }
     }
 
     AfterAll {

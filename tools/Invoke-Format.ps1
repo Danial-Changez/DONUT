@@ -4,10 +4,12 @@
 
 .DESCRIPTION
     The repo's "clang-format": runs Invoke-Formatter with the Rules section of
-    PSScriptAnalyzerSettings.psd1 (brace placement, 4-space indentation, consistent
-    whitespace, cmdlet casing, hashtable alignment) over every source file, and
-    guarantees a trailing newline at end of file (Zephyr's InsertNewlineAtEndOfFile;
-    no PSSA rule covers it).
+    PSScriptAnalyzerSettings.psd1 (brace placement, consistent whitespace, cmdlet
+    casing, hashtable alignment) over every source file, and guarantees a trailing
+    newline at end of file (Zephyr's InsertNewlineAtEndOfFile; no PSSA rule covers
+    it). Indentation is not touched: the analyzer's rule is off so parameter
+    continuations can align under the first parameter (tools\Rules\DonutRules.psm1
+    checks that shape in the lint instead).
 
     Formatting only moves whitespace and fixes cmdlet-name casing - it never changes
     tokens, so string/here-string content (e.g. the remote probe-script templates) is

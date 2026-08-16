@@ -48,8 +48,7 @@ class UpdatePresenter {
         $release = $null
         try {
             $release = $this.Service.GetLatestRelease($token)
-        }
-        catch {
+        } catch {
             $status = 0
             try { $status = [int]$_.Exception.Response.StatusCode } catch {}
             # Only 404-anonymous and 401 are fixable by signing in. See .NOTES.
@@ -68,8 +67,7 @@ class UpdatePresenter {
             $token = $this.Service.GetStoredToken()
             try {
                 $release = $this.Service.GetLatestRelease($token)
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Update check failed after sign-in", $_)
                 return
             }
@@ -83,8 +81,7 @@ class UpdatePresenter {
             if ($remoteVer -ne $localVer) {
                 $this.ShowUpdateWindow($release, $localVer, $remoteVer, $token)
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Update check failed", $_)
         }
     }
@@ -122,16 +119,14 @@ class UpdatePresenter {
                 if (-not $this.Service.VerifyFileHash($msiPath, $expectedHash)) {
                     throw "SHA-256 hash mismatch. Update aborted."
                 }
-            }
-            else {
+            } else {
                 $this.Logger.LogWarning("No checksum file found. Skipping verification.")
             }
 
             $this.Service.ApplyUpdate($msiPath, $isRollback, $this.Resources.SourceRoot)
 
             [System.Windows.Application]::Current.Shutdown()
-        }
-        catch {
+        } catch {
             # Themed alert, not a raw MessageBox, so the failure matches the app's dialogs.
             $this.Logger.LogException("Update failed", $_)
             $this.Dialog.ShowAlert('Update Failed', "$_", @())

@@ -62,29 +62,25 @@ function Show-Snapshot {
         $items = Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue |
             Select-Object Name, Length, @{ n = 'AgeSec'; e = { [int]((Get-Date) - $_.LastWriteTime).TotalSeconds } }
         if ($items) { $items | Format-Table -AutoSize | Out-String | Write-Host } else { Write-Host '  (empty)' }
-    }
-    else { Write-Host '  (dir does not exist - the agent never cold-started on this box)' -ForegroundColor Yellow }
+    } else { Write-Host '  (dir does not exist - the agent never cold-started on this box)' -ForegroundColor Yellow }
 
     Write-Host '=== heartbeat age (alive if < ~4s) ===' -ForegroundColor Cyan
     $age = Get-BeatAge
     if ($null -ne $age) {
         Write-Host "  $age s" -ForegroundColor ($(if ($age -lt 4) { 'Green' } else { 'Red' }))
-    }
-    else { Write-Host '  NO HEARTBEAT' -ForegroundColor Red }
+    } else { Write-Host '  NO HEARTBEAT' -ForegroundColor Red }
 
     Write-Host '=== stop.flag (should be absent) ===' -ForegroundColor Cyan
     if (Test-Path -LiteralPath $stop) {
         Write-Host ("  PRESENT -> '{0}'  (agent was told to exit)" -f ((Get-Content -LiteralPath $stop -Raw -ErrorAction SilentlyContinue) -replace '\s+$', '')) -ForegroundColor Red
-    }
-    else { Write-Host '  absent' -ForegroundColor Green }
+    } else { Write-Host '  absent' -ForegroundColor Green }
 
     Write-Host '=== timeouts.txt (2+ forces a recycle on the next pick) ===' -ForegroundColor Cyan
     $strikes = Join-Path $dir 'timeouts.txt'
     if (Test-Path -LiteralPath $strikes) {
         $count = (Get-Content -LiteralPath $strikes -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
         Write-Host ("  {0} consecutive lookup timeout(s)" -f $count) -ForegroundColor Yellow
-    }
-    else { Write-Host '  absent (no consecutive lookup timeouts)' -ForegroundColor Green }
+    } else { Write-Host '  absent (no consecutive lookup timeouts)' -ForegroundColor Green }
 
     Write-Host '=== agent process (pwsh running LensAgent.ps1) ===' -ForegroundColor Cyan
     $procs = Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
@@ -110,8 +106,7 @@ if ($Watch) {
         Start-Sleep -Seconds 1
         $bins = if (Test-Path -LiteralPath $dir) {
             @(Get-ChildItem -LiteralPath $dir -Filter '*.bin' -File -ErrorAction SilentlyContinue).Name -join ', '
-        }
-        else { '(dir gone)' }
+        } else { '(dir gone)' }
         $age = Get-BeatAge
         $ageStr = if ($null -ne $age) { "${age}s" } else { 'none' }
         Write-Host ('  {0:HH:mm:ss}  beat={1,-5}  bins=[{2}]' -f (Get-Date), $ageStr, $bins)
@@ -123,8 +118,7 @@ if (Test-Path -LiteralPath $log) {
     $hits = Get-Content -LiteralPath $log -Tail 500 -ErrorAction SilentlyContinue |
         Select-String -Pattern 'Lens|agent' | Select-Object -Last 20
     if ($hits) { $hits | ForEach-Object { Write-Host "  $_" } } else { Write-Host '  (no Lens lines in the last 500)' }
-}
-else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
+} else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
 
 Write-Host "`nInterpretation:" -ForegroundColor White
 Write-Host '  heartbeat past ~4s / stop.flag present / no agent process -> agent dead or wedged (next pick recycles it).'

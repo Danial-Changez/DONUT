@@ -73,8 +73,7 @@ function Show-Resolve([string]$label, [string]$name, [string]$server) {
             return $ips[0]
         }
         Write-Host ("  {0,-34} no A record  ({1} ms)" -f $label, $sw.ElapsedMilliseconds) -ForegroundColor Yellow
-    }
-    catch {
+    } catch {
         Write-Host ("  {0,-34} ERR {1}  ({2} ms)" -f $label, $_.Exception.Message, $sw.ElapsedMilliseconds) -ForegroundColor Red
     }
     return ''
@@ -87,12 +86,10 @@ Write-Host "`n=== 1. DNS: bare name vs FQDN ===" -ForegroundColor Cyan
 try {
     $g = Get-DnsClientGlobalSetting
     Write-Host "  suffix search list : $(@($g.SuffixSearchList) -join ', ')"
-}
-catch { Write-Host "  suffix search list : (unavailable: $($_.Exception.Message))" }
+} catch { Write-Host "  suffix search list : (unavailable: $($_.Exception.Message))" }
 try {
     Write-Host "  this box's domain  : $((Get-CimInstance Win32_ComputerSystem).Domain)"
-}
-catch { }
+} catch { }
 Write-Host ''
 $null = Show-Resolve -label 'bare, local resolver' -name $HostName -server ''
 $bareDc = Show-Resolve -label 'bare, via DC' -name $HostName -server $Dc
@@ -101,14 +98,11 @@ if ($Domain) { $fqdnDc = Show-Resolve -label "FQDN '$HostName.$Domain', via DC" 
 Write-Host ''
 if ($Domain -and $fqdnDc -and $bareDc -and $fqdnDc -ne $bareDc) {
     Write-Host "  BARE AND FQDN DISAGREE: the bare name reaches a DIFFERENT machine ($bareDc vs $fqdnDc)." -ForegroundColor Red
-}
-elseif ($Domain -and $fqdnDc -and -not $bareDc) {
+} elseif ($Domain -and $fqdnDc -and -not $bareDc) {
     Write-Host '  bare name fails, FQDN resolves: exactly the false-Offline the fix removes.' -ForegroundColor Yellow
-}
-elseif ($Domain -and $fqdnDc) {
+} elseif ($Domain -and $fqdnDc) {
     Write-Host '  both agree: a home-forest machine, or the suffix list already covers this domain.' -ForegroundColor Green
-}
-elseif ($Domain -and -not $fqdnDc) {
+} elseif ($Domain -and -not $fqdnDc) {
     Write-Host "  FQDN did not resolve: the machine's DNS zone is not '$Domain' (disjoint namespace?), the bare fallback carries it." -ForegroundColor Yellow
 }
 
@@ -127,8 +121,7 @@ if ($SiteServer) {
         $pick = if ($live.Count -gt 0) { $live[0] } else { $rows | Select-Object -First 1 }
         if ($pick) { $resourceId = [string]$pick.ResourceID }
         if ($rows.Count -gt 1) { Write-Host '  more than one record: SCCM holds duplicates or obsoletes for this name.' -ForegroundColor Yellow }
-    }
-    catch { Write-Host "  ERR  by-name filter: $($_.Exception.Message)" -ForegroundColor Red }
+    } catch { Write-Host "  ERR  by-name filter: $($_.Exception.Message)" -ForegroundColor Red }
 
     if ($resourceId) {
         Write-Host "`n  -- keyed segment SMS_R_System($resourceId), the exact read the Lens device job makes --" -ForegroundColor White
@@ -153,8 +146,7 @@ if ($SiteServer) {
                         ForEach-Object { "$($_.Name)='$($_.Value)'" })
                 Write-Host "  related properties on the full row: $($names -join '; ')"
             }
-        }
-        catch { Write-Host "  ERR  keyed segment: $($_.Exception.Message)" -ForegroundColor Red }
+        } catch { Write-Host "  ERR  keyed segment: $($_.Exception.Message)" -ForegroundColor Red }
 
         if ($sccmDn) {
             Write-Host "`n  -- LDAP bind of that DN (serverless, the locator picks the domain) --" -ForegroundColor White
@@ -165,8 +157,7 @@ if ($SiteServer) {
                 Write-Host "  OK  bound as '$($entry.Properties['name'][0])', dNSHostName '$($entry.Properties['dnshostname'][0])'  ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
                 $dnDomain = (($sccmDn -split ',' | Where-Object { $_ -match '^DC=' } | ForEach-Object { $_.Substring(3) }) -join '.')
                 Write-Host "  DN's domain '$dnDomain'  vs FullDomainName '$fullDomain'  vs -Domain '$Domain'"
-            }
-            catch { Write-Host "  ERR  bind failed (stale DN after an OU move, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
+            } catch { Write-Host "  ERR  bind failed (stale DN after an OU move, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
         }
 
         if ($sid) {
@@ -180,8 +171,7 @@ if ($SiteServer) {
                 if ([string]$entry.Properties['name'][0] -ne $HostName) {
                     Write-Host "  NAME MISMATCH: SCCM's SID belongs to '$($entry.Properties['name'][0])', not '$HostName'." -ForegroundColor Red
                 }
-            }
-            catch { Write-Host "  ERR  SID bind failed (not the AD account SID, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
+            } catch { Write-Host "  ERR  SID bind failed (not the AD account SID, or no trust path): $($_.Exception.Message)" -ForegroundColor Red }
         }
     }
 
@@ -197,12 +187,10 @@ if ($SiteServer) {
         $hit = $gc.FindOne()
         if ($hit) {
             Write-Host "  HIT  $($hit.Properties['distinguishedname'][0])  ($($sw.ElapsedMilliseconds) ms): the SCCM read never runs for this machine." -ForegroundColor Green
-        }
-        else {
+        } else {
             Write-Host "  MISS ($($sw.ElapsedMilliseconds) ms): the SCCM read above is what saves this machine from the domain sweep." -ForegroundColor Yellow
         }
-    }
-    catch { Write-Host "  ERR  GC search: $($_.Exception.Message)" -ForegroundColor Red }
+    } catch { Write-Host "  ERR  GC search: $($_.Exception.Message)" -ForegroundColor Red }
 }
 
 Write-Host "`nInterpretation:" -ForegroundColor White

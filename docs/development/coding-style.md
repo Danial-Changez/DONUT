@@ -114,9 +114,9 @@ The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's
 
 | Zephyr `.clang-format`        | DONUT equivalent                                        |
 | ----------------------------- | ------------------------------------------------------- |
-| `ColumnLimit: 100`            | `PSAvoidLongLines` at 100 (reported, not build-breaking) |
-| `IndentWidth: 8` (tabs)       | 4-space indent (`PSUseConsistentIndentation`)            |
-| `BreakBeforeBraces: Linux`    | Open brace same line; `else`/`catch` on their own line   |
+| `ColumnLimit: 100`            | `PSAvoidLongLines` at 120 (PSScriptAnalyzer's default; a build gate) |
+| `IndentWidth: 8` (tabs)       | 4-space indent, by review (the analyzer rule is off, see below) |
+| `BreakBeforeBraces: Linux`    | Open brace same line; `} else {`, `} catch {` cuddled (1TBS) |
 | `AlignConsecutiveMacros`      | Hashtable assignment alignment                           |
 | proper capitalization         | `PSUseCorrectCasing`                                     |
 | `InsertNewlineAtEndOfFile`    | Enforced by `Invoke-Format.ps1`                          |
@@ -142,6 +142,28 @@ The comment sweep starts clean and gates unconditionally, so any hit is somethin
 you just added. The `Invoke-StyleCheckForChange` hook applies the same rule per
 edit, so it usually surfaces before the lint run does.
 
-`PSAvoidLongLines` is report-only: wrap when it's free, but leave a line long when
-wrapping would hurt — long URLs, the here-string script templates, and string
-literals where a mid-string break reads worse than the overrun.
+`PSAvoidLongLines` gates at 120 (PSScriptAnalyzer's default; the 100 in Zephyr's
+table is a C column, and PowerShell's class nesting and cmdlet names spend it
+fast). When a line is over, or a cmdlet call carries more than two named
+parameters, go **one per line**, each continuation aligned under the first
+parameter:
+
+```powershell
+$auth = Get-CimInstance -Namespace 'root\ccm' `
+                        -ClassName 'SMS_Authority' `
+                        -ErrorAction Stop
+```
+
+Constructor and method arguments split the same way inside the parentheses, and
+array literals one element per line. A message string splits with `+` at a phrase
+boundary; a one-line `try {} catch {}` opens up. Inside the here-string script
+templates, break only where the shipped payload stays valid PowerShell (after a
+comma, a pipe, or a doubled backtick). `PSUseConsistentIndentation` is off for
+this reason: it has no alignment mode and would rewrite every such continuation
+to one indent level, so 4-space block indentation is kept by review.
+
+`TypeNotFound` also gates, but it is a parser diagnostic rather than a rule: the
+lint session loads the WPF and WinForms assemblies first so every `[Brush]` and
+`[DispatcherTimer]` resolves, and filters the runtime-compiled launcher types by
+name. A hit therefore means a real typo in a type name, or a new runtime-compiled
+type that needs adding to the filter in `Invoke-Lint.ps1`.

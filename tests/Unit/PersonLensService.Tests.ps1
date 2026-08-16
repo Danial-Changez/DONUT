@@ -223,8 +223,7 @@ Describe "PersonLensService" {
                             Move-Item -LiteralPath $tmp -Destination (Join-Path $dir $msg.name) -Force
                             Start-Sleep -Milliseconds 120
                         }
-                    }
-                    finally { $aes.Dispose() }
+                    } finally { $aes.Dispose() }
                 })
             [void]$agent.AddArgument($dir).AddArgument($keyIv).AddArgument($response)
             $handle = $agent.BeginInvoke()
@@ -234,8 +233,7 @@ Describe "PersonLensService" {
                 $out | Should -Be $response
                 @(Get-ChildItem -Path $dir -Filter '*-*.bin' -Exclude 'key.bin') |
                     Should -BeNullOrEmpty   # request, partial and result all consumed
-            }
-            finally {
+            } finally {
                 if (-not $handle.IsCompleted) { $agent.Stop() }
                 $agent.Dispose()
             }
@@ -272,8 +270,7 @@ Describe "PersonLensService" {
                         $tmp = Join-Path $dir "result-$id.bin.tmp"
                         [IO.File]::WriteAllBytes($tmp, $enc.TransformFinalBlock($plain, 0, $plain.Length))
                         Move-Item -LiteralPath $tmp -Destination (Join-Path $dir "result-$id.bin") -Force
-                    }
-                    finally { $aes.Dispose() }
+                    } finally { $aes.Dispose() }
                 })
             [void]$agent.AddArgument($dir).AddArgument($keyIv).AddArgument($response)
             $handle = $agent.BeginInvoke()
@@ -282,8 +279,7 @@ Describe "PersonLensService" {
 
                 $out | Should-Be $response
                 Test-Path (Join-Path $dir 'timeouts.txt') | Should-BeFalse
-            }
-            finally {
+            } finally {
                 if (-not $handle.IsCompleted) { $agent.Stop() }
                 $agent.Dispose()
             }

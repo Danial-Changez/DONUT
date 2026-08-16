@@ -267,7 +267,7 @@ Describe "SelfUpdateService" {
             $corruptFile = Join-Path $TestDrive "corrupt_token.json"
             
             # Write non-DPAPI-encrypted garbage
-            [IO.File]::WriteAllBytes($corruptFile, [byte[]](1,2,3,4,5))
+            [IO.File]::WriteAllBytes($corruptFile, [byte[]](1, 2, 3, 4, 5))
             $service.TokenFile = $corruptFile
 
             $result = $service.GetStoredToken()

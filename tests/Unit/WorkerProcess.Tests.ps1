@@ -18,8 +18,7 @@ Describe "WorkerProcess" {
                 $a = Get-Content -LiteralPath $prep.ArgsFile -Raw | ConvertFrom-Json -AsHashtable
                 $a.HostName | Should -Be 'PC1'
                 $a.JobType | Should -Be 'Scan'
-            }
-            finally {
+            } finally {
                 Remove-Item $prep.ArgsFile, $prep.ResultFile -Force -ErrorAction SilentlyContinue
             }
         }
@@ -29,8 +28,7 @@ Describe "WorkerProcess" {
             try {
                 $a = Get-Content -LiteralPath $prep.ArgsFile -Raw | ConvertFrom-Json -AsHashtable
                 $a.ConfigPath | Should -Be 'C:\temp\cfg.json'
-            }
-            finally {
+            } finally {
                 Remove-Item $prep.ArgsFile, $prep.ResultFile -Force -ErrorAction SilentlyContinue
             }
         }
@@ -39,7 +37,8 @@ Describe "WorkerProcess" {
     Context "Interpret" {
         It "reads exit 0 as success and passes the result through" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = @{ Ip = '10.0.0.1' }; ExitCode = 0; StdErr = ''; StdOut = '' })
+                    Result = @{ Ip = '10.0.0.1' }; ExitCode = 0; StdErr = ''; StdOut = '' 
+            })
             $v.Succeeded | Should -BeTrue
             $v.Result.Ip | Should -Be '10.0.0.1'
             $v.FailureMessage | Should -BeNullOrEmpty
@@ -47,7 +46,8 @@ Describe "WorkerProcess" {
 
         It "reads a non-zero exit as failure with the clean stderr as the message" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = $null; ExitCode = 1; StdErr = "Worker failed: host offline`n"; StdOut = '' })
+                    Result = $null; ExitCode = 1; StdErr = "Worker failed: host offline`n"; StdOut = '' 
+            })
             $v.Succeeded | Should -BeFalse
             $v.ExitCode | Should -Be 1
             $v.FailureMessage | Should -Be 'Worker failed: host offline'
@@ -62,7 +62,8 @@ Describe "WorkerProcess" {
         # The single-instance guard makes a second launcher exit 0 with no result, wedging workers.
         It "reads exit 0 with no result as a FAILURE, not a silent success" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = $null; ExitCode = 0; StdErr = ''; StdOut = '' })
+                    Result = $null; ExitCode = 0; StdErr = ''; StdOut = '' 
+            })
             $v.Succeeded | Should -BeFalse
             $v.FailureMessage | Should -BeLike '*no result*'
         }
@@ -79,8 +80,7 @@ Describe "WorkerProcess" {
             $prep = [WorkerProcess]::Prepare('w.ps1', @{ HostName = 'PC3' }, '')
             try {
                 $prep.PwshPath | Should -Be ([WorkerProcess]::FindPwsh())
-            }
-            finally {
+            } finally {
                 Remove-Item $prep.ArgsFile, $prep.ResultFile -Force -ErrorAction SilentlyContinue
             }
         }

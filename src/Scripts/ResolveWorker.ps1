@@ -56,11 +56,13 @@ function Resolve-TargetIp {
     foreach ($name in $names) {
         try {
             $Log.LogDebug("[$TargetHost] fast resolve: DNS '$name' via DC '$Server'...")
-            $records = Resolve-DnsName -Name $name -Server $Server -Type A -ErrorAction Stop
+            $records = Resolve-DnsName -Name $name `
+                                       -Server $Server `
+                                       -Type A `
+                                       -ErrorAction Stop
             $a = $records | Where-Object { $_.IPAddress } | Select-Object -First 1
             if ($null -ne $a) { return [string]$a.IPAddress }
-        }
-        catch {
+        } catch {
             $Log.LogDebug("[$TargetHost] fast resolve: DNS '$name' via '$Server' failed: $($_.Exception.Message)")
         }
     }
@@ -76,8 +78,7 @@ function Test-RpcPort {
         $client = [System.Net.Sockets.TcpClient]::new()
         try { return $client.ConnectAsync($Ip, $Port).Wait(2000) }
         finally { $client.Close() }
-    }
-    catch {
+    } catch {
         $Log.LogDebug("[$Ip] fast resolve: RPC probe failed: $($_.Exception.Message)")
         return $false
     }
@@ -92,15 +93,17 @@ try {
     $log.DebugEnabled = [bool]$DebugLog
     $log.LogDebug("[$HostName] Fast resolve up: DC='$Dc', domain='$Domain'.")
 
-    $ip = Resolve-TargetIp -TargetHost $HostName -Server $Dc -Log $log -Domain $Domain
+    $ip = Resolve-TargetIp -TargetHost $HostName `
+                           -Server $Dc `
+                           -Log $log `
+                           -Domain $Domain
     $online = $false
     if (-not [string]::IsNullOrWhiteSpace($ip)) { $online = Test-RpcPort -Ip $ip -Log $log }
     $log.LogDebug("[$HostName] Fast resolve verdict: ip='$ip', online=$online.")
 
     @{ Mode = 'Host'; HostName = $HostName; Ip = $ip; Online = $online } |
         ConvertTo-Json -Compress | Set-Content -LiteralPath $ResultFile -Encoding UTF8
-}
-catch {
+} catch {
     # No result file means an infrastructure fault, so the parent flags ProcessFault.
     [Console]::Error.WriteLine("Fast resolve failed: $($_.Exception.Message)")
     exit 1

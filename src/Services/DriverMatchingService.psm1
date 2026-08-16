@@ -177,15 +177,14 @@ class DriverMatchingService {
                 if ($updVal -gt $instVal) {
                     $result.IsNewer = $true
                     break
-                }
-                elseif ($updVal -lt $instVal) {
+                } elseif ($updVal -lt $instVal) {
                     break
                 }
             }
-        }
-        catch {
+        } catch {
             $result.ParseError = $true
-            $this.Logger.LogDebug("Version comparison failed for '$installedVersion' vs '$updateVersion': $($_.Exception.Message)")
+            $this.Logger.LogDebug(
+                "Version comparison failed for '$installedVersion' vs '$updateVersion': $($_.Exception.Message)")
         }
 
         return $result

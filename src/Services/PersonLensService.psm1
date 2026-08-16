@@ -76,8 +76,7 @@ class PersonLensService {
             $enc = $aes.CreateEncryptor()
             $plain = [System.Text.Encoding]::UTF8.GetBytes($text)
             return $enc.TransformFinalBlock($plain, 0, $plain.Length)
-        }
-        finally { $aes.Dispose() }
+        } finally { $aes.Dispose() }
     }
 
     static [string] UnprotectText([byte[]]$blob, [byte[]]$keyIv) {
@@ -87,8 +86,7 @@ class PersonLensService {
             $dec = $aes.CreateDecryptor()
             return [System.Text.Encoding]::UTF8.GetString(
                 $dec.TransformFinalBlock($blob, 0, $blob.Length))
-        }
-        finally { $aes.Dispose() }
+        } finally { $aes.Dispose() }
     }
 
     # Encrypted atomic write (tmp + rename), so the agent never reads a half-written file.
@@ -112,8 +110,7 @@ class PersonLensService {
         try {
             $raw = [IO.File]::ReadAllText([PersonLensService]::TimeoutsPath($dir)).Trim()
             if (-not [int]::TryParse($raw, [ref]$n)) { $n = 0 }
-        }
-        catch { $n = 0 }
+        } catch { $n = 0 }
         return $n
     }
 
@@ -121,8 +118,7 @@ class PersonLensService {
         try {
             $n = [PersonLensService]::ReadLensTimeoutCount($dir) + 1
             [IO.File]::WriteAllText([PersonLensService]::TimeoutsPath($dir), "$n")
-        }
-        catch { }
+        } catch { }
     }
 
     hidden static [void] ClearLensTimeouts([string]$dir) {
@@ -137,14 +133,26 @@ class PersonLensService {
     # bundles hold BitLocker keys and nothing may outlive the app. Best effort.
     static [void] StopAndPurgeAgent() {
         $dir = [PersonLensService]::AgentDir()
-        try { New-Item -ItemType File -Path (Join-Path $dir 'stop.flag') -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
-        try { Stop-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -ErrorAction SilentlyContinue } catch { }
-        try { Unregister-ScheduledTask -TaskName ([PersonLensService]::AgentTaskName) -Confirm:$false -ErrorAction SilentlyContinue } catch { }
+        $taskName = [PersonLensService]::AgentTaskName
         try {
-            Get-ChildItem -Path (Split-Path $dir -Parent) -Directory -Filter 'lens-*' -ErrorAction SilentlyContinue |
+            New-Item -ItemType File `
+                     -Path (Join-Path $dir 'stop.flag') `
+                     -Force `
+                     -ErrorAction SilentlyContinue | Out-Null
+        } catch { }
+        try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch { }
+        try {
+            Unregister-ScheduledTask -TaskName $taskName `
+                                     -Confirm:$false `
+                                     -ErrorAction SilentlyContinue
+        } catch { }
+        try {
+            Get-ChildItem -Path (Split-Path $dir -Parent) `
+                          -Directory `
+                          -Filter 'lens-*' `
+                          -ErrorAction SilentlyContinue |
                 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        catch { }
+        } catch { }
     }
 
     # --- Agent supervision ---
@@ -169,7 +177,9 @@ class PersonLensService {
                 $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
                 if ($beatAge.TotalSeconds -lt 15) { return '' }
             }
-            if ($forceRecycle) { $this.Logger.LogWarning('Two Lens lookups timed out in a row, so the agent is being recycled.') }
+            if ($forceRecycle) {
+                $this.Logger.LogWarning('Two Lens lookups timed out in a row, so the agent is being recycled.')
+            }
 
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
             if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
@@ -180,8 +190,13 @@ class PersonLensService {
             # Cold start: replace any previous instance and rebuild the exchange dir.
             $taskName = [PersonLensService]::AgentTaskName
             Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $taskName `
+                                     -Confirm:$false `
+                                     -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $dir `
+                        -Recurse `
+                        -Force `
+                        -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
             # ProgramData grants every local user read, and bundles hold BitLocker keys.
@@ -195,15 +210,16 @@ class PersonLensService {
             if (-not $pwshPath) { return 'could not resolve pwsh.exe to run the de-elevated agent.' }
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
-            $argline = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -ExchangeDir "{1}" -ParentPid {2} -SiteServer "{3}"' -f $agentScript, $dir, $donutPid, $this.SiteServer
+            $argFormat = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" ' +
+            '-ExchangeDir "{1}" -ParentPid {2} -SiteServer "{3}"'
+            $argline = $argFormat -f $agentScript, $dir, $donutPid, $this.SiteServer
             # -WindowStyle Hidden applies too late to stop the flash, so conhost runs it.
             $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
             $action =
             if (Test-Path -LiteralPath $conhost) {
                 $headless = '--headless "{0}" {1}' -f $pwshPath, $argline
                 New-ScheduledTaskAction -Execute $conhost -Argument $headless
-            }
-            else {
+            } else {
                 New-ScheduledTaskAction -Execute $pwshPath -Argument $argline
             }
             $principalArgs = @{ UserId = $interactiveUser; LogonType = 'Interactive'; RunLevel = 'Limited' }
@@ -217,9 +233,13 @@ class PersonLensService {
                 MultipleInstances          = 'IgnoreNew'
             }
             $settings = New-ScheduledTaskSettingsSet @taskSettings
-            $task = New-ScheduledTask -Action $action -Principal $principal -Settings $settings
-            Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop |
-                Out-Null
+            $task = New-ScheduledTask -Action $action `
+                                      -Principal $principal `
+                                      -Settings $settings
+            Register-ScheduledTask -TaskName $taskName `
+                                   -InputObject $task `
+                                   -Force `
+                                   -ErrorAction Stop | Out-Null
             Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 
             # Wait for the first heartbeat (the agent writes it before its pre-warm).
@@ -229,11 +249,9 @@ class PersonLensService {
                 Start-Sleep -Milliseconds 200
             }
             return "the agent did not start within 20s (as $interactiveUser)."
-        }
-        catch {
+        } catch {
             return "could not start the Lens agent: $($_.Exception.Message)"
-        }
-        finally {
+        } finally {
             if ($owned) { try { $mutex.ReleaseMutex() } catch { } }
             $mutex.Dispose()
         }
@@ -252,10 +270,11 @@ class PersonLensService {
             . $common
             $script:ForestNc = Get-LensForestNc
             return [string](& $resolver @resolverArgs)
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("In-process $label failed", $_)
-            if ($bundleErrors) { return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)") }
+            if ($bundleErrors) {
+                return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
+            }
             return ''
         }
     }
@@ -309,8 +328,7 @@ class PersonLensService {
                     . $common
                     Show-LensToast -title $title -body $body
                 }
-            }
-            catch { $this.Logger.LogException('Key toast failed', $_) }
+            } catch { $this.Logger.LogException('Key toast failed', $_) }
             return
         }
         # Elevated, the de-elevated agent raises it: same reason the whole lens exists.
@@ -323,8 +341,7 @@ class PersonLensService {
         try {
             [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
                 (@{ kind = 'toast'; title = $title; body = $body } | ConvertTo-Json -Compress), $keyIv)
-        }
-        catch { $this.Logger.LogException('Key toast could not be sent', $_) }
+        } catch { $this.Logger.LogException('Key toast could not be sent', $_) }
     }
 
     [string] RunLookupJson([string]$identity) {
@@ -346,7 +363,9 @@ class PersonLensService {
         $dir = [PersonLensService]::AgentDir()
         $keyIv = $null
         try { $keyIv = [IO.File]::ReadAllBytes((Join-Path $dir 'key.bin')) } catch { }
-        if (-not $keyIv -or $keyIv.Length -ne 48) { return [PersonLensService]::ErrorBundle('Lens agent session key is missing - retry the lookup.') }
+        if (-not $keyIv -or $keyIv.Length -ne 48) {
+            return [PersonLensService]::ErrorBundle('Lens agent session key is missing - retry the lookup.')
+        }
 
         $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
         $resultPath = Join-Path $dir "result-$reqId.bin"
@@ -367,8 +386,7 @@ class PersonLensService {
                         Write-Information -MessageData $partialText -Tags 'LensPartial'
                         $partialIndex++
                         continue   # Check for the next partial before sleeping.
-                    }
-                    catch {
+                    } catch {
                         # The index holds so the next tick retries instead of skipping.
                         if ($warnedIndex -ne $partialIndex) {
                             $warnedIndex = $partialIndex
@@ -381,7 +399,9 @@ class PersonLensService {
             if (-not (Test-Path -LiteralPath $resultPath)) {
                 # Strikes accumulate across service instances until a lookup lands.
                 [PersonLensService]::RecordLensTimeout($dir)
-                return [PersonLensService]::ErrorBundle("The lens lookup did not complete within $($this.TimeoutSec)s (agent heartbeat may have died mid-lookup - retry).")
+                return [PersonLensService]::ErrorBundle(
+                    "The lens lookup did not complete within $($this.TimeoutSec)s " +
+                    '(agent heartbeat may have died mid-lookup - retry).')
             }
             [PersonLensService]::ClearLensTimeouts($dir)
             # A scanner can hold the fresh result briefly, so the read gets a few tries.
@@ -391,20 +411,20 @@ class PersonLensService {
                     $resultText = [PersonLensService]::UnprotectText(
                         [IO.File]::ReadAllBytes($resultPath), $keyIv)
                     break
-                }
-                catch {
+                } catch {
                     if ($attempt -eq 5) { throw }
                     Start-Sleep -Milliseconds 100
                 }
             }
             return $resultText
-        }
-        catch {
+        } catch {
             return [PersonLensService]::ErrorBundle("Lens lookup failed: $($_.Exception.Message)")
-        }
-        finally {
+        } finally {
             # Consume this lookup's files, and the agent's 10-minute sweep covers the rest.
-            Get-ChildItem -Path $dir -Filter "*-$reqId*.bin" -File -ErrorAction SilentlyContinue |
+            Get-ChildItem -Path $dir `
+                          -Filter "*-$reqId*.bin" `
+                          -File `
+                          -ErrorAction SilentlyContinue |
                 Remove-Item -Force -ErrorAction SilentlyContinue
         }
     }

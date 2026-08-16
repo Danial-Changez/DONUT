@@ -446,7 +446,7 @@ Describe "AppConfig" {
                 commands = @{
                     scan = @{
                         args = @{
-                            report = 'C:\temp\DONUT'
+                            report         = 'C:\temp\DONUT'
                             updateSeverity = 'critical'
                         }
                     }
@@ -513,7 +513,7 @@ Describe "AppConfig" {
                 commands = @{
                     scan = @{
                         args = @{
-                            report = ''
+                            report          = ''
                             catalogLocation = '   '
                         }
                     }
@@ -562,7 +562,7 @@ Describe "AppConfig" {
                 commands = @{
                     scan = @{
                         args = @{
-                            silent = $true
+                            silent    = $true
                             customArg = 'customValue'
                         }
                     }

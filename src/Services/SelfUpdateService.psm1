@@ -47,8 +47,7 @@ class SelfUpdateService {
 
             # Returned as-is, deliberately: no expiry check and no refresh.
             return $data.access_token
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to read stored token", $_)
             return $null
         }
@@ -118,8 +117,7 @@ class SelfUpdateService {
                 TokenData   = $response
                 Error       = $null
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug("Device-flow token poll failed (will retry): $($_.Exception.Message)")
             return [PSCustomObject]@{
                 Status = 'pending'; AccessToken = $null; TokenData = $null; Error = $null
@@ -154,7 +152,10 @@ class SelfUpdateService {
         $headers = [SelfUpdateService]::Headers($Token, 'application/octet-stream')
 
         # Generous, since this is the MSI itself, but no longer indefinite.
-        Invoke-RestMethod -Uri $Asset.url -Headers $headers -OutFile $destPath -TimeoutSec 300
+        Invoke-RestMethod -Uri $Asset.url `
+                          -Headers $headers `
+                          -OutFile $destPath `
+                          -TimeoutSec 300
         return $destPath
     }
 
@@ -208,6 +209,8 @@ class SelfUpdateService {
             $argList += "-Rollback"
         }
 
-        Start-Process -FilePath "powershell.exe" -ArgumentList $argList -WindowStyle Hidden
+        Start-Process -FilePath "powershell.exe" `
+                      -ArgumentList $argList `
+                      -WindowStyle Hidden
     }
 }

@@ -64,7 +64,8 @@ BeforeAll {
     }
     function New-CompRow([string]$name) {
         return @{ 'name' = $name; 'sAMAccountName' = "$name`$"; 'userAccountControl' = 0x1000; 'distinguishedName' = "CN=$name,DC=x"
-            'objectCategory' = 'CN=Computer,CN=Schema,CN=Configuration,DC=x' }
+            'objectCategory' = 'CN=Computer,CN=Schema,CN=Configuration,DC=x' 
+        }
     }
 }
 

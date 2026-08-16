@@ -91,8 +91,7 @@ try {
             # A logon start must never throw a credential prompt at the sign-in screen.
             $limitedCapability = $true
             $logger.LogInfo('Autostarted de-elevated: elevating at logon would prompt for credentials.')
-        }
-        else {
+        } else {
             $spawn = [ElevationRelaunch]::Spawn([ElevationRelaunch]::BuildSpec($srcRoot))
             if ($spawn.Ok) {
                 $logger.LogInfo('Relaunching elevated; this instance is exiting before it builds anything.')
@@ -130,9 +129,9 @@ try {
             $global:AppConfig.SetSetting('domains', $domains)
             $logger.LogInfo("Discovered search domains: $($domains -join ', ')")
             $discovered = $true
-        }
-        else {
-            $logger.LogWarning('No search domains discovered (off-domain?); the finder searches nothing until config names them.')
+        } else {
+            $logger.LogWarning('No search domains discovered (off-domain?); ' +
+                'the finder searches nothing until config names them.')
         }
     }
     if (-not $global:AppConfig.GetAdminServiceHost()) {
@@ -154,8 +153,7 @@ try {
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
         $logger.LogInfo("Main window preloaded (+$($bootSw.ElapsedMilliseconds)ms).")
         Update-Splash 90 'Preparing sign-in'
-    }
-    catch {
+    } catch {
         $logger.LogException("Main window preload failed", $_)
     }
 
@@ -190,23 +188,19 @@ try {
             # Defer sign-in/update to the first time the user surfaces the window.
             $mainPresenter.PendingUpdateCheck = $updatePresenter
             $mainPresenter.ShowHidden()
-        }
-        else {
+        } else {
             try {
                 $updatePresenter.CheckAndPrompt()
-            }
-            catch {
+            } catch {
                 $logger.LogException("Update check failed", $_)
             }
             $mainPresenter.Show()
         }
-    }
-    else {
+    } else {
         $logger.LogError("Main window could not be built.")
     }
 
-}
-catch {
+} catch {
     Close-Splash
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
     [System.Windows.Forms.MessageBox]::Show("DONUT could not start. $_", "Startup Error")

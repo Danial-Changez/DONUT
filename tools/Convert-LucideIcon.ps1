@@ -60,8 +60,7 @@ $parts = foreach ($el in $svg.svg.ChildNodes) {
             $rx = if ($el.rx) { [double]$el.rx } else { 0 }
             if ($rx -eq 0) {
                 'M{0},{1} h{2} v{3} h-{2} z' -f $x, $y, $w, $h
-            }
-            else {
+            } else {
                 ('M{0},{1} h{2} a{3},{3} 0 0 1 {3},{3} v{4} a{3},{3} 0 0 1 -{3},{3} ' +
                 'h-{2} a{3},{3} 0 0 1 -{3},-{3} v-{4} a{3},{3} 0 0 1 {3},-{3} z') -f
                 ($x + $rx), $y, ($w - 2 * $rx), $rx, ($h - 2 * $rx)

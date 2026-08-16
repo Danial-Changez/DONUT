@@ -39,8 +39,7 @@ if ($dcu) {
     Write-Host "  OK  $dcu" -ForegroundColor Green
     try { & $dcu /version 2>&1 | Select-Object -First 3 | ForEach-Object { Write-Host "  $_" } }
     catch { Write-Host "  /version failed: $($_.Exception.Message)" -ForegroundColor Yellow }
-}
-else { Write-Host '  dcu-cli not found on this machine' -ForegroundColor Yellow }
+} else { Write-Host '  dcu-cli not found on this machine' -ForegroundColor Yellow }
 
 Write-Host "`n=== 2. Newest scan report in $ReportDir ===" -ForegroundColor Cyan
 $report = $null
@@ -66,10 +65,8 @@ if ($report) {
                 Version  = "$($_.SelectSingleNode('version').InnerText)"
             }
         } | Format-Table -AutoSize | Out-String | Write-Host
-    }
-    catch { Write-Host "  parse failed: $($_.Exception.Message)" -ForegroundColor Yellow }
-}
-else { Write-Host '  no report found (run a DONUT scan first)' -ForegroundColor Yellow }
+    } catch { Write-Host "  parse failed: $($_.Exception.Message)" -ForegroundColor Yellow }
+} else { Write-Host '  no report found (run a DONUT scan first)' -ForegroundColor Yellow }
 
 Write-Host "`n=== 3. DCU ActivityLog.xml (apply history) ===" -ForegroundColor Cyan
 $activity = @("$env:ProgramData\Dell\UpdateService\Log\ActivityLog.xml",
@@ -83,8 +80,7 @@ if ($activity) {
             Select-Object -Last 15)
     Write-Host "  last lines mentioning a version ($($hits.Count) shown):"
     $hits | ForEach-Object { Write-Host "    $($_.Line.Trim())" }
-}
-else { Write-Host '  no ActivityLog.xml under UpdateService\Log or CommandUpdate' -ForegroundColor Yellow }
+} else { Write-Host '  no ActivityLog.xml under UpdateService\Log or CommandUpdate' -ForegroundColor Yellow }
 
 Write-Host "`n=== 4. Dell Update Package logs ===" -ForegroundColor Cyan
 $dupDir = "$env:ProgramData\Dell\UpdatePackage\Log"
@@ -101,8 +97,7 @@ if (Test-Path -LiteralPath $dupDir) {
             $lines | ForEach-Object { Write-Host "    $($_.Line.Trim())" }
         }
     }
-}
-else { Write-Host "  $dupDir not present" -ForegroundColor Yellow }
+} else { Write-Host "  $dupDir not present" -ForegroundColor Yellow }
 
 Write-Host "`n=== 5. UpdateService data dir (persisted inventory?) ===" -ForegroundColor Cyan
 $svcDir = "$env:ProgramData\Dell\UpdateService"
@@ -112,8 +107,7 @@ if (Test-Path -LiteralPath $svcDir) {
         Format-Table @{ n = 'Path'; e = { $_.FullName.Substring($svcDir.Length + 1) } },
         @{ n = 'KB'; e = { [Math]::Round($_.Length / 1KB) } }, LastWriteTime -AutoSize |
         Out-String | Write-Host
-}
-else { Write-Host "  $svcDir not present" -ForegroundColor Yellow }
+} else { Write-Host "  $svcDir not present" -ForegroundColor Yellow }
 
 Write-Host "`n=== 6. Add or Remove Programs (package suites) ===" -ForegroundColor Cyan
 $arp = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -123,8 +117,7 @@ $arp = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
     Sort-Object DisplayName -Unique
 if ($arp) {
     $arp | Format-Table DisplayName, DisplayVersion, Publisher -AutoSize | Out-String | Write-Host
-}
-else { Write-Host '  no matching entries' -ForegroundColor Yellow }
+} else { Write-Host '  no matching entries' -ForegroundColor Yellow }
 
 Write-Host "`n=== Interpretation ===" -ForegroundColor Cyan
 Write-Host @'

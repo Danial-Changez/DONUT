@@ -70,14 +70,16 @@ class HostOfflineException : RemoteOperationException {
 # The host name could not be resolved to an IP (DNS / AD lookup failed).
 class HostUnresolvableException : RemoteOperationException {
     HostUnresolvableException([string]$hostName) : base(
-        "Could not resolve an IP for '$hostName' - the DNS/AD lookup failed. Check the name and that the host is in the directory.",
+        "Could not resolve an IP for '$hostName' - the DNS/AD lookup failed. " +
+        "Check the name and that the host is in the directory.",
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::Unresolvable) {}
 }
 
 # The host is up but RPC (port 135, the transport PsExec/CIM use) is blocked.
 class RpcUnavailableException : RemoteOperationException {
     RpcUnavailableException([string]$hostName) : base(
-        "RPC (port 135) is not reachable on '$hostName'. Check the Windows Firewall and that the host has finished booting.",
+        "RPC (port 135) is not reachable on '$hostName'. " +
+        "Check the Windows Firewall and that the host has finished booting.",
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::RpcUnavailable) {}
 }
 
@@ -89,9 +91,15 @@ class RemoteExecutionException : RemoteOperationException {
     # its exit code). Anything else keeps the bare-number form.
     RemoteExecutionException([string]$hostName, [string]$what, [int]$exitCode) : base(
         $(switch ($exitCode) {
-                5 { "$what failed on '$hostName' (exit code 5 - access denied: the account DONUT runs as is not an admin on the target)." }
+                5 {
+                    "$what failed on '$hostName' (exit code 5 - access denied: " +
+                    "the account DONUT runs as is not an admin on the target)."
+                }
                 53 { "$what failed on '$hostName' (exit code 53 - the network path to the target was not found)." }
-                1219 { "$what failed on '$hostName' (exit code 1219 - an existing connection to the target uses different credentials)." }
+                1219 {
+                    "$what failed on '$hostName' (exit code 1219 - " +
+                    "an existing connection to the target uses different credentials)."
+                }
                 1326 { "$what failed on '$hostName' (exit code 1326 - the user name or password is incorrect)." }
                 default { "$what failed on '$hostName' (exit code $exitCode)." }
             }),
@@ -115,7 +123,11 @@ class RemoteProcessStartException : RemoteOperationException {
     [int] $ExitCode
 
     RemoteProcessStartException([string]$hostName, [string]$what, [int]$exitCode) : base(
-        "$what could not run on '$hostName': the remote process exited during startup ($([RemoteProcessStartException]::Describe($exitCode))). This is a Windows process-launch failure, not a DCU error - commonly session-0 desktop-heap exhaustion after repeated remote runs, or AV/EDR interference; it often succeeds on retry.",
+        "$what could not run on '$hostName': the remote process exited during startup " +
+        "($([RemoteProcessStartException]::Describe($exitCode))). " +
+        "This is a Windows process-launch failure, not a DCU error - commonly session-0 " +
+        "desktop-heap exhaustion after repeated remote runs, or AV/EDR interference; " +
+        "it often succeeds on retry.",
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::ProcessStartFailed) {
         $this.ExitCode = $exitCode
     }
@@ -141,7 +153,12 @@ class RemoteConnectionLostException : RemoteOperationException {
     [int] $ExitCode
 
     RemoteConnectionLostException([string]$hostName, [string]$what, [int]$exitCode) : base(
-        "$what on '$hostName' could not be confirmed: psexec lost its connection to the host ($([RemoteConnectionLostException]::Describe($exitCode))). This is a network/transport drop, not a DCU error - it typically happens when the update resets the network (e.g. a NIC/Ethernet driver), which severs psexec's own connection while dcu-cli finishes on the host. The update most likely applied; re-scan to confirm.",
+        "$what on '$hostName' could not be confirmed: psexec lost its connection to the host " +
+        "($([RemoteConnectionLostException]::Describe($exitCode))). " +
+        "This is a network/transport drop, not a DCU error - it typically happens when the " +
+        "update resets the network (e.g. a NIC/Ethernet driver), which severs psexec's own " +
+        "connection while dcu-cli finishes on the host. The update most likely applied; " +
+        "re-scan to confirm.",
         $hostName, [ErrorLevel]::Warning, [RemoteFailureReason]::ConnectionLost) {
         $this.ExitCode = $exitCode
     }
@@ -182,7 +199,9 @@ class RemoteTimeoutException : RemoteOperationException {
     [int] $TimeoutMinutes
 
     RemoteTimeoutException([string]$hostName, [string]$what, [int]$timeoutMinutes) : base(
-        "$what on '$hostName' did not finish within $timeoutMinutes minutes - the psexec session was terminated. The remote process may still be running on the host; give it a moment to settle before retrying.",
+        "$what on '$hostName' did not finish within $timeoutMinutes minutes - " +
+        "the psexec session was terminated. The remote process may still be running on the host; " +
+        "give it a moment to settle before retrying.",
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::TimedOut) {
         $this.TimeoutMinutes = $timeoutMinutes
     }

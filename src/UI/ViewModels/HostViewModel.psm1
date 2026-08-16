@@ -100,8 +100,7 @@ class HostViewModel : ObservableObject {
             $this.Set('ProgressVisible', $true)
             # Indeterminate until a percentage arrives (SetPercent flips it off).
             if ($this.Percent -le 0) { $this.Set('ProgressIndeterminate', $true) }
-        }
-        else {
+        } else {
             $this.Set('ProgressVisible', $false)
             $this.Set('ProgressIndeterminate', $false)
             $this.Set('Percent', [double]0)
@@ -135,8 +134,7 @@ class HostViewModel : ObservableObject {
 
         $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
             'never run'
-        }
-        else {
+        } else {
             [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
@@ -160,8 +158,7 @@ class HostViewModel : ObservableObject {
                 if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
                     $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
                     "$($inv.ChargePercent)% - $state"
-                }
-                else { '' }))
+                } else { '' }))
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
         $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
@@ -236,8 +233,7 @@ class HostViewModel : ObservableObject {
         $tokens = if ($full.Contains(',')) {
             $half = $full -split ',\s*', 2
             @(@($half[1] -split '\s+')[0], @($half[0] -split '\s+')[-1])
-        }
-        else { @($full -split '\s+') }
+        } else { @($full -split '\s+') }
         $tokens = @($tokens | Where-Object { $_ })
         $shortForm = [string]$tokens[0]
         if ($tokens.Count -gt 1 -and $tokens[-1].Length -gt 0) {
@@ -252,8 +248,7 @@ class HostViewModel : ObservableObject {
             $sub = if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' }
             else { "$($this.BaseSubtitle)  ·  offline" }
             $this.Set('Subtitle', $sub)
-        }
-        else {
+        } else {
             $this.Set('Subtitle', $this.BaseSubtitle)
         }
     }

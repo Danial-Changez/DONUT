@@ -42,11 +42,12 @@ class ElevationRelaunch {
     # broke", which read the same to the caller but not to the person reading the toast.
     static [hashtable] Spawn([hashtable]$spec) {
         try {
-            Start-Process -FilePath $spec.FilePath -ArgumentList $spec.Arguments `
-                -Verb RunAs -ErrorAction Stop
+            Start-Process -FilePath $spec.FilePath `
+                          -ArgumentList $spec.Arguments `
+                          -Verb RunAs `
+                          -ErrorAction Stop
             return @{ Ok = $true; Declined = $false; Reason = '' }
-        }
-        catch {
+        } catch {
             # 1223 is ERROR_CANCELLED: the consent or credential prompt was dismissed.
             $win32 = $_.Exception -as [System.ComponentModel.Win32Exception]
             $declined = $null -ne $win32 -and $win32.NativeErrorCode -eq 1223

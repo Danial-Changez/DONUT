@@ -50,8 +50,7 @@ class SearchRowViewModel {
             $vm.Secondary = ($sub -join '  -  ')
             $vm.CanUnlock = [bool]$r.LockedOut
             $vm.CanReset = $true
-        }
-        else {
+        } else {
             $vm.Primary = [string]$r.Name
             $vm.Secondary = "$([string]$r.Domain)  -  computer"
         }

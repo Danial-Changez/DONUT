@@ -112,8 +112,7 @@ class PersonLens {
         try {
             $h = $json | ConvertFrom-Json -AsHashtable -Depth 8
             return [PersonLens]::FromHashtable([hashtable]$h)
-        }
-        catch {
+        } catch {
             $p = [PersonLens]::new()
             $p.Errors = @("Failed to parse the lens bundle: $($_.Exception.Message)")
             return $p
@@ -149,8 +148,7 @@ class LensDeployment {
             }
             $out.Rows = $rowList.ToArray()
             $out.Error = [string]$h['error']
-        }
-        catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
+        } catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
         return $out
     }
 

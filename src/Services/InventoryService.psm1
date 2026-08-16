@@ -29,7 +29,9 @@ class InventoryService : RemoteJobService {
     # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
     [void] DeleteReport([string]$hostName) {
         $reportPath = Join-Path $this.Config.ReportsPath "$hostName-inventory.json"
-        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $reportPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     # Reads the copied-back inventory JSON into a typed MachineInventory. Returns $null
@@ -42,8 +44,7 @@ class InventoryService : RemoteJobService {
             $raw = Get-Content -Path $reportPath -Raw
             $h = $raw | ConvertFrom-Json -AsHashtable
             return [MachineInventory]::FromHashtable([hashtable]$h)
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to parse inventory report for $hostName", $_)
             return $null
         }

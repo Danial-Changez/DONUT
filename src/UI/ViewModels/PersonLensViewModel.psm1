@@ -53,7 +53,9 @@ class PersonLensViewModel : ObservableObject {
 
     # Devices newest-seen first: parsed LastLogon descending, blanks last.
     hidden [object[]] SortByLastSeen([LensDevice[]]$devices) {
-        return @($devices | Sort-Object -Descending -Stable -Property @{
+        return @($devices | Sort-Object -Descending `
+                                        -Stable `
+                                        -Property @{
                 Expression = {
                     $at = [datetime]::MinValue
                     [void][datetime]::TryParse([string]$_.LastLogon,
@@ -118,8 +120,7 @@ class PersonLensViewModel : ObservableObject {
             $this.SetDeviceRows($lens.Devices)
             $this.Set('HasDevices', $true)
             $this.Set('StatusText', 'Loading device details…')
-        }
-        else {
+        } else {
             $this.Set('StatusText', 'Looking up devices…')
         }
     }
@@ -149,8 +150,7 @@ class PersonLensViewModel : ObservableObject {
         if ($lens.Errors.Count -gt 0) {
             $this.Set('HasError', $true)
             $this.Set('StatusText', ($lens.Errors -join '  |  '))
-        }
-        else {
+        } else {
             $this.Set('HasError', $false)
             $this.Set('StatusText', '')
         }

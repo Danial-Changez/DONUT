@@ -102,8 +102,7 @@ class StartupTaskService {
             # WorkingDirectory too, or tasks registered before it existed never re-register.
             return ($action.Execute -ne $spec.Execute) -or ($action.Arguments -ne $spec.Argument) -or
             ($action.WorkingDirectory -ne $spec.WorkingDirectory)
-        }
-        catch { return $true }
+        } catch { return $true }
     }
 
     # Thin shell: reconcile the desired state against the installed task and apply it.
@@ -131,8 +130,7 @@ class StartupTaskService {
             # A task named for a previous owner would linger (and never fire) forever.
             $this.RemoveStaleTasks($name)
             return $true
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Startup task update failed", $_)
             return $this.Fail($_.Exception.Message)
         }
@@ -179,7 +177,9 @@ class StartupTaskService {
         $explorer = Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if (-not $explorer) { return $null }
-        $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction SilentlyContinue
+        $owner = Invoke-CimMethod -InputObject $explorer `
+                                  -MethodName GetOwner `
+                                  -ErrorAction SilentlyContinue
         if (-not $owner -or -not $owner.User) { return $null }
         return "$($owner.Domain)\$($owner.User)"
     }
@@ -191,21 +191,33 @@ class StartupTaskService {
     # One lane: the console user's own logon, as that user. RunLevel Highest so an admin
     # console account starts elevated with no logon-time UAC prompt. See .NOTES.
     hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
-        $action = New-ScheduledTaskAction -Execute $spec.Execute -Argument $spec.Argument `
-            -WorkingDirectory $spec.WorkingDirectory
+        $action = New-ScheduledTaskAction -Execute $spec.Execute `
+                                          -Argument $spec.Argument `
+                                          -WorkingDirectory $spec.WorkingDirectory
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $triggerUser
-        $principal = New-ScheduledTaskPrincipal -UserId $triggerUser -RunLevel Highest -LogonType Interactive
+        $principal = New-ScheduledTaskPrincipal -UserId $triggerUser `
+                                                -RunLevel Highest `
+                                                -LogonType Interactive
         # Priority 5 keeps normal CPU class, where the scheduler default of 7 boots below it.
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
-            -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -Priority 5
+                                                 -DontStopIfGoingOnBatteries `
+                                                 -ExecutionTimeLimit ([TimeSpan]::Zero) `
+                                                 -Priority 5
         # An access-denied register is non-terminating and would slip past Apply's catch.
-        Register-ScheduledTask -TaskName $name -Action $action `
-            -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Register-ScheduledTask -TaskName $name `
+                               -Action $action `
+                               -Trigger $trigger `
+                               -Principal $principal `
+                               -Settings $settings `
+                               -Force `
+                               -ErrorAction Stop | Out-Null
         $this.Logger.LogInfo("Registered startup task $name, triggered by $triggerUser's logon.")
     }
 
     hidden [void] UnregisterTask([string]$name) {
-        Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop
+        Unregister-ScheduledTask -TaskName $name `
+                                 -Confirm:$false `
+                                 -ErrorAction Stop
         $this.Logger.LogInfo("Unregistered startup task $name.")
     }
 
@@ -221,10 +233,14 @@ class StartupTaskService {
             ([string]$action.Arguments -like '*Start-Donut.ps1*')
             if (-not $launchesUs) { continue }
             try {
-                Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                Unregister-ScheduledTask -TaskName $task.TaskName `
+                                         -Confirm:$false `
+                                         -ErrorAction Stop
                 $this.Logger.LogInfo("Removed stale startup task $($task.TaskName).")
+            } catch {
+                $this.Logger.LogWarning(
+                    "Could not remove stale startup task $($task.TaskName): $($_.Exception.Message)")
             }
-            catch { $this.Logger.LogWarning("Could not remove stale startup task $($task.TaskName): $($_.Exception.Message)") }
         }
     }
 }

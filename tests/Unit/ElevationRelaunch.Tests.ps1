@@ -31,8 +31,7 @@ Describe "ElevationRelaunch" {
             if ($script:isPwshHost) {
                 $script:spec.Arguments | Should -Match '-AwaitPid \d+'
                 $script:spec.Arguments | Should -Match '-File "C:\\My App\\src\\Start-Donut\.ps1"'
-            }
-            else {
+            } else {
                 $script:spec.Arguments | Should -Match '--await-pid \d+'
             }
         }

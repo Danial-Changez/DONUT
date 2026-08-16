@@ -80,8 +80,7 @@ class PendingIntent {
                     ForEach-Object { [string]$_ })
             $intent.CreatedUtc = [TimeFormat]::NormalizeStamp($h['createdUtc'])
             return $intent
-        }
-        catch {
+        } catch {
             return $null
         }
     }

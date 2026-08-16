@@ -59,8 +59,7 @@ function Protect-Text([string]$text) {
         $enc = $aes.CreateEncryptor()
         $plain = [Text.Encoding]::UTF8.GetBytes($text)
         return $enc.TransformFinalBlock($plain, 0, $plain.Length)
-    }
-    finally { $aes.Dispose() }
+    } finally { $aes.Dispose() }
 }
 
 function Unprotect-File([string]$path) {
@@ -70,8 +69,7 @@ function Unprotect-File([string]$path) {
         $dec = $aes.CreateDecryptor()
         $blob = [IO.File]::ReadAllBytes($path)
         return [Text.Encoding]::UTF8.GetString($dec.TransformFinalBlock($blob, 0, $blob.Length))
-    }
-    finally { $aes.Dispose() }
+    } finally { $aes.Dispose() }
 }
 
 function Write-LensBundle([string]$path, [string]$json) {
@@ -104,12 +102,17 @@ function Show-LensToast([string]$title, [string]$body) {
     $reg = 'HKCU:\SOFTWARE\Classes\AppUserModelId\DONUT'
     if (-not (Test-Path -LiteralPath $reg)) {
         $null = New-Item -Path $reg -Force
-        $null = New-ItemProperty -Path $reg -Name 'DisplayName' -Value 'DONUT' -PropertyType String -Force
+        $null = New-ItemProperty -Path $reg `
+                                 -Name 'DisplayName' `
+                                 -Value 'DONUT' `
+                                 -PropertyType String `
+                                 -Force
     }
     $script = New-LensToastScript -title $title -body $body
     $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
-    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @(
-        '-NoProfile', '-NonInteractive', '-EncodedCommand', $b64)
+    Start-Process -FilePath 'powershell.exe' `
+                  -WindowStyle Hidden `
+                  -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $b64)
 }
 
 function Get-Cn([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
@@ -177,13 +180,20 @@ $script:HardwareScript = {
     function Get-InventoryRow([string]$srv, [string]$class, [string]$select, [string]$id) {
         if (-not $script:UseKey) {
             try {
-                $row = Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $false
+                $row = Get-AdminServiceRow -srv $srv `
+                                           -class $class `
+                                           -select $select `
+                                           -id $id `
+                                           -useKey $false
                 if ($row) { return $row }
-            }
-            catch { $script:FilterError = $_.Exception.Message }
+            } catch { $script:FilterError = $_.Exception.Message }
             $script:UseKey = $true
         }
-        return Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $true
+        return Get-AdminServiceRow -srv $srv `
+                                   -class $class `
+                                   -select $select `
+                                   -id $id `
+                                   -useKey $true
     }
     $script:UseKey = $false
     $script:FilterError = ''
@@ -195,22 +205,25 @@ $script:HardwareScript = {
         return $out
     }
     try {
-        $cs = Get-InventoryRow -srv $server -class 'SMS_G_System_COMPUTER_SYSTEM' `
-            -select 'Manufacturer,Model' -id $pair.resourceId
+        $cs = Get-InventoryRow -srv $server `
+                               -class 'SMS_G_System_COMPUTER_SYSTEM' `
+                               -select 'Manufacturer,Model' `
+                               -id $pair.resourceId
         if ($cs) {
             $out.manufacturer = [string]$cs.Manufacturer
             $out.model = [string]$cs.Model
         }
-        $bios = Get-InventoryRow -srv $server -class 'SMS_G_System_PC_BIOS' `
-            -select 'SerialNumber' -id $pair.resourceId
+        $bios = Get-InventoryRow -srv $server `
+                                 -class 'SMS_G_System_PC_BIOS' `
+                                 -select 'SerialNumber' `
+                                 -id $pair.resourceId
         if ($bios) { $out.serial = [string]$bios.SerialNumber }
         # Both shapes answering nothing used to blank the card with no reason on it.
         if (-not $out.model -and -not $out.serial) {
             $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
             if ($script:FilterError) { $out.error += " (filter form: $($script:FilterError))" }
         }
-    }
-    catch { $out.error = $_.Exception.Message }
+    } catch { $out.error = $_.Exception.Message }
     $out.ms = $sw.ElapsedMilliseconds
     return $out
 }
@@ -233,8 +246,7 @@ $script:DeviceScript = {
         try {
             $cHit = $gc.FindOne()
             if ($cHit) { $compDn = [string]$cHit.Properties['distinguishedname'][0] }
-        }
-        catch { }
+        } catch { }
         # A sibling-forest machine is invisible to this GC, and SCCM's heartbeat SID pins it.
         if (-not $compDn -and $resourceId -and $server) {
             try {
@@ -257,8 +269,7 @@ $script:DeviceScript = {
                     $probe.psbase.RefreshCache()
                     $compDn = [string]$probe.Properties['distinguishedname'][0]
                 }
-            }
-            catch { }
+            } catch { }
         }
         # Every domain the finder knows, the person's own first, asked directly.
         if (-not $compDn) {
@@ -271,8 +282,7 @@ $script:DeviceScript = {
                     [void]$ds.PropertiesToLoad.Add('distinguishedName')
                     $hit = $ds.FindOne()
                     if ($hit) { $compDn = [string]$hit.Properties['distinguishedname'][0]; break }
-                }
-                catch { }
+                } catch { }
             }
         }
         if ($compDn) {
@@ -311,27 +321,22 @@ $script:DeviceScript = {
                         $iso = ''
                         if ($wc -is [datetime]) {
                             $iso = $wc.ToUniversalTime().ToString('o')
-                        }
-                        elseif ($wc) {
+                        } elseif ($wc) {
                             $dt = [datetime]::MinValue
                             if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
                                 $iso = $dt.ToUniversalTime().ToString('o')
-                            }
-                            else { $iso = [string]$wc }
+                            } else { $iso = [string]$wc }
                         }
                         @{
                             password = [string]$_.Properties['msfve-recoverypassword'][0]
                             created  = $iso
                         }
                     })
-            }
-            elseif (-not $dev.note) {
+            } elseif (-not $dev.note) {
                 $dev.note = 'BitLocker not escrowed to AD (or not readable)'
             }
-        }
-        elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
-    }
-    catch {
+        } elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+    } catch {
         if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
     }
     $dev.ms = $sw.ElapsedMilliseconds
@@ -345,8 +350,7 @@ function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
     try {
         $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
         Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
-    }
-    catch {
+    } catch {
         Write-Verbose "Lens partial $Seq not written: $($_.Exception.Message)"
     }
 }
@@ -388,8 +392,7 @@ function Get-OwnerDisplayName {
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $rows = @((Invoke-RestMethod @p).value)
         if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
-    }
-    catch { $r.error = "SCCM user: $($_.Exception.Message)" }
+    } catch { $r.error = "SCCM user: $($_.Exception.Message)" }
     if (-not $r.owner) {
         # The GC covers only the agent's own forest, never a sibling forest's user.
         try {
@@ -403,8 +406,7 @@ function Get-OwnerDisplayName {
                     $r.owner = [string]$user.Properties['displayname'][0]
                 }
             }
-        }
-        catch { $r.error = "AD user: $($_.Exception.Message)" }
+        } catch { $r.error = "AD user: $($_.Exception.Message)" }
     }
     # Only a found name is memoized, so a transient failure retries on the next batch.
     if ($r.owner) { $script:OwnerNameCache[$uniqueUserName] = $r.owner }
@@ -427,12 +429,13 @@ function Get-MachineOwner {
         # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
         $unique = [string]$rows[0].UniqueUserName
         $out.sam = ($unique -split '\\')[-1]
-    }
-    catch {
+    } catch {
         $out.error = "SCCM affinity: $($_.Exception.Message)"
         return $out
     }
-    $named = Get-OwnerDisplayName -uniqueUserName $unique -sam $out.sam -server $server
+    $named = Get-OwnerDisplayName -uniqueUserName $unique `
+                                  -sam $out.sam `
+                                  -server $server
     $out.owner = [string]$named.owner
     if ($named.error) { $out.error = [string]$named.error }
     # A SAM still tells them apart when the naming is what failed.
@@ -522,8 +525,7 @@ function Resolve-UserSoftware {
             $uFilter =
             if ($identity -match '@') {
                 "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))"
-            }
-            else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+            } else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
             $hit = Find-Gc $uFilter
             if ($hit) {
                 $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
@@ -532,8 +534,7 @@ function Resolve-UserSoftware {
         }
         if (-not $resolved) { throw "no SAM resolved for '$identity'." }
         $bundle.deployments = @(& $script:SoftwareScript $server $resolved)
-    }
-    catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
+    } catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
     return ($bundle | ConvertTo-Json -Compress -Depth 4)
 }
 
@@ -557,8 +558,7 @@ function Read-LensUser([string]$identity, [string]$samGuess, [string]$dn) {
                 $bound = [ADSI]"LDAP://$dn"
                 $bound.psbase.RefreshCache()
                 $user = $bound
-            }
-            catch { $user = $null }
+            } catch { $user = $null }
         }
         if ($null -eq $user) {
             $uHit = Find-Gc $uFilter
@@ -581,8 +581,7 @@ function Read-LensUser([string]$identity, [string]$samGuess, [string]$dn) {
             $v = [string]$user.Properties['physicaldeliveryofficename'][0]; if ($v) { $office += $v }
         }
         $r.office = ($office -join ', ')
-    }
-    catch { $r.error = [string]$_.Exception.Message }
+    } catch { $r.error = [string]$_.Exception.Message }
     return $r
 }
 
@@ -604,21 +603,27 @@ function Resolve-Lens {
     $sam = $samGuess
     $affinityJob = $null
     if ($samGuess -and $server) {
-        try { $affinityJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:AffinityScript -ArgumentList $server, $samGuess } catch { $affinityJob = $null }
+        try {
+            $affinityJob = Start-ThreadJob -ThrottleLimit 16 `
+                                           -ScriptBlock $script:AffinityScript `
+                                           -ArgumentList $server, $samGuess
+        } catch { $affinityJob = $null }
     }
     $affinityStarted = [bool]$affinityJob
 
     # The AD read rides its own job beside affinity, so neither lane gates the other.
     $userJob = $null
     try {
-        $userJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock {
+        $userJob = Start-ThreadJob -ThrottleLimit 16 `
+                                   -ScriptBlock {
             param($commonSelf, $forestNc, $identity, $samGuess, $dn)
             . $commonSelf
             $script:ForestNc = $forestNc
-            Read-LensUser -identity $identity -samGuess $samGuess -dn $dn
+            Read-LensUser -identity $identity `
+                          -samGuess $samGuess `
+                          -dn $dn
         } -ArgumentList $script:CommonSelf, $script:ForestNc, $identity, $samGuess, $dn
-    }
-    catch { $userJob = $null }
+    } catch { $userJob = $null }
     $user = if ($userJob) { $null }
     else { Read-LensUser -identity $identity -samGuess $samGuess -dn $dn }
 
@@ -638,12 +643,15 @@ function Resolve-Lens {
                     try { $user = @(Receive-Job -Job $userJob -ErrorAction Stop) | Select-Object -Last 1 }
                     catch { $user = @{ error = [string]$_.Exception.Message } }
                     if ($null -eq $user) { $user = @{ error = 'the AD read returned nothing.' } }
-                    Remove-Job -Job $userJob -Force -ErrorAction SilentlyContinue
+                    Remove-Job -Job $userJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
                     $userJob = $null
-                }
-                elseif ([datetime]::UtcNow -ge $gatherDeadline) {
+                } elseif ([datetime]::UtcNow -ge $gatherDeadline) {
                     Stop-Job -Job $userJob -ErrorAction SilentlyContinue
-                    Remove-Job -Job $userJob -Force -ErrorAction SilentlyContinue
+                    Remove-Job -Job $userJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
                     $userJob = $null
                     $user = @{ error = 'timed out after 45s.' }
                 }
@@ -662,7 +670,11 @@ function Resolve-Lens {
                 # On a UPN or display-name pick, the SAM only became known just now.
                 if (-not $affinityStarted -and $sam -and $server) {
                     $affinityStarted = $true
-                    try { $affinityJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:AffinityScript -ArgumentList $server, $sam } catch { $affinityJob = $null }
+                    try {
+                        $affinityJob = Start-ThreadJob -ThrottleLimit 16 `
+                                                       -ScriptBlock $script:AffinityScript `
+                                                       -ArgumentList $server, $sam
+                    } catch { $affinityJob = $null }
                 }
             }
         }
@@ -673,29 +685,37 @@ function Resolve-Lens {
             if ($affinityJob) {
                 if ([string]$affinityJob.State -in @('Completed', 'Failed', 'Stopped')) {
                     try { $rows = Receive-Job -Job $affinityJob -ErrorAction Stop; $haveRows = $true }
-                    catch { $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): $($_.Exception.Message)" }
-                    Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue
+                    catch {
+                        $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                        $_.Exception.Message
+                    }
+                    Remove-Job -Job $affinityJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
                     $affinityJob = $null
                     $affDone = $true
                     $landed = $true
-                }
-                elseif ([datetime]::UtcNow -ge $gatherDeadline) {
+                } elseif ([datetime]::UtcNow -ge $gatherDeadline) {
                     Stop-Job -Job $affinityJob -ErrorAction SilentlyContinue
-                    Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue
+                    Remove-Job -Job $affinityJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
                     $affinityJob = $null
-                    $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): timed out after 45s."
+                    $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                    'timed out after 45s.'
                     $affDone = $true
                     $landed = $true
                 }
-            }
-            elseif ($affinityStarted) {
+            } elseif ($affinityStarted) {
                 # The job would not start, so this lane's turn runs the query inline.
                 try { $rows = & $script:AffinityScript $server $sam; $haveRows = $true }
-                catch { $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): $($_.Exception.Message)" }
+                catch {
+                    $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                    $_.Exception.Message
+                }
                 $affDone = $true
                 $landed = $true
-            }
-            elseif ($userDone) {
+            } elseif ($userDone) {
                 # No SAM or no site server means there is no affinity to wait for.
                 $affDone = $true
             }
@@ -732,10 +752,10 @@ function Resolve-Lens {
         foreach ($hwPair in $hwPairs) {
             $hwJob = $null
             try {
-                $hwJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:HardwareScript `
-                    -ArgumentList $server, $hwPair
-            }
-            catch { $hwJob = $null }
+                $hwJob = Start-ThreadJob -ThrottleLimit 16 `
+                                         -ScriptBlock $script:HardwareScript `
+                                         -ArgumentList $server, $hwPair
+            } catch { $hwJob = $null }
             $hwJobs.Add(@{ Job = $hwJob; Pair = $hwPair })
         }
     }
@@ -759,11 +779,12 @@ function Resolve-Lens {
     foreach ($wsid in $wsids) {
         $devJob = $null
         try {
-            # The affinity's ResourceID rides along, so a GC miss reads SCCM's DN for it.
-            $devJob = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $script:DeviceScript `
-                -ArgumentList $script:ForestNc, $wsid, $adFallback, ([string]$wsMap[$wsid]), $server
-        }
-        catch { $devJob = $null }
+            # The affinity's ResourceID rides along, so a GC miss reads SCCM's SID for it.
+            $devArgs = @($script:ForestNc, $wsid, $adFallback, [string]$wsMap[$wsid], $server)
+            $devJob = Start-ThreadJob -ThrottleLimit 16 `
+                                      -ScriptBlock $script:DeviceScript `
+                                      -ArgumentList $devArgs
+        } catch { $devJob = $null }
         $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })
     }
 
@@ -776,20 +797,21 @@ function Resolve-Lens {
                 $left = [int][Math]::Max(1, ($devDeadline - [datetime]::UtcNow).TotalSeconds)
                 if (Wait-Job -Job $entry.Job -Timeout $left) {
                     $dev = @(Receive-Job -Job $entry.Job -ErrorAction Stop) | Select-Object -Last 1
-                }
-                else { throw 'timed out after 30s.' }
+                } else { throw 'timed out after 30s.' }
             }
             # No job means it would not start, and inline keeps the row filled.
             else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid $adFallback }
-        }
-        catch {
+        } catch {
             $dev = [ordered]@{ name = $entry.Wsid; os = ''; lastLogon = ''; domain = ''
                 model = ''; serial = ''; manufacturer = ''
                 note = "AD detail: $($_.Exception.Message)"; bitLockerKeys = @()
             }
-        }
-        finally {
-            if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+        } finally {
+            if ($entry.Job) {
+                Remove-Job -Job $entry.Job `
+                           -Force `
+                           -ErrorAction SilentlyContinue
+            }
         }
         # Each device's AD wall time joins the stage marks, then leaves the bundle row.
         if ($null -ne $dev.ms) {
@@ -819,20 +841,21 @@ function Resolve-Lens {
                     if (Wait-Job -Job $entry.Job -Timeout $left) {
                         $got = @(Receive-Job -Job $entry.Job -ErrorAction Stop)
                         foreach ($r in $got) { $hwRows.Add($r) }
-                    }
-                    else { throw 'timed out after 30s.' }
+                    } else { throw 'timed out after 30s.' }
                 }
                 # No job means it would not start, and inline keeps the cards filled.
                 else {
                     $got = @(& $script:HardwareScript $server $entry.Pair)
                     foreach ($r in $got) { $hwRows.Add($r) }
                 }
-            }
-            catch {
+            } catch {
                 $bundle.errors += "SCCM hardware ($($entry.Pair.name)): $($_.Exception.Message)"
-            }
-            finally {
-                if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+            } finally {
+                if ($entry.Job) {
+                    Remove-Job -Job $entry.Job `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                }
             }
         }
 
@@ -856,8 +879,7 @@ function Resolve-Lens {
             $unique = @($hwErrors | ForEach-Object { ($_ -split ': ', 2)[-1] } | Select-Object -Unique)
             if ($unique.Count -eq 1 -and $hwErrors.Count -gt 1) {
                 $bundle.errors += "SCCM hardware inventory: $($unique[0])"
-            }
-            else { $bundle.errors += @($hwErrors | ForEach-Object { "SCCM hardware ($_)" }) }
+            } else { $bundle.errors += @($hwErrors | ForEach-Object { "SCCM hardware ($_)" }) }
         }
     }
     $bundle.devices = $devices.ToArray()

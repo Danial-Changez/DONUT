@@ -104,11 +104,11 @@ Describe "RemoteError" {
             [string][RemoteFailure]::ReasonFromMessage(([HostOfflineException]::new('h')).Message)      | Should -Be 'Offline'
             [string][RemoteFailure]::ReasonFromMessage(([HostUnresolvableException]::new('h')).Message) | Should -Be 'Unresolvable'
             [string][RemoteFailure]::ReasonFromMessage(([RpcUnavailableException]::new('h')).Message)   | Should -Be 'RpcUnavailable'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h','DCU /scan',500)).Message) | Should -Be 'ExecutionFailed'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h', 'DCU /scan', 500)).Message) | Should -Be 'ExecutionFailed'
             [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h','DCU /applyUpdates',-1073741502)).Message) | Should -Be 'ProcessStartFailed'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteConnectionLostException]::new('h','DCU /applyUpdates',233)).Message) | Should -Be 'ConnectionLost'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteTimeoutException]::new('h','Remote probe',20)).Message) | Should -Be 'TimedOut'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h', 'DCU /applyUpdates', -1073741502)).Message) | Should -Be 'ProcessStartFailed'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteConnectionLostException]::new('h', 'DCU /applyUpdates', 233)).Message) | Should -Be 'ConnectionLost'
+            [string][RemoteFailure]::ReasonFromMessage(([RemoteTimeoutException]::new('h', 'Remote probe', 20)).Message) | Should -Be 'TimedOut'
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
             [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'
