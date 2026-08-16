@@ -19,8 +19,11 @@
     comment-length rule in docs/development/coding-style.md.
 
     Rule calibration lives in PSScriptAnalyzerSettings.psd1 at the repo root, and the
-    repo's own rules (tools\Rules\DonutRules.psm1: one named parameter per line past two,
-    continuations aligned under the first) run beside the stock set.
+    repo's own rules (tools\Rules\DonutRules.psm1) run beside the stock set: the layout
+    rule (one named parameter per line past two, continuations aligned under the first)
+    gates as a Warning, and the function-size rule (clang-tidy's 150 lines / 100
+    statements, plus 20 branches and nesting 5) reports at Information, so the known
+    hotspots print on every run without blocking it.
 
 .PARAMETER Path
     Source root to scan. Defaults to the repo's src\ folder.
@@ -93,9 +96,19 @@ if ($results) {
 
     # Trailing whitespace stays in the count but out of the listing, so real findings show.
     Write-Host 'Findings (excluding layout rules):'
-    $results | Where-Object { $_.RuleName -ne 'PSAvoidTrailingWhitespace' } |
+    $results | Where-Object { $_.RuleName -notin @('PSAvoidTrailingWhitespace', 'DonutFunctionSize') } |
         Select-Object @{ n = 'File'; e = { Split-Path $_.ScriptPath -Leaf } }, Line, RuleName |
         Sort-Object File, Line | Format-Table -AutoSize | Out-Host
+
+    # Report only, so the message (which function, by how much) is the useful part.
+    $sizes = @($results | Where-Object { $_.RuleName -eq 'DonutFunctionSize' } | Sort-Object ScriptPath, Line)
+    if ($sizes) {
+        Write-Host "Functions past the size limits ($($sizes.Count), report only):"
+        foreach ($s in $sizes) {
+            Write-Host ("  {0}:{1}  {2}" -f (Split-Path $s.ScriptPath -Leaf), $s.Line, $s.Message)
+        }
+        Write-Host ''
+    }
 }
 
 # --- Comment length ---
@@ -104,8 +117,10 @@ if ($results) {
 # Swept repo-wide rather than over -Path, because the rule is not src-only.
 $repo = Split-Path $PSScriptRoot -Parent
 $excluded = '\\(bin|obj|\.cache|node_modules|dist|\.astro|\.diag)\\'
-$sweep = Get-ChildItem -Path $repo -Recurse -File `
-    -Include *.ps1, *.psm1, *.cs, *.mjs, *.js, *.ts, *.astro, *.xaml |
+$sweep = Get-ChildItem -Path $repo `
+                       -Recurse `
+                       -File `
+                       -Include *.ps1, *.psm1, *.cs, *.mjs, *.js, *.ts, *.astro, *.xaml |
     Where-Object { $_.FullName -notmatch $excluded }
 $longComments = @(Get-CommentFinding -Files $sweep)
 if ($longComments) {

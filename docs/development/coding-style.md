@@ -167,3 +167,25 @@ lint session loads the WPF and WinForms assemblies first so every `[Brush]` and
 `[DispatcherTimer]` resolves, and filters the runtime-compiled launcher types by
 name. A hit therefore means a real typo in a type name, or a new runtime-compiled
 type that needs adding to the filter in `Invoke-Lint.ps1`.
+
+### The repo's own rules
+
+`tools/Rules/DonutRules.psm1` holds the conventions no stock rule can express, and
+`Invoke-Lint.ps1` loads it beside the stock set:
+
+- **DonutParameterLayout** (Warning, gates): the one-per-line and alignment shape
+  above, for calls with more than two named parameters, and alignment for any
+  wrapped call.
+- **DonutFunctionSize** (Information, report only): a function or method past
+  clang-tidy's `readability-function-size` limits — 150 lines or 100 statements — or
+  past 20 branches (every `if`/`elseif`/`else`, `switch` case, loop and `catch`) or
+  five nested blocks. Reported, never gated: the handful of known hotspots
+  (`Resolve-Lens`, `MainPresenter.Initialize`, `HomePresenter.OnJobCompleted`,
+  `ResolutionCoordinator.CompleteResolveCore`, `WizTreeCsv.ParseTopFoldersFromFile`)
+  print on every run so the list stays visible and cannot grow unnoticed. Split one
+  when its file is next touched, and promote the rule to Warning once the list is
+  empty. The thresholds are pylint's and clang-tidy's kind of limit, calibrated to
+  this codebase: pylint's own 40-statement cap would flag a fifth of it.
+
+Each rule is tested through the real analyzer on snippets in
+`tests/Unit/DonutRules.Tests.ps1`.

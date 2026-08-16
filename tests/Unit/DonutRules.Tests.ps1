@@ -84,3 +84,79 @@ $job = Start-ThreadJob -ScriptBlock {
         (Get-LayoutFindings $code).Count | Should -Be 0
     }
 }
+
+Describe "DonutFunctionSize rule" {
+
+    BeforeAll {
+        Import-Module PSScriptAnalyzer -ErrorAction Stop
+        $script:rulePath = (Resolve-Path (Join-Path $PSScriptRoot '..\..\tools\Rules\DonutRules.psm1')).Path
+        function Get-SizeFindings([string]$code) {
+            return @(Invoke-ScriptAnalyzer -ScriptDefinition $code -CustomRulePath $script:rulePath |
+                    Where-Object RuleName -eq 'DonutFunctionSize')
+        }
+        # A body of N one-statement lines, to build functions right at a limit.
+        function New-Body([int]$statements) { return (1..$statements | ForEach-Object { "    `$v$_ = $_" }) -join "`n" }
+    }
+
+    It "says nothing about a function inside every limit" {
+        $code = "function Test-Small {`n$(New-Body 100)`n}"
+        (Get-SizeFindings $code).Count | Should -Be 0
+    }
+
+    It "reports a function over the statement limit, at Information severity, once" {
+        $code = "function Test-Big {`n$(New-Body 101)`n}"
+        $f = Get-SizeFindings $code
+        $f.Count | Should -Be 1
+        $f[0].Severity | Should -Be 'Information'
+        $f[0].Message | Should -BeLike "'Test-Big' has outgrown one function: statements 101 (limit 100)*"
+    }
+
+    It "names a class method by its class and reports it once, not per wrapper node" {
+        $code = "class Widget {`n    [void] Grow() {`n$(New-Body 101)`n    }`n}"
+        $f = Get-SizeFindings $code
+        $f.Count | Should -Be 1
+        $f[0].Message | Should -BeLike "'Widget.Grow' has outgrown*"
+    }
+
+    It "counts branches across if, elseif, else, switch, loops and catch" {
+        # 7 ifs x (if + elseif + else) = 21 branches on a body that is short otherwise.
+        $ifs = (1..7 | ForEach-Object { "    if (`$a -eq $_) { 1 } elseif (`$a -eq -$_) { 2 } else { 3 }" }) -join "`n"
+        $f = Get-SizeFindings "function Test-Branchy(`$a) {`n$ifs`n}"
+        $f.Count | Should -Be 1
+        $f[0].Message | Should -BeLike "*branches 21 (limit 20)*"
+    }
+
+    It "reports nesting deeper than five blocks, and not five" {
+        $five = @'
+function Test-Five($a) {
+    if ($a) {
+        foreach ($b in $a) {
+            if ($b) {
+                while ($b) {
+                    if ($b -gt 1) { $b-- }
+                }
+            }
+        }
+    }
+}
+'@
+        (Get-SizeFindings $five).Count | Should -Be 0
+
+        $six = @'
+function Test-Six($a) {
+    if ($a) {
+        foreach ($b in $a) {
+            if ($b) {
+                while ($b) {
+                    try { $b-- } catch { if ($b) { $b = 0 } }
+                }
+            }
+        }
+    }
+}
+'@
+        $f = Get-SizeFindings $six
+        $f.Count | Should -Be 1
+        $f[0].Message | Should -BeLike "*nesting depth 6 (limit 5)*"
+    }
+}
