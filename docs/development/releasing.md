@@ -10,7 +10,10 @@ same MSI a stable release ships, from the same `tools/Build-Installer.ps1`.
 
 The third field is a build counter, not a patch level. A fix and a feature both
 advance it by however many commits they took, so versions are ordered but not
-meaningful - the series is where intent lives, and it is bumped by hand.
+meaningful - the series is where intent lives, and it is bumped by hand. Semantic
+versioning does not fit here and a fourth field is worse than useless: the MSI is
+the one that has to compare, and it counts three fields
+([why](./decisions.md#why-the-third-field-counts-builds-not-patches)).
 
 ## Promoting a beta to stable
 
