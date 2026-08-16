@@ -26,6 +26,7 @@ lets the target machine's DCU defaults apply.
 | Settings Shortcut | Toggles Settings open and closed while DONUT is focused (default `Ctrl+,`) |
 | Throttle Limit | How many machines run at once (default 8) |
 | Folders to Scan | How many largest folders the storage scan returns (default 12) |
+| Beta Channel | Off by default. On, the update check also sees prereleases — see [Self-update](./self-update.md#beta-channel) |
 | Debug Logging | Verbose breadcrumbs in `Donut.log`, off by default. Applies immediately, no restart |
 
 ## Recording a keybind

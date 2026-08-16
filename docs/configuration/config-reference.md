@@ -29,6 +29,7 @@ up).
 | `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
 | `activeDomainController` | string, discovered | The domain controller DONUT resolves names against; rewritten whenever it picks a different one |
 | `hasSeenTour` | bool, `false` | Set once the first-run [guided tour](../get-started/first-launch.md#the-guided-tour) is shown or skipped; the `?` button replays regardless |
+| `betaUpdates` | bool, `false` | Follow the [beta channel](../features/self-update.md#beta-channel): the update check also sees prereleases. Off again offers the stable build as a rollback |
 | `debugLogging` | bool, `false` | Verbose `[DEBUG]` breadcrumbs in `Donut.log`. Warnings and errors always log; this applies live, no restart |
 | `commands` | object | Per-command DCU argument maps — see the [DCU command reference](./dcu-commands.md) |
 

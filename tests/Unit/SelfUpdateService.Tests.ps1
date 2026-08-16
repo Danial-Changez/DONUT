@@ -91,6 +91,23 @@ Describe "SelfUpdateService" {
                 $result.tag_name | Should -Be "v1.0.0"
             }
         }
+
+        It "Beta takes the newest release from the list, drafts skipped" {
+            InModuleScope "SelfUpdateService" {
+                $service = [SelfUpdateService]::new()
+
+                Mock Invoke-RestMethod {
+                    return @(
+                        [PSCustomObject]@{ tag_name = "v2.4.58"; draft = $true; prerelease = $true },
+                        [PSCustomObject]@{ tag_name = "v2.4.57"; draft = $false; prerelease = $true },
+                        [PSCustomObject]@{ tag_name = "v2.3.0"; draft = $false; prerelease = $false }
+                    )
+                } -ParameterFilter { $Uri -like "*/releases?per_page=*" }
+
+                $result = $service.GetLatestRelease("", $true)
+                $result.tag_name | Should -Be "v2.4.57"
+            }
+        }
     }
 
     Context "Asset Management" {

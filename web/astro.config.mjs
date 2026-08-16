@@ -111,6 +111,7 @@ export default defineConfig({
             },
             'development/coding-style',
             'development/testing',
+            'development/releasing',
             'development/ui-reference',
             'development/decisions',
             'development/maintaining-the-site',

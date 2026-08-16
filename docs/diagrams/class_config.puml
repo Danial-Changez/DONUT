@@ -118,7 +118,7 @@ package "Donut.Services" #221634 {
         +SaveToken(tokenData): void
         +InitiateDeviceFlow(): PSCustomObject
         +PollForToken(deviceCode): PSCustomObject
-        +GetLatestRelease(token): PSCustomObject
+        +GetLatestRelease(token, includeBeta): PSCustomObject
         +DownloadAsset(token, asset, destDir): string
         +VerifyFileHash(path, expectedHash): bool
         +ApplyUpdate(msiPath, isRollback, sourceRoot): void

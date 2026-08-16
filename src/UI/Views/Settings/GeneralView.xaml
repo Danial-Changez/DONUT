@@ -120,6 +120,20 @@
                      ToolTip="Only collections matching this regex show in the Lens software list. Blank shows all." />
         </StackPanel>
     </Border>
+    <Border Style="{DynamicResource Card}"
+            Margin="0,0,0,12">
+        <StackPanel>
+            <TextBlock Text="UPDATES"
+                       Style="{DynamicResource SettingsSectionLabel}" />
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton x:Name="chkBetaUpdates"
+                              Style="{DynamicResource ModernToggleSwitch}" />
+                <TextBlock Text="Beta Channel"
+                           Style="{DynamicResource SettingsToggleLabel}"
+                           ToolTip="Offer prerelease builds. Turning this off offers the stable build as a rollback." />
+            </StackPanel>
+        </StackPanel>
+    </Border>
     <!-- Off by default, and applied live to the app and its worker processes. -->
     <Border Style="{DynamicResource Card}">
         <StackPanel>

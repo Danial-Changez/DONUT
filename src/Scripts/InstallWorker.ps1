@@ -26,6 +26,10 @@
 .NOTES
     Kept as a standalone script (not a class) so it can be copied to the data
     root and run independently of the install it is replacing.
+
+    The install passes the registered InstallLocation back as INSTALLFOLDER. A
+    major upgrade otherwise resolves the default Program Files path, which would
+    silently migrate a beta install out of its own directory (tools/Install-Beta.ps1).
 #>
 param(
     [string]$MsiPath,
@@ -73,11 +77,12 @@ function Get-DONUTUninstallInfo {
 }
 
 # Installs the MSI with reboot suppressed. Returns msiexec's exit code, or 1603 when
-# the MSI path is missing.
+# the MSI path is missing. InstallFolder keeps a non-default install where it is.
 function Invoke-MsiInstall {
     param(
         [Parameter(Mandatory = $true)][string]$MsiPath,
         [string]$LogPath,
+        [string]$InstallFolder,
         [switch]$Passive
     )
 
@@ -88,7 +93,11 @@ function Invoke-MsiInstall {
 
     $ui = if ($Passive) { '/passive' } else { '/qb!' }
     $logArg = if ($LogPath) { "/log `"$LogPath`"" } else { '' }
-    $msiArguments = "/i `"$MsiPath`" REBOOT=ReallySuppress $ui $logArg"
+    # Trailing backslash trimmed: it would escape the closing quote on msiexec's command line.
+    $folderArg = if ($InstallFolder) {
+        "INSTALLFOLDER=`"$($InstallFolder.TrimEnd('\'))`""
+    } else { '' }
+    $msiArguments = "/i `"$MsiPath`" REBOOT=ReallySuppress $folderArg $ui $logArg"
     $p = Start-Process -FilePath 'msiexec' `
                        -ArgumentList $msiArguments `
                        -Wait `
@@ -178,8 +187,11 @@ try {
     }
 
     $logPath = Join-Path -Path ([IO.Path]::GetDirectoryName($MsiPath)) -ChildPath 'msi-install.log'
+    # The recorded location, or a beta install outside Program Files would migrate back into it.
+    $folder = if ($info) { [string]$info.InstallLocation } else { '' }
     $exit = Invoke-MsiInstall -MsiPath $MsiPath `
                               -LogPath $logPath `
+                              -InstallFolder $folder `
                               -Passive:$Passive
 
     if (@(0, 3010) -notcontains $exit) {
