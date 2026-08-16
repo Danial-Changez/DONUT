@@ -66,7 +66,7 @@ Describe "DriverMatchingService" {
                 @{ DriverName = "Realtek Audio Device"; ProviderName = "Realtek"; DriverVersion = "1.0.0" }
                 @{ DriverName = "Intel Network Adapter"; ProviderName = "Intel"; DriverVersion = "2.0.0" }
                 @{ DriverName = "Microsoft Bluetooth LE Enumerator"; ProviderName = "Microsoft"
-                    DriverVersion = "10.0.26100.8972" 
+                    DriverVersion = "10.0.26100.8972"
                 }
                 @{ DriverName = "Dell System BIOS"; ProviderName = "Dell Inc."; DriverVersion = "1.36.0" }
             )
@@ -113,7 +113,7 @@ Describe "DriverMatchingService" {
         It "Rejects same-category rows that share no name word" {
             $service = [DriverMatchingService]::new()
             $drivers = @(@{ DriverName = "WAN Miniport (IKEv2)"; ProviderName = "Microsoft"
-                    DriverVersion = "1.0"; DeviceClass = "NET" 
+                    DriverVersion = "1.0"; DeviceClass = "NET"
             })
             $result = $service.FindBestDriverMatch("Intel Killer Wireless Driver", "Driver", "Network", $drivers)
             $result | Should -BeNullOrEmpty
@@ -123,7 +123,7 @@ Describe "DriverMatchingService" {
             $service = [DriverMatchingService]::new()
             # The name alone reads as no category, but the scan recorded MEDIA.
             $drivers = @(@{ DriverName = "Intel(R) SST OED"; ProviderName = "Intel"
-                    DriverVersion = "10.29.0.1"; DeviceClass = "MEDIA" 
+                    DriverVersion = "10.29.0.1"; DeviceClass = "MEDIA"
             })
             $result = $service.FindBestDriverMatch("Intel Smart Sound Technology Driver", "Driver", "Audio", $drivers)
             $result | Should -Not -BeNullOrEmpty

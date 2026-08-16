@@ -153,7 +153,9 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
     }
 
     It "exits within 5s of stop.flag" {
-        New-Item -ItemType File -Path (Join-Path $script:exchangeDir 'stop.flag') -Force | Out-Null
+        New-Item -ItemType File `
+                 -Path (Join-Path $script:exchangeDir 'stop.flag') `
+                 -Force | Out-Null
         $script:agent.WaitForExit(5000) | Should -BeTrue -Because (
             "an agent that outlives stop.flag would leak a de-elevated process " +
             "holding BitLocker-grade data past app close")

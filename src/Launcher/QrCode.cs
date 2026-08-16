@@ -2,8 +2,7 @@
 
 using QRCoder;
 
-namespace Donut.Qr
-{
+namespace Donut.Qr {
     /// <summary>
     /// Thin wrapper over bundled QRCoder: encodes text to a PNG entirely in memory via the
     /// dependency-free <see cref="PngByteQRCode"/> path (no System.Drawing/GDI). Kept in C#
@@ -13,8 +12,7 @@ namespace Donut.Qr
     /// Compiled into Donut.Launcher for production. Start-Donut.ps1 also compiles it from
     /// this source, guarded, so the `pwsh -Sta` dev path resolves the type.
     /// </remarks>
-    public static class QrCode
-    {
+    public static class QrCode {
         /// <summary>
         /// Encodes <paramref name="text"/> to a QR-code PNG in the given module colours
         /// (RGBA, so a transparent background is supported). ECC level Q (~25% recovery)
@@ -27,8 +25,7 @@ namespace Donut.Qr
         /// <param name="darkRgba">Dark-module colour as [R,G,B,A].</param>
         /// <param name="lightRgba">Light-module/background colour as [R,G,B,A].</param>
         /// <returns>PNG bytes, never written to disk by this method.</returns>
-        public static byte[] EncodePng(string text, int pixelsPerModule, byte[] darkRgba, byte[] lightRgba)
-        {
+        public static byte[] EncodePng(string text, int pixelsPerModule, byte[] darkRgba, byte[] lightRgba) {
             var generator = new QRCodeGenerator();
             var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.Q);
             return new PngByteQRCode(data).GetGraphic(pixelsPerModule, darkRgba, lightRgba);

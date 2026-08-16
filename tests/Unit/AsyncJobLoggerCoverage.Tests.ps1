@@ -17,7 +17,7 @@ Describe "AsyncJob logger coverage" {
         $script:SrcRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../src'))
 
         # All [AsyncJob]/[ResolveProcessJob]::new(...) invocations, via AST (comment/string safe).
-        function Get-AsyncJobConstructions([string]$path) {
+        function Get-AsyncJobConstruction([string]$path) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile(
                 $path, [ref]$null, [ref]$null)
             return $ast.FindAll({
@@ -31,10 +31,13 @@ Describe "AsyncJob logger coverage" {
     }
 
     It "every production AsyncJob is constructed with a logger (3-arg form)" {
-        $files = Get-ChildItem -Path $SrcRoot -Recurse -Include '*.psm1', '*.ps1' -File
+        $files = Get-ChildItem -Path $SrcRoot `
+                               -Recurse `
+                               -Include '*.psm1', '*.ps1' `
+                               -File
         $checked = 0
         foreach ($file in $files) {
-            foreach ($ctor in (Get-AsyncJobConstructions $file.FullName)) {
+            foreach ($ctor in (Get-AsyncJobConstruction $file.FullName)) {
                 $checked++
                 @($ctor.Arguments).Count | Should -Be 3 -Because (
                     "$($file.Name):$($ctor.Extent.StartLineNumber) constructs an AsyncJob " +

@@ -14,7 +14,8 @@ Describe "PersonLens" {
   "devices": [
     { "name": "WS-1", "os": "Windows 11 Enterprise", "lastLogon": "2026-07-03T10:00:00Z", "domain": "prod.contoso.com",
       "model": "Latitude 5440", "serial": "ABC1234", "manufacturer": "Dell Inc.",
-      "bitLockerKeys": [ { "password": "111-222", "created": "2026-05-01T00:00:00Z" }, { "password": "333-444", "created": "" } ] },
+      "bitLockerKeys": [ { "password": "111-222", "created": "2026-05-01T00:00:00Z" },
+                         { "password": "333-444", "created": "" } ] },
     { "name": "WS-2", "os": "", "lastLogon": "", "domain": "fabrikam.local", "note": "BitLocker not escrowed to AD",
       "bitLockerKeys": [] }
   ],

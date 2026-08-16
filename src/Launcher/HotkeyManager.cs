@@ -3,8 +3,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
-namespace Donut.Interop
-{
+namespace Donut.Interop {
     /// <summary>
     /// Registers a single global show/restore hotkey via user32 RegisterHotKey and raises
     /// <see cref="Pressed"/> when it fires. RegisterHotKey (not a keyboard hook) is used on
@@ -12,8 +11,7 @@ namespace Donut.Interop
     /// keylogger heuristics. The WM_HOTKEY message is delivered to the window's WndProc, so
     /// the hook (and thus <see cref="Pressed"/>) runs on that window's UI thread.
     /// </summary>
-    public sealed class HotkeyManager
-    {
+    public sealed class HotkeyManager {
         private const int HotkeyId = 0x0D0;
         private const uint MOD_NOREPEAT = 0x4000;
         private const int WM_HOTKEY = 0x0312;
@@ -35,8 +33,7 @@ namespace Donut.Interop
         /// <param name="hwnd">Target window handle (must already exist).</param>
         /// <param name="modifiers">MOD_ALT/CONTROL/SHIFT/WIN bitmask.</param>
         /// <param name="vk">Virtual-key code of the non-modifier key.</param>
-        public bool Attach(IntPtr hwnd, uint modifiers, uint vk)
-        {
+        public bool Attach(IntPtr hwnd, uint modifiers, uint vk) {
             Detach();
 
             _source = HwndSource.FromHwnd(hwnd);
@@ -46,8 +43,7 @@ namespace Donut.Interop
             _source.AddHook(WndHook);
 
             // MOD_NOREPEAT: one event per physical press, not an autorepeat stream.
-            if (!RegisterHotKey(hwnd, HotkeyId, modifiers | MOD_NOREPEAT, vk))
-            {
+            if (!RegisterHotKey(hwnd, HotkeyId, modifiers | MOD_NOREPEAT, vk)) {
                 LastError = Marshal.GetLastWin32Error();
                 _source.RemoveHook(WndHook);
                 _source = null;
@@ -61,25 +57,20 @@ namespace Donut.Interop
         }
 
         /// <summary>Unregisters the combo and removes the WndProc hook. Idempotent.</summary>
-        public void Detach()
-        {
-            if (_registered && _hwnd != IntPtr.Zero)
-            {
+        public void Detach() {
+            if (_registered && _hwnd != IntPtr.Zero) {
                 UnregisterHotKey(_hwnd, HotkeyId);
                 _registered = false;
             }
-            if (_source != null)
-            {
+            if (_source != null) {
                 _source.RemoveHook(WndHook);
                 _source = null;
             }
             _hwnd = IntPtr.Zero;
         }
 
-        private IntPtr WndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
-            {
+        private IntPtr WndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId) {
                 Pressed?.Invoke(this, EventArgs.Empty);
                 handled = true;
             }

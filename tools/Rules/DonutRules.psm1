@@ -33,6 +33,9 @@ using namespace System.Management.Automation.Language
 # Named parameters on a single line above this width belong one per line.
 $script:ShortLineLimit = 80
 
+# Pester's Should reads as a sentence: its switches are assertion operators, not parameters.
+$script:LayoutExemptCommands = @('Should')
+
 # clang-tidy's readability-function-size limits, plus a branch and nesting cap.
 $script:MaxFunctionLines = 150
 $script:MaxFunctionStatements = 100
@@ -82,6 +85,7 @@ function Measure-DonutParameterLayout {
     process {
         $elements = @($CommandAst.CommandElements)
         if ($elements.Count -lt 2) { return }
+        if ($elements[0].Extent.Text -in $script:LayoutExemptCommands) { return }
         $named = @($elements | Where-Object { $_ -is [CommandParameterAst] })
         $extent = $CommandAst.Extent
 

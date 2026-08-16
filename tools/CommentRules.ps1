@@ -111,8 +111,13 @@ function Get-CommentFinding {
     $xaml = @($Files | Where-Object Extension -EQ '.xaml')
     $slash = @($Files | Where-Object { $ps -notcontains $_ -and $xaml -notcontains $_ })
     return @(
-        Get-LongComment -Files $slash -Marker '//(?!/)' -ExemptNext $script:SlashExempt
-        Get-LongComment -Files $ps -Marker '#' -ExemptNext $script:PsExempt -PowerShell
+        Get-LongComment -Files $slash `
+                        -Marker '//(?!/)' `
+                        -ExemptNext $script:SlashExempt
+        Get-LongComment -Files $ps `
+                        -Marker '#' `
+                        -ExemptNext $script:PsExempt `
+                        -PowerShell
         Get-LongXamlComment -Files $xaml
     )
 }

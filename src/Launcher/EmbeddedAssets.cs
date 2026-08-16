@@ -12,15 +12,12 @@ namespace Donut.Launcher;
 /// name. Public: the hosted PowerShell runtime reads views and style dictionaries through
 /// it (ViewLoader / ResourceService), so the XAML never has to exist on disk.
 /// </summary>
-public static class EmbeddedAssets
-{
+public static class EmbeddedAssets {
     private static readonly Assembly Asm = typeof(EmbeddedAssets).Assembly;
 
     /// <summary>Opens an embedded resource by logical name (e.g. "assets/Images/x.png"), or null.</summary>
-    public static Stream? Open(string logicalName)
-    {
-        foreach (string n in Asm.GetManifestResourceNames())
-        {
+    public static Stream? Open(string logicalName) {
+        foreach (string n in Asm.GetManifestResourceNames()) {
             if (string.Equals(n.Replace('\\', '/'), logicalName, StringComparison.OrdinalIgnoreCase))
                 return Asm.GetManifestResourceStream(n);
         }
@@ -35,8 +32,7 @@ public static class EmbeddedAssets
            .ToArray();
 
     /// <summary>Loads an embedded image, copied into a kept stream (GIF frames need it alive).</summary>
-    public static Image? LoadImage(string logicalName)
-    {
+    public static Image? LoadImage(string logicalName) {
         using Stream? s = Open(logicalName);
         if (s is null) return null;
         var ms = new MemoryStream();

@@ -48,7 +48,10 @@ Describe "DcuUpdate" {
     Context "child-element XML parse pattern" {
         It "reads each field via SelectSingleNode (InnerText mashes the children)" {
             $xml = [xml]@"
-<updates><update><release>Y8R01</release><name>Dell Latitude 5330 System BIOS</name><version>1.36.0</version><urgency>Urgent</urgency><type>BIOS</type><category>BIOS</category><bytes>28033352</bytes></update></updates>
+<updates><update>
+  <release>Y8R01</release><name>Dell Latitude 5330 System BIOS</name><version>1.36.0</version>
+  <urgency>Urgent</urgency><type>BIOS</type><category>BIOS</category><bytes>28033352</bytes>
+</update></updates>
 "@
             $node = $xml.SelectNodes("//update")[0]
             $node.SelectSingleNode('name').InnerText | Should -Be 'Dell Latitude 5330 System BIOS'

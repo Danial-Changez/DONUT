@@ -123,8 +123,9 @@ Describe "Lens software query" {
         It "catches a hop failure into one error string" {
             Mock Invoke-RestMethod { throw 'Response status code does not indicate success: 404 (Not Found).' }
 
-            $bundle = Resolve-UserSoftware -identity 'jdoe' -sam 'jdoe' -server 'sccm.corp.com' |
-                ConvertFrom-Json
+            $bundle = Resolve-UserSoftware -identity 'jdoe' `
+                                           -sam 'jdoe' `
+                                           -server 'sccm.corp.com' | ConvertFrom-Json
 
             @($bundle.deployments).Count | Should-Be 0
             ($bundle.error -match 'SCCM software') | Should-BeTrue
@@ -134,7 +135,9 @@ Describe "Lens software query" {
         It "answers a blank server without asking anything" {
             Mock Invoke-RestMethod { throw 'should not be reached' }
 
-            $bundle = Resolve-UserSoftware -identity 'jdoe' -sam 'jdoe' -server '' | ConvertFrom-Json
+            $bundle = Resolve-UserSoftware -identity 'jdoe' `
+                                           -sam 'jdoe' `
+                                           -server '' | ConvertFrom-Json
 
             $bundle.error | Should-Be 'no AdminService host configured'
             Should -Not -Invoke Invoke-RestMethod
@@ -148,8 +151,9 @@ Describe "Lens software query" {
             }
             function Find-Gc { param([string]$Filter) throw 'AD must not be asked for a derivable SAM' }
 
-            $bundle = Resolve-UserSoftware -identity 'CORP\jdoe' -sam '' -server 'sccm.corp.com' |
-                ConvertFrom-Json
+            $bundle = Resolve-UserSoftware -identity 'CORP\jdoe' `
+                                           -sam '' `
+                                           -server 'sccm.corp.com' | ConvertFrom-Json
 
             @($bundle.deployments).Count | Should-Be 1
             $bundle.deployments[0].software | Should-Be 'Zoom Workplace'
@@ -164,8 +168,10 @@ Describe "Lens software query" {
             function Get-DnSam { param([string]$dn) if ($dn -eq 'CN=J Doe,DC=corp') { 'jdoe' } else { '' } }
             function Find-Gc { param([string]$Filter) throw 'the DN in hand must win over a GC guess' }
 
-            $bundle = Resolve-UserSoftware -identity 'J Doe' -sam '' -server 'sccm.corp.com' -dn 'CN=J Doe,DC=corp' |
-                ConvertFrom-Json
+            $bundle = Resolve-UserSoftware -identity 'J Doe' `
+                                           -sam '' `
+                                           -server 'sccm.corp.com' `
+                                           -dn 'CN=J Doe,DC=corp' | ConvertFrom-Json
 
             @($bundle.deployments).Count | Should-Be 1
             $bundle.deployments[0].software | Should-Be 'Zoom Workplace'
@@ -176,8 +182,10 @@ Describe "Lens software query" {
             function Get-DnSam { param([string]$dn) '' }
             function Find-Gc { param([string]$Filter) throw 'GC unreachable' }
 
-            $bundle = Resolve-UserSoftware -identity 'J Doe' -sam '' -server 'sccm.corp.com' -dn 'CN=stale,DC=corp' |
-                ConvertFrom-Json
+            $bundle = Resolve-UserSoftware -identity 'J Doe' `
+                                           -sam '' `
+                                           -server 'sccm.corp.com' `
+                                           -dn 'CN=stale,DC=corp' | ConvertFrom-Json
 
             @($bundle.deployments).Count | Should-Be 0
             ($bundle.error -match 'GC unreachable') | Should-BeTrue

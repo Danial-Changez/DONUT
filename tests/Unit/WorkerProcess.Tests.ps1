@@ -37,7 +37,7 @@ Describe "WorkerProcess" {
     Context "Interpret" {
         It "reads exit 0 as success and passes the result through" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = @{ Ip = '10.0.0.1' }; ExitCode = 0; StdErr = ''; StdOut = '' 
+                    Result = @{ Ip = '10.0.0.1' }; ExitCode = 0; StdErr = ''; StdOut = ''
             })
             $v.Succeeded | Should -BeTrue
             $v.Result.Ip | Should -Be '10.0.0.1'
@@ -46,7 +46,7 @@ Describe "WorkerProcess" {
 
         It "reads a non-zero exit as failure with the clean stderr as the message" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = $null; ExitCode = 1; StdErr = "Worker failed: host offline`n"; StdOut = '' 
+                    Result = $null; ExitCode = 1; StdErr = "Worker failed: host offline`n"; StdOut = ''
             })
             $v.Succeeded | Should -BeFalse
             $v.ExitCode | Should -Be 1
@@ -62,7 +62,7 @@ Describe "WorkerProcess" {
         # The single-instance guard makes a second launcher exit 0 with no result, wedging workers.
         It "reads exit 0 with no result as a FAILURE, not a silent success" {
             $v = [WorkerProcess]::Interpret([pscustomobject]@{
-                    Result = $null; ExitCode = 0; StdErr = ''; StdOut = '' 
+                    Result = $null; ExitCode = 0; StdErr = ''; StdOut = ''
             })
             $v.Succeeded | Should -BeFalse
             $v.FailureMessage | Should -BeLike '*no result*'

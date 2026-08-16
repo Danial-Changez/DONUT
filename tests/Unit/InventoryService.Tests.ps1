@@ -11,7 +11,9 @@ Describe "InventoryService" {
         New-Item -Path $script:tempDir -ItemType Directory -Force | Out-Null
         $scriptsDir = Join-Path $script:tempDir "Scripts"
         New-Item -Path $scriptsDir -ItemType Directory -Force | Out-Null
-        New-Item -Path (Join-Path $scriptsDir "RemoteWorker.ps1") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $scriptsDir "RemoteWorker.ps1") `
+                 -ItemType File `
+                 -Force | Out-Null
         $script:reportsDir = Join-Path $script:tempDir "Reports"
         New-Item -Path $script:reportsDir -ItemType Directory -Force | Out-Null
 

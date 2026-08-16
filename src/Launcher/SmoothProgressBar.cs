@@ -10,8 +10,7 @@ namespace Donut.Launcher;
 /// locks its fill to the theme green. On screen for about two seconds, so it earns no
 /// animation machinery: a plain percent fill over a dim track.
 /// </summary>
-public sealed class SmoothProgressBar : Control
-{
+public sealed class SmoothProgressBar : Control {
     private int _value;
 
     // Set in code only, not via the designer, so mark them non-serialized (satisfies WFO1000).
@@ -23,21 +22,18 @@ public sealed class SmoothProgressBar : Control
 
     /// <summary>Completion 0-100.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public int Value
-    {
+    public int Value {
         get => _value;
         set { _value = Math.Clamp(value, 0, 100); Invalidate(); }
     }
 
-    public SmoothProgressBar()
-    {
+    public SmoothProgressBar() {
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         Height = 8;
     }
 
-    protected override void OnPaint(PaintEventArgs e)
-    {
+    protected override void OnPaint(PaintEventArgs e) {
         using (var track = new SolidBrush(TrackColor))
             e.Graphics.FillRectangle(track, 0, 0, Width, Height);
 

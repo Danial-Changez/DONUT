@@ -38,7 +38,8 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 # Without Graphviz, Smetana keeps local renders working (CI apt-installs dot for parity).
 $layoutArgs = @()
 if (-not (Get-Command dot -ErrorAction SilentlyContinue)) {
-    Write-Warning 'Graphviz "dot" not found; using Smetana layout. Install Graphviz (winget install Graphviz.Graphviz) to match CI output exactly.'
+    Write-Warning ('Graphviz "dot" not found; using Smetana layout. ' +
+        'Install Graphviz (winget install Graphviz.Graphviz) to match CI output exactly.')
     $layoutArgs = @('-Playout=smetana')
 }
 
@@ -46,7 +47,13 @@ if (-not (Get-Command dot -ErrorAction SilentlyContinue)) {
 $darkConfig = Join-Path $PSScriptRoot 'plantuml-dark.cfg'
 
 $pumlFiles = Get-ChildItem -Path $sourceDir -Filter '*.puml'
-java -jar $jarPath -tsvg -charset UTF-8 -config $darkConfig @layoutArgs -o $outputDir $pumlFiles.FullName
+java -jar $jarPath `
+     -tsvg `
+     -charset UTF-8 `
+     -config $darkConfig `
+     @layoutArgs `
+     -o $outputDir `
+     $pumlFiles.FullName
 if ($LASTEXITCODE -ne 0) {
     throw "PlantUML exited with code $LASTEXITCODE."
 }

@@ -12,6 +12,13 @@ Describe "ConfigManager" {
         $script:testRoot = $script:redirect.Root
         $script:testSourceRoot = Join-Path $testRoot "src"
         New-Item -Path $testSourceRoot -ItemType Directory -Force | Out-Null
+
+        function Remove-Tree([string]$path) {
+            Remove-Item -Path $path `
+                        -Recurse `
+                        -Force `
+                        -ErrorAction SilentlyContinue
+        }
     }
 
     AfterAll {
@@ -20,15 +27,13 @@ Describe "ConfigManager" {
 
     BeforeEach {
         $configDir = Join-Path $script:testRoot "DONUT\config"
-        if (Test-Path $configDir) {
-            Remove-Item -Path $configDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        if (Test-Path $configDir) { Remove-Tree $configDir }
     }
 
     Context "Constructor" {
         It "Should initialize with correct paths" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             $manager.SourceRoot | Should -Be $script:testSourceRoot
             $manager.ConfigPath | Should -BeLike "*DONUT*config*config.json"
             $manager.LogsPath | Should -BeLike "*DONUT*logs"
@@ -37,7 +42,7 @@ Describe "ConfigManager" {
 
         It "Should create necessary directories on initialization" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             $configDir = Split-Path $manager.ConfigPath -Parent
             Test-Path $configDir | Should -Be $true
             Test-Path $manager.LogsPath | Should -Be $true
@@ -48,14 +53,14 @@ Describe "ConfigManager" {
     Context "EnsureDirectories" {
         It "Should create directories if they do not exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             $configDir = Split-Path $manager.ConfigPath -Parent
-            Remove-Item -Path $configDir -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path $manager.LogsPath -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path $manager.ReportsPath -Recurse -Force -ErrorAction SilentlyContinue
-            
+            Remove-Tree $configDir
+            Remove-Tree $manager.LogsPath
+            Remove-Tree $manager.ReportsPath
+
             $manager.EnsureDirectories()
-            
+
             Test-Path $configDir | Should -Be $true
             Test-Path $manager.LogsPath | Should -Be $true
             Test-Path $manager.ReportsPath | Should -Be $true
@@ -63,7 +68,7 @@ Describe "ConfigManager" {
 
         It "Should not fail if directories already exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             { $manager.EnsureDirectories() } | Should -Not -Throw
         }
     }
@@ -75,9 +80,9 @@ Describe "ConfigManager" {
                 activeCommand = "scan"
                 throttleLimit = 10
             })
-            
+
             $manager.SaveConfig($config)
-            
+
             Test-Path $manager.ConfigPath | Should -Be $true
             $content = Get-Content $manager.ConfigPath -Raw
             $content | Should -BeLike "*activeCommand*"
@@ -96,9 +101,9 @@ Describe "ConfigManager" {
                     }
                 }
             })
-            
+
             $manager.SaveConfig($config)
-            
+
             $json = Get-Content $manager.ConfigPath -Raw | ConvertFrom-Json -AsHashtable
             $json.commands.scan.args.silent | Should -Be $true
         }
@@ -107,15 +112,15 @@ Describe "ConfigManager" {
     Context "LoadConfig" {
         It "Should load existing config from file" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             $testSettings = @{
                 activeCommand = "applyUpdates"
                 throttleLimit = 8
             }
             $testSettings | ConvertTo-Json -Depth 10 | Set-Content -Path $manager.ConfigPath
-            
+
             $config = $manager.LoadConfig()
-            
+
             $config | Should -Not -BeNullOrEmpty
             $config.Settings.activeCommand | Should -Be "applyUpdates"
             $config.Settings.throttleLimit | Should -Be 8
@@ -123,32 +128,32 @@ Describe "ConfigManager" {
 
         It "Should return default config when file does not exist" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             if (Test-Path $manager.ConfigPath) {
                 Remove-Item $manager.ConfigPath -Force
             }
-            
+
             $config = $manager.LoadConfig()
-            
+
             $config | Should -Not -BeNullOrEmpty
             $config.SourceRoot | Should -Be $script:testSourceRoot
         }
 
         It "Should create default config file when none exists" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             if (Test-Path $manager.ConfigPath) {
                 Remove-Item $manager.ConfigPath -Force
             }
-            
-            $config = $manager.LoadConfig()
-            
+
+            $null = $manager.LoadConfig()
+
             Test-Path $manager.ConfigPath | Should -Be $true
         }
 
         It "Should handle malformed JSON gracefully" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             "{ invalid json }" | Set-Content -Path $manager.ConfigPath
 
             $config = $manager.LoadConfig()
@@ -191,7 +196,7 @@ Describe "ConfigManager" {
     Context "Round-trip Save and Load" {
         It "Should preserve settings through save and load cycle" {
             $manager = [ConfigManager]::new($script:testSourceRoot)
-            
+
             $originalConfig = [AppConfig]::new($script:testSourceRoot, $manager.LogsPath, $manager.ReportsPath, @{
                 activeCommand = "scan"
                 throttleLimit = 5
@@ -204,10 +209,10 @@ Describe "ConfigManager" {
                     }
                 }
             })
-            
+
             $manager.SaveConfig($originalConfig)
             $loadedConfig = $manager.LoadConfig()
-            
+
             $loadedConfig.Settings.activeCommand | Should -Be "scan"
             $loadedConfig.Settings.throttleLimit | Should -Be 5
             $loadedConfig.Settings.commands.scan.args.silent | Should -Be $false

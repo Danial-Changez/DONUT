@@ -44,7 +44,10 @@ if ($dcu) {
 Write-Host "`n=== 2. Newest scan report in $ReportDir ===" -ForegroundColor Cyan
 $report = $null
 if (Test-Path -LiteralPath $ReportDir) {
-    $report = Get-ChildItem -Path $ReportDir -Filter '*.xml' -File -ErrorAction SilentlyContinue |
+    $report = Get-ChildItem -Path $ReportDir `
+                            -Filter '*.xml' `
+                            -File `
+                            -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 if ($report) {
@@ -74,9 +77,12 @@ $activity = @("$env:ProgramData\Dell\UpdateService\Log\ActivityLog.xml",
     Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ($activity) {
     $item = Get-Item -LiteralPath $activity
-    Write-Host "  OK  $activity ($([Math]::Round($item.Length / 1KB)) KB, $($item.LastWriteTime))" -ForegroundColor Green
+    $sizeKb = [Math]::Round($item.Length / 1KB)
+    Write-Host "  OK  $activity ($sizeKb KB, $($item.LastWriteTime))" -ForegroundColor Green
     # Text matching keeps the probe schema-proof across DCU versions.
-    $hits = @(Select-String -LiteralPath $activity -Pattern 'version' -SimpleMatch |
+    $hits = @(Select-String -LiteralPath $activity `
+                            -Pattern 'version' `
+                            -SimpleMatch |
             Select-Object -Last 15)
     Write-Host "  last lines mentioning a version ($($hits.Count) shown):"
     $hits | ForEach-Object { Write-Host "    $($_.Line.Trim())" }
@@ -102,7 +108,11 @@ if (Test-Path -LiteralPath $dupDir) {
 Write-Host "`n=== 5. UpdateService data dir (persisted inventory?) ===" -ForegroundColor Cyan
 $svcDir = "$env:ProgramData\Dell\UpdateService"
 if (Test-Path -LiteralPath $svcDir) {
-    Get-ChildItem -Path $svcDir -Filter '*.xml' -File -Recurse -ErrorAction SilentlyContinue |
+    Get-ChildItem -Path $svcDir `
+                  -Filter '*.xml' `
+                  -File `
+                  -Recurse `
+                  -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 20 |
         Format-Table @{ n = 'Path'; e = { $_.FullName.Substring($svcDir.Length + 1) } },
         @{ n = 'KB'; e = { [Math]::Round($_.Length / 1KB) } }, LastWriteTime -AutoSize |

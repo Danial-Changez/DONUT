@@ -99,6 +99,13 @@ scoped to the public API:
 `GenerateDocumentationFile` is intentionally off: the docs are for readers, not a
 published API surface, so CS1591 is not a build gate.
 
+Layout follows the same brace style as the PowerShell (1TBS: `if (x) {` and
+`} else {` / `} catch {`), declared in the repo's `.editorconfig` and applied by
+`dotnet format whitespace src/Launcher/Donut.Launcher.csproj`. A short statement
+may share the `if` line (`if (x) return;`), matching clang-tidy's
+`braces-around-statements` with `ShortStatementLines = 1`; anything longer opens a
+block. CI runs the same command with `--verify-no-changes`. Lines stay under 120.
+
 ## XAML (`src/UI/`)
 
 The same rule, measured across a whole `<!-- -->` span: one line, and two only for
@@ -122,21 +129,24 @@ The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's
 | `InsertNewlineAtEndOfFile`    | Enforced by `Invoke-Format.ps1`                          |
 
 ```powershell
-pwsh -File tools\Invoke-Format.ps1          # fix src\ in place
+pwsh -File tools\Invoke-Format.ps1          # fix src\, tests\ and tools\ in place
 pwsh -File tools\Invoke-Format.ps1 -Check   # CI / pre-commit gate
 ```
 
-The VS Code PowerShell extension picks up the same settings file, so **Format
-Document** produces identical output.
+Beyond the analyzer's rules, `Invoke-Format.ps1` strips trailing whitespace from
+every line outside a here-string (a fixture's trailing spaces may be the point) and
+guarantees a final newline. The VS Code PowerShell extension picks up the same
+settings file, so **Format Document** produces the same brace and whitespace shape.
 
 ## Linting
 
 `tools/Invoke-Lint.ps1` runs PSScriptAnalyzer with the repo settings over `src/`,
-then sweeps **every** PowerShell, C#, web, and XAML file in the repo for the
-comment-length rule above. PSScriptAnalyzer has no such rule and cannot parse the
-other languages at all, so nothing else would catch it. Run it (and
+`tests/` and `tools/`, then sweeps **every** PowerShell, C#, web, and XAML file in
+the repo for the comment-length rule above. PSScriptAnalyzer has no such rule and
+cannot parse the other languages at all, so nothing else would catch it. Run it (and
 `Invoke-Format.ps1 -Check`) before committing; new findings are fixed, not
-suppressed.
+suppressed. Test files follow the same layout rules as source: a repeated setup
+call becomes a `BeforeAll` helper rather than a wrapped one-liner in every `It`.
 
 The comment sweep starts clean and gates unconditionally, so any hit is something
 you just added. The `Invoke-StyleCheckForChange` hook applies the same rule per
@@ -175,7 +185,9 @@ type that needs adding to the filter in `Invoke-Lint.ps1`.
 
 - **DonutParameterLayout** (Warning, gates): the one-per-line and alignment shape
   above, for calls with more than two named parameters, and alignment for any
-  wrapped call.
+  wrapped call. A call under 80 columns is left alone whatever it carries, and
+  Pester's `Should` is exempt: its switches are assertion operators, not
+  parameters, and `Should -Not -BeNullOrEmpty -Because '...'` reads as a sentence.
 - **DonutFunctionSize** (Information, report only): a function or method past
   clang-tidy's `readability-function-size` limits — 150 lines or 100 statements — or
   past 20 branches (every `if`/`elseif`/`else`, `switch` case, loop and `catch`) or

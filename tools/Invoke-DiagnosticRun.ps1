@@ -80,11 +80,13 @@ if (-not $SourceRoot) {
 $SourceRoot = (Resolve-Path $SourceRoot).Path
 if (-not $OutDir) {
     $OutDir = Join-Path ([System.IO.Path]::GetTempPath()) `
-    ("DonutDiag-" + $runStart.ToString('yyyyMMdd-HHmmss'))
+                        ("DonutDiag-" + $runStart.ToString('yyyyMMdd-HHmmss'))
 }
 $logsDir = Join-Path $OutDir 'logs'
 $reportsDir = Join-Path $OutDir 'reports'
-New-Item -ItemType Directory -Force -Path $OutDir, $logsDir, $reportsDir | Out-Null
+New-Item -ItemType Directory `
+         -Force `
+         -Path $OutDir, $logsDir, $reportsDir | Out-Null
 
 $timeouts = @{ Warm = 120; Dc = 90; Host = 90; Disk = 180 }
 foreach ($k in $PhaseTimeouts.Keys) { $timeouts[$k] = [int]$PhaseTimeouts[$k] }
@@ -317,8 +319,10 @@ $proc = [System.Diagnostics.Process]::Start($psi)
 function Invoke-StackProbe([int]$targetPid) {
     $probe = Join-Path $PSScriptRoot 'Get-DonutRunspaceStacks.ps1'
     try {
-        & $pwshPath -NoProfile -File $probe -ProcessId $targetPid -OutFile $stacksFile |
-            Out-Null
+        & $pwshPath -NoProfile `
+                    -File $probe `
+                    -ProcessId $targetPid `
+                    -OutFile $stacksFile | Out-Null
     } catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
 }
 
@@ -352,9 +356,9 @@ if (-not $SkipEventLog -and $IsWindows) {
     if ($found) {
         try {
             Get-WinEvent -FilterHashtable @{ LogName = $found; StartTime = $runStart } `
-                -ErrorAction Stop |
+                         -ErrorAction Stop |
                 Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } 
+                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) }
                 } |
                 Export-Csv -Path (Join-Path $OutDir 'events-powershell.csv') -NoTypeInformation
             Write-Note "exported PowerShell events from '$found'"
@@ -365,10 +369,10 @@ if (-not $SkipEventLog -and $IsWindows) {
     try {
         Get-WinEvent -FilterHashtable @{
             LogName   = 'Microsoft-Windows-Windows Defender/Operational'
-            StartTime = $runStart 
+            StartTime = $runStart
         } -ErrorAction Stop |
             Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } 
+                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) }
             } |
             Export-Csv -Path (Join-Path $OutDir 'events-defender.csv') -NoTypeInformation
         Write-Note "exported Defender events"
@@ -421,7 +425,9 @@ $zipName = "DonutDiag-{0}-{1}-{2}.zip" -f [System.Environment]::MachineName,
     $prov.Commit, $runStart.ToString('yyyyMMdd-HHmmss')
 $zipPath = Join-Path (Split-Path $OutDir -Parent) $zipName
 try {
-    Compress-Archive -Path (Join-Path $OutDir '*') -DestinationPath $zipPath -Force
+    Compress-Archive -Path (Join-Path $OutDir '*') `
+                     -DestinationPath $zipPath `
+                     -Force
 } catch { Write-Note "bundle failed: $($_.Exception.Message)"; $zipPath = $OutDir }
 
 # The zip path is the LAST line on purpose: CI and humans both consume it.

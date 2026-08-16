@@ -5,10 +5,17 @@ using module "..\..\src\Services\HostResolver.psm1"
 Describe "HostResolver" {
     BeforeAll {
         $script:tempDir = Join-Path $TestDrive "Resolver"
-        New-Item -Path (Join-Path $script:tempDir "Scripts") -ItemType Directory -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempDir "Scripts\RemoteWorker.ps1") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempDir "Scripts\ResolveWorker.ps1") -ItemType File -Force | Out-Null
-        $script:config = [AppConfig]::new($script:tempDir, (Join-Path $script:tempDir "Logs"), (Join-Path $script:tempDir "Reports"), @{})
+        $scripts = Join-Path $script:tempDir "Scripts"
+        New-Item -Path $scripts -ItemType Directory -Force | Out-Null
+        foreach ($worker in 'RemoteWorker.ps1', 'ResolveWorker.ps1') {
+            New-Item -Path (Join-Path $scripts $worker) `
+                     -ItemType File `
+                     -Force | Out-Null
+        }
+        $script:config = [AppConfig]::new($script:tempDir,
+            (Join-Path $script:tempDir "Logs"),
+            (Join-Path $script:tempDir "Reports"),
+            @{})
 
         function New-Resolver { [HostResolver]::new($script:config, [NetworkProbe]::new()) }
     }

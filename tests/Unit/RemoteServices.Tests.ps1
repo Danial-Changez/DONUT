@@ -9,27 +9,29 @@ using module "..\Helpers\MockNetworkProbe.psm1"
 using namespace System.Net
 
 Describe "RemoteServices" {
-    
+
     BeforeAll {
+        # -Force creates the whole path, existing or not, so no Test-Path guard is needed.
         $tempDir = Join-Path $TestDrive "DonutTests_Remote"
-        if (-not (Test-Path $tempDir)) { New-Item -Path $tempDir -ItemType Directory -Force | Out-Null }
         $scriptsDir = Join-Path $tempDir "Scripts"
-        if (-not (Test-Path $scriptsDir)) { New-Item -Path $scriptsDir -ItemType Directory -Force | Out-Null }
-        New-Item -Path (Join-Path $scriptsDir "RemoteWorker.ps1") -ItemType File -Force | Out-Null
-        
-        $config = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{})
+        New-Item -Path $scriptsDir -ItemType Directory -Force | Out-Null
+        New-Item -Path (Join-Path $scriptsDir "RemoteWorker.ps1") `
+                 -ItemType File `
+                 -Force | Out-Null
+
+        $script:config = [AppConfig]::new($tempDir, (Join-Path $tempDir "Logs"), (Join-Path $tempDir "Reports"), @{})
     }
 
     Context "Scan preparation" {
         It "Should initialize correctly" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
             $service | Should -Not -BeNullOrEmpty
         }
 
         It "PrepareScan should return correct arguments (no network on the UI thread)" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             $result = $service.PrepareScanForUpdates("TestHost")
 
@@ -42,7 +44,7 @@ Describe "RemoteServices" {
             # An offline host must not make the UI-thread Prepare* block or throw.
             $probe = [MockNetworkProbe]::new()
             $probe.IsOnlineResult = $false
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             { $service.PrepareScanForUpdates("OfflineHost") } | Should -Not -Throw
         }
@@ -52,25 +54,25 @@ Describe "RemoteServices" {
         It "Should initialize correctly" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
             $service | Should -Not -BeNullOrEmpty
         }
 
         It "PrepareScanForUpdates should return correct arguments" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             $result = $service.PrepareScanForUpdates("TestHost")
-            
+
             $result.Arguments.JobType | Should -Be "Scan"
         }
 
         It "PrepareApplyUpdates should return correct arguments" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
-            
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
+
             $updates = @{ "KB123456" = "Security Update" }
             $result = $service.PrepareApplyUpdates("TestHost", $updates)
 
@@ -85,24 +87,26 @@ Describe "RemoteServices" {
         BeforeAll {
             $script:reportsDir = Join-Path $tempDir "Reports"
             if (-not (Test-Path $script:reportsDir)) {
-                New-Item -Path $script:reportsDir -ItemType Directory -Force | Out-Null
+                New-Item -Path $script:reportsDir `
+                         -ItemType Directory `
+                         -Force | Out-Null
             }
         }
 
         It "Should return null when report file does not exist" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             $result = $service.ParseUpdateReport("NonExistentHost")
-            
+
             $result | Should -BeNullOrEmpty
         }
 
         It "Should parse valid XML report" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             # Real DCU report shape: each field is a child element, not an attribute.
             $testXml = @"
@@ -144,7 +148,7 @@ Describe "RemoteServices" {
         It "Caches the parsed report until the file's mtime changes" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             $reportPath = Join-Path $script:reportsDir "CacheHost-Updates.xml"
             Set-Content -Path $reportPath -Value @"
@@ -175,13 +179,13 @@ Describe "RemoteServices" {
         It "Should return null for malformed XML" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             $reportPath = Join-Path $script:reportsDir "BadHost-Updates.xml"
             Set-Content -Path $reportPath -Value "This is not valid XML <unclosed"
 
             $result = $service.ParseUpdateReport("BadHost")
-            
+
             $result | Should -BeNullOrEmpty
 
             Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
@@ -192,13 +196,15 @@ Describe "RemoteServices" {
         BeforeAll {
             $script:delReportsDir = Join-Path $tempDir "Reports"
             if (-not (Test-Path $script:delReportsDir)) {
-                New-Item -Path $script:delReportsDir -ItemType Directory -Force | Out-Null
+                New-Item -Path $script:delReportsDir `
+                         -ItemType Directory `
+                         -Force | Out-Null
             }
         }
 
         It "Removes the host's update report and tolerates a missing one" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, [DriverMatchingService]::new())
+            $service = [RemoteUpdateService]::new($script:config, $probe, [DriverMatchingService]::new())
             $path = Join-Path $script:delReportsDir "GONE-Updates.xml"
             Set-Content -Path $path -Value "<updates></updates>"
 
@@ -214,7 +220,7 @@ Describe "RemoteServices" {
         It "Returns 0 for a null report" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             $service.CountUpdates($null) | Should -Be 0
         }
@@ -222,7 +228,7 @@ Describe "RemoteServices" {
         It "Counts //update nodes in a report" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             [xml]$report = @"
 <updates>
@@ -237,7 +243,7 @@ Describe "RemoteServices" {
         It "Returns 0 when there are no update nodes" {
             $probe = [MockNetworkProbe]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $matcher)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $matcher)
 
             [xml]$report = "<updates></updates>"
             $service.CountUpdates($report) | Should -Be 0
@@ -248,7 +254,9 @@ Describe "RemoteServices" {
         BeforeAll {
             $script:rowsReportsDir = Join-Path $tempDir "Reports"
             if (-not (Test-Path $script:rowsReportsDir)) {
-                New-Item -Path $script:rowsReportsDir -ItemType Directory -Force | Out-Null
+                New-Item -Path $script:rowsReportsDir `
+                         -ItemType Directory `
+                         -Force | Out-Null
             }
             # Real DCU updates are child elements, and the drivers section is DONUT's scan-time add.
             $script:rowsXml = @"
@@ -293,12 +301,14 @@ Describe "RemoteServices" {
 </updates>
 "@
             $script:rowsService = [RemoteUpdateService]::new(
-                $config, [MockNetworkProbe]::new(), [DriverMatchingService]::new())
+                $script:config, [MockNetworkProbe]::new(), [DriverMatchingService]::new())
             Set-Content -Path (Join-Path $script:rowsReportsDir "RowsHost-Updates.xml") -Value $script:rowsXml
         }
 
         AfterAll {
-            Remove-Item -Path (Join-Path $script:rowsReportsDir "RowsHost-Updates.xml") -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path (Join-Path $script:rowsReportsDir "RowsHost-Updates.xml") `
+                        -Force `
+                        -ErrorAction SilentlyContinue
         }
 
         It "Returns null when no report exists (distinct from a zero-update report)" {
@@ -384,7 +394,7 @@ Describe "RemoteServices" {
     Context "Logging" {
         It "Should default to a no-op logger when constructed without one" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             $service.Logger | Should -Not -BeNullOrEmpty
         }
@@ -395,7 +405,10 @@ Describe "RemoteServices" {
             $emptyDir = Join-Path $TestDrive "DonutTests_Empty_$(Get-Random)"
             New-Item -Path $emptyDir -ItemType Directory -Force | Out-Null
 
-            $emptyConfig = [AppConfig]::new($emptyDir, (Join-Path $emptyDir "Logs"), (Join-Path $emptyDir "Reports"), @{})
+            $emptyConfig = [AppConfig]::new($emptyDir,
+                (Join-Path $emptyDir "Logs"),
+                (Join-Path $emptyDir "Reports"),
+                @{})
             $probe = [MockNetworkProbe]::new()
             $service = [RemoteUpdateService]::new($emptyConfig, $probe, $null)
 
@@ -404,21 +417,21 @@ Describe "RemoteServices" {
 
         It "Should include SourceRoot in arguments" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             $result = $service.PrepareScanForUpdates("TestHost")
-            
-            $result.Arguments.SourceRoot | Should -Be $config.SourceRoot
+
+            $result.Arguments.SourceRoot | Should -Be $script:config.SourceRoot
         }
 
         It "Should include LogsDir and ReportsDir in arguments" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             $result = $service.PrepareScanForUpdates("TestHost")
 
-            $result.Arguments.LogsDir | Should -Be $config.LogsPath
-            $result.Arguments.ReportsDir | Should -Be $config.ReportsPath
+            $result.Arguments.LogsDir | Should -Be $script:config.LogsPath
+            $result.Arguments.ReportsDir | Should -Be $script:config.ReportsPath
         }
 
         It "Should send the config keys workers read so the worker need not re-read config.json" {
@@ -469,7 +482,7 @@ Describe "RemoteServices" {
 
         It "Should carry the logger's effective debug state as the DebugLog arg" {
             $probe = [MockNetworkProbe]::new()
-            $service = [RemoteUpdateService]::new($config, $probe, $null)
+            $service = [RemoteUpdateService]::new($script:config, $probe, $null)
 
             # No logger means NullLogService, whose class default is verbose.
             $service.PrepareScanForUpdates("TestHost").Arguments.DebugLog | Should -BeTrue

@@ -8,7 +8,7 @@ Describe "Machine owner lookup" {
         function New-Affinity { param($Rows) return [pscustomobject]@{ value = @($Rows) } }
         function New-SccmUser {
  param([string]$Full) return [pscustomobject]@{ value = @(
-                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' }) 
+                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' })
         }
         }
     }
@@ -109,7 +109,8 @@ Describe "Machine owner lookup" {
                 return New-Affinity @()
             }
 
-            $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-BAD', 'WS-NONE') -server 'sccm.corp.com') | ConvertFrom-Json
+            $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-BAD', 'WS-NONE') -server 'sccm.corp.com') |
+                ConvertFrom-Json
 
             @($bundle.owners).Count | Should -Be 2
             $bundle.owners[0].error | Should -Match 'SCCM affinity'

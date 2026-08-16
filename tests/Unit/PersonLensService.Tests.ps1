@@ -26,7 +26,8 @@ Describe "PersonLensService" {
     }
 
     It "parses a worker bundle into a typed PersonLens (Lookup over the faked seam)" {
-        $json = '{ "upn": "a@b.com", "sam": "U1", "devices": [ { "name": "PC-1", "bitLockerKeys": [ { "password": "k1", "created": "" } ] } ] }'
+        $json = '{ "upn": "a@b.com", "sam": "U1", ' +
+        '"devices": [ { "name": "PC-1", "bitLockerKeys": [ { "password": "k1", "created": "" } ] } ] }'
         $svc = [FakeLensService]::new($json)
 
         $lens = $svc.Lookup('a@b.com')
@@ -115,7 +116,9 @@ Describe "PersonLensService" {
         }
 
         BeforeEach {
-            $script:redirect = New-RedirectedDataRoot -Prefix 'lens' -Under $TestDrive -ProgramDataOnly
+            $script:redirect = New-RedirectedDataRoot -Prefix 'lens' `
+                                                      -Under $TestDrive `
+                                                      -ProgramDataOnly
         }
 
         AfterEach {
@@ -138,7 +141,9 @@ Describe "PersonLensService" {
 
         It "reports a missing session key rather than hanging" {
             $svc = [StubAgentLensService]::new()
-            New-Item -ItemType Directory -Path ([PersonLensService]::AgentDir()) -Force | Out-Null
+            New-Item -ItemType Directory `
+                     -Path ([PersonLensService]::AgentDir()) `
+                     -Force | Out-Null
 
             $out = $svc.ExchangeRoundTrip(@{ identity = 'a@b.com' }, $true)
 
@@ -203,7 +208,10 @@ Describe "PersonLensService" {
                     $deadline = (Get-Date).AddSeconds(8)
                     $req = $null
                     while ((Get-Date) -lt $deadline -and -not $req) {
-                        $req = Get-ChildItem -Path $dir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
+                        $req = Get-ChildItem -Path $dir `
+                                             -Filter 'request-*.bin' `
+                                             -File `
+                                             -ErrorAction SilentlyContinue |
                             Select-Object -First 1
                         if (-not $req) { Start-Sleep -Milliseconds 50 }
                     }
@@ -212,15 +220,22 @@ Describe "PersonLensService" {
                     $aes = [System.Security.Cryptography.Aes]::Create()
                     try {
                         $aes.Key = [byte[]]($keyIv[0..31]); $aes.IV = [byte[]]($keyIv[32..47])
-                        foreach ($msg in @(@{ name = "partial-$id-1.bin"; text = '{ "sam": "U1" }' },
-                                @{ name = "partial-$id-2.bin"; text = '{ "sam": "U1", "devices": [{ "name": "WS1" }] }' },
-                                @{ name = "partial-$id-3.bin"; text = '{ "sam": "U1", "devices": [{ "name": "WS1", "os": "Windows 11" }] }' },
-                                @{ name = "result-$id.bin"; text = $response })) {
+                        $messages = @(
+                            @{ name = "partial-$id-1.bin"; text = '{ "sam": "U1" }' }
+                            @{ name = "partial-$id-2.bin"; text = '{ "sam": "U1", "devices": [{ "name": "WS1" }] }' }
+                            @{ name  = "partial-$id-3.bin"
+                                text = '{ "sam": "U1", "devices": [{ "name": "WS1", "os": "Windows 11" }] }'
+                            }
+                            @{ name = "result-$id.bin"; text = $response }
+                        )
+                        foreach ($msg in $messages) {
                             $enc = $aes.CreateEncryptor()
                             $plain = [System.Text.Encoding]::UTF8.GetBytes($msg.text)
                             $tmp = Join-Path $dir ($msg.name + '.tmp')
                             [IO.File]::WriteAllBytes($tmp, $enc.TransformFinalBlock($plain, 0, $plain.Length))
-                            Move-Item -LiteralPath $tmp -Destination (Join-Path $dir $msg.name) -Force
+                            Move-Item -LiteralPath $tmp `
+                                      -Destination (Join-Path $dir $msg.name) `
+                                      -Force
                             Start-Sleep -Milliseconds 120
                         }
                     } finally { $aes.Dispose() }
@@ -231,7 +246,9 @@ Describe "PersonLensService" {
                 $out = $svc.ExchangeRoundTrip(@{ identity = 'jane@corp.example'; sam = 'U1' }, $true)
 
                 $out | Should -Be $response
-                @(Get-ChildItem -Path $dir -Filter '*-*.bin' -Exclude 'key.bin') |
+                @(Get-ChildItem -Path $dir `
+                                -Filter '*-*.bin' `
+                                -Exclude 'key.bin') |
                     Should -BeNullOrEmpty   # request, partial and result all consumed
             } finally {
                 if (-not $handle.IsCompleted) { $agent.Stop() }
@@ -256,7 +273,10 @@ Describe "PersonLensService" {
                     $deadline = (Get-Date).AddSeconds(8)
                     $req = $null
                     while ((Get-Date) -lt $deadline -and -not $req) {
-                        $req = Get-ChildItem -Path $dir -Filter 'request-*.bin' -File -ErrorAction SilentlyContinue |
+                        $req = Get-ChildItem -Path $dir `
+                                             -Filter 'request-*.bin' `
+                                             -File `
+                                             -ErrorAction SilentlyContinue |
                             Select-Object -First 1
                         if (-not $req) { Start-Sleep -Milliseconds 50 }
                     }
@@ -269,7 +289,9 @@ Describe "PersonLensService" {
                         $plain = [System.Text.Encoding]::UTF8.GetBytes($response)
                         $tmp = Join-Path $dir "result-$id.bin.tmp"
                         [IO.File]::WriteAllBytes($tmp, $enc.TransformFinalBlock($plain, 0, $plain.Length))
-                        Move-Item -LiteralPath $tmp -Destination (Join-Path $dir "result-$id.bin") -Force
+                        Move-Item -LiteralPath $tmp `
+                                  -Destination (Join-Path $dir "result-$id.bin") `
+                                  -Force
                     } finally { $aes.Dispose() }
                 })
             [void]$agent.AddArgument($dir).AddArgument($keyIv).AddArgument($response)

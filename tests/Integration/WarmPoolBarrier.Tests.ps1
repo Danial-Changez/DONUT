@@ -48,7 +48,7 @@ Describe "WarmPool barrier" {
         # capturing logger it writes to.
         function New-BarrierFixture([string]$stubBody) {
             $root = Join-Path ([System.IO.Path]::GetTempPath()) `
-                ("DonutBarrier-" + [guid]::NewGuid().ToString('N'))
+                              ("DonutBarrier-" + [guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Force -Path $root | Out-Null
             $stub = Join-Path $root 'StubWarm.ps1'
             $stubBody | Set-Content -Path $stub

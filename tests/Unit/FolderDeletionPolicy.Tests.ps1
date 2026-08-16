@@ -86,7 +86,8 @@ Describe "FolderDeletionPolicy" {
 
     Context "Canonicalize" {
         It "returns the resolved path for usable inputs" {
-            [FolderDeletionPolicy]::Canonicalize('C:\temp\..\Windows\System32') | Should -BeExactly 'C:\Windows\System32'
+            [FolderDeletionPolicy]::Canonicalize('C:\temp\..\Windows\System32') |
+                Should -BeExactly 'C:\Windows\System32'
             [FolderDeletionPolicy]::Canonicalize('C:/temp/sub/') | Should -BeExactly 'C:\temp\sub'
             [FolderDeletionPolicy]::Canonicalize('C:\temp\.\sub') | Should -BeExactly 'C:\temp\sub'
             [FolderDeletionPolicy]::Canonicalize('C:\Windows.\System32') | Should -BeExactly 'C:\Windows\System32'

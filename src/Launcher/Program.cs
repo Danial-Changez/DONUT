@@ -12,8 +12,7 @@ namespace Donut.Launcher;
 /// message loop keeps it alive. The process hard-exits when the app window closes, and
 /// the tray icon is owned by the PowerShell side rather than here.
 /// </summary>
-static class Program
-{
+static class Program {
     /// <summary>How long to wait for the instance we are replacing to release the mutex.</summary>
     const int AwaitPredecessorSeconds = 15;
 
@@ -24,22 +23,18 @@ static class Program
     /// single-instance race.
     /// </param>
     [STAThread]
-    static void Main(string[] args)
-    {
+    static void Main(string[] args) {
         bool tray = args.Contains("--tray");
 
         // Before the mutex: it is per-session, so an elevated relaunch would collide.
         AwaitPredecessor(args);
 
         var instanceMutex = new Mutex(true, "Local\\DONUT.SingleInstance", out bool createdNew);
-        if (!createdNew)
-        {
-            try
-            {
+        if (!createdNew) {
+            try {
                 using var evt = EventWaitHandle.OpenExisting("Local\\DONUT.ShowRequest");
                 evt.Set();
-            }
-            catch { /* first instance not fully up yet - nothing to signal */ }
+            } catch { /* first instance not fully up yet - nothing to signal */ }
             return;
         }
 
@@ -50,18 +45,14 @@ static class Program
         if (!tray) { splash.Show(); }
         var progress = new StartupProgress(splash);
 
-        try
-        {
-            Thread psThread = new Thread(() =>
-            {
-                try
-                {
+        try {
+            Thread psThread = new Thread(() => {
+                try {
                     // Always the embedded copy, never a checkout beside the exe.
                     progress.Report(3, "Unpacking resources");
                     string appRoot = ExtractEmbeddedApp();
                     string scriptPath = Path.Combine(appRoot, "src", "Start-Donut.ps1");
-                    if (!File.Exists(scriptPath))
-                    {
+                    if (!File.Exists(scriptPath)) {
                         MessageBox.Show($"Could not find Start-Donut.ps1 at:\n{scriptPath}", "Error",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
@@ -84,24 +75,18 @@ static class Program
                     iss.Variables.Add(new SessionStateVariableEntry(
                         "SingleInstanceOwned", true, "Launcher owns the single-instance mutex"));
 
-                    using (var ps = PowerShell.Create(iss))
-                    {
+                    using (var ps = PowerShell.Create(iss)) {
                         ps.AddScript($"& '{scriptPath}'");
                         var results = ps.Invoke();
 
-                        if (ps.HadErrors)
-                        {
+                        if (ps.HadErrors) {
                             string errors = string.Join("\n", ps.Streams.Error.Select(e => e.ToString()));
                             MessageBox.Show(errors, "PowerShell Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     MessageBox.Show(ex.ToString(), "Thread Error");
-                }
-                finally
-                {
+                } finally {
                     // Backstop: dismiss the splash if startup threw before DonutApp closed it.
                     progress.Complete();
 
@@ -117,45 +102,39 @@ static class Program
             // Bare loop because the tray icon lives on the PS and WPF side.
             Application.Run(new ApplicationContext());
             GC.KeepAlive(instanceMutex);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             MessageBox.Show(ex.Message, "Fatal Error");
         }
     }
 
     // Best-effort: a gone or unreadable pid means there is nothing left to wait for.
-    static void AwaitPredecessor(string[] args)
-    {
+    static void AwaitPredecessor(string[] args) {
         int flag = Array.IndexOf(args, "--await-pid");
         if (flag < 0 || flag + 1 >= args.Length) return;
         if (!int.TryParse(args[flag + 1], out int pid)) return;
 
-        try
-        {
+        try {
             using var predecessor = Process.GetProcessById(pid);
             predecessor.WaitForExit(AwaitPredecessorSeconds * 1000);
+        } catch (ArgumentException) {
+            // already exited
+        } catch (InvalidOperationException) {
+            // exited between the lookup and the wait
         }
-        catch (ArgumentException) { /* already exited */ }
-        catch (InvalidOperationException) { /* exited between the lookup and the wait */ }
     }
 
     // Beside the exe, not ProgramData: an MSI install makes that admin-only NTFS.
-    static string ExtractEmbeddedApp()
-    {
+    static string ExtractEmbeddedApp() {
         var asm = typeof(Program).Assembly;
         string root = Path.Combine(AppContext.BaseDirectory, "app");
 
         // Serialize concurrent launches so two instances don't write the same files.
         using var mtx = new Mutex(false, "Global\\DonutAppExtract");
         bool owned = false;
-        try { owned = mtx.WaitOne(TimeSpan.FromSeconds(60)); }
-        catch (AbandonedMutexException) { owned = true; }
-        try
-        {
+        try { owned = mtx.WaitOne(TimeSpan.FromSeconds(60)); } catch (AbandonedMutexException) { owned = true; }
+        try {
             var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string name in asm.GetManifestResourceNames())
-            {
+            foreach (string name in asm.GetManifestResourceNames()) {
                 if (!(name.StartsWith("src/", StringComparison.Ordinal) ||
                       name.StartsWith("assets/", StringComparison.Ordinal) ||
                       name.StartsWith("res/", StringComparison.Ordinal)))
@@ -175,15 +154,12 @@ static class Program
                 if (s is null || !NeedsWrite(dest, s)) continue;
 
                 // Never widened: this tree runs elevated, so a user-writable copy is an LPE.
-                try
-                {
+                try {
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                     s.Position = 0;
                     using var fs = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None);
                     s.CopyTo(fs);
-                }
-                catch (UnauthorizedAccessException ex)
-                {
+                } catch (UnauthorizedAccessException ex) {
                     throw new UnauthorizedAccessException(
                         $"Could not write the app tree at {root}.\n\n" +
                         "This run is not elevated and the install folder is admin-only. " +
@@ -198,17 +174,18 @@ static class Program
             string legacy = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "DONUT", "app");
-            try { if (Directory.Exists(legacy)) Directory.Delete(legacy, true); }
-            catch { /* in use or de-elevated; the next elevated run gets it */ }
+            try {
+                if (Directory.Exists(legacy)) Directory.Delete(legacy, true);
+            } catch {
+                // in use or de-elevated, so the next elevated run gets it
+            }
 
             return root;
-        }
-        finally { if (owned) mtx.ReleaseMutex(); }
+        } finally { if (owned) mtx.ReleaseMutex(); }
     }
 
     // Leaves the stream at its end.
-    static bool NeedsWrite(string dest, Stream embedded)
-    {
+    static bool NeedsWrite(string dest, Stream embedded) {
         if (!File.Exists(dest)) return true;
         if (embedded.CanSeek && new FileInfo(dest).Length != embedded.Length) return true;
 
@@ -219,15 +196,12 @@ static class Program
     }
 
     // Absorbs files dropped across updates, never reaching outside the app root.
-    static void PruneUnknown(string root, HashSet<string> keep)
-    {
-        try
-        {
+    static void PruneUnknown(string root, HashSet<string> keep) {
+        try {
             if (!Directory.Exists(root)) return;
             foreach (string f in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
                 if (!keep.Contains(Path.GetFullPath(f)))
                     try { File.Delete(f); } catch { /* file in use */ }
-        }
-        catch { /* nothing to prune */ }
+        } catch { /* nothing to prune */ }
     }
 }

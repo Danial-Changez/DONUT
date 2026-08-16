@@ -260,7 +260,9 @@ Describe "RecentConnectionsStore" {
         BeforeEach {
             $script:saves = 0
             $script:fakeMgr = [pscustomobject]@{}
-            $script:fakeMgr | Add-Member -MemberType ScriptMethod -Name SaveConfig -Value { $script:saves++ }
+            $script:fakeMgr | Add-Member -MemberType ScriptMethod `
+                                         -Name SaveConfig `
+                                         -Value { $script:saves++ }
         }
 
         It "Imports legacy entries minus the per-machine blobs and strips the config keys" {

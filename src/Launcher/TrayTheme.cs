@@ -12,8 +12,7 @@ namespace Donut.Interop;
 /// here (values mirror UIColors.xaml: PanelBackground / PanelBackgroundActive / the
 /// PanelBorder hairline composited over the surface).
 /// </summary>
-public static class TrayTheme
-{
+public static class TrayTheme {
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUNDSMALL = 3;
 
@@ -28,29 +27,27 @@ public static class TrayTheme
     private static readonly Color Border = Color.FromArgb(0x2B, 0x2B, 0x2B);
 
     /// <summary>Applies the app palette and rounded corners to a tray menu.</summary>
-    public static void Apply(ContextMenuStrip menu)
-    {
-        menu.Renderer = new ToolStripProfessionalRenderer(new DonutColorTable())
-        {
+    public static void Apply(ContextMenuStrip menu) {
+        menu.Renderer = new ToolStripProfessionalRenderer(new DonutColorTable()) {
             RoundedEdges = false,
         };
         menu.ShowImageMargin = false;
         menu.BackColor = Surface;
         menu.ForeColor = Color.FromArgb(0xFA, 0xFA, 0xFA);
-        menu.Opening += (s, e) =>
-        {
+        menu.Opening += (s, e) => {
             // Pre-Win11 this call fails and the menu stays square but still themed.
             int pref = DWMWCP_ROUNDSMALL;
-            try { _ = DwmSetWindowAttribute(menu.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int)); }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
+            try {
+                _ = DwmSetWindowAttribute(menu.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
+            } catch (DllNotFoundException) {
+            } catch (EntryPointNotFoundException) {
+            }
         };
         // Without this the menu floats orphaned when the taskbar flyout dismisses.
         menu.Opened += (s, e) => SetForegroundWindow(menu.Handle);
     }
 
-    private sealed class DonutColorTable : ProfessionalColorTable
-    {
+    private sealed class DonutColorTable : ProfessionalColorTable {
         public override Color ToolStripDropDownBackground => Surface;
         public override Color MenuItemSelected => Hover;
         public override Color MenuItemSelectedGradientBegin => Hover;

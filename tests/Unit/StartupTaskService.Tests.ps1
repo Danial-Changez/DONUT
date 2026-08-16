@@ -62,7 +62,9 @@ class ThrowingStartupTaskService : StartupTaskService {
     hidden [string] GetProcessIdentity() { return 'PROD\jdoe' }
     hidden [string] GetInteractiveUser() { return 'PROD\jdoe' }
     hidden [object] GetExistingTask([string]$name) { return $this.Existing }
-    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) { throw "access denied (not elevated)" }
+    hidden [void] RegisterTask([string]$name, [string]$triggerUser, [hashtable]$spec) {
+        throw "access denied (not elevated)"
+    }
     hidden [void] RemoveStaleTasks([string]$keepName) { }
 }
 

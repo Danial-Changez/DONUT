@@ -26,17 +26,17 @@
     hotspots print on every run without blocking it.
 
 .PARAMETER Path
-    Source root to scan. Defaults to the repo's src\ folder.
+    Roots to scan. Defaults to the repo's src\, tests\ and tools\ folders.
 
 .PARAMETER FailOn
     Minimum severity that makes this script exit non-zero (for a hook / CI gate).
     One of None, Information, Warning, Error. Default None (report only).
 
 .NOTES
-    The gate skips what the listing skips: trailing whitespace is accepted style
-    debt. PSAvoidLongLines (120, PSScriptAnalyzer's own default) and TypeNotFound
-    both start clean and gate. TypeNotFound gates only when the UI assemblies
-    loaded, since off Windows the parser cannot resolve WPF types at all.
+    Everything at or above -FailOn gates, and every rule starts clean: PSAvoidLongLines
+    (120, PSScriptAnalyzer's own default), PSAvoidTrailingWhitespace (Invoke-Format
+    strips it), and TypeNotFound, which gates only when the UI assemblies loaded,
+    since off Windows the parser cannot resolve WPF types at all.
 
     PSUseCmdletCorrectly is reported but never gates: it flaps between runs on
     valid positional calls (e.g. Split-Path -Parent $x) when the analyzer session
@@ -49,7 +49,11 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $Path = (Join-Path $PSScriptRoot '..\src'),
+    [string[]] $Path = @(
+        (Join-Path $PSScriptRoot '..\src'),
+        (Join-Path $PSScriptRoot '..\tests'),
+        $PSScriptRoot
+    ),
     [ValidateSet('None', 'Information', 'Warning', 'Error')]
     [string] $FailOn = 'None'
 )
@@ -68,7 +72,7 @@ try {
 }
 
 $files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
-    Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
+    Where-Object { $_.FullName -notmatch '\\(bin|obj|\.cache)\\' }
 
 # Runtime-compiled C# types no static session can resolve (see .DESCRIPTION).
 $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
@@ -94,9 +98,8 @@ if ($results) {
     $results | Group-Object RuleName | Sort-Object Count -Descending |
         Select-Object Count, Name | Format-Table -AutoSize | Out-Host
 
-    # Trailing whitespace stays in the count but out of the listing, so real findings show.
-    Write-Host 'Findings (excluding layout rules):'
-    $results | Where-Object { $_.RuleName -notin @('PSAvoidTrailingWhitespace', 'DonutFunctionSize') } |
+    Write-Host 'Findings:'
+    $results | Where-Object { $_.RuleName -ne 'DonutFunctionSize' } |
         Select-Object @{ n = 'File'; e = { Split-Path $_.ScriptPath -Leaf } }, Line, RuleName |
         Sort-Object File, Line | Format-Table -AutoSize | Out-Host
 
@@ -132,8 +135,8 @@ if ($longComments) {
 
 if ($FailOn -ne 'None') {
     $order = @{ Information = 1; Warning = 2; Error = 3 }
-    # The gate skips what the listing skips, plus the flaky rule. See .NOTES.
-    $nonGating = @('PSAvoidTrailingWhitespace', 'PSUseCmdletCorrectly')
+    # Only the flaky rule sits out, and TypeNotFound where the parser cannot see WPF. See .NOTES.
+    $nonGating = @('PSUseCmdletCorrectly')
     if (-not $uiLoaded) { $nonGating += 'TypeNotFound' }
     $gate = $results | Where-Object {
         $order[[string]$_.Severity] -ge $order[$FailOn] -and $_.RuleName -notin $nonGating

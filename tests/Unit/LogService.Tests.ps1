@@ -14,15 +14,15 @@ Describe "LogService" {
     Context "Constructor" {
         It "Should create log directory if it does not exist" {
             $newLogDir = Join-Path $script:tempDir "NewLogDir_$(Get-Random)"
-            
-            $logger = [LogService]::new($newLogDir)
+
+            $null = [LogService]::new($newLogDir)
 
             Test-Path $newLogDir | Should -Be $true
         }
 
         It "Should set LogFilePath to Donut.log in the directory" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $expectedPath = Join-Path $script:testLogDir "Donut.log"
             $logger.LogFilePath | Should -Be $expectedPath
         }
@@ -30,7 +30,7 @@ Describe "LogService" {
         It "Should not fail if directory already exists" {
             $logger1 = [LogService]::new($script:testLogDir)
             $logger2 = [LogService]::new($script:testLogDir)
-            
+
             $logger1.LogFilePath | Should -Be $logger2.LogFilePath
         }
     }
@@ -38,9 +38,9 @@ Describe "LogService" {
     Context "LogInfo" {
         It "Should write INFO level log entry" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.LogInfo("Test info message")
-            
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*[INFO]*"
             $content | Should -BeLike "*Test info message*"
@@ -49,9 +49,9 @@ Describe "LogService" {
         It "Should include timestamp in log entry" {
             $logger = [LogService]::new($script:testLogDir)
             $datePart = Get-Date -Format "yyyy-MM-dd"
-            
+
             $logger.LogInfo("Timestamp test")
-            
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*$datePart*"
         }
@@ -60,9 +60,9 @@ Describe "LogService" {
     Context "LogError" {
         It "Should write ERROR level log entry" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.LogError("Test error message")
-            
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*[ERROR]*"
             $content | Should -BeLike "*Test error message*"
@@ -72,9 +72,9 @@ Describe "LogService" {
     Context "LogWarning" {
         It "Should write WARN level log entry" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.LogWarning("Test warning message")
-            
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*[WARN]*"
             $content | Should -BeLike "*Test warning message*"
@@ -84,9 +84,9 @@ Describe "LogService" {
     Context "WriteLog" {
         It "Should format log entry with timestamp, level, and message" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.WriteLog("DEBUG", "Custom level test")
-            
+
             $content = Get-Content -Path $logger.LogFilePath -Raw
             $content | Should -BeLike "*[DEBUG]*"
             $content | Should -BeLike "*Custom level test*"
@@ -95,11 +95,11 @@ Describe "LogService" {
 
         It "Should append to existing log file" {
             $logger = [LogService]::new($script:testLogDir)
-            
+
             $logger.LogInfo("First message")
             $logger.LogInfo("Second message")
             $logger.LogError("Third message")
-            
+
             $lines = Get-Content -Path $logger.LogFilePath
             $lines.Count | Should -Be 3
         }

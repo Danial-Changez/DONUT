@@ -4,8 +4,7 @@ using System;
 using System.ComponentModel;
 using System.Reflection;
 
-namespace Donut.Mvvm
-{
+namespace Donut.Mvvm {
     /// <summary>
     /// MVVM base for PowerShell view-models. PowerShell classes cannot declare CLR events,
     /// so they inherit this to get <see cref="INotifyPropertyChanged"/>. View-models call
@@ -16,8 +15,7 @@ namespace Donut.Mvvm
     /// Compiled into Donut.Launcher for production. Start-Donut.ps1 also compiles it from
     /// this source, guarded, so the `pwsh -Sta` dev path resolves the type at parse time.
     /// </remarks>
-    public abstract class ObservableObject : INotifyPropertyChanged
-    {
+    public abstract class ObservableObject : INotifyPropertyChanged {
         /// <inheritdoc/>
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -33,25 +31,25 @@ namespace Donut.Mvvm
         /// <param name="propertyName">Public instance property to write.</param>
         /// <param name="value">New value, coerced to the property type when it differs.</param>
         /// <returns><c>true</c> when the value changed and notification was raised.</returns>
-        public bool Set(string propertyName, object value)
-        {
+        public bool Set(string propertyName, object value) {
             var prop = GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-            if (prop == null || !prop.CanWrite)
-            {
+            if (prop == null || !prop.CanWrite) {
                 return false;
             }
 
             var current = prop.GetValue(this);
-            if (Equals(current, value))
-            {
+            if (Equals(current, value)) {
                 return false;
             }
 
             var coerced = value;
-            if (value != null && !prop.PropertyType.IsInstanceOfType(value))
-            {
-                try { coerced = Convert.ChangeType(value, prop.PropertyType); }
-                catch { coerced = value; } // let SetValue surface a real incompatibility
+            if (value != null && !prop.PropertyType.IsInstanceOfType(value)) {
+                // A failed coercion keeps the raw value, so SetValue surfaces a real incompatibility.
+                try {
+                    coerced = Convert.ChangeType(value, prop.PropertyType);
+                } catch {
+                    coerced = value;
+                }
             }
 
             prop.SetValue(this, coerced);

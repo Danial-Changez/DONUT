@@ -10,7 +10,7 @@ Describe "DonutParameterLayout rule" {
         Import-Module PSScriptAnalyzer -ErrorAction Stop
         # The module file, not its folder: the analyzer's folder discovery finds nothing.
         $script:rulePath = (Resolve-Path (Join-Path $PSScriptRoot '..\..\tools\Rules\DonutRules.psm1')).Path
-        function Get-LayoutFindings([string]$code) {
+        function Get-LayoutFinding([string]$code) {
             return @(Invoke-ScriptAnalyzer -ScriptDefinition $code -CustomRulePath $script:rulePath |
                     Where-Object RuleName -EQ 'DonutParameterLayout')
         }
@@ -22,7 +22,7 @@ $auth = Get-CimInstance -Namespace 'root\ccm' `
                         -ClassName 'SMS_Authority' `
                         -ErrorAction Stop
 '@
-        (Get-LayoutFindings $code).Count | Should -Be 0
+        (Get-LayoutFinding $code).Count | Should -Be 0
     }
 
     It "flags a continuation indented instead of aligned" {
@@ -31,21 +31,21 @@ $auth = Get-CimInstance -Namespace 'root\ccm' `
     -ClassName 'SMS_Authority' `
     -ErrorAction Stop
 '@
-        $f = Get-LayoutFindings $code
+        $f = Get-LayoutFinding $code
         $f.Count | Should -Be 2
         $f[0].Message | Should -BeLike '*not under the first argument*'
         $f[0].Line | Should -Be 2
     }
 
     It "flags three named parameters kept on one long line" {
-        $code = "`$records = Resolve-DnsName -Name `$hostName -Server `$server -Type A -ErrorAction Stop -DnsOnly -NoHostsFile"
-        $f = Get-LayoutFindings $code
+        $code = '$records = Resolve-DnsName -Name $hostName -Server $server -Type A -ErrorAction Stop'
+        $f = Get-LayoutFinding $code
         $f.Count | Should -Be 1
         $f[0].Message | Should -BeLike '*named parameters on one line*'
     }
 
     It "leaves a short line alone however many parameters it carries" {
-        (Get-LayoutFindings 'New-Item -ItemType Directory -Path $dir -Force').Count | Should -Be 0
+        (Get-LayoutFinding 'New-Item -ItemType Directory -Path $dir -Force').Count | Should -Be 0
     }
 
     It "flags two named parameters sharing a line of a wrapped call" {
@@ -53,7 +53,7 @@ $auth = Get-CimInstance -Namespace 'root\ccm' `
 Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden `
               -ArgumentList $args
 '@
-        $f = Get-LayoutFindings $code
+        $f = Get-LayoutFinding $code
         $f.Count | Should -Be 1
         $f[0].Message | Should -BeLike '*more than one named parameter*'
     }
@@ -63,7 +63,7 @@ Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden `
 Write-Host -ForegroundColor Cyan -NoNewline `
            "DONUT probe"
 '@
-        (Get-LayoutFindings $code).Count | Should -Be 0
+        (Get-LayoutFinding $code).Count | Should -Be 0
     }
 
     It "aligns under a positional first argument too" {
@@ -71,7 +71,12 @@ Write-Host -ForegroundColor Cyan -NoNewline `
 $p = Join-Path (Split-Path $root -Parent) `
                'Assets\icon.ico'
 '@
-        (Get-LayoutFindings $code).Count | Should -Be 0
+        (Get-LayoutFinding $code).Count | Should -Be 0
+    }
+
+    It "leaves Pester's Should alone, since its switches are assertion operators" {
+        $code = '$dict | Should -Not -BeNullOrEmpty -Because "the resource dictionary must load, whatever the theme"'
+        (Get-LayoutFinding $code).Count | Should -Be 0
     }
 
     It "ignores a call whose only line break is inside a script block argument" {
@@ -81,7 +86,7 @@ $job = Start-ThreadJob -ScriptBlock {
     $x
 } -ArgumentList $a
 '@
-        (Get-LayoutFindings $code).Count | Should -Be 0
+        (Get-LayoutFinding $code).Count | Should -Be 0
     }
 }
 
@@ -90,9 +95,9 @@ Describe "DonutFunctionSize rule" {
     BeforeAll {
         Import-Module PSScriptAnalyzer -ErrorAction Stop
         $script:rulePath = (Resolve-Path (Join-Path $PSScriptRoot '..\..\tools\Rules\DonutRules.psm1')).Path
-        function Get-SizeFindings([string]$code) {
+        function Get-SizeFinding([string]$code) {
             return @(Invoke-ScriptAnalyzer -ScriptDefinition $code -CustomRulePath $script:rulePath |
-                    Where-Object RuleName -eq 'DonutFunctionSize')
+                    Where-Object RuleName -EQ 'DonutFunctionSize')
         }
         # A body of N one-statement lines, to build functions right at a limit.
         function New-Body([int]$statements) { return (1..$statements | ForEach-Object { "    `$v$_ = $_" }) -join "`n" }
@@ -100,12 +105,12 @@ Describe "DonutFunctionSize rule" {
 
     It "says nothing about a function inside every limit" {
         $code = "function Test-Small {`n$(New-Body 100)`n}"
-        (Get-SizeFindings $code).Count | Should -Be 0
+        (Get-SizeFinding $code).Count | Should -Be 0
     }
 
     It "reports a function over the statement limit, at Information severity, once" {
         $code = "function Test-Big {`n$(New-Body 101)`n}"
-        $f = Get-SizeFindings $code
+        $f = Get-SizeFinding $code
         $f.Count | Should -Be 1
         $f[0].Severity | Should -Be 'Information'
         $f[0].Message | Should -BeLike "'Test-Big' has outgrown one function: statements 101 (limit 100)*"
@@ -113,7 +118,7 @@ Describe "DonutFunctionSize rule" {
 
     It "names a class method by its class and reports it once, not per wrapper node" {
         $code = "class Widget {`n    [void] Grow() {`n$(New-Body 101)`n    }`n}"
-        $f = Get-SizeFindings $code
+        $f = Get-SizeFinding $code
         $f.Count | Should -Be 1
         $f[0].Message | Should -BeLike "'Widget.Grow' has outgrown*"
     }
@@ -121,7 +126,7 @@ Describe "DonutFunctionSize rule" {
     It "counts branches across if, elseif, else, switch, loops and catch" {
         # 7 ifs x (if + elseif + else) = 21 branches on a body that is short otherwise.
         $ifs = (1..7 | ForEach-Object { "    if (`$a -eq $_) { 1 } elseif (`$a -eq -$_) { 2 } else { 3 }" }) -join "`n"
-        $f = Get-SizeFindings "function Test-Branchy(`$a) {`n$ifs`n}"
+        $f = Get-SizeFinding "function Test-Branchy(`$a) {`n$ifs`n}"
         $f.Count | Should -Be 1
         $f[0].Message | Should -BeLike "*branches 21 (limit 20)*"
     }
@@ -140,7 +145,7 @@ function Test-Five($a) {
     }
 }
 '@
-        (Get-SizeFindings $five).Count | Should -Be 0
+        (Get-SizeFinding $five).Count | Should -Be 0
 
         $six = @'
 function Test-Six($a) {
@@ -155,7 +160,7 @@ function Test-Six($a) {
     }
 }
 '@
-        $f = Get-SizeFindings $six
+        $f = Get-SizeFinding $six
         $f.Count | Should -Be 1
         $f[0].Message | Should -BeLike "*nesting depth 6 (limit 5)*"
     }

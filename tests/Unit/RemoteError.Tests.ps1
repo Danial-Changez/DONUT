@@ -101,17 +101,26 @@ Describe "RemoteError" {
 
     Context "RemoteFailure.ReasonFromMessage (re-derives reason across the runspace boundary)" {
         It "maps each exception's own message back to its reason" {
-            [string][RemoteFailure]::ReasonFromMessage(([HostOfflineException]::new('h')).Message)      | Should -Be 'Offline'
-            [string][RemoteFailure]::ReasonFromMessage(([HostUnresolvableException]::new('h')).Message) | Should -Be 'Unresolvable'
-            [string][RemoteFailure]::ReasonFromMessage(([RpcUnavailableException]::new('h')).Message)   | Should -Be 'RpcUnavailable'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteExecutionException]::new('h', 'DCU /scan', 500)).Message) | Should -Be 'ExecutionFailed'
-            [string][RemoteFailure]::ReasonFromMessage(([DcuNotInstalledException]::new('h')).Message)  | Should -Be 'DcuMissing'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteProcessStartException]::new('h', 'DCU /applyUpdates', -1073741502)).Message) | Should -Be 'ProcessStartFailed'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteConnectionLostException]::new('h', 'DCU /applyUpdates', 233)).Message) | Should -Be 'ConnectionLost'
-            [string][RemoteFailure]::ReasonFromMessage(([RemoteTimeoutException]::new('h', 'Remote probe', 20)).Message) | Should -Be 'TimedOut'
+            $cases = @(
+                @{ Ex = [HostOfflineException]::new('h'); Reason = 'Offline' }
+                @{ Ex = [HostUnresolvableException]::new('h'); Reason = 'Unresolvable' }
+                @{ Ex = [RpcUnavailableException]::new('h'); Reason = 'RpcUnavailable' }
+                @{ Ex = [RemoteExecutionException]::new('h', 'DCU /scan', 500); Reason = 'ExecutionFailed' }
+                @{ Ex = [DcuNotInstalledException]::new('h'); Reason = 'DcuMissing' }
+                @{ Ex      = [RemoteProcessStartException]::new('h', 'DCU /applyUpdates', -1073741502)
+                    Reason = 'ProcessStartFailed'
+                }
+                @{ Ex = [RemoteConnectionLostException]::new('h', 'DCU /applyUpdates', 233); Reason = 'ConnectionLost' }
+                @{ Ex = [RemoteTimeoutException]::new('h', 'Remote probe', 20); Reason = 'TimedOut' }
+            )
+            foreach ($c in $cases) {
+                [string][RemoteFailure]::ReasonFromMessage($c.Ex.Message) |
+                    Should -Be $c.Reason -Because $c.Ex.GetType().Name
+            }
         }
         It "tolerates the worker's 'Worker failed: ' prefix" {
-            [string][RemoteFailure]::ReasonFromMessage("Worker failed: Host 'h' is offline or unreachable (no response).") | Should -Be 'Offline'
+            $prefixed = "Worker failed: Host 'h' is offline or unreachable (no response)."
+            [string][RemoteFailure]::ReasonFromMessage($prefixed) | Should -Be 'Offline'
         }
         It "returns Unknown for blank or unrecognized messages" {
             [string][RemoteFailure]::ReasonFromMessage('')              | Should -Be 'Unknown'

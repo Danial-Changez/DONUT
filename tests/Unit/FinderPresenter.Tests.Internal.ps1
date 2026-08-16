@@ -74,7 +74,10 @@ Describe "FinderPresenter Lens poll" {
             $p = $script:presenter
             $p.LensVm.SetLoading('Jane Doe')
             $p.LensToken = 1
-            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 120 -Who 'Jane Doe'))
+            $job = New-LensJob -Token 1 `
+                               -AgeSeconds 120 `
+                               -Who 'Jane Doe'
+            $p.LensJobs.Add($job)
 
             $p.PollLens()
 
@@ -128,7 +131,7 @@ Describe "FinderPresenter Lens poll" {
             $begun = $dispatch.AddMilliseconds(20)
             $ended = $begun.AddMilliseconds(210)
             $job = New-TimedSearchJob -StartedAt $dispatch `
-                -Payload "$($begun.Ticks) 200 $($ended.Ticks)"
+                                      -Payload "$($begun.Ticks) 200 $($ended.Ticks)"
 
             $text = $script:presenter.DescribeSearchTiming($job)
 
@@ -146,7 +149,8 @@ Describe "FinderPresenter Lens poll" {
 
         It "degrades to nothing when another record carries a different tag" {
             $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow) `
-                -Payload 'partial bundle' -Tag 'LensPartial'
+                                      -Payload 'partial bundle' `
+                                      -Tag 'LensPartial'
             $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''
         }
 
@@ -161,7 +165,10 @@ Describe "FinderPresenter Lens poll" {
             $p = [ThrowingFinderPresenter]::new($script:config, $script:logger)
             $p.LensVm.SetLoading('Jane Doe')
             $p.LensToken = 1
-            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 1 -Completed $true))
+            $job = New-LensJob -Token 1 `
+                               -AgeSeconds 1 `
+                               -Completed $true
+            $p.LensJobs.Add($job)
 
             $p.PollLens()
 

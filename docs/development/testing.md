@@ -47,9 +47,9 @@ class MockNetworkProbe : NetworkProbe {
 Before committing:
 
 ```powershell
-.\tools\Invoke-Format.ps1 -Check   # layout must be clean
-.\tools\Invoke-Lint.ps1            # zero non-layout findings
-.\tools\Invoke-Tests.ps1           # full suite green (pinned Pester 6)
+.\tools\Invoke-Format.ps1 -Check        # layout must be clean (src, tests, tools)
+.\tools\Invoke-Lint.ps1 -FailOn Warning  # what CI gates on: zero Warning-or-worse findings
+.\tools\Invoke-Tests.ps1                 # full suite green (pinned Pester 6)
 ```
 
 :::caution

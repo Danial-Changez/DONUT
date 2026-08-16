@@ -110,7 +110,8 @@ function Get-Filter([string]$shape, [string]$escaped) {
         # UPN is not an ANR attribute, so dropping the OR would silently stop UPN searches.
         return "$head(|(anr=$escaped)(userPrincipalName=$escaped*)))"
     }
-    return "$head(|(sAMAccountName=$escaped*)(cn=$escaped*)(displayName=$escaped*)(userPrincipalName=$escaped*)(sn=$escaped*)))"
+    return "$head(|(sAMAccountName=$escaped*)(cn=$escaped*)(displayName=$escaped*)" +
+    "(userPrincipalName=$escaped*)(sn=$escaped*)))"
 }
 
 # Never throws: a forest that is down should report itself, not abort the whole table.
@@ -266,13 +267,17 @@ foreach ($p in $Prefix) {
             $filter = Get-Filter $shape $escaped
             foreach ($referral in 'External', 'None') {
                 # The first bind pays connect and authenticate, which is not under test.
-                [void](Invoke-Timed -domain $domain -filter $filter -referral $referral)
+                [void](Invoke-Timed -domain $domain `
+                                    -filter $filter `
+                                    -referral $referral)
 
                 $times = [System.Collections.Generic.List[long]]::new()
                 $count = -1
                 $err = ''
                 for ($i = 0; $i -lt $Iterations; $i++) {
-                    $r = Invoke-Timed -domain $domain -filter $filter -referral $referral
+                    $r = Invoke-Timed -domain $domain `
+                                      -filter $filter `
+                                      -referral $referral
                     if ($r.Error) { $err = $r.Error; break }
                     $times.Add([long]$r.Ms)
                     $count = [int]$r.Count
@@ -310,8 +315,14 @@ foreach ($p in $Prefix) {
         if ($cur.Capped -or $anr.Capped) {
             Write-Host '  A side reached the 50-row cap, so this diff is truncated.' -ForegroundColor Yellow
         }
-        Write-DiffSection -Title 'Only ANR found' -Left $anr.Rows -Right $cur.Rows -Prefix $p
-        Write-DiffSection -Title 'Only the current filter found' -Left $cur.Rows -Right $anr.Rows -Prefix $p
+        Write-DiffSection -Title 'Only ANR found' `
+                          -Left $anr.Rows `
+                          -Right $cur.Rows `
+                          -Prefix $p
+        Write-DiffSection -Title 'Only the current filter found' `
+                          -Left $cur.Rows `
+                          -Right $anr.Rows `
+                          -Prefix $p
     }
 }
 

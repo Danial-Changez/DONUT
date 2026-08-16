@@ -6,6 +6,11 @@ Describe "AppConfig" {
         $script:testSourceRoot = "C:\TestSource"
         $script:testLogsPath = "C:\TestLogs"
         $script:testReportsPath = "C:\TestReports"
+
+        # The three fixed paths, so a case names only the settings it is about.
+        function New-TestConfig($settings) {
+            return [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $settings)
+        }
     }
 
     Context "Static Defaults" {
@@ -38,8 +43,8 @@ Describe "AppConfig" {
 
     Context "Constructor" {
         It "Should initialize with provided paths" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+            $config = New-TestConfig @{}
+
             $config.SourceRoot | Should -Be $script:testSourceRoot
             $config.LogsPath | Should -Be $script:testLogsPath
             $config.ReportsPath | Should -Be $script:testReportsPath
@@ -50,16 +55,16 @@ Describe "AppConfig" {
                 activeCommand = 'applyUpdates'
                 throttleLimit = 10
             }
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $userSettings)
-            
+            $config = New-TestConfig $userSettings
+
             $config.Settings.activeCommand | Should -Be 'applyUpdates'
             $config.Settings.throttleLimit | Should -Be 10
             $config.Settings.commands | Should -Not -BeNullOrEmpty
         }
 
         It "Should handle null settings gracefully" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $null)
-            
+            $config = New-TestConfig $null
+
             $config.Settings | Should -Not -BeNullOrEmpty
             $config.Settings.activeCommand | Should -Be 'scan'
         }
@@ -75,8 +80,8 @@ Describe "AppConfig" {
                     }
                 }
             }
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $userSettings)
-            
+            $config = New-TestConfig $userSettings
+
             $config.Settings.commands.scan.args.silent | Should -Be $true
             $config.Settings.commands.scan.args.report | Should -Be 'C:\CustomReport'
             $config.Settings.commands.applyUpdates | Should -Not -BeNullOrEmpty
@@ -88,21 +93,21 @@ Describe "AppConfig" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                 customKey = 'customValue'
             })
-            
+
             $config.GetSetting('customKey', 'default') | Should -Be 'customValue'
         }
 
         It "Should return default when setting does not exist" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+            $config = New-TestConfig @{}
+
             $config.GetSetting('nonExistentKey', 'fallback') | Should -Be 'fallback'
         }
 
         It "Should set a new setting" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+            $config = New-TestConfig @{}
+
             $config.SetSetting('newKey', 'newValue')
-            
+
             $config.Settings.newKey | Should -Be 'newValue'
         }
 
@@ -110,17 +115,17 @@ Describe "AppConfig" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                 existingKey = 'oldValue'
             })
-            
+
             $config.SetSetting('existingKey', 'updatedValue')
-            
+
             $config.Settings.existingKey | Should -Be 'updatedValue'
         }
     }
 
     Context "GetActiveCommand / SetActiveCommand" {
         It "Should return default 'scan' when not set" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+            $config = New-TestConfig @{}
+
             $config.GetActiveCommand() | Should -Be 'scan'
         }
 
@@ -128,42 +133,42 @@ Describe "AppConfig" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                 activeCommand = 'applyUpdates'
             })
-            
+
             $config.GetActiveCommand() | Should -Be 'applyUpdates'
         }
 
         It "Should set active command" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
-            
+            $config = New-TestConfig @{}
+
             $config.SetActiveCommand('applyUpdates')
-            
+
             $config.GetActiveCommand() | Should -Be 'applyUpdates'
         }
     }
 
     Context "GetCommandArgs" {
         It "Should return args for existing command" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
 
-            $args = $config.GetCommandArgs('scan')
+            $cmdArgs = $config.GetCommandArgs('scan')
 
-            $args | Should -Not -BeNullOrEmpty
-            $args.ContainsKey('silent') | Should -Be $true
+            $cmdArgs | Should -Not -BeNullOrEmpty
+            $cmdArgs.ContainsKey('silent') | Should -Be $true
         }
 
         It "Should return empty hashtable for non-existent command" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
 
-            $args = $config.GetCommandArgs('nonExistentCommand')
+            $cmdArgs = $config.GetCommandArgs('nonExistentCommand')
 
-            $args | Should -BeOfType [hashtable]
-            $args.Count | Should -Be 0
+            $cmdArgs | Should -BeOfType [hashtable]
+            $cmdArgs.Count | Should -Be 0
         }
     }
 
     Context "GetThrottleLimit / SetThrottleLimit" {
         It "Should return default 8 when not set" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
             $config.Settings.Remove('throttleLimit')
 
             $config.GetThrottleLimit() | Should -Be 8
@@ -173,7 +178,7 @@ Describe "AppConfig" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                 throttleLimit = 10
             })
-            
+
             $config.GetThrottleLimit() | Should -Be 10
         }
 
@@ -181,12 +186,12 @@ Describe "AppConfig" {
             $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                 throttleLimit = '15'
             })
-            
+
             $config.GetThrottleLimit() | Should -Be 15
         }
 
         It "Should set throttle limit" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
 
             $config.SetThrottleLimit(20)
 
@@ -196,7 +201,7 @@ Describe "AppConfig" {
 
     Context "GetRecoveryWindowMinutes" {
         It "Should default to 30 when not set" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
             $config.Settings.Remove('recoveryWindowMinutes')
             $config.GetRecoveryWindowMinutes() | Should -Be 30
         }
@@ -219,7 +224,7 @@ Describe "AppConfig" {
 
     Context "GetStartWithWindows / GetCloseToTray" {
         It "Should default to false when the key is absent" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
             $config.Settings.Remove('startWithWindows')
             $config.Settings.Remove('closeToTray')
 
@@ -260,7 +265,7 @@ Describe "AppConfig" {
 
     Context "GetRunAsAdmin" {
         It "Should default to TRUE when the key is absent" {
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})
+            $config = New-TestConfig @{}
             $config.Settings.Remove('runAsAdmin')
 
             [AppConfig]::Defaults.runAsAdmin | Should -Be $true
@@ -268,16 +273,16 @@ Describe "AppConfig" {
         }
 
         It "Should return a configured real boolean" {
-            $off = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $false })
-            $on = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $true })
+            $off = New-TestConfig @{ runAsAdmin = $false }
+            $on = New-TestConfig @{ runAsAdmin = $true }
 
             $off.GetRunAsAdmin() | Should -Be $false
             $on.GetRunAsAdmin() | Should -Be $true
         }
 
         It "Should tolerate JSON string booleans case-insensitively" {
-            $off = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = 'False' })
-            $on = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = 'TRUE' })
+            $off = New-TestConfig @{ runAsAdmin = 'False' }
+            $on = New-TestConfig @{ runAsAdmin = 'TRUE' }
 
             $off.GetRunAsAdmin() | Should -Be $false
             $on.GetRunAsAdmin() | Should -Be $true
@@ -286,7 +291,7 @@ Describe "AppConfig" {
         It "Should fall back to TRUE, not false, on garbage values" {
             # Defaults on, so a corrupt config must not drop every remote job into access denied.
             foreach ($garbage in @('yes-please', 3, '', $null)) {
-                $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ runAsAdmin = $garbage })
+                $config = New-TestConfig @{ runAsAdmin = $garbage }
                 $config.GetRunAsAdmin() | Should -Be $true -Because "'$garbage' is not a usable boolean"
             }
         }
@@ -295,7 +300,7 @@ Describe "AppConfig" {
     Context "GetHasSeenTour" {
         It "Should default to false and read a real/string boolean" {
             [AppConfig]::Defaults.hasSeenTour | Should -Be $false
-            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})).GetHasSeenTour() | Should -Be $false
+            (New-TestConfig @{}).GetHasSeenTour() | Should -Be $false
             ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                         hasSeenTour = $true
                     })).GetHasSeenTour() | Should -Be $true
@@ -308,7 +313,7 @@ Describe "AppConfig" {
     Context "GetDebugLogging" {
         It "Should default to false and read a real/string boolean" {
             [AppConfig]::Defaults.debugLogging | Should -Be $false
-            ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{})).GetDebugLogging() | Should -Be $false
+            (New-TestConfig @{}).GetDebugLogging() | Should -Be $false
             ([AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{
                         debugLogging = $true
                     })).GetDebugLogging() | Should -Be $true
@@ -386,9 +391,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('customCmd', @{})
-            
+
             $result | Should -BeNullOrEmpty
         }
 
@@ -402,9 +407,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -BeLike "*-silent*"
             $result | Should -Not -BeLike "*=enable*"
         }
@@ -419,9 +424,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('applyUpdates', @{})
-            
+
             $result | Should -BeLike "*-reboot=enable*"
         }
 
@@ -435,9 +440,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -Not -BeLike "*-silent*"
         }
 
@@ -452,9 +457,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -BeLike "*-report=C:\temp\DONUT*"
             $result | Should -BeLike "*-updateSeverity=critical*"
         }
@@ -469,9 +474,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -BeLike "*-report='C:\Program Files\DONUT Reports'*"
         }
 
@@ -501,9 +506,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{ report = 'C:\Override' })
-            
+
             $result | Should -BeLike "*-report=C:\Override*"
             $result | Should -Not -BeLike "*C:\Original*"
         }
@@ -519,9 +524,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -Not -BeLike "*-report=*"
             $result | Should -Not -BeLike "*-catalogLocation=*"
         }
@@ -537,9 +542,9 @@ Describe "AppConfig" {
                     }
                 }
             })
-            
+
             $result = $config.BuildDcuArgs('scan', @{})
-            
+
             $result | Should -BeLike "*-silent*"
             $result | Should -BeLike "*-report=C:\temp*"
         }
@@ -550,8 +555,8 @@ Describe "AppConfig" {
             $userSettings = @{
                 customSetting = 'customValue'
             }
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $userSettings)
-            
+            $config = New-TestConfig $userSettings
+
             $config.Settings.commands.scan | Should -Not -BeNullOrEmpty
             $config.Settings.commands.applyUpdates | Should -Not -BeNullOrEmpty
             $config.Settings.customSetting | Should -Be 'customValue'
@@ -568,8 +573,8 @@ Describe "AppConfig" {
                     }
                 }
             }
-            $config = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $userSettings)
-            
+            $config = New-TestConfig $userSettings
+
             $config.Settings.commands.scan.args.silent | Should -Be $true
             $config.Settings.commands.scan.args.customArg | Should -Be 'customValue'
             $config.Settings.commands.scan.args.ContainsKey('report') | Should -Be $true
@@ -579,11 +584,11 @@ Describe "AppConfig" {
     Context "Merge isolation (regression)" {
         It "Should not throw when rebuilt from an already-merged config (worker round-trip)" {
             # A shallow clone aliased source and target args, throwing 'Collection was modified'.
-            $first = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, @{ activeCommand = 'applyUpdates' })
+            $first = New-TestConfig @{ activeCommand = 'applyUpdates' }
 
-            { [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $first.Settings) } | Should -Not -Throw
+            { New-TestConfig $first.Settings } | Should -Not -Throw
 
-            $second = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath, $script:testReportsPath, $first.Settings)
+            $second = New-TestConfig $first.Settings
             $second.GetActiveCommand() | Should -Be 'applyUpdates'
             $second.Settings.commands.scan.args.ContainsKey('report') | Should -Be $true
         }

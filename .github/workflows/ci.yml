@@ -90,5 +90,9 @@ jobs:
           key: nuget-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
           restore-keys: nuget-
 
+      # The C# half of the layout rules (.editorconfig): 1TBS braces, verified not rewritten.
+      - name: Format check (C#)
+        run: dotnet format whitespace src/Launcher/Donut.Launcher.csproj --verify-no-changes
+
       - name: Build launcher
         run: dotnet build DONUT.sln -c Release

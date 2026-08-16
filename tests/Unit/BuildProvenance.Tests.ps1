@@ -25,7 +25,9 @@ Describe "BuildProvenance" {
     It "never throws outside a repo and still reports the runtime" {
         # TestDrive sits under the system temp dir, so no enclosing repo answers the SHA probe.
         $root = Join-Path $TestDrive ("DonutProv-" + [guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Force -Path (Join-Path $root 'src') | Out-Null
+        New-Item -ItemType Directory `
+                 -Force `
+                 -Path (Join-Path $root 'src') | Out-Null
 
         $stamp = [BuildProvenance]::Stamp((Join-Path $root 'src'))
 

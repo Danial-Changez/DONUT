@@ -78,11 +78,16 @@ Describe "DcuProgress" {
 
     Context "ParseScanStep - the five scan milestones" {
         It "maps each milestone line (with its outputLog timestamp prefix) to its step" {
-            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:33] : Checking for updates...")                       | Should -Be 1
-            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:33] : Checking for application component updates...") | Should -Be 2
-            [DcuProgress]::ParseScanStep("[2026-07-02 15:14:38] : Scanning system devices...")                    | Should -Be 3
-            [DcuProgress]::ParseScanStep("[2026-07-02 15:15:01] : Determining available updates...")              | Should -Be 4
-            [DcuProgress]::ParseScanStep("[2026-07-02 15:15:43] : Check for updates completed")                   | Should -Be 5
+            $milestones = @(
+                @{ Line = "[2026-07-02 15:14:33] : Checking for updates..."; Step = 1 }
+                @{ Line = "[2026-07-02 15:14:33] : Checking for application component updates..."; Step = 2 }
+                @{ Line = "[2026-07-02 15:14:38] : Scanning system devices..."; Step = 3 }
+                @{ Line = "[2026-07-02 15:15:01] : Determining available updates..."; Step = 4 }
+                @{ Line = "[2026-07-02 15:15:43] : Check for updates completed"; Step = 5 }
+            )
+            foreach ($m in $milestones) {
+                [DcuProgress]::ParseScanStep($m.Line) | Should -Be $m.Step -Because $m.Line
+            }
         }
 
         It "does not mistake the component check (step 2) for the update check (step 1)" {

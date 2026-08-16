@@ -10,7 +10,10 @@ Describe "Project type import coverage" {
 
     BeforeAll {
         $script:SrcRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../src'))
-        $script:Files = Get-ChildItem -Path $script:SrcRoot -Recurse -Include '*.psm1', '*.ps1' -File
+        $script:Files = Get-ChildItem -Path $script:SrcRoot `
+                                      -Recurse `
+                                      -Include '*.psm1', '*.ps1' `
+                                      -File
 
         # class name -> defining module file basename(s), from `class X` declarations.
         $script:DefinedIn = @{}

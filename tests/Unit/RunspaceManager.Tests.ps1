@@ -12,7 +12,7 @@ Describe "RunspaceManager" {
     Context "Initialize" {
         It "Should create a RunspacePool with default parameters" {
             [RunspaceManager]::Initialize(1, 5)
-            
+
             $pool = [RunspaceManager]::RunspacePool
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
@@ -20,7 +20,7 @@ Describe "RunspaceManager" {
 
         It "Should create a RunspacePool with custom min/max" {
             [RunspaceManager]::Initialize(2, 10)
-            
+
             $pool = [RunspaceManager]::RunspacePool
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
@@ -83,7 +83,7 @@ Describe "RunspaceManager" {
         It "Should return existing pool if initialized" {
             [RunspaceManager]::Initialize(1, 5)
             $pool = [RunspaceManager]::GetPool()
-            
+
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
         }
@@ -92,7 +92,7 @@ Describe "RunspaceManager" {
             [RunspaceManager]::Close()
 
             $pool = [RunspaceManager]::GetPool()
-            
+
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
         }

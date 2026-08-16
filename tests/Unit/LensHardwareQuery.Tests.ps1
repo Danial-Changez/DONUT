@@ -69,7 +69,9 @@ Describe "Lens hardware inventory query" {
 
         It "carries the filter form's own failure when it threw" {
             Mock Invoke-RestMethod {
-                if ($Uri -notmatch '\(16777345\)') { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                if ($Uri -notmatch '\(16777345\)') {
+                    throw 'Response status code does not indicate success: 404 (Not Found).'
+                }
                 return New-Collection @()
             }
 

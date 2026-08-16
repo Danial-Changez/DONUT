@@ -153,7 +153,9 @@ Describe "ResolutionCoordinator" {
         It "sets + persists the active DC on a Warm result" {
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02')
+                })
 
             $script:coord.CompleteResolve($job)
 
@@ -179,7 +181,9 @@ Describe "ResolutionCoordinator" {
             $script:config.Settings['activeDomainController'] = 'DC01'
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02')
+                })
 
             $script:coord.CompleteResolve($job)
 
@@ -190,7 +194,9 @@ Describe "ResolutionCoordinator" {
             # 'domainControllers' was never read back, and the warm re-discovers it every launch.
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03')
+                })
 
             $script:coord.CompleteResolve($job)
 
