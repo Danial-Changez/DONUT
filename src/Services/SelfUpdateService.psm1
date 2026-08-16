@@ -135,10 +135,19 @@ class SelfUpdateService {
     }
 
     [PSCustomObject] GetLatestRelease([string]$Token) {
-        $uri = "https://api.github.com/repos/$($this.Owner)/$($this.Repo)/releases/latest"
+        return $this.GetLatestRelease($Token, $false)
+    }
+
+    # Beta follows the newest release of either kind, and GitHub's latest endpoint skips
+    # prereleases by definition, so that channel takes the list's first non-draft entry.
+    [PSCustomObject] GetLatestRelease([string]$Token, [bool]$IncludeBeta) {
+        $releases = "https://api.github.com/repos/$($this.Owner)/$($this.Repo)/releases"
+        $uri = if ($IncludeBeta) { "${releases}?per_page=10" } else { "$releases/latest" }
         $headers = [SelfUpdateService]::Headers($Token, 'application/vnd.github.v3+json')
         # A cap, or a dead network hangs the deferred tray-surface check on the UI thread.
-        return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
+        $result = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
+        if (-not $IncludeBeta) { return $result }
+        return ($result | Where-Object { -not $_.draft } | Select-Object -First 1)
     }
 
     [PSCustomObject] GetReleaseAsset([PSCustomObject]$Release, [string]$Pattern) {

@@ -222,14 +222,16 @@ Describe "AppConfig" {
         }
     }
 
-    Context "GetStartWithWindows / GetCloseToTray" {
+    Context "GetStartWithWindows / GetCloseToTray / GetBetaUpdates" {
         It "Should default to false when the key is absent" {
             $config = New-TestConfig @{}
             $config.Settings.Remove('startWithWindows')
             $config.Settings.Remove('closeToTray')
+            $config.Settings.Remove('betaUpdates')
 
             $config.GetStartWithWindows() | Should -Be $false
             $config.GetCloseToTray() | Should -Be $false
+            $config.GetBetaUpdates() | Should -Be $false
         }
 
         It "Should return a configured real boolean" {

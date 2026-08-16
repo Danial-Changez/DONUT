@@ -157,11 +157,15 @@ reference. See [Design decisions](../decisions.md#the-coordinator-seam).
   to the data root and run it independently for updates/rollbacks (the MSI is
   SHA-256-verified first). The version compare reads the installed
   `DisplayVersion` from the uninstall key.
-- **Publishing a release:** build the MSI with the Product Version set to the
-  release tag, then create a GitHub release with that tag and upload the MSI (it
-  must match `MsiAssetPattern`, default `*.msi`). Users are prompted on next
-  startup. A tag *older* than the installed version is offered as a rollback, so
-  re-tagging is how a bad release gets pulled.
+- The check follows the configured channel: stable reads `releases/latest`, beta
+  (`betaUpdates`) the release list, so prereleases count too. `InstallWorker.ps1`
+  passes the registered `InstallLocation` back as `INSTALLFOLDER`, which is what
+  keeps a beta install outside Program Files from migrating into it on an upgrade.
+- **Publishing a release** is the workflow's job, not a checklist: a push to `main`
+  publishes a prerelease and a promotion flips its flag, both covered in
+  [Releasing](../releasing.md). The presenter picks the first `*.msi` asset and
+  keys everything off the tag, so a tag *older* than the installed version is
+  offered as a rollback - how a bad release gets pulled.
 
 ### First-run guided tour
 

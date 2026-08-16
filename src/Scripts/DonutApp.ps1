@@ -144,7 +144,7 @@ try {
     }
     if ($discovered) { $configManager.SaveConfig($global:AppConfig) }
     $selfUpdateService = [SelfUpdateService]::new($logger)
-    $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService)
+    $updatePresenter = [UpdatePresenter]::new($selfUpdateService, $resourceService, $global:AppConfig)
 
     # With no window on screen the synchronous warm is launch delay, not a frozen modal.
     $mainPresenter = $null

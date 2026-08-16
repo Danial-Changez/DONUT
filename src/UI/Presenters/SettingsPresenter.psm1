@@ -268,6 +268,15 @@ class SettingsPresenter {
             $runAsAdmin.Add_Unchecked($h)
         }
 
+        # No live effect: the channel is read by the next update check, not applied now.
+        $beta = $view.FindName('chkBetaUpdates')
+        if ($beta) {
+            $beta.IsChecked = $this.Config.GetBetaUpdates()
+            $h = { param($s, $e) $self.PersistToggle('betaUpdates', [bool]$s.IsChecked, $null) }.GetNewClosure()
+            $beta.Add_Checked($h)
+            $beta.Add_Unchecked($h)
+        }
+
         $debugLog = $view.FindName('chkDebugLogging')
         if ($debugLog) {
             $debugLog.IsChecked = $this.Config.GetDebugLogging()

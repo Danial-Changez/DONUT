@@ -45,4 +45,23 @@ DONUT isn't digitally signed yet, so Defender may quarantine it or slow every
 launch to a crawl. Both exclusions are scoped to DONUT's own folders.
 :::
 
+## Testing a beta build
+
+Beta builds are published as prereleases, so the normal install never offers them.
+To run one, install it into its own directory from an **elevated** PowerShell:
+
+```powershell
+pwsh -File tools\Install-Beta.ps1
+```
+
+It takes the newest release, verifies it, installs into `C:\Safe\Donut` (override
+with `-InstallDir`), locks that folder down to administrators, and turns on the
+[beta channel](../features/self-update.md#beta-channel) so every later update
+follows the beta stream and stays in that directory. Exclude the folder you chose
+in Defender instead of the Program Files path above.
+
+One machine holds one DONUT, so an install already in Program Files moves into the
+beta folder rather than sitting beside it. Your settings, machine list and reports
+live outside the install and carry across either way.
+
 Next: [First launch](./first-launch.md).

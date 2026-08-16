@@ -1,5 +1,6 @@
 using namespace System.Windows
 using namespace System.Windows.Threading
+using module '..\..\Models\AppConfig.psm1'
 using module '..\..\Services\SelfUpdateService.psm1'
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\DonutPaths.psm1'
@@ -12,11 +13,15 @@ using module '.\DialogPresenter.psm1'
     Checks for a newer release on startup and prompts to update or roll back.
 
 .DESCRIPTION
-    Uses SelfUpdateService to compare the installed version to the latest GitHub
-    release, and on a difference shows the update window (via DialogPresenter),
-    then downloads, verifies and applies the MSI (or rolls back to an older tag).
+    Uses SelfUpdateService to compare the installed version to the newest GitHub
+    release on the configured channel (beta includes prereleases), and on a
+    difference shows the update window (via DialogPresenter), then downloads,
+    verifies and applies the MSI (or rolls back to an older tag).
 
 .NOTES
+    Any difference prompts, in either direction, so turning the beta toggle off on
+    a machine running a prerelease offers the stable build as a rollback.
+
     Anonymous-first: the public upstream answers without auth, so a default install
     never sees a sign-in. Only when the repo refuses does the device-flow login
     appear, once, and the check retries with the stored token from then on.
@@ -31,10 +36,12 @@ class UpdatePresenter {
     [ResourceService]$Resources
     [DialogPresenter]$Dialog
     [LogService]$Logger
+    [AppConfig]$Config
 
-    UpdatePresenter([SelfUpdateService]$service, [ResourceService]$resources) {
+    UpdatePresenter([SelfUpdateService]$service, [ResourceService]$resources, [AppConfig]$config) {
         $this.Service = $service
         $this.Resources = $resources
+        $this.Config = $config
         $this.Logger = $resources.Logger
         $this.Dialog = [DialogPresenter]::new($resources)
     }
@@ -44,10 +51,12 @@ class UpdatePresenter {
     [void] CheckAndPrompt() {
         $localVer = $this.Service.GetLocalVersion()
         $token = $this.Service.GetStoredToken()
+        # Read now, not at construction: the toggle may have been flipped this session.
+        $beta = $this.Config.GetBetaUpdates()
 
         $release = $null
         try {
-            $release = $this.Service.GetLatestRelease($token)
+            $release = $this.Service.GetLatestRelease($token, $beta)
         } catch {
             $status = 0
             try { $status = [int]$_.Exception.Response.StatusCode } catch {}
@@ -66,7 +75,7 @@ class UpdatePresenter {
             }
             $token = $this.Service.GetStoredToken()
             try {
-                $release = $this.Service.GetLatestRelease($token)
+                $release = $this.Service.GetLatestRelease($token, $beta)
             } catch {
                 $this.Logger.LogException("Update check failed after sign-in", $_)
                 return

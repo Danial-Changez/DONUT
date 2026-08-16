@@ -48,6 +48,8 @@ class AppConfig {
         openSettingsShortcut         = 'Ctrl+,'
         # Set once the first-run guided tour is shown or skipped. The ? button replays it.
         hasSeenTour                  = $false
+        # Update channel: on takes the newest prerelease too, off only what is marked latest.
+        betaUpdates                  = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
         debugLogging                 = $false
         commands                     = @{
@@ -233,6 +235,11 @@ class AppConfig {
     # Whether the first-run guided tour has already been shown (or skipped).
     [bool] GetHasSeenTour() {
         return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
+    }
+
+    # Whether the update check follows the beta channel (prereleases), off by default.
+    [bool] GetBetaUpdates() {
+        return [AppConfig]::AsBool($this.GetSetting('betaUpdates', $null), $false)
     }
 
     # Verbose [DEBUG] logging, off by default (INFO, WARN and ERROR always flow).

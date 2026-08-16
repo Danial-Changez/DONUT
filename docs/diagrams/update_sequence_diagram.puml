@@ -35,9 +35,9 @@ alt No valid token
     note right of Service: DPAPI (CurrentUser) + ACL hardened
 end
 
-Presenter -> Service: GetLatestRelease(token)
+Presenter -> Service: GetLatestRelease(token, betaUpdates)
 activate Service
-Service -> GH: GET /repos/.../releases/latest
+Service -> GH: GET /repos/.../releases/latest\n(beta: /releases, first non-draft)
 GH --> Service: release JSON (tag, assets)
 Service --> Presenter: release
 deactivate Service
@@ -65,7 +65,7 @@ alt Update / rollback needed
     Service -> Worker: Start-Process powershell.exe (5.1) on a\nstaged COPY of InstallWorker.ps1 (the MSI\nreplaces the source tree mid-install)
     activate Worker
     Worker -> Worker: stop DONUT (graceful)
-    Worker -> Worker: msiexec /i NewVersion.msi\nREBOOT=ReallySuppress /passive /log (accept 0, 3010)
+    Worker -> Worker: msiexec /i NewVersion.msi INSTALLFOLDER=(registered)\nREBOOT=ReallySuppress /passive /log (accept 0, 3010)
     Worker -> Worker: relaunch Donut.Launcher.exe
     deactivate Worker
     deactivate Service
