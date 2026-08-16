@@ -37,6 +37,15 @@ no partials, so the pane fills in one step. See
   path — and the serve loop starts serving before the warm lands. `WarmLens` also
   runs a `-WarmOnly` pass on every interactive runspace, so the worker's class
   graph is parsed before the first pick instead of by it.
+- That warm decays while DONUT idles (the site server's IIS pool spins down, and
+  the process's pooled LDAP sockets die across sleep or a VPN change), so every 4
+  minutes the serve loop re-runs a throwaway affinity query and a GC read to keep
+  both routes hot for the next pick. Resume-from-sleep and network-change events
+  (hooked in `LensWarmTriggers.cs`, debounced 30s) drop a `warm.flag` in the
+  exchange dir, and the loop answers with the same ping immediately — so the exact
+  moments that kill pooled binds re-warm them, instead of waiting out the timer.
+  `Find-Gc` also retries once over a fresh RootDSE bind, so a pick that races the
+  ping still heals instead of erroring.
 - `PersonLensService` is the supervisor + client and stays **transport-only** — it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
@@ -58,8 +67,11 @@ no partials, so the pane fills in one step. See
 `Resolve-Lens` in `LensAgent.Common.ps1` is the data-access composition point — a
 future source (e.g. an Intune API) slots in beside the existing ones:
 
-1. The AD user read runs forest-wide via the Global Catalog, then a home-domain
-   bind for the full attribute set.
+1. The AD user read binds the picked row's `distinguishedName` directly — a
+   serverless DN bind the locator routes to the right domain over the trust, so
+   the exact account you clicked resolves even in a sibling forest, and a
+   multi-account person never lands on the wrong twin. The forest-wide GC search
+   (UPN / SAM / display name) stays as the fallback for DN-less callers.
 2. The SCCM affinity query (person → WSIDs, `SMS_UserMachineRelationship`) runs on
    a thread job in parallel with the AD read.
 3. A hardware-inventory pass (model/serial/manufacturer, keyed by the affinity
@@ -68,7 +80,15 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    pairs were the whole lookup's tail.
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
    computer's AD object, one thread job per device running beside the hardware
-   jobs, so the gather's tail is one device's cost rather than the sum.
+   jobs, so the gather's tail is one device's cost rather than the sum. A
+   computer the agent forest's GC cannot see is pinned by the affinity row's own
+   ResourceID: one keyed `SMS_R_System` read supplies the client heartbeat's
+   `SID` (bound as `LDAP://<domain>/<SID=...>`, so the pane shows the exact
+   machine SCCM asserted, and it outlives renames and OU moves, which is what
+   rots a discovery DN) and its `FullDomainName`, which then leads the fallback
+   sweep over the finder's configured domain list, the person's own domain next
+   — so a stale SID costs one bind, not the whole sweep. Both fields answered
+   and bound on the site this ships to (`tools/Probe-DeviceIdentity.ps1`).
 
 The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path —
@@ -87,9 +107,11 @@ Rules the AdminService imposes (each learned the hard way — see
   segment, and a device empty from both records `no inventory rows for ResourceID
   N` rather than a blank card.
 - Owner naming: `SMS_R_User.FullUserName` first (the site aggregates every forest),
-  the agent's own-forest GC as fallback, the SAM as last resort; names memoize per
-  batch, and the batched owner lookup is one request for all machines, served on a
-  thread job off the serve loop.
+  the agent's own-forest GC as fallback — accepted only when the hit's
+  `msDS-PrincipalName` equals the `DOMAIN\sam` SCCM handed over, so a same-SAM
+  twin in this forest never names a sibling-forest machine's owner — the SAM as
+  last resort; names memoize per batch, and the batched owner lookup is one
+  request for all machines, served on a thread job off the serve loop.
 - The software list (`Resolve-UserSoftware`, request kind `software`) walks the user
   direction: `SMS_R_User` names the ResourceIDs (endswith, exact tail client-side),
   `SMS_FullCollectionMembership` the collections (`ResourceID eq N`, with no keyed
@@ -98,8 +120,10 @@ Rules the AdminService imposes (each learned the hard way — see
   deployment (packages carry their program name, since no generic filter can sort
   them apart) — an or-filter over the collections would 404. It rides its own
   request, dispatched in parallel with the person lookup, so neither ever waits on
-  the other; the optional `lensSoftwareCollectionFilter` config regex narrows the
-  rows parent-side at render time, blank by default.
+  the other, and carries the same SAM and DN hints: a SAM-less pick binds the DN
+  for its SAM before any GC guess, exactly as the person read does; the optional
+  `lensSoftwareCollectionFilter` config regex narrows the rows parent-side at
+  render time, blank by default.
 - Every AdminService call carries a 15 s timeout and every searcher a 15 s
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.
@@ -119,14 +143,23 @@ agent/task I/O is the overridable `RunLookupJson` seam.
 Fixed `%ProgramData%\DONUT\lens-agent` dir:
 
 1. The parent drops `request-<id>.bin`.
-2. The agent answers `partial-<id>-1.bin` (directory facts), `partial-<id>-2.bin`
-   (name-only device rows), then `result-<id>.bin` (the filled detail) — so the UI
-   paints progressively.
+2. The agent answers `partial-<id>-N.bin` — cumulative bundle snapshots numbered in
+   completion order: directory facts and name-only device rows as each lane lands
+   (AD and SCCM affinity run beside each other, so neither gates the other), then
+   AD-detailed rows — and finally `result-<id>.bin` (the filled detail), so the UI
+   paints progressively and the slow hardware inventory only ever adds model/serial.
 3. Each side deletes what it consumed; the agent sweeps anything older than 10
    minutes.
 4. The parent counts consecutive lookup timeouts in `timeouts.txt` (no secrets,
    just a counter); a completed lookup deletes it, and at two `EnsureAgent`
    recycles the agent.
+5. Two extras ride the same dir: `warm.flag` (plain, dropped by the parent's
+   resume/network hooks, answered with an immediate keep-warm ping) and
+   `kind='toast'` requests — the two KEY job outcomes (apply failed, manual
+   reboot required) raised as Action Center toasts by the agent, because only
+   the interactive user's toasts reach the operator's shell. The parent skips
+   them entirely while the DONUT window is focused, so they never spam an
+   operator who is already watching the in-app toasts.
 
 ## Securing the exchange
 

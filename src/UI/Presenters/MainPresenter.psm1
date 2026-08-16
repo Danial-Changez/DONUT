@@ -95,8 +95,7 @@ class MainPresenter {
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.MainWindow = $this.Window
             }
-        }
-        catch {
+        } catch {
             $msg = "Failed to load XAML: $_"
             if ($_.Exception -and $_.Exception.InnerException) {
                 $msg += "`nInner Exception: $($_.Exception.InnerException.Message)"
@@ -111,14 +110,14 @@ class MainPresenter {
         }
 
         $this.Resources.ApplyResourcesToWindow($this.Window)
-        $this.Logger.LogDebug("MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
+        $this.Logger.LogDebug(
+            "MainWindow merged resource dictionaries: $($this.Window.Resources.MergedDictionaries.Count)")
         if ($this.Window.Resources.MergedDictionaries.Count -eq 0) {
             $this.Logger.LogWarning("No resources merged into MainWindow.")
         }
 
         $this.Controls = @{}
         $this.Controls['contentMain'] = $this.Window.FindName("contentMain")
-        $this.Controls['settingsContent'] = $this.Window.FindName("settingsContent")
         $this.Controls['settingsCard'] = $this.Window.FindName("settingsCard")
         $this.Controls['badgeLimited'] = $this.Window.FindName("badgeLimited")
         $this.ShowElevationBadge()
@@ -156,8 +155,7 @@ class MainPresenter {
         $max = { param($p)
             if ($presenter.Window.WindowState -eq 'Maximized') {
                 $presenter.Window.WindowState = 'Normal'
-            }
-            else { $presenter.Window.WindowState = 'Maximized' }
+            } else { $presenter.Window.WindowState = 'Maximized' }
         }.GetNewClosure()
         $this.MainVm.MaximizeCommand = [RelayCommand]::new([System.Action[object]]$max)
         $close = { param($p) $presenter.Window.Close() }.GetNewClosure()
@@ -219,8 +217,7 @@ class MainPresenter {
                     try {
                         [void]$global:LensTeardownJob.Handle.AsyncWaitHandle.WaitOne(
                             [TimeSpan]::FromSeconds(5))
-                    }
-                    catch { }
+                    } catch { }
                     try { $global:LensTeardownJob.Ps.Dispose() } catch { }
                     $global:LensTeardownJob = $null
                 }
@@ -262,8 +259,7 @@ class MainPresenter {
                         # The HWND now exists, so RegisterHotKey can bind to it.
                         $presenter.AttachHotkey($hwnd)
                     }
-                }
-                catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
+                } catch { $presenter.Logger.LogException("Maximize constraint hook failed", $_) }
             }.GetNewClosure())
 
         # Permanent diagnostic: logs UI-thread stalls over 1 s with GC-delta fingerprints.
@@ -321,14 +317,12 @@ class MainPresenter {
             }
             if ($this.Hotkey.Attach($this.Hwnd, $gesture.Modifiers, $gesture.VirtualKey)) {
                 $this.Logger.LogInfo("Global hotkey registered: $($gesture.Normalized)")
-            }
-            else {
+            } else {
                 $msg = "Hotkey $($gesture.Normalized) is already in use. Pick another in Settings."
                 $this.Logger.LogWarning("$msg (Win32 error $($this.Hotkey.LastError))")
                 if ($this.ToastService) { $this.ToastService.ShowError('Global Hotkey', $msg) }
             }
-        }
-        catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
+        } catch { $this.Logger.LogException("Global hotkey setup failed", $_) }
     }
 
     # (Re)builds the window-level Open-Settings shortcut from config. In-app only (a WPF
@@ -353,8 +347,7 @@ class MainPresenter {
             $kb = [System.Windows.Input.KeyBinding]::new($this.MainVm.ToggleSettingsCommand, $key, $mods)
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
-        }
-        catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+        } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
     }
 
     # Registers/unregisters the elevated startup task to match the setting. Runs on the
@@ -398,7 +391,8 @@ class MainPresenter {
         }
 
         if ($this.SpawnElevated()) { return }
-        $this.RevertRunAsAdmin()
+        # Put the setting back after the failed elevation so the switch matches reality.
+        $this.PersistRunAsAdmin($false)
     }
 
     # A gated action clicked without rights: confirm, record it, elevate, and let the new
@@ -431,13 +425,14 @@ class MainPresenter {
     # Spawns the elevated replacement and, on success, closes this instance so the new one
     # can take the mutex. $false means we are still running and still de-elevated.
     hidden [bool] SpawnElevated() {
-        $result = [ElevationRelaunch]::Spawn($this.BuildRelaunchSpec())
+        $result = [ElevationRelaunch]::Spawn([ElevationRelaunch]::BuildSpec($this.Config.SourceRoot))
         if (-not $result.Ok) {
             $this.ReportElevationFailure($result.Declined, $result.Reason)
             return $false
         }
         $this.ExitRequested = $true
-        $this.Logger.LogInfo('Relaunched elevated; this instance is exiting so the new one can take the single-instance mutex.')
+        $this.Logger.LogInfo('Relaunched elevated; ' +
+            'this instance is exiting so the new one can take the single-instance mutex.')
         $this.Window.Close()
         return $true
     }
@@ -469,16 +464,6 @@ class MainPresenter {
         $badge.Visibility = [System.Windows.Visibility]::Visible
     }
 
-    # Shared with the startup check in DonutApp.ps1, which has no presenter to ask.
-    hidden [hashtable] BuildRelaunchSpec() {
-        return [ElevationRelaunch]::BuildSpec($this.Config.SourceRoot)
-    }
-
-    # Puts the setting back after a failed elevation so the switch matches reality.
-    hidden [void] RevertRunAsAdmin() {
-        $this.PersistRunAsAdmin($false)
-    }
-
     hidden [void] PersistRunAsAdmin([bool]$value) {
         $this.Config.SetSetting('runAsAdmin', $value)
         try { $this.ConfigManager.SaveConfig($this.Config) }
@@ -508,7 +493,8 @@ class MainPresenter {
     [void] ApplyDebugLogging() {
         $effective = $this.Config.GetDebugLogging() -or [bool]$global:DebugLogStart
         $this.Logger.DebugEnabled = $effective
-        $this.Logger.LogInfo("Debug logging " + $(if ($effective) { 'enabled' } else { 'disabled' }) + " (settings toggle).")
+        $state = if ($effective) { 'enabled' } else { 'disabled' }
+        $this.Logger.LogInfo("Debug logging $state (settings toggle).")
     }
 
     # Runs a pool worker script (a .ps1 whose using-module class types resolve in the
@@ -530,8 +516,7 @@ class MainPresenter {
                 $this.PoolReapTimer.Add_Tick({ $presenter.ReapPoolJobs() }.GetNewClosure())
             }
             if (-not $this.PoolReapTimer.IsEnabled) { $this.PoolReapTimer.Start() }
-        }
-        catch { $this.Logger.LogException("Pool job start failed", $_) }
+        } catch { $this.Logger.LogException("Pool job start failed", $_) }
     }
 
     # Completes finished pool jobs, hands each result to its callback, and stops the
@@ -569,43 +554,34 @@ class MainPresenter {
     [object] LoadView([string]$fileName) {
         try {
             return [ViewLoader]::Load($this.Config.SourceRoot, "UI\Views\$fileName")
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to load view $fileName", $_)
         }
         return $null
     }
 
-    # Builds the settings view + presenter once, on first open, and hosts it in
-    # the overlay card. SettingsPresenter persists edits live (no Save button).
+    # Builds the settings presenter once, on first open. It composes the option views
+    # straight into the overlay card, and persists edits live (no Save button).
     hidden [void] EnsureSettingsView() {
-        if ($this.Views.ContainsKey('Settings') -and $this.Views['Settings']) { return }
+        if ($this.SettingsPresenter) { return }
 
-        $settingsView = $this.LoadView("SettingsView.xaml")
-        $this.Views['Settings'] = $settingsView
-        if ($settingsView) {
-            $presenter = $this
-            # These re-apply the bits that live outside the config file as each control changes.
-            $sideEffects = @{
-                Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
-                WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
-                # Ungated, this reached Register-ScheduledTask and died on access denied.
-                StartupTask    = {
-                    if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
-                        $presenter.ApplyStartupTask()
-                    }
-                }.GetNewClosure()
-                DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
-                RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
-            }
-            # The page segments sit in MainWindow's overlay header, not in the settings body.
-            $this.SettingsPresenter = [SettingsPresenter]::new(
-                $this.Config, $this.ConfigManager, $settingsView, $this.Window,
-                $this.ToastService, $sideEffects)
-            if ($this.Controls['settingsContent']) {
-                $this.Controls['settingsContent'].Content = $settingsView
-            }
+        $presenter = $this
+        # These re-apply the bits that live outside the config file as each control changes.
+        $sideEffects = @{
+            Hotkey         = { $presenter.ApplyHotkey() }.GetNewClosure()
+            WindowShortcut = { $presenter.ApplyWindowShortcuts() }.GetNewClosure()
+            # Ungated, this reached Register-ScheduledTask and died on access denied.
+            StartupTask    = {
+                if ($presenter.EnsureElevated([GatedAction]::StartupTask, @(), 'Starting DONUT with Windows')) {
+                    $presenter.ApplyStartupTask()
+                }
+            }.GetNewClosure()
+            DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
+            RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
         }
+        $this.SettingsPresenter = [SettingsPresenter]::new(
+            $this.Config, $this.ConfigManager, $this.Window,
+            $this.ToastService, $sideEffects)
     }
 
     # Home is the shell's only page, shown with a gentle fade-in.
@@ -616,7 +592,7 @@ class MainPresenter {
         $fade = [System.Windows.Media.Animation.DoubleAnimation]::new(
             0, 1, [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(180)))
         $content.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
-        if ($this.HomePresenter) { $this.HomePresenter.UpdateSearchButtonLabel() }
+        if ($this.HomePresenter) { $this.HomePresenter.UpdateModePill() }
     }
 
     # Opens the settings overlay, building the settings view lazily on first use. A
@@ -711,8 +687,7 @@ class MainPresenter {
             if ($this.ToastService) {
                 $this.ToastService.ShowInfo('Reset Password', 'Temporary password copied.')
             }
-        }
-        catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
     }
 
     hidden [void] OnShowPasswordQr() {
@@ -766,8 +741,7 @@ class MainPresenter {
             $flag = $(if ($vm.ChangeAtLogon) { ' Change required at next logon.' } else { '' })
             $this.ToastService.ShowSuccess('Reset Password',
                 "Password reset for $($vm.TargetSam).$flag")
-        }
-        else {
+        } else {
             $this.ToastService.ShowError('Reset Password',
                 "Could not reset $($vm.TargetSam). Open the log for details.")
         }
@@ -796,8 +770,7 @@ class MainPresenter {
             $img.EndInit()
             $img.Freeze()
             return $img
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("QR render failed", $_)
             return $null
         }
@@ -810,20 +783,17 @@ class MainPresenter {
                 if ($this.Watchdog) { $this.Watchdog.Reset() }
                 if ([System.Windows.Application]::Current) {
                     [System.Windows.Application]::Current.Run($this.Window)
-                }
-                else {
+                } else {
                     $this.Window.ShowDialog() | Out-Null
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Show failed", $_)
                 if ($_.Exception.InnerException) {
                     $this.Logger.LogError("Inner Exception: $($_.Exception.InnerException.Message)")
                 }
                 throw
             }
-        }
-        else {
+        } else {
             $this.Logger.LogError("MainWindow is null.")
         }
     }
@@ -843,8 +813,7 @@ class MainPresenter {
             if ([System.Windows.Application]::Current) {
                 [System.Windows.Application]::Current.Run()
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("ShowHidden failed", $_)
             throw
         }

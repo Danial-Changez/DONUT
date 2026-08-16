@@ -41,20 +41,22 @@ activate AG
 
 == Gather (as the regular user) ==
 AG ->> SCCM : affinity on a THREAD JOB at t=0 (the Sam hint):\nendswith(UniqueUserName,'<SAM>')\n(the /wmi route 404s richer filters)
-AG -> AD : GC-locate the user (forest-wide) -> bind home domain\n(parallel with the affinity job)
+AG ->> AD : GC-locate the user on a THREAD JOB -> bind home domain\n(beside the affinity job, neither lane gates the other)
 AD --> AG : UPN / SAM / email / manager / office
-AG -> AG : write partial-<id>-1.bin (directory facts)
 SCCM --> AG : ResourceName(s)  (exact-tail filtered)
-AG -> AG : write partial-<id>-2.bin (name-only device rows)
+AG -> AG : write partial-<id>-N.bin per lane as it lands\n(directory facts, name-only device rows, in completion order)
 loop each WSID
   AG -> AD : GC-locate the computer -> OS + lastLogonTimestamp\n+ msFVE-RecoveryInformation (BitLocker)
 end
+AG -> AG : write the next partial-<id>-N.bin (AD-detailed rows)
+AG ->> SCCM : hardware inventory per device (parallel thread jobs)
+SCCM --> AG : model / serial / manufacturer
 AG -> AG : write result-<id>.bin (AES, atomic)
 deactivate AG
 note over AG : stays alive for the next pick
 
 == Return + render ==
-PW -> P : partials (100ms poll): decrypt partial-<id>-N.bin ->\nInformation stream 'LensPartial' -> ApplyPartial\n(person info, then device names, while details load)
+PW -> P : partials (100ms poll): decrypt partial-<id>-N.bin ->\nInformation stream 'LensPartial' -> ApplyPartial\n(person info and device names as each lands, then AD details;\na locked read holds the index and retries next tick)
 PW -> PW : decrypt result-<id>.bin, delete this lookup's files
 PW --> P : JSON bundle
 deactivate PW
@@ -67,7 +69,7 @@ deactivate P
 
 == Act on a device ==
 OP -> VM : click "Add" on a device
-VM -> P : OnAddDeviceToList(wsid)
+VM -> P : OnAddDeviceToList(wsid, domain)
 activate P
 P -> P : EnsureRow + PrefetchIp + StartInventory + MoveRowToTop
 P -> OP : machine added to the list (toast); Lens stays open

@@ -47,8 +47,7 @@ class HostListSource {
                     ForEach-Object { if ($null -ne $_) { $_.Trim() } } |
                     Where-Object { $_ }
             )
-        }
-        catch {
+        } catch {
             Write-Warning "Failed to load WSID.txt: $_"
             return @()
         }

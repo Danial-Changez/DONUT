@@ -85,6 +85,7 @@
                     MinHeight="96">
                 <TextBox x:Name="Output"
                          Text="{Binding OutputText, Mode=OneWay}"
+                         Margin="10"
                          TextWrapping="Wrap"
                          TextAlignment="Center"
                          VerticalContentAlignment="Center"
@@ -112,8 +113,7 @@
                                Foreground="{DynamicResource AccentPurpleLight}"
                                TextDecorations="None">Create an account</Hyperlink>
                 </TextBlock>
-                <Button x:Name="btnGitHubAuth"
-                        Command="{Binding AuthCommand}"
+                <Button Command="{Binding AuthCommand}"
                         Content="Sign in with GitHub"
                         Style="{DynamicResource ButtonTintPrimary}"
                         FontSize="12.5"

@@ -27,8 +27,7 @@ namespace Donut.Launcher;
 /// A failure warns and defers to the next elevated launch, so an offline install
 /// still opens the app and setup finishes once the network returns.
 /// </summary>
-public static class Bootstrap
-{
+public static class Bootstrap {
     // Sysinternals forbids redistribution, so PsExec is downloaded, never bundled.
     const string PsToolsUrl = "https://download.sysinternals.com/files/PSTools.zip";
 
@@ -53,8 +52,7 @@ public static class Bootstrap
     /// shown. A hidden start is de-elevated by design, and a dialog at the sign-in
     /// screen is exactly what the autostart lane must never produce.
     /// </param>
-    public static void Run(Action<int, string> report, string appRoot, bool quiet = false)
-    {
+    public static void Run(Action<int, string> report, string appRoot, bool quiet = false) {
         var missing = new List<(string Name, Action Install)>();
         if (FindOnPath("psexec.exe") is null) missing.Add(("PsExec", InstallPsExec));
         if (FindOnPath("pwsh.exe") is null) missing.Add(("PowerShell 7", InstallPwsh));
@@ -65,8 +63,7 @@ public static class Bootstrap
         if (!File.Exists(wizTree)) missing.Add(("disk scan tool", () => InstallWizTree(wizTree)));
         if (missing.Count == 0) return;
 
-        if (!IsElevated())
-        {
+        if (!IsElevated()) {
             // Same funnel as the app-tree extraction: one elevated launch finishes setup.
             if (!quiet)
                 MessageBox.Show(
@@ -78,11 +75,9 @@ public static class Bootstrap
 
         var failures = new List<string>();
         int pct = 3;
-        foreach (var (name, install) in missing)
-        {
+        foreach (var (name, install) in missing) {
             report(pct += 2, $"Installing {name}");
-            try { install(); }
-            catch (Exception ex) { failures.Add($"{name}: {ex.Message}"); }
+            try { install(); } catch (Exception ex) { failures.Add($"{name}: {ex.Message}"); }
         }
         if (failures.Count > 0 && !quiet)
             MessageBox.Show(
@@ -93,11 +88,9 @@ public static class Bootstrap
 
     /// <summary>Resolves an executable through PATH, or null when absent.</summary>
     /// <param name="searchPath">Override for tests. Defaults to the process PATH.</param>
-    public static string? FindOnPath(string exeName, string? searchPath = null)
-    {
+    public static string? FindOnPath(string exeName, string? searchPath = null) {
         searchPath ??= Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (string dir in searchPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
+        foreach (string dir in searchPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
             // Quoted entries are legal in PATH, and File.Exists absorbs other junk.
             string candidate = Path.Combine(dir.Trim().Trim('"'), exeName);
             if (File.Exists(candidate)) return candidate;
@@ -106,11 +99,9 @@ public static class Bootstrap
     }
 
     /// <summary>Picks the win-x64 MSI download URL out of a GitHub release JSON document.</summary>
-    public static string? SelectPwshAsset(string releaseJson)
-    {
+    public static string? SelectPwshAsset(string releaseJson) {
         using var doc = JsonDocument.Parse(releaseJson);
-        foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
-        {
+        foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray()) {
             string? name = asset.GetProperty("name").GetString();
             if (name is not null &&
                 name.StartsWith("PowerShell-", StringComparison.OrdinalIgnoreCase) &&
@@ -120,8 +111,7 @@ public static class Bootstrap
         return null;
     }
 
-    static bool IsElevated()
-    {
+    static bool IsElevated() {
         using var identity = WindowsIdentity.GetCurrent();
         return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
     }
@@ -131,10 +121,8 @@ public static class Bootstrap
         Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules", "ActiveDirectory"));
 
     // Client-SKU capability name, as Server SKUs want Install-WindowsFeature.
-    static void InstallRsatAd()
-    {
-        using var p = Process.Start(new ProcessStartInfo
-        {
+    static void InstallRsatAd() {
+        using var p = Process.Start(new ProcessStartInfo {
             FileName = "dism.exe",
             Arguments = "/Online /Add-Capability " +
                 "/CapabilityName:Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0 " +
@@ -149,11 +137,9 @@ public static class Bootstrap
     }
 
     // System32 because it is already on the PATH that bare 'psexec.exe' resolves against.
-    static void InstallPsExec()
-    {
+    static void InstallPsExec() {
         string tmpDir = Directory.CreateTempSubdirectory("donut-pstools").FullName;
-        try
-        {
+        try {
             string zip = Path.Combine(tmpDir, "PSTools.zip");
             Download(PsToolsUrl, zip);
             string exe = Path.Combine(tmpDir, "PsExec.exe");
@@ -164,9 +150,7 @@ public static class Bootstrap
             // Trust boundary: never place an unverified download into System32.
             VerifySignature(exe, "O=Microsoft Corporation");
             File.Copy(exe, Path.Combine(Environment.SystemDirectory, "psexec.exe"));
-        }
-        finally
-        {
+        } finally {
             try { Directory.Delete(tmpDir, true); } catch { /* best effort */ }
         }
     }
@@ -176,19 +160,16 @@ public static class Bootstrap
         Path.Combine(appRoot, "src", "Tools", "wiztree64.exe");
 
     /// <summary>Picks the portable zip URL out of the WizTree download page.</summary>
-    public static string? SelectWizTreeAsset(string pageHtml)
-    {
+    public static string? SelectWizTreeAsset(string pageHtml) {
         var m = System.Text.RegularExpressions.Regex.Match(
             pageHtml, @"files/wiztree_\d+_\d+(?:_\d+)?_portable\.zip");
         return m.Success ? "https://diskanalyzer.com/" + m.Value : null;
     }
 
     // Only the scanner binary is kept, as the headless export needs no locale files.
-    static void InstallWizTree(string destPath)
-    {
+    static void InstallWizTree(string destPath) {
         string tmpDir = Directory.CreateTempSubdirectory("donut-wiztree").FullName;
-        try
-        {
+        try {
             string url = SelectWizTreeAsset(DownloadString(WizTreeDownloadPage))
                 ?? throw new InvalidDataException("No portable zip link on the WizTree page.");
             string zip = Path.Combine(tmpDir, "wiztree.zip");
@@ -201,27 +182,22 @@ public static class Bootstrap
             VerifySignature(exe, "O=Antibody Software Limited");
             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
             File.Copy(exe, destPath, true);
-        }
-        finally
-        {
+        } finally {
             try { Directory.Delete(tmpDir, true); } catch { /* best effort */ }
         }
     }
 
     // Patches this process's PATH too: the MSI's only reaches processes started later.
-    static void InstallPwsh()
-    {
+    static void InstallPwsh() {
         string tmpDir = Directory.CreateTempSubdirectory("donut-pwsh").FullName;
-        try
-        {
+        try {
             string url = SelectPwshAsset(DownloadString(PwshReleaseApi))
                 ?? throw new InvalidDataException("No win-x64 MSI in the latest PowerShell release.");
             string msi = Path.Combine(tmpDir, "PowerShell-win-x64.msi");
             Download(url, msi);
             VerifySignature(msi, "O=Microsoft Corporation");
 
-            using var p = Process.Start(new ProcessStartInfo
-            {
+            using var p = Process.Start(new ProcessStartInfo {
                 FileName = "msiexec.exe",
                 Arguments = $"/i \"{msi}\" /passive /norestart",
                 UseShellExecute = false,
@@ -235,15 +211,12 @@ public static class Bootstrap
             if (Directory.Exists(pwshDir) && FindOnPath("pwsh.exe") is null)
                 Environment.SetEnvironmentVariable("PATH",
                     Environment.GetEnvironmentVariable("PATH") + Path.PathSeparator + pwshDir);
-        }
-        finally
-        {
+        } finally {
             try { Directory.Delete(tmpDir, true); } catch { /* best effort */ }
         }
     }
 
-    static void Download(string url, string destPath)
-    {
+    static void Download(string url, string destPath) {
         using var http = NewHttpClient();
         using var response = http.GetAsync(url).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
@@ -251,14 +224,12 @@ public static class Bootstrap
         response.Content.CopyToAsync(fs).GetAwaiter().GetResult();
     }
 
-    static string DownloadString(string url)
-    {
+    static string DownloadString(string url) {
         using var http = NewHttpClient();
         return http.GetStringAsync(url).GetAwaiter().GetResult();
     }
 
-    static HttpClient NewHttpClient()
-    {
+    static HttpClient NewHttpClient() {
         var http = new HttpClient();
         // GitHub's API rejects requests without a User-Agent.
         http.DefaultRequestHeaders.UserAgent.ParseAdd("DONUT-Setup");
@@ -266,8 +237,7 @@ public static class Bootstrap
     }
 
     // Every download here runs elevated later, so a spoofed one has to fail here.
-    static void VerifySignature(string file, string expectedSigner)
-    {
+    static void VerifySignature(string file, string expectedSigner) {
         using var ps = PowerShell.Create();
         ps.AddCommand("Get-AuthenticodeSignature").AddParameter("FilePath", file);
         var sig = ps.Invoke<Signature>().FirstOrDefault()

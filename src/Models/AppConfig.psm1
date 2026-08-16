@@ -98,12 +98,10 @@ class AppConfig {
                     if (-not $merged['commands'].ContainsKey($cmd)) {
                         if ($userCmd -is [hashtable]) {
                             $merged['commands'][$cmd] = [AppConfig]::DeepClone($userCmd)
-                        }
-                        else {
+                        } else {
                             $merged['commands'][$cmd] = $userCmd
                         }
-                    }
-                    elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
+                    } elseif ($userCmd -is [hashtable] -and $userCmd.ContainsKey('args') -and
                         $userCmd['args'] -is [hashtable]) {
                         # Snapshot the keys: never enumerate a collection being written to.
                         foreach ($argKey in @($userCmd['args'].Keys)) {
@@ -111,8 +109,7 @@ class AppConfig {
                         }
                     }
                 }
-            }
-            else {
+            } else {
                 $merged[$key] = $userSettings[$key]
             }
         }
@@ -138,8 +135,7 @@ class AppConfig {
             $v = $source[$k]
             if ($v -is [hashtable]) {
                 $copy[$k] = [AppConfig]::DeepCloneCore($v, $seen)
-            }
-            else {
+            } else {
                 $copy[$k] = $v
             }
         }
@@ -193,25 +189,16 @@ class AppConfig {
 
     # SCCM AdminService host for the Lens device lookup. Empty until discovery persists it.
     [string] GetAdminServiceHost() {
-        $val = [string]$this.GetSetting('adminServiceHost', $null)
-        if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
-        return ''
+        return [AppConfig]::AsTrimmed($this.GetSetting('adminServiceHost', $null))
     }
 
     # Optional regex narrowing the Lens software list by collection name. Blank shows all.
     [string] GetLensSoftwareCollectionFilter() {
-        $val = [string]$this.GetSetting('lensSoftwareCollectionFilter', $null)
-        if ([string]::IsNullOrWhiteSpace($val)) { return '' }
-        return $val.Trim()
+        return [AppConfig]::AsTrimmed($this.GetSetting('lensSoftwareCollectionFilter', $null))
     }
 
     [int] GetThrottleLimit() {
-        if ($null -ne $this.Settings -and $this.Settings.ContainsKey('throttleLimit')) {
-            $val = $this.Settings['throttleLimit']
-            if ($val -is [int]) { return $val }
-            if ($val -is [string] -and $val -match '^\d+$') { return [int]$val }
-        }
-        return 8
+        return [AppConfig]::AsInt($this.GetSetting('throttleLimit', $null), 8)
     }
 
     [void] SetThrottleLimit([int]$limit) {
@@ -219,12 +206,7 @@ class AppConfig {
     }
 
     [int] GetFolderScanCount() {
-        if ($null -ne $this.Settings -and $this.Settings.ContainsKey('folderScanCount')) {
-            $val = $this.Settings['folderScanCount']
-            if ($val -is [int]) { return $val }
-            if ($val -is [string] -and $val -match '^\d+$') { return [int]$val }
-        }
-        return 12
+        return [AppConfig]::AsInt($this.GetSetting('folderScanCount', $null), 12)
     }
 
     [void] SetFolderScanCount([int]$count) {
@@ -234,14 +216,7 @@ class AppConfig {
     # Minutes a dropped run keeps reconnecting + resuming before settling Unconfirmed.
     # Clamped to >= 1 so a bad/zero config can't disable recovery outright.
     [int] GetRecoveryWindowMinutes() {
-        $val = 30
-        if ($null -ne $this.Settings -and $this.Settings.ContainsKey('recoveryWindowMinutes')) {
-            $raw = $this.Settings['recoveryWindowMinutes']
-            if ($raw -is [int]) { $val = $raw }
-            elseif ($raw -is [string] -and $raw -match '^\d+$') { $val = [int]$raw }
-        }
-        if ($val -lt 1) { return 1 }
-        return $val
+        return [Math]::Max([AppConfig]::AsInt($this.GetSetting('recoveryWindowMinutes', $null), 30), 1)
     }
 
     # Start DONUT elevated at logon via a scheduled task. Tolerates JSON's string
@@ -294,6 +269,21 @@ class AppConfig {
         return $default
     }
 
+    # Coerces a config value to int: a real [int] as-is, a digit string by parse,
+    # everything else to the default.
+    hidden static [int] AsInt([object]$value, [int]$default) {
+        if ($value -is [int]) { return $value }
+        if ($value -is [string] -and $value -match '^\d+$') { return [int]$value }
+        return $default
+    }
+
+    # Coerces a config value to a trimmed string, with null or whitespace collapsing to ''.
+    hidden static [string] AsTrimmed([object]$value) {
+        $s = [string]$value
+        if ([string]::IsNullOrWhiteSpace($s)) { return '' }
+        return $s.Trim()
+    }
+
     # Builds the dcu-cli argument string. DCU's format is -option=value, not /option.
     [string] BuildDcuArgs([string]$command, [hashtable]$overrides) {
         $cmdArgs = $this.GetCommandArgs($command)
@@ -318,20 +308,17 @@ class AppConfig {
                     # Some flags are just present (like -silent), others need =enable
                     if ($key -in @('silent')) {
                         $argList.Add("-$key") | Out-Null
-                    }
-                    else {
+                    } else {
                         $argList.Add("-$key=enable") | Out-Null
                     }
                 }
                 # $false means the flag is simply omitted.
-            }
-            elseif ($val -is [string]) {
+            } elseif ($val -is [string]) {
                 # Double quotes close the remote -c wrapper, a bare comma is the array operator.
                 if ($val -match '[\s,]') {
                     $escaped = $val -replace "'", "''"
                     $argList.Add("-$key='$escaped'") | Out-Null
-                }
-                else {
+                } else {
                     $argList.Add("-$key=$val") | Out-Null
                 }
             }

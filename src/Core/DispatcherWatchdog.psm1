@@ -13,8 +13,9 @@ using module ".\LogService.psm1"
     Pairs with the worker-side timing in WorkerServices.RunDiskScanPhase.
 
 .NOTES
-    Diagnostic only; remove once the freeze is pinned. It catches stalls that recover; a
-    permanent hang stops the timer, so the worker-side start/done logs cover that case.
+    A permanent live diagnostic, shipped in production builds. It catches stalls that
+    recover. A hang that never recovers stops the timer itself, so the worker-side
+    start/done logs cover that case.
 
     DispatcherTimer ticks only fire while a message pump runs, so the span before the
     first pump (or between two pumps, e.g. login dialog close -> Application.Run) would

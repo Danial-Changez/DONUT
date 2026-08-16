@@ -76,8 +76,7 @@ class ActiveDirectoryService {
                         $results.Add($item)
                     }
                 }
-            }
-            catch {
+            } catch {
                 # Recorded as well as logged: the usual caller has a null logger. See .NOTES.
                 $this.LastErrors += "${domain}: $($_.Exception.Message)"
                 $this.Logger.LogWarning("AD search in '$domain' failed: $($_.Exception.Message)")
@@ -96,8 +95,7 @@ class ActiveDirectoryService {
             $this.InvokeUnlock($user.SamAccountName, $user.Domain)
             $this.Logger.LogInfo("Unlocked AD account $($user.SamAccountName) in $($user.Domain).")
             return $true
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to unlock $($user.SamAccountName) in $($user.Domain)", $_)
             return $false
         }
@@ -117,8 +115,7 @@ class ActiveDirectoryService {
             $this.Logger.LogInfo(("Reset password for {0} in {1} (change at logon: {2})." -f
                     $user.SamAccountName, $user.Domain, $changeAtLogon))
             return $true
-        }
-        catch {
+        } catch {
             $this.Logger.LogException(
                 "Failed to reset password for $($user.SamAccountName) in $($user.Domain)", $_)
             return $false
@@ -174,11 +171,9 @@ class ActiveDirectoryService {
                     }
                     $rows.Add($h)
                 }
-            }
-            finally { $found.Dispose() }
+            } finally { $found.Dispose() }
             return $rows.ToArray()
-        }
-        finally {
+        } finally {
             $searcher.Dispose()
             $entry.Dispose()
         }
@@ -192,9 +187,14 @@ class ActiveDirectoryService {
     # Resets via the AD module against the user's home domain (one-shot).
     hidden [void] InvokeReset([string]$sam, [string]$domain,
         [securestring]$newPassword, [bool]$changeAtLogon) {
-        Set-ADAccountPassword -Identity $sam -Server $domain -Reset `
-            -NewPassword $newPassword -ErrorAction Stop
-        Set-ADUser -Identity $sam -Server $domain -ChangePasswordAtLogon $changeAtLogon `
-            -ErrorAction Stop
+        Set-ADAccountPassword -Identity $sam `
+                              -Server $domain `
+                              -Reset `
+                              -NewPassword $newPassword `
+                              -ErrorAction Stop
+        Set-ADUser -Identity $sam `
+                   -Server $domain `
+                   -ChangePasswordAtLogon $changeAtLogon `
+                   -ErrorAction Stop
     }
 }

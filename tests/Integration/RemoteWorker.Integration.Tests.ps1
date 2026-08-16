@@ -15,7 +15,9 @@ Describe "RemoteWorker legacy entry (failure contract)" {
         $script:testRoot = Join-Path $env:TEMP "DonutRemoteWorkerLegacy_$stamp"
         $script:logsDir = Join-Path $script:testRoot 'logs'
         $script:reportsDir = Join-Path $script:testRoot 'reports'
-        New-Item -Path $script:logsDir, $script:reportsDir -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:logsDir, $script:reportsDir `
+                 -ItemType Directory `
+                 -Force | Out-Null
 
         $script:scriptPath = (Resolve-Path (
                 Join-Path $PSScriptRoot '..\..\src\Scripts\RemoteWorker.ps1')).Path
@@ -23,7 +25,10 @@ Describe "RemoteWorker legacy entry (failure contract)" {
     }
 
     AfterAll {
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $script:testRoot `
+                    -Recurse `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     It "fails a doomed job with exit 1 and one parseable 'Worker failed:' stderr line" {

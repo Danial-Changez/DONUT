@@ -49,15 +49,6 @@ Describe "Runspace warm coverage" {
             "a runspace whose first worker execution lands on a real job wedges it silently")
     }
 
-    It "the barrier never runs a superset graph warm" {
-        # 8 concurrent superset warms contend the loader locks and blew the barrier. See header.
-        Test-Path (Join-Path $ScriptsDir 'Warm-Runspace.ps1') | Should -BeFalse -Because (
-            "the superset warm script was removed; AD/Lens graphs warm via the " +
-            "deferred finder warms, never behind the startup barrier")
-        (Get-Content $Coordinator -Raw) | Should -Not -Match 'Warm-Runspace' -Because (
-            "WarmPool must submit the worker pass, not a graph superset")
-    }
-
     It "nothing unproven goes back under the barrier" {
         # Three re-introductions, each of which shipped once and hung startup:
         # - a socket probe in the scan-path warm, which wedges below any PowerShell timeout

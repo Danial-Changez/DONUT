@@ -45,8 +45,13 @@ Write-Host "Publishing Donut.Launcher..." -ForegroundColor Cyan
 # Explicit -o: a recursive search could pick up a stale publish from an earlier build.
 $publish = Join-Path $repo 'installer\obj\publish'
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
-dotnet publish (Join-Path $repo 'src\Launcher\Donut.Launcher.csproj') -c Release -v quiet -nologo `
-    -r win-x64 --self-contained true -o $publish
+dotnet publish (Join-Path $repo 'src\Launcher\Donut.Launcher.csproj') `
+       -c Release `
+       -v quiet `
+       -nologo `
+       -r win-x64 `
+       --self-contained true `
+       -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
 $stage = Join-Path $repo 'installer\obj\stage'
@@ -62,8 +67,12 @@ if (Test-Path (Join-Path $repo 'installer\bin')) {
 
 Write-Host "Building the MSI..." -ForegroundColor Cyan
 # Quoted as one token: an unquoted -p value truncates at the first space in the path.
-$buildOutput = dotnet build (Join-Path $repo 'installer\Donut.Installer.wixproj') -c Release -v quiet -nologo `
-    "-p:DonutVersion=$Version" "-p:StageDir=$stage" 2>&1
+$buildOutput = dotnet build (Join-Path $repo 'installer\Donut.Installer.wixproj') `
+                      -c Release `
+                      -v quiet `
+                      -nologo `
+                      "-p:DonutVersion=$Version" `
+                      "-p:StageDir=$stage" 2>&1
 $buildOutput | Write-Output
 if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE." }
 # Policy can make WiX silently skip ICE validation, shipping an unvalidated MSI.
@@ -79,39 +88,43 @@ $msi = Get-ChildItem (Join-Path $repo 'installer\bin') -Recurse -Filter 'DONUT.m
 # --- Signing ---
 $cert = if (-not $SkipSigning) {
     Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
-        Where-Object Subject -eq 'CN=Danial Changez' |
+        Where-Object Subject -EQ 'CN=Danial Changez' |
         Sort-Object NotAfter -Descending | Select-Object -First 1
 }
 if ($cert) {
-    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse `
-        -Filter signtool.exe -ErrorAction SilentlyContinue |
-        Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+                              -Recurse `
+                              -Filter signtool.exe `
+                              -ErrorAction SilentlyContinue |
+        Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
     if (-not $signtool) {
         $toolDir = Join-Path $repo 'tools\.cache\signtool'
-        $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-            Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+        $signtool = Get-ChildItem $toolDir `
+                                  -Recurse `
+                                  -Filter signtool.exe `
+                                  -ErrorAction SilentlyContinue |
+            Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
         if (-not $signtool) {
             Write-Host 'Fetching signtool (first run only)...' -ForegroundColor Cyan
             $nupkg = Join-Path $env:TEMP 'sdk-buildtools.nupkg.zip'
             Invoke-WebRequest 'https://www.nuget.org/api/v2/package/Microsoft.Windows.SDK.BuildTools' `
-                -OutFile $nupkg
+                              -OutFile $nupkg
             Expand-Archive $nupkg -DestinationPath $toolDir -Force
             Remove-Item $nupkg
             $signtool = Get-ChildItem $toolDir -Recurse -Filter signtool.exe |
-                Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+                Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
         }
     }
     Write-Host "Signing as $($cert.Subject) ($($cert.Thumbprint))..." -ForegroundColor Cyan
     # Timestamp so the signature outlives the certificate, retrying bare when the TSA is down.
     & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /td SHA256 `
-        /tr 'http://timestamp.digicert.com' $msi.FullName
+                         /tr 'http://timestamp.digicert.com' $msi.FullName
     if ($LASTEXITCODE -ne 0) {
         Write-Warning 'Timestamped signing failed (TSA unreachable?); signing without a timestamp.'
         & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 $msi.FullName
         if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE." }
     }
-}
-else {
+} else {
     Write-Host 'No signing certificate provisioned - building unsigned (expected until one is sanctioned).'
 }
 

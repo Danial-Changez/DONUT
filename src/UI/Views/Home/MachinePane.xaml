@@ -40,7 +40,7 @@
                ItemContainerStyle="{DynamicResource MachineListItem}">
         <ListBox.ItemTemplate>
           <DataTemplate>
-            <Border x:Name="rowBorder" Margin="0,0,0,8" CornerRadius="10"
+            <Border Margin="0,0,0,8" CornerRadius="10"
                     Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
               <Border.Style>
                 <Style TargetType="Border">
@@ -149,6 +149,16 @@
         Margin="24"
         IsHitTestVisible="False"
       >
+        <StackPanel.Style>
+          <Style TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding Machines.Count}" Value="0">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </StackPanel.Style>
         <TextBlock Text="No machines yet"
                    Foreground="{DynamicResource TitleTextSecondary}"
                    FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="SemiBold"

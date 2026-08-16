@@ -10,7 +10,8 @@ using module '.\LogService.psm1'
     limit) is what AsyncJob borrows from; the interactive pool is a small fixed
     lane for in-process scripts that a user is waiting on. Pre-warming every
     runspace at startup keeps the CLR module-loader lock off the hot path so
-    concurrent jobs never block the UI. Optionally logs lifecycle events.
+    concurrent jobs never block the UI. Lifecycle events go to the static Logger,
+    a no-op until DonutApp assigns the real one.
 
 .NOTES
     The pools are separate because they starve each other otherwise: every worker
@@ -28,21 +29,11 @@ using module '.\LogService.psm1'
 class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $RunspacePool
     static [System.Management.Automation.Runspaces.RunspacePool] $InteractivePool
-    static [LogService] $Logger = $null
+    # Static like the pools it logs for. The no-op default means no null checks anywhere.
+    static [LogService] $Logger = [NullLogService]::new()
 
     # Fixed, not throttle-derived: four so a whole AD fan-out dispatches at once. See .NOTES.
     static [int] $InteractiveSize = 4
-
-    # Static like the pool it logs for. When unset, logging is silently skipped.
-    static [void] SetLogger([LogService]$logger) {
-        [RunspaceManager]::Logger = $logger
-    }
-
-    hidden static [void] Log([string]$level, [string]$message) {
-        if ($null -ne [RunspaceManager]::Logger) {
-            [RunspaceManager]::Logger.WriteLog($level, $message)
-        }
-    }
 
     # Lazy-init fallback when nothing configured the pool first. min = max because idle
     # cleanup only disposes above the minimum, so a lower floor lets warm runspaces die.
@@ -52,31 +43,33 @@ class RunspaceManager {
 
     static [void] Initialize([int]$MinRunspaces, [int]$MaxRunspaces) {
         $interactive = [RunspaceManager]::InteractiveSize
+        $factory = [System.Management.Automation.Runspaces.RunspaceFactory]
         if (-not [RunspaceManager]::RunspacePool) {
             try {
                 # Pool dispatch runs on ThreadPool threads, so raise the floor before opening.
                 $floor = [Math]::Max(16, ($MaxRunspaces + $interactive) * 2)
                 [void][System.Threading.ThreadPool]::SetMinThreads($floor, $floor)
-                [RunspaceManager]::Log("INFO", "ThreadPool min threads raised to $floor (worker+IOCP) so pool dispatch never starves.")
-                [RunspaceManager]::RunspacePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($MinRunspaces, $MaxRunspaces)
+                [RunspaceManager]::Logger.WriteLog("INFO",
+                    "ThreadPool min threads raised to $floor (worker+IOCP) so pool dispatch never starves.")
+                [RunspaceManager]::RunspacePool = $factory::CreateRunspacePool($MinRunspaces, $MaxRunspaces)
                 [RunspaceManager]::RunspacePool.Open()
-                [RunspaceManager]::Log("INFO", "Runspace pool opened (min=$MinRunspaces, max=$MaxRunspaces).")
-            }
-            catch {
-                [RunspaceManager]::Log("ERROR", "Failed to open runspace pool: $($_.Exception.Message)")
+                [RunspaceManager]::Logger.WriteLog("INFO",
+                    "Runspace pool opened (min=$MinRunspaces, max=$MaxRunspaces).")
+            } catch {
+                [RunspaceManager]::Logger.WriteLog("ERROR", "Failed to open runspace pool: $($_.Exception.Message)")
                 throw
             }
         }
         if (-not [RunspaceManager]::InteractivePool) {
             try {
                 # min = max here too, so warmed interactive runspaces never die and cold-load.
-                [RunspaceManager]::InteractivePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($interactive, $interactive)
+                [RunspaceManager]::InteractivePool = $factory::CreateRunspacePool($interactive, $interactive)
                 [RunspaceManager]::InteractivePool.Open()
-                [RunspaceManager]::Log("INFO", "Interactive runspace pool opened (min=max=$interactive).")
-            }
-            catch {
+                [RunspaceManager]::Logger.WriteLog("INFO", "Interactive runspace pool opened (min=max=$interactive).")
+            } catch {
                 # Non-fatal: GetInteractivePool falls back to the worker pool, degraded but alive.
-                [RunspaceManager]::Log("ERROR", "Failed to open the interactive runspace pool; interactive lookups will share the worker pool: $($_.Exception.Message)")
+                [RunspaceManager]::Logger.WriteLog("ERROR", "Failed to open the interactive runspace pool; " +
+                    "interactive lookups will share the worker pool: $($_.Exception.Message)")
             }
         }
     }
@@ -105,12 +98,11 @@ class RunspaceManager {
             try {
                 [RunspaceManager]::InteractivePool.Close()
                 [RunspaceManager]::InteractivePool.Dispose()
-                [RunspaceManager]::Log("INFO", "Interactive runspace pool closed.")
-            }
-            catch {
-                [RunspaceManager]::Log("WARN", "Error while closing the interactive runspace pool: $($_.Exception.Message)")
-            }
-            finally {
+                [RunspaceManager]::Logger.WriteLog("INFO", "Interactive runspace pool closed.")
+            } catch {
+                [RunspaceManager]::Logger.WriteLog("WARN",
+                    "Error while closing the interactive runspace pool: $($_.Exception.Message)")
+            } finally {
                 [RunspaceManager]::InteractivePool = $null
             }
         }
@@ -118,12 +110,10 @@ class RunspaceManager {
             try {
                 [RunspaceManager]::RunspacePool.Close()
                 [RunspaceManager]::RunspacePool.Dispose()
-                [RunspaceManager]::Log("INFO", "Runspace pool closed.")
-            }
-            catch {
-                [RunspaceManager]::Log("WARN", "Error while closing runspace pool: $($_.Exception.Message)")
-            }
-            finally {
+                [RunspaceManager]::Logger.WriteLog("INFO", "Runspace pool closed.")
+            } catch {
+                [RunspaceManager]::Logger.WriteLog("WARN", "Error while closing runspace pool: $($_.Exception.Message)")
+            } finally {
                 [RunspaceManager]::RunspacePool = $null
             }
         }

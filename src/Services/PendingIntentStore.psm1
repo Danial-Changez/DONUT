@@ -33,8 +33,7 @@ class PendingIntentStore {
         if ($null -eq $intent) { return }
         try {
             $this.WriteText($this.IntentPath(), $intent.ToJson())
-        }
-        catch {
+        } catch {
             # Losing the note costs a re-click after elevating, never correctness.
             $this.Logger.LogWarning("Could not record the pending action: $($_.Exception.Message)")
         }
@@ -61,7 +60,8 @@ class PendingIntentStore {
             return $null
         }
         if (-not $intent.IsResumable()) {
-            $this.Logger.LogInfo("A pending $($intent.Action) action is not resumed automatically; re-run it from the pane.")
+            $this.Logger.LogInfo(
+                "A pending $($intent.Action) action is not resumed automatically; re-run it from the pane.")
             return $null
         }
         return $intent
@@ -75,12 +75,23 @@ class PendingIntentStore {
     # --- Filesystem seams (overridden by the test fake) ---
 
     hidden [bool] FileExists([string]$path) { return (Test-Path -LiteralPath $path) }
-    hidden [string] ReadText([string]$path) { return (Get-Content -LiteralPath $path -Raw -ErrorAction Stop) }
+    hidden [string] ReadText([string]$path) {
+        return (Get-Content -LiteralPath $path `
+                            -Raw `
+                            -ErrorAction Stop)
+    }
 
     hidden [void] WriteText([string]$path, [string]$text) {
         $dir = Split-Path -Parent $path
-        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        Set-Content -LiteralPath $path -Value $text -Encoding UTF8 -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory `
+                     -Path $dir `
+                     -Force | Out-Null
+        }
+        Set-Content -LiteralPath $path `
+                    -Value $text `
+                    -Encoding UTF8 `
+                    -ErrorAction Stop
     }
 
     hidden [void] DeleteFile([string]$path) {

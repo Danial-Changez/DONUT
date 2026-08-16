@@ -25,17 +25,6 @@ class AdSearchResult {
     [string] Key() {
         return ($this.Kind + '|' + $this.Domain + '\' + $this.SamAccountName).ToLowerInvariant()
     }
-
-    # Best label for the dropdown: UPN for users (fallback sam), name for computers.
-    [string] Label() {
-        if ($this.Kind -eq 'User') {
-            if (-not [string]::IsNullOrWhiteSpace($this.UserPrincipalName)) {
-                return $this.UserPrincipalName
-            }
-            return $this.SamAccountName
-        }
-        return $this.Name
-    }
 }
 
 <#
@@ -113,7 +102,8 @@ class AdFilter {
     # explicit rather than via ANR, which would also drag in office and proxyAddresses.
     static [string] UserFilter([string]$prefix) {
         $p = [AdFilter]::EscapeLdap($prefix)
-        return "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)(sn=$p*)))"
+        return "(&(objectCategory=person)(objectClass=user)" +
+        "(|(sAMAccountName=$p*)(cn=$p*)(displayName=$p*)(userPrincipalName=$p*)(sn=$p*)))"
     }
 
     # Computers: match the prefix against name / sam (escaped).

@@ -47,8 +47,7 @@ class RecentConnectionsStore {
         try {
             $raw = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
             $this.Data = @($raw | Where-Object { $_ -is [hashtable] })
-        }
-        catch {
+        } catch {
             $this.Logger.LogWarning(
                 "Could not read recents file '$path' - starting empty: $($_.Exception.Message)")
         }
@@ -78,8 +77,7 @@ class RecentConnectionsStore {
                 ConvertTo-Json -InputObject $imported -Depth 5 |
                     Set-Content -LiteralPath $path -Encoding UTF8
                 $log.LogInfo("Moved $($imported.Count) recent host(s) from config.json to '$path'.")
-            }
-            catch {
+            } catch {
                 $log.LogException("Recents migration could not write '$path'", $_)
                 return
             }
@@ -272,8 +270,7 @@ class RecentConnectionsStore {
             # -InputObject keeps an empty/one-entry list serialized as a JSON array.
             ConvertTo-Json -InputObject $this.Data -Depth 5 |
                 Set-Content -LiteralPath $this.Path -Encoding UTF8
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Could not write recents file '$($this.Path)'", $_)
         }
     }

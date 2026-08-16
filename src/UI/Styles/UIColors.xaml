@@ -81,18 +81,11 @@
     <Color x:Key="PanelBorderColor"> #1AFFFFFF</Color>
     <SolidColorBrush x:Key="PanelBorder"
                      Color="{StaticResource PanelBorderColor}" />
-    <!-- Misc Colors -->
-    <Color x:Key="GroupBoxBackgroundColor"> #14FFFFFF</Color>
-    <SolidColorBrush x:Key="GroupBoxBackground"
-                     Color="{StaticResource GroupBoxBackgroundColor}" />
     <!-- Arcane shadcn tokens, oklch converted to sRGB, consumed by ButtonStyles.xaml. -->
-    <!-- primary oklch(0.541 0.281 293.009), hover is that at 90 percent over the base -->
+    <!-- primary oklch(0.541 0.281 293.009) -->
     <Color x:Key="PrimaryColor"> #8022FE</Color>
     <SolidColorBrush x:Key="Primary"
                      Color="{StaticResource PrimaryColor}" />
-    <Color x:Key="PrimaryHoverColor"> #7420E6</Color>
-    <SolidColorBrush x:Key="PrimaryHover"
-                     Color="{StaticResource PrimaryHoverColor}" />
     <!-- primary-foreground oklch(0.969 0.016 293.756) -->
     <Color x:Key="PrimaryForegroundColor"> #F3EDFE</Color>
     <SolidColorBrush x:Key="PrimaryForeground"

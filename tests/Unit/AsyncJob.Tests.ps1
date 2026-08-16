@@ -8,11 +8,12 @@ using module "..\Helpers\CapturingLogService.psm1"
 Describe "AsyncJob" {
 
     BeforeAll {
-        $script:testScriptDir = Join-Path $env:TEMP "DonutAsyncJobTests"
-        if (-not (Test-Path $script:testScriptDir)) {
-            New-Item -Path $script:testScriptDir -ItemType Directory -Force | Out-Null
-        }
-        
+        $script:testScriptDir = Join-Path $TestDrive "DonutAsyncJobTests"
+        New-Item -Path $script:testScriptDir `
+                 -ItemType Directory `
+                 -Force | Out-Null
+
+
         # Stubs follow AsyncJob's child protocol: -ArgsFile in, -ResultFile out, non-zero to fail.
         $script:simpleScript = Join-Path $script:testScriptDir "SimpleScript.ps1"
         @'
@@ -37,22 +38,18 @@ $a = if ($ArgsFile) { Get-Content -LiteralPath $ArgsFile -Raw | ConvertFrom-Json
 [Console]::Error.WriteLine("Worker failed: $($a.Message)")
 exit 1
 '@ | Set-Content -Path $script:errorScript
-        
+
         [RunspaceManager]::Initialize(1, 5)
     }
 
     AfterAll {
         [RunspaceManager]::Close()
-        
-        if (Test-Path $script:testScriptDir) {
-            Remove-Item -Path $script:testScriptDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
     }
 
     Context "Constructor" {
         It "Should initialize with hostname and job type" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             $job.HostName | Should -Be "TestHost"
             $job.JobType | Should -Be "Scan"
             $job.Status | Should -Be "Created"
@@ -60,7 +57,7 @@ exit 1
 
         It "Should initialize Logs as a ConcurrentQueue" {
             $job = [AsyncJob]::new("TestHost", "UpdateApply")
-            
+
             # Module loading order rules out a type check, so only existence is asserted.
             $null -ne $job.Logs | Should -Be $true
         }
@@ -69,7 +66,7 @@ exit 1
             $scanJob = [AsyncJob]::new("Host1", "Scan")
             $updateScanJob = [AsyncJob]::new("Host2", "UpdateScan")
             $applyJob = [AsyncJob]::new("Host3", "UpdateApply")
-            
+
             $scanJob.JobType | Should -Be "Scan"
             $updateScanJob.JobType | Should -Be "UpdateScan"
             $applyJob.JobType | Should -Be "UpdateApply"
@@ -79,32 +76,32 @@ exit 1
     Context "Start" {
         It "Should change status to Running when started" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             $job.Start($script:simpleScript, @{ Input = "test" }, "")
-            
+
             $job.Status | Should -Be "Running"
-            
+
             $job.Cleanup()
         }
 
         It "Should store TempConfigPath" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $tempConfig = Join-Path $script:testScriptDir "temp_config.json"
-            
+
             $job.Start($script:simpleScript, @{ Input = "test" }, $tempConfig)
-            
+
             $job.TempConfigPath | Should -Be $tempConfig
-            
+
             $job.Cleanup()
         }
 
         It "Should have a valid AsyncResult after starting" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             $job.Start($script:simpleScript, @{ Input = "test" }, "")
-            
+
             $job.AsyncResult | Should -Not -BeNullOrEmpty
-            
+
             $job.Cleanup()
         }
     }
@@ -112,7 +109,7 @@ exit 1
     Context "Poll" {
         It "Should do nothing if status is not Running" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             { $job.Poll() } | Should -Not -Throw
             $job.Status | Should -Be "Created"
         }
@@ -120,45 +117,45 @@ exit 1
         It "Should update status to Completed when job finishes successfully" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "hello" }, "")
-            
+
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             $job.Status | Should -Be "Completed"
-            
+
             $job.Cleanup()
         }
 
         It "Should populate Result after successful completion" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "testvalue" }, "")
-            
+
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             $job.Result | Should -Not -BeNullOrEmpty
-            
+
             $job.Cleanup()
         }
 
         It "Should set status to Failed when script throws" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:errorScript, @{ Message = "Test error" }, "")
-            
+
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             $job.Status | Should -Be "Failed"
-            
+
             $job.Cleanup()
         }
 
@@ -208,38 +205,38 @@ exit 1
         It "Should dispose PowerShell instance" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $job.Start($script:simpleScript, @{ Input = "test" }, "")
-            
+
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             { $job.Cleanup() } | Should -Not -Throw
         }
 
         It "Should remove TempConfigPath file if it exists" {
             $job = [AsyncJob]::new("TestHost", "Scan")
             $tempConfig = Join-Path $script:testScriptDir "temp_config_cleanup.json"
-            
+
             "{}" | Set-Content -Path $tempConfig
-            
+
             $job.Start($script:simpleScript, @{ Input = "test" }, $tempConfig)
-            
+
             $timeout = [DateTime]::Now.AddSeconds(10)
             while ($job.Status -eq "Running" -and [DateTime]::Now -lt $timeout) {
                 $job.Poll()
                 Start-Sleep -Milliseconds 50
             }
-            
+
             $job.Cleanup()
-            
+
             Test-Path $tempConfig | Should -Be $false
         }
 
         It "Should handle cleanup when PowerShell is null" {
             $job = [AsyncJob]::new("TestHost", "Scan")
-            
+
             { $job.Cleanup() } | Should -Not -Throw
         }
     }
@@ -308,39 +305,4 @@ exit 1
         }
     }
 
-    Context "ThreadPool self-heal backstop" {
-        BeforeEach {
-            # Reset the process-wide latch so each case starts un-healed.
-            [AsyncJob]::ThreadPoolHealed = $false
-        }
-        AfterAll {
-            [AsyncJob]::ThreadPoolHealed = $false
-        }
-
-        It "raises the floor once when a stall shows the starvation signature" {
-            $logger = [CapturingLogService]::new()
-            $job = [AsyncJob]::new("StarvedHost", "Resolve", $logger)
-
-            # Idle runspaces + ~0 free worker threads = dispatch starvation.
-            $job.HealThreadPoolIfStarved(2, 0)
-            $logger.Contains("raised ThreadPool floor") | Should -BeTrue
-            [AsyncJob]::ThreadPoolHealed | Should -BeTrue
-
-            # Latched: a second stall must not re-bump.
-            $before = @($logger.Entries | Where-Object { $_ -like "*raised ThreadPool floor*" }).Count
-            $job.HealThreadPoolIfStarved(2, 0)
-            @($logger.Entries | Where-Object { $_ -like "*raised ThreadPool floor*" }).Count |
-                Should -Be $before
-        }
-
-        It "does NOT fire on a busy-runspace stall (healthy ThreadPool)" {
-            $logger = [CapturingLogService]::new()
-            $job = [AsyncJob]::new("BusyHost", "Scan", $logger)
-
-            # 0 idle runspaces with plenty of free workers is the scan case, not starvation.
-            $job.HealThreadPoolIfStarved(0, 8)
-            $logger.Contains("raised ThreadPool floor") | Should -BeFalse
-            [AsyncJob]::ThreadPoolHealed | Should -BeFalse
-        }
-    }
 }

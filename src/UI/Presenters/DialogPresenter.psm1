@@ -51,15 +51,10 @@ class DialogPresenter {
                         if ($_.ButtonState -eq 'Pressed') { $self.Window.DragMove() }
                     }.GetNewClosure())
             }
-        }
-        catch {
+        } catch {
             [System.Windows.Forms.MessageBox]::Show("Failed to load DialogWindow: $_", "Error")
             throw
         }
-    }
-
-    [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems) {
-        return $this.ShowConfirmation($title, $message, $listItems, 'Confirm', $false)
     }
 
     # Destructive-aware confirmation: $primaryText names the action rather than a generic
@@ -167,8 +162,7 @@ class DialogPresenter {
         if ($null -ne $main -and $main -ne $this.Window -and $main.IsLoaded) {
             $this.Window.Owner = $main
             $this.Window.WindowStartupLocation = 'CenterOwner'
-        }
-        else {
+        } else {
             # No usable owner (e.g. the startup update prompt), so force it forward.
             $this.Window.Topmost = $true
         }

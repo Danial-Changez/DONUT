@@ -63,8 +63,7 @@ class PoolScriptJob {
                 return $true
             }
             $ps.Dispose()
-        }
-        catch { $log.LogDebug("Job dispose failed: $($_.Exception.Message)") }
+        } catch { $log.LogDebug("Job dispose failed: $($_.Exception.Message)") }
         return $false
     }
 

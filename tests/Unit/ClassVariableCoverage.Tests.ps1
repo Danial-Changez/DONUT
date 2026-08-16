@@ -37,7 +37,7 @@ Describe "Class method variable coverage" {
 
         # Every name the method binds: its own parameters, anything it assigns, the
         # foreach/param variables of nested scriptblocks, and -*Variable capture targets.
-        function Get-BoundNames([object]$method) {
+        function Get-BoundName([object]$method) {
             $names = [System.Collections.Generic.HashSet[string]]::new(
                 [System.StringComparer]::OrdinalIgnoreCase)
             foreach ($p in $method.Parameters) { [void]$names.Add($p.Name.VariablePath.UserPath) }
@@ -68,20 +68,25 @@ Describe "Class method variable coverage" {
     It "no class method reads a variable it never assigns" {
         $violations = @()
         $checked = 0
-        foreach ($file in (Get-ChildItem -Path $SrcRoot -Recurse -Include '*.psm1', '*.ps1' -File)) {
+        $sources = Get-ChildItem -Path $SrcRoot `
+                                 -Recurse `
+                                 -Include '*.psm1', '*.ps1' `
+                                 -File
+        foreach ($file in $sources) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile(
                 $file.FullName, [ref]$null, [ref]$null)
             foreach ($type in (Find-Ast $ast 'TypeDefinitionAst')) {
                 if (-not $type.IsClass) { continue }
                 foreach ($method in (Find-Ast $type 'FunctionMemberAst')) {
                     $checked++
-                    $bound = Get-BoundNames $method
+                    $bound = Get-BoundName $method
                     foreach ($v in (Find-Ast $method 'VariableExpressionAst')) {
                         # Scope-qualified ($env:, $script:, $using:) resolves outside the method.
                         if (-not $v.VariablePath.IsUnqualified) { continue }
                         $name = $v.VariablePath.UserPath
                         if ($bound.Contains($name) -or $name -in $script:Automatic) { continue }
-                        $violations += "$($file.Name):$($v.Extent.StartLineNumber) $($type.Name).$($method.Name) reads `$$name, which it never assigns"
+                        $violations += "$($file.Name):$($v.Extent.StartLineNumber) " +
+                        "$($type.Name).$($method.Name) reads `$$name, which it never assigns"
                     }
                 }
             }

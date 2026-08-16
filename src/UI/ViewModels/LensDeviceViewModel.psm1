@@ -14,12 +14,9 @@ using module "..\..\Models\PersonLens.psm1"
 #>
 class LensDeviceViewModel : ObservableObject {
     [string] $Name = ''
-    [string] $Os = ''
+    [string] $Domain = ''                 # home AD domain, so Add resolves the FQDN first
     [string] $LastSeenText = ''
-    [string] $Domain = ''
     [string] $Model = ''
-    [string] $Serial = ''
-    [string] $Manufacturer = ''
     [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
     # $null rather than '' so an unknown OS/manufacturer pair shows no tooltip at all.
     [object] $DetailTip
@@ -37,11 +34,8 @@ class LensDeviceViewModel : ObservableObject {
     LensDeviceViewModel([LensDevice]$d) {
         if ($null -ne $d) {
             $this.Name = $d.Name
-            $this.Os = $d.Os
             $this.Domain = $d.Domain
             $this.Model = $d.Model
-            $this.Serial = $d.Serial
-            $this.Manufacturer = $d.Manufacturer
             # "Tag" spelled out matches the MACHINE stat tile, so one fact keeps one name.
             if ($d.Serial) { $this.TagText = "Tag $($d.Serial)" }
             # OS lives in the tooltip: usually shared, but it still spots a Windows 10 holdout.
@@ -64,8 +58,7 @@ class LensDeviceViewModel : ObservableObject {
             $this.BitLockerText = (@($ordered | ForEach-Object {
                         if ($_.At -gt [datetime]::MinValue) {
                             "$($_.Key.Password)  ($($_.At.ToString('yyyy-MM-dd HH:mm')))"
-                        }
-                        elseif ($_.Key.Created) { "$($_.Key.Password)  ($($_.Key.Created))" }
+                        } elseif ($_.Key.Created) { "$($_.Key.Password)  ($($_.Key.Created))" }
                         else { $_.Key.Password }
                     }) -join "`n")
             if ($ordered.Count -gt 0) { $this.LatestKey = $ordered[0].Key.Password }

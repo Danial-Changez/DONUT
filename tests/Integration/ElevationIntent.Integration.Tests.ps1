@@ -10,16 +10,14 @@ using module "..\..\src\Core\DonutPaths.psm1"
 Describe "Pending intent on the real data root" {
 
     BeforeAll {
-        $script:originalProgramData = $env:ProgramData
-        $script:testRoot = Join-Path $env:TEMP "DonutIntentIntegration_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
-        New-Item -Path $script:testRoot -ItemType Directory -Force | Out-Null
-        $env:ProgramData = $script:testRoot
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutIntentIntegration' -ProgramDataOnly
+        $script:testRoot = $script:redirect.Root
         $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
     }
 
     AfterAll {
-        $env:ProgramData = $script:originalProgramData
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     It "round-trips a note through the real pending-intent.json" {

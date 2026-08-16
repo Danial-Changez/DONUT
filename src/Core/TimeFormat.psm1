@@ -35,8 +35,7 @@ class TimeFormat {
     static [string] Relative([datetime]$when) {
         $whenUtc = if ($when.Kind -eq [System.DateTimeKind]::Utc) {
             $when
-        }
-        else {
+        } else {
             $when.ToUniversalTime()
         }
 

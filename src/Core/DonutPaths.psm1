@@ -55,8 +55,7 @@ class DonutPaths {
             }
             Set-Acl -Path $dir -AclObject $acl
             return ''
-        }
-        catch {
+        } catch {
             return "could not secure ${dir} for ${who}: $($_.Exception.Message)"
         }
     }

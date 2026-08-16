@@ -17,9 +17,9 @@ Describe "FolderNodeViewModel" {
 
     It "maps a nested report to display nodes (label, size, depth, root flag, children)" {
         $report = New-Report @(
-            @{ Path = 'C:\Users';            Size = 50GB },
+            @{ Path = 'C:\Users'; Size = 50GB },
             @{ Path = 'C:\Users\bob\Videos'; Size = 20GB },
-            @{ Path = 'C:\Windows';          Size = 600MB }
+            @{ Path = 'C:\Windows'; Size = 600MB }
         )
         $roots = [FolderNodeViewModel]::FromReport($report)
 
@@ -48,7 +48,7 @@ Describe "FolderNodeViewModel" {
     Context "clear selection" {
         BeforeEach {
             $script:roots = [FolderNodeViewModel]::FromReport((New-Report @(
-                        @{ Path = 'C:\App';   Size = 10GB },
+                        @{ Path = 'C:\App'; Size = 10GB },
                         @{ Path = 'C:\App\a'; Size = 6GB },
                         @{ Path = 'C:\App\b'; Size = 4GB }
                     )))

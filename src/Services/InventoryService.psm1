@@ -9,9 +9,8 @@ using module ".\RemoteServices.psm1"
     Prepares and parses the per-machine inventory probe.
 
 .DESCRIPTION
-    Builds a small self-contained pwsh probe script that runs on the remote host
-    (via the worker's PsExec path) and writes laptop-troubleshooting facts as
-    JSON, which are copied back and parsed into a [MachineInventory]. Mirrors
+    The worker gathers laptop-troubleshooting facts over a remote CIM session and
+    writes them as JSON, which is parsed here into a [MachineInventory]. Mirrors
     RemoteUpdateService - subclasses RemoteJobService, reusing BuildWorkerArgs.
 #>
 class InventoryService : RemoteJobService {
@@ -21,11 +20,18 @@ class InventoryService : RemoteJobService {
     InventoryService([AppConfig] $config, [NetworkProbe] $probe,
         [LogService] $logger) : base($config, $probe, $logger) {}
 
-    # Worker args carrying the probe script. No network here: the worker gates
-    # reachability. "Inventory" is the worker token, distinct from [JobKind]::Inventory.
+    # Worker args only. No network here: the worker gates reachability.
+    # "Inventory" is the worker token, distinct from [JobKind]::Inventory.
     [hashtable] PrepareInventory([string]$hostName) {
-        $script = [InventoryService]::BuildProbeScript($hostName)
-        return $this.BuildWorkerArgs($hostName, "Inventory", @{ ScriptText = $script })
+        return $this.BuildWorkerArgs($hostName, "Inventory", @{})
+    }
+
+    # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
+    [void] DeleteReport([string]$hostName) {
+        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-inventory.json"
+        Remove-Item -LiteralPath $reportPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     # Reads the copied-back inventory JSON into a typed MachineInventory. Returns $null
@@ -38,81 +44,10 @@ class InventoryService : RemoteJobService {
             $raw = Get-Content -Path $reportPath -Raw
             $h = $raw | ConvertFrom-Json -AsHashtable
             return [MachineInventory]::FromHashtable([hashtable]$h)
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to parse inventory report for $hostName", $_)
             return $null
         }
     }
 
-    # Generates the remote probe script, which writes <host>-inventory.json. The host
-    # name is baked into the template, so the payload takes no parameters.
-    static [string] BuildProbeScript([string]$hostName) {
-        $template = @'
-$ErrorActionPreference = 'SilentlyContinue'
-$dir = 'C:\temp\DONUT'
-if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
-
-$inv = [ordered]@{
-    model              = $null
-    serviceTag         = $null
-    biosVersion        = $null
-    hasBattery         = $false
-    designCapacity     = $null
-    fullChargeCapacity = $null
-    chargePercent      = $null
-    charging           = $false
-    freeSpaceBytes     = $null
-    totalSpaceBytes    = $null
-    lastBootTime       = $null
-    probedAt           = ([datetime]::UtcNow.ToString('o'))
-}
-
-# Every query projects only the fields we use (-Property): less to serialize and
-# transfer, and it sidesteps the BatteryStaticData crash (see below).
-try { $cs = Get-CimInstance -ClassName Win32_ComputerSystem -Property Model -ErrorAction Stop; $inv.model = $cs.Model } catch { }
-try {
-    $bios = Get-CimInstance -ClassName Win32_BIOS -Property SerialNumber, SMBIOSBIOSVersion -ErrorAction Stop
-    $inv.serviceTag = $bios.SerialNumber
-    $inv.biosVersion = $bios.SMBIOSBIOSVersion
-} catch { }
-
-# Battery classes live in root\wmi (not root\cimv2). Request only the numeric capacity
-# via -Property: serializing all of BatteryStaticData crashes on a corrupt datetime field.
-try {
-    $static = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryStaticData -Property DesignedCapacity -ErrorAction Stop | Select-Object -First 1
-    if ($static) { $inv.designCapacity = [int64]$static.DesignedCapacity }
-} catch { }
-try {
-    $full = Get-CimInstance -Namespace 'root\wmi' -ClassName BatteryFullChargedCapacity -Property FullChargedCapacity -ErrorAction Stop | Select-Object -First 1
-    if ($full) { $inv.fullChargeCapacity = [int64]$full.FullChargedCapacity }
-} catch { }
-
-# Presence + current charge from Win32_Battery (BatteryStatus 1 = discharging).
-try {
-    $bat = Get-CimInstance -ClassName Win32_Battery -Property EstimatedChargeRemaining, BatteryStatus -ErrorAction Stop | Select-Object -First 1
-    if ($bat) {
-        $inv.hasBattery = $true
-        $inv.chargePercent = [int]$bat.EstimatedChargeRemaining
-        $inv.charging = ([int]$bat.BatteryStatus -ne 1)
-    }
-} catch { }
-
-try {
-    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -Property FreeSpace, Size -ErrorAction Stop | Select-Object -First 1
-    if ($disk) {
-        $inv.freeSpaceBytes = [int64]$disk.FreeSpace
-        $inv.totalSpaceBytes = [int64]$disk.Size
-    }
-} catch { }
-
-try {
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem -Property LastBootUpTime -ErrorAction Stop
-    if ($os.LastBootUpTime) { $inv.lastBootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o') }
-} catch { }
-
-$inv | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $dir '__HOST__-inventory.json') -Encoding UTF8
-'@
-        return $template.Replace('__HOST__', $hostName)
-    }
 }

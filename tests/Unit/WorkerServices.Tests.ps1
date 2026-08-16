@@ -1,7 +1,6 @@
 using module "..\..\src\Core\LogService.psm1"
 using module "..\..\src\Core\NetworkProbe.psm1"
 using module "..\..\src\Services\DriverMatchingService.psm1"
-using module "..\..\src\Models\DeviceContext.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\DiskUsage.psm1"
 using module "..\..\src\Services\WorkerServices.psm1"
@@ -64,21 +63,7 @@ class TestExecutionService : ExecutionService {
         return @{ Report = "C:\Fake\Report.xml"; Log = "C:\Fake\Scan.log" }
     }
 
-    [string] $LastInventoryScript = $null
-    [string] $LastRemotePwshIp = $null
-    [string] $LastRemotePwshService = $null
-
-    [void] InvokeRemotePwsh([string]$ip, [string]$scriptText, [string]$serviceName, [int]$maxMinutes) {
-        $this.LastRemotePwshIp = $ip
-        $this.LastInventoryScript = $scriptText
-        $this.LastRemotePwshService = $serviceName
-    }
-
-    [string] CopyInventoryArtifact([string]$hostName) {
-        return "C:\Fake\$hostName-inventory.json"
-    }
-
-    # GatherResult $null takes the psexec fallback, and ThrowOnGather blows the gather up.
+    # GatherResult $null simulates a failed CIM session, and ThrowOnGather blows the gather up.
     [hashtable] $GatherResult = $null
     [bool] $ThrowOnGather = $false
     [hashtable] GatherRemoteInventory([string]$ip) {
@@ -90,20 +75,25 @@ class TestExecutionService : ExecutionService {
 }
 
 Describe "WorkerServices" {
-    
+
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_Worker"
-        if (-not (Test-Path $script:tempDir)) { New-Item -Path $script:tempDir -ItemType Directory -Force | Out-Null }
+        $script:tempDir = Join-Path $TestDrive "DonutTests_Worker"
         $script:logsDir = Join-Path $script:tempDir "Logs"
         $script:reportsDir = Join-Path $script:tempDir "Reports"
         $script:sourceRoot = $script:tempDir
-        
-        if (-not (Test-Path $script:logsDir)) { New-Item -Path $script:logsDir -ItemType Directory -Force | Out-Null }
-        if (-not (Test-Path $script:reportsDir)) { New-Item -Path $script:reportsDir -ItemType Directory -Force | Out-Null }
-    }
 
-    AfterAll {
-        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -Path $script:logsDir -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:reportsDir -ItemType Directory -Force | Out-Null
+
+        # The three fixed paths, so a case names only the collaborators it is about.
+        function New-ExecutionService($logger, $probe, $matcher, $config) {
+            return [ExecutionService]::new($logger, $probe, $matcher, $config,
+                $script:sourceRoot, $script:logsDir, $script:reportsDir)
+        }
+        function New-TestExecutionService($logger, $probe, $matcher, $config) {
+            return [TestExecutionService]::new($logger, $probe, $matcher, $config,
+                $script:sourceRoot, $script:logsDir, $script:reportsDir)
+        }
     }
 
     Context "ExecutionService Constructor" {
@@ -112,9 +102,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
+
+            $service = New-ExecutionService $logger $probe $matcher $config
+
             $service | Should -Not -BeNullOrEmpty
             $service.Logger | Should -Be $logger
             $service.Probe | Should -Be $probe
@@ -127,9 +117,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
+
+            $service = New-ExecutionService $logger $probe $matcher $config
+
             $expected = Join-Path $script:sourceRoot "Scripts\RemoteWorker.ps1"
             $service.RemoteScriptPath | Should -Be $expected
         }
@@ -139,9 +129,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
+
+            $service = New-ExecutionService $logger $probe $matcher $config
+
             $service.LocalLogsDir | Should -Be $script:logsDir
             $service.LocalReportsDir | Should -Be $script:reportsDir
         }
@@ -154,9 +144,11 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $probe.IsSmbAvailableResult = $false   # gate throws before psexec is ever launched
             $matcher = [DriverMatchingService]::new()
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService $logger $probe $matcher $config
 
-            $params = @{ ComputerName = 'PC-5'; Command = 'scan'; Arguments = '-silent'; OutputLog = 'C:\temp\DONUT\scan.log' }
+            $params = @{
+                ComputerName = 'PC-5'; Command = 'scan'; Arguments = '-silent'; OutputLog = 'C:\temp\DONUT\scan.log'
+            }
             $threw = $false; $errName = ''
             try { $service.InvokePsExec($params) } catch { $threw = $true; $errName = $_.Exception.GetType().Name }
             $threw  | Should -BeTrue
@@ -169,7 +161,7 @@ Describe "WorkerServices" {
             $script:config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{
                 activeCommand = "scan"
                 throttleLimit = 5
-                commands = @{
+                commands      = @{
                     scan = @{
                         args = @{
                             silent = $true
@@ -184,12 +176,12 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
 
             $result = $service.RunScanPhase($device)
-            
+
             $result | Should -Not -BeNullOrEmpty
             $result.ReportPath | Should -Be "C:\Fake\Report.xml"
         }
@@ -198,9 +190,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
 
             $result = $service.RunScanPhase($device)
 
@@ -212,11 +204,12 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.RunScanPhase([DeviceContext]::new("TestHost"))
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $service.RunScanPhase("TestHost")
 
             # No configured updateDeviceCategory, so the appended default must be single-quoted.
-            $service.LastPsExecParams.Arguments | Should -BeLike "*-updateDeviceCategory='audio,video,network,storage,input,chipset,others'*"
+            $service.LastPsExecParams.Arguments |
+                Should -BeLike "*-updateDeviceCategory='audio,video,network,storage,input,chipset,others'*"
         }
 
         It "brackets the psexec launch with start/done breadcrumbs carrying the exit code" {
@@ -224,10 +217,10 @@ Describe "WorkerServices" {
             $logger = [CapturingLogService]::new()
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
             $service.PsExecReturnCode = 5
 
-            $service.RunScanPhase([DeviceContext]::new("TestHost"))
+            $service.RunScanPhase("TestHost")
 
             $logger.Contains("Scan: psexec launch start") | Should -BeTrue
             $logger.Contains("Scan: psexec launch done") | Should -BeTrue
@@ -238,24 +231,25 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
             $service.PsExecReturnCode = 500
 
-            $result = $service.RunScanPhase([DeviceContext]::new("TestHost"))
+            $result = $service.RunScanPhase("TestHost")
 
             $result.NoUpdatesFound | Should -BeTrue
             $result.DcuCode | Should -Be 500
-            $service.LastCopyReport | Should -BeFalse -Because "a stale previous-run XML must not masquerade as this scan's result"
+            $service.LastCopyReport | Should -BeFalse -Because (
+                "a stale previous-run XML must not masquerade as this scan's result")
         }
 
         It "carries the dcu code on a clean scan and keeps the report copy" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
             $service.PsExecReturnCode = 0
 
-            $result = $service.RunScanPhase([DeviceContext]::new("TestHost"))
+            $result = $service.RunScanPhase("TestHost")
 
             $result.NoUpdatesFound | Should -BeFalse
             $result.DcuCode | Should -Be 0
@@ -269,9 +263,12 @@ Describe "WorkerServices" {
         It "Warm mode returns the active DC and the DC list" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
-            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService ([LogService]::new($script:logsDir)) `
+                                            $probe `
+                                            ([DriverMatchingService]::new()) `
+                                            $config
 
-            $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'Warm' })
+            $result = $service.RunResolvePhase("", @{ Mode = 'Warm' })
 
             $result.Mode                  | Should -Be 'Warm'
             $result.ActiveDc              | Should -Be 'DC1.contoso.local'
@@ -281,9 +278,12 @@ Describe "WorkerServices" {
         It "Host mode returns a verdict (fresh IP + online) against the supplied DC" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
-            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService ([LogService]::new($script:logsDir)) `
+                                            $probe `
+                                            ([DriverMatchingService]::new()) `
+                                            $config
 
-            $result = $service.RunResolvePhase([DeviceContext]::new("PC-1"), @{ Mode = 'Host'; Dc = 'DC1' })
+            $result = $service.RunResolvePhase("PC-1", @{ Mode = 'Host'; Dc = 'DC1' })
 
             $result.Mode     | Should -Be 'Host'
             $result.HostName | Should -Be 'PC-1'
@@ -295,9 +295,12 @@ Describe "WorkerServices" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
             # TestExecutionService no-ops WarmRuntimeAssemblies, so no real DNS or CIM opens.
-            $service = [TestExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService ([LogService]::new($script:logsDir)) `
+                                                $probe `
+                                                ([DriverMatchingService]::new()) `
+                                                $config
 
-            $result = $service.RunResolvePhase([DeviceContext]::new(""), @{ Mode = 'WarmRunspace' })
+            $result = $service.RunResolvePhase("", @{ Mode = 'WarmRunspace' })
 
             $result.Mode | Should -Be 'WarmRunspace'
         }
@@ -306,9 +309,12 @@ Describe "WorkerServices" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
             $probe.ComputerNameResult = "OTHER-PC"
-            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService ([LogService]::new($script:logsDir)) `
+                                            $probe `
+                                            ([DriverMatchingService]::new()) `
+                                            $config
 
-            $result = $service.RunResolvePhase([DeviceContext]::new("WS-5330"), @{ Mode = 'Name'; Ip = '10.0.0.7' })
+            $result = $service.RunResolvePhase("WS-5330", @{ Mode = 'Name'; Ip = '10.0.0.7' })
 
             $result.Mode       | Should -Be 'Name'
             $result.HostName   | Should -Be 'WS-5330'
@@ -319,9 +325,12 @@ Describe "WorkerServices" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
             $probe = [MockNetworkProbeWorker]::new()
             $probe.IsRpcAvailableResult = $false
-            $service = [ExecutionService]::new([LogService]::new($script:logsDir), $probe, [DriverMatchingService]::new(), $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService ([LogService]::new($script:logsDir)) `
+                                            $probe `
+                                            ([DriverMatchingService]::new()) `
+                                            $config
 
-            $result = $service.RunResolvePhase([DeviceContext]::new("PC-1"), @{ Mode = 'Host'; Dc = 'DC1' })
+            $result = $service.RunResolvePhase("PC-1", @{ Mode = 'Host'; Dc = 'DC1' })
 
             $result.Ip     | Should -Be '10.0.0.7'
             $result.Online | Should -BeFalse
@@ -330,8 +339,10 @@ Describe "WorkerServices" {
 
     Context "ToAdminShare" {
         It "maps a drive-rooted target path to its admin-share UNC" {
-            [ExecutionService]::ToAdminShare('10.0.0.7', 'C:\temp\DONUT\apply.log') | Should -Be '\\10.0.0.7\C$\temp\DONUT\apply.log'
-            [ExecutionService]::ToAdminShare('10.0.0.7', 'D:\logs\scan.log')        | Should -Be '\\10.0.0.7\D$\logs\scan.log'
+            [ExecutionService]::ToAdminShare('10.0.0.7', 'C:\temp\DONUT\apply.log') |
+                Should -Be '\\10.0.0.7\C$\temp\DONUT\apply.log'
+            [ExecutionService]::ToAdminShare('10.0.0.7', 'D:\logs\scan.log') |
+                Should -Be '\\10.0.0.7\D$\logs\scan.log'
         }
         It "returns '' for blank, UNC, or relative paths" {
             [ExecutionService]::ToAdminShare('10.0.0.7', '')                  | Should -Be ''
@@ -347,8 +358,8 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+
+            $service = New-TestExecutionService $logger $probe $matcher $config
 
             $result = $service.CopyRemoteArtifacts("TestHost", 'C:\temp\DONUT\scan.log')
 
@@ -360,8 +371,8 @@ Describe "WorkerServices" {
     Context "StartWorker Static Method" {
         It "Should throw for unknown JobType" {
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-            
-            { 
+
+            {
                 [ExecutionService]::StartWorker(
                     "TestHost",
                     "Unknown",
@@ -382,19 +393,19 @@ Describe "WorkerServices" {
                 commands = @{
                     scan = @{
                         args = @{
-                            silent = $true
-                            report = 'C:\TestReports'
+                            silent         = $true
+                            report         = 'C:\TestReports'
                             updateSeverity = 'critical'
                         }
                     }
                 }
             })
-            
-            $args = $config.BuildDcuArgs('scan', @{})
-            
-            $args | Should -BeLike "*-silent*"
-            $args | Should -BeLike "*-report=C:\TestReports*"
-            $args | Should -BeLike "*-updateSeverity=critical*"
+
+            $dcuArgs = $config.BuildDcuArgs('scan', @{})
+
+            $dcuArgs | Should -BeLike "*-silent*"
+            $dcuArgs | Should -BeLike "*-report=C:\TestReports*"
+            $dcuArgs | Should -BeLike "*-updateSeverity=critical*"
         }
 
         It "Should allow runtime overrides via BuildDcuArgs" {
@@ -407,11 +418,11 @@ Describe "WorkerServices" {
                     }
                 }
             })
-            
-            $args = $config.BuildDcuArgs('scan', @{ report = 'C:\RuntimeOverride' })
-            
-            $args | Should -BeLike "*-report=C:\RuntimeOverride*"
-            $args | Should -Not -BeLike "*C:\Original*"
+
+            $dcuArgs = $config.BuildDcuArgs('scan', @{ report = 'C:\RuntimeOverride' })
+
+            $dcuArgs | Should -BeLike "*-report=C:\RuntimeOverride*"
+            $dcuArgs | Should -Not -BeLike "*C:\Original*"
         }
     }
 
@@ -421,7 +432,7 @@ Describe "WorkerServices" {
                 commands = @{
                     applyUpdates = @{
                         args = @{
-                            silent = $true
+                            silent               = $true
                             autoSuspendBitLocker = $true
                         }
                     }
@@ -433,12 +444,12 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
 
             $result = $service.RunApplyPhase($device, @{})
-            
+
             $result | Should -Not -BeNullOrEmpty
             $result.Report | Should -Not -BeNullOrEmpty
             $result.Log | Should -Not -BeNullOrEmpty
@@ -449,8 +460,8 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
 
             $service.PsExecReturnCode = 1
             ($service.RunApplyPhase($device, @{})).RebootRequired | Should -BeTrue
@@ -463,8 +474,8 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
 
             ($service.RunApplyPhase($device, @{})).RebootRequired | Should -BeFalse
         }
@@ -474,8 +485,8 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("ApplyTestHost")
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "ApplyTestHost"
 
             $service.RunApplyPhase($device, @{})
 
@@ -488,8 +499,8 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.RunApplyPhase([DeviceContext]::new("ApplyTestHost"), @{})
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $service.RunApplyPhase("ApplyTestHost", @{})
 
             $service.LastCopiedOutputLog | Should -Be 'C:\temp\DONUT\apply.log'
         }
@@ -498,10 +509,10 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("TestHost")
-            
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "TestHost"
+
             $options = @{ reboot = $true }
             $service.RunApplyPhase($device, $options)
 
@@ -513,8 +524,8 @@ Describe "WorkerServices" {
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $script:config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $device = [DeviceContext]::new("ApplyTestHost")
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $device = "ApplyTestHost"
 
             # A non-option control key reaching the dcu-cli line makes DCU return 105.
             $service.RunApplyPhase($device, @{ ResolvedIp = '10.124.28.147'; reboot = $true })
@@ -545,6 +556,25 @@ Describe "WorkerServices" {
             $s.Contains('/scan -silent') | Should -BeTrue
         }
 
+        It "a scan appends the installed-driver section after capturing dcu-cli's code" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('scan', '-silent', 'C:\temp\DONUT\scan.log')
+            $s.Contains('Win32_PnPSignedDriver') | Should -BeTrue
+            $s.Contains('Win32_BIOS') | Should -BeTrue
+            # The enrichment sits between the code capture and the exit, never after it.
+            $s.IndexOf('$code = $LASTEXITCODE') | Should -BeLessThan $s.IndexOf('Win32_PnPSignedDriver')
+            $s.IndexOf('Win32_PnPSignedDriver') | Should -BeLessThan $s.IndexOf('exit $code')
+            # The payload only ever runs on a field machine, so pin its syntax here.
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$null, [ref]$errors)
+            @($errors) | Should -BeNullOrEmpty
+        }
+
+        It "an apply ships no driver enrichment but keeps the captured exit" {
+            $s = [ExecutionService]::BuildRemoteDcuScript('applyUpdates', '-silent', 'C:\temp\DONUT\apply.log')
+            $s.Contains('Win32_PnPSignedDriver') | Should -BeFalse
+            $s.Contains('exit $code') | Should -BeTrue
+        }
+
         It "uses a not-found sentinel outside every dcu-cli and psexec transport code" {
             # Past the driver-install range (2000-2007) and clear of the transport codes.
             [ExecutionService]::DcuNotFoundExit | Should -BeGreaterThan 2007
@@ -559,11 +589,13 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()   # IsSmbAvailable = $true
             $matcher = [DriverMatchingService]::new()
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService $logger $probe $matcher $config
 
             $logFile = Join-Path $script:tempDir 'apply-tail.log'
-            "[2026-07-09 15:00:00] : Installing updates (4 of 4)...`n[2026-07-09 15:00:30] : The program exited with return code: 1" |
-                Set-Content -LiteralPath $logFile -Encoding UTF8
+            @(
+                '[2026-07-09 15:00:00] : Installing updates (4 of 4)...'
+                '[2026-07-09 15:00:30] : The program exited with return code: 1'
+            ) -join "`n" | Set-Content -LiteralPath $logFile -Encoding UTF8
 
             # A local temp file stands in for the admin-share UNC path, SMB gate mocked open.
             $r = $service.TailAndScanLog('10.0.0.7', $logFile, 0)
@@ -577,7 +609,7 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new(); $probe.IsSmbAvailableResult = $false
             $matcher = [DriverMatchingService]::new()
-            $service = [ExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-ExecutionService $logger $probe $matcher $config
 
             $r = $service.TailAndScanLog('10.0.0.7', 'C:\temp\DONUT\apply.log', 42)
             $r.Seen       | Should -Be 42
@@ -591,7 +623,7 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()   # local + SMB both online
             $matcher = [DriverMatchingService]::new()
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $config
             $service.TailResults.Enqueue(@{ Seen = 10; Code = @{ Found = $true; Code = 5 } })
 
             $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
@@ -605,9 +637,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.TailResults.Enqueue(@{ Seen = 5;  Code = @{ Found = $false; Code = 0 } })  # dcu still installing
-            $service.TailResults.Enqueue(@{ Seen = 20; Code = @{ Found = $true;  Code = 0 } })  # then the verdict
+            $service = New-TestExecutionService $logger $probe $matcher $config
+            $service.TailResults.Enqueue(@{ Seen = 5; Code = @{ Found = $false; Code = 0 } })  # dcu still installing
+            $service.TailResults.Enqueue(@{ Seen = 20; Code = @{ Found = $true; Code = 0 } })  # then the verdict
 
             $r = $service.RecoverByResumeTail('10.0.0.7', 'PC-9', '\\10.0.0.7\C$\temp\DONUT\apply.log', 0)
             $r.Found           | Should -BeTrue
@@ -622,17 +654,17 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
+
+            $service = New-TestExecutionService $logger $probe $matcher $config
+
             $params = @{
                 ComputerName = "TestPC"
-                Command = "scan"
-                Arguments = "-silent -report=C:\temp"
+                Command      = "scan"
+                Arguments    = "-silent -report=C:\temp"
             }
-            
+
             $service.InvokePsExec($params)
-            
+
             $service.LastPsExecParams.ComputerName | Should -Be "TestPC"
             $service.LastPsExecParams.Command | Should -Be "scan"
             $service.LastPsExecParams.Arguments | Should -Be "-silent -report=C:\temp"
@@ -645,9 +677,9 @@ Describe "WorkerServices" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
-            
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            
+
+            $service = New-TestExecutionService $logger $probe $matcher $config
+
             $result = $service.CopyRemoteArtifacts("WORKSTATION01", 'C:\temp\DONUT\scan.log')
 
             $result.ContainsKey('Report') | Should -Be $true
@@ -656,99 +688,74 @@ Describe "WorkerServices" {
     }
 
     Context "RunInventoryPhase" {
-        It "Fast path: writes the CIM-gathered inventory JSON locally (no psexec)" {
+        It "Writes the CIM-gathered inventory JSON locally" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $config
             $service.GatherResult = @{ model = 'Latitude 5340'; hasBattery = $true }
-            $device = [DeviceContext]::new("InvHost")
+            $device = "InvHost"
 
-            $result = $service.RunInventoryPhase($device, @{ ScriptText = "probe" })
+            $result = $service.RunInventoryPhase($device)
 
             $expected = Join-Path $script:reportsDir "InvHost-inventory.json"
             $result.InventoryPath | Should -Be $expected
             Test-Path $expected | Should -BeTrue
             (Get-Content $expected -Raw | ConvertFrom-Json).model | Should -Be 'Latitude 5340'
-            $service.LastInventoryScript | Should -BeNullOrEmpty   # psexec probe not used
         }
 
-        It "Fallback: when CIM is unavailable, runs the psexec probe and copies the JSON back" {
+        It "Throws when the CIM session cannot be opened" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $config
             $service.GatherResult = $null   # CIM session failed
-            $device = [DeviceContext]::new("InvHost")
 
-            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
-
-            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
-            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
+            { $service.RunInventoryPhase("InvHost") } | Should -Throw "*CIM inventory unavailable*"
         }
 
-        It "Fallback throws when no script text is supplied" {
+        It "Throws on an all-null CIM result (DCOM up, WMI empty)" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.GatherResult = $null
-            $device = [DeviceContext]::new("InvHost")
+            $service = New-TestExecutionService $logger $probe $matcher $config
+            $service.GatherResult = @{
+                model = $null; serviceTag = $null; biosVersion = $null
+                totalSpaceBytes = $null; lastBootTime = $null; probedAt = 'x'
+            }
 
-            { $service.RunInventoryPhase($device, @{}) } | Should -Throw "*No inventory script*"
+            { $service.RunInventoryPhase("InvHost") } | Should -Throw "*CIM inventory unavailable*"
         }
 
-        It "Fallback: an all-null CIM result (DCOM up, WMI empty) uses the psexec probe" {
+        It "Throws when the CIM gather itself throws" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
-            $service.GatherResult = @{ model = $null; serviceTag = $null; biosVersion = $null; totalSpaceBytes = $null; lastBootTime = $null; probedAt = 'x' }
-            $device = [DeviceContext]::new("InvHost")
-
-            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
-
-            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
-            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
-        }
-
-        It "Fallback: a CIM exception falls back to the psexec probe" {
-            $logger = [LogService]::new($script:logsDir)
-            $probe = [MockNetworkProbeWorker]::new()
-            $matcher = [DriverMatchingService]::new()
-            $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
-
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $config
             $service.ThrowOnGather = $true
-            $device = [DeviceContext]::new("InvHost")
 
-            $result = $service.RunInventoryPhase($device, @{ ScriptText = "Write-Output 'probe'" })
-
-            $result.InventoryPath | Should -Be "C:\Fake\InvHost-inventory.json"
-            $service.LastInventoryScript | Should -Be "Write-Output 'probe'"
+            { $service.RunInventoryPhase("InvHost") } | Should -Throw "*CIM inventory unavailable*"
         }
 
-        It "Fails fast (no CIM / psexec) when RPC (135) is unreachable" {
+        It "Fails fast when RPC (135) is unreachable" {
             $logger = [LogService]::new($script:logsDir)
             $probe = [MockNetworkProbeWorker]::new()
             $probe.IsRpcAvailableResult = $false   # offline / RPC blocked
             $matcher = [DriverMatchingService]::new()
             $config = [AppConfig]::new($script:sourceRoot, $script:logsDir, $script:reportsDir, @{})
 
-            $service = [TestExecutionService]::new($logger, $probe, $matcher, $config, $script:sourceRoot, $script:logsDir, $script:reportsDir)
+            $service = New-TestExecutionService $logger $probe $matcher $config
             $service.GatherResult = @{ model = 'ShouldNotBeReached' }   # would succeed past the gate
-            $device = [DeviceContext]::new("DeadHost")
 
-            { $service.RunInventoryPhase($device, @{ ScriptText = 'probe' }) } | Should -Throw "*offline*"
-            $service.LastInventoryScript | Should -BeNullOrEmpty   # CIM + psexec fallback never reached
+            { $service.RunInventoryPhase("DeadHost") } | Should -Throw "*offline*"
         }
     }
 
@@ -757,7 +764,10 @@ Describe "WorkerServices" {
             [ExecutionService]::IsUsableInventory($null) | Should -BeFalse
         }
         It "is false when every identifying field is null" {
-            $inv = @{ model = $null; serviceTag = $null; biosVersion = $null; totalSpaceBytes = $null; lastBootTime = $null; hasBattery = $false }
+            $inv = @{
+                model = $null; serviceTag = $null; biosVersion = $null
+                totalSpaceBytes = $null; lastBootTime = $null; hasBattery = $false
+            }
             [ExecutionService]::IsUsableInventory($inv) | Should -BeFalse
         }
         It "is true when any identifying field is populated" {
@@ -769,10 +779,10 @@ Describe "WorkerServices" {
     Context "BuildScanCommand" {
         BeforeAll {
             # Executes the generated script's filter half (everything after the
-            # WizTree invocation) with its hardcoded paths redirected to temp files.
+            # two-line WizTree invocation) with its hardcoded paths redirected to temp files.
             function Invoke-ScanFilter([string]$fixtureCsv, [int]$topN, [string]$outCsv) {
                 $script = [ExecutionService]::BuildScanCommand($topN)
-                $body = ($script -split "\r?\n" | Select-Object -Skip 1) -join "`n"
+                $body = ($script -split "\r?\n" | Select-Object -Skip 2) -join "`n"
                 $body = $body.Replace('C:\temp\DONUT\folders-top.csv', $outCsv)
                 $body = $body.Replace('C:\temp\DONUT\folders.csv', $fixtureCsv)
                 & ([scriptblock]::Create($body))
@@ -781,7 +791,7 @@ Describe "WorkerServices" {
 
         It "selects the N largest rows across the whole export, not a head slice" {
             # Tree-ordered export: a head trim once kept tiny folders and dropped C:\Windows.
-            $dir = Join-Path $env:TEMP "DonutScanFilter_$(Get-Random)"
+            $dir = Join-Path $TestDrive "DonutScanFilter_$(Get-Random)"
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
             $fixture = Join-Path $dir 'folders.csv'
             $out = Join-Path $dir 'folders-top.csv'
@@ -797,25 +807,27 @@ Generated by WizTree 4.x (banner line)
 "C:\Program Files, x86\",700,700,2026-08-01,16,0,0
 "C:\tiny\",1,1,2026-08-01,16,0,0
 '@
-            try {
-                Invoke-ScanFilter $fixture 3 $out
+            Invoke-ScanFilter $fixture 3 $out
 
-                # The ~40 MB export must not be left on the fleet machine.
-                Test-Path $fixture | Should -BeFalse
-                # End to end: volume root dropped, quoted comma path intact, no deep small rows.
-                $report = [WizTreeCsv]::ParseTopFoldersFromFile($out, 3)
-                ($report.Folders | ForEach-Object { $_.Path }) | Should -Be @(
-                    'C:\Users\', 'C:\Windows\', 'C:\Program Files, x86\')
-            }
-            finally {
-                Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+            # The ~40 MB export must not be left on the fleet machine.
+            Test-Path $fixture | Should -BeFalse
+            # End to end: volume root dropped, quoted comma path intact, no deep small rows.
+            $report = [WizTreeCsv]::ParseTopFoldersFromFile($out, 3)
+            ($report.Folders | ForEach-Object { $_.Path }) | Should -Be @(
+                'C:\Users\', 'C:\Windows\', 'C:\Program Files, x86\')
         }
 
         It "pins the invocation shape" {
             $s = [ExecutionService]::BuildScanCommand(12)
             $s | Should -Match '/exportfolders=1 /exportfiles=0'
             $s | Should -Match 'folders-top\.csv'
+            # The invocation continues over a backtick, and the payload must parse as one statement.
+            $lines = $s -split "\r?\n"
+            $lines[0] | Should -Match '/admin=1 `$'
+            $lines[1] | Should -Match '^\s+/exportfolders=1'
+            $tokens = $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$tokens, [ref]$errors)
+            @($errors).Count | Should -Be 0
         }
     }
 

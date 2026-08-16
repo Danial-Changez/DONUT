@@ -53,7 +53,9 @@ class PersonLensViewModel : ObservableObject {
 
     # Devices newest-seen first: parsed LastLogon descending, blanks last.
     hidden [object[]] SortByLastSeen([LensDevice[]]$devices) {
-        return @($devices | Sort-Object -Descending -Stable -Property @{
+        return @($devices | Sort-Object -Descending `
+                                        -Stable `
+                                        -Property @{
                 Expression = {
                     $at = [datetime]::MinValue
                     [void][datetime]::TryParse([string]$_.LastLogon,
@@ -77,6 +79,10 @@ class PersonLensViewModel : ObservableObject {
     [void] SetLoading([string]$who) {
         $this.Set('DisplayName', $who)
         $this.Set('Upn', '')
+        $this.Set('Sam', '')
+        $this.Set('Email', '')
+        $this.Set('Manager', '')
+        $this.Set('Office', '')
         $this.Set('IsLoading', $true)
         $this.Set('HasError', $false)
         $this.Set('StatusText', 'Looking up directory + SCCM…')
@@ -114,8 +120,7 @@ class PersonLensViewModel : ObservableObject {
             $this.SetDeviceRows($lens.Devices)
             $this.Set('HasDevices', $true)
             $this.Set('StatusText', 'Loading device details…')
-        }
-        else {
+        } else {
             $this.Set('StatusText', 'Looking up devices…')
         }
     }
@@ -125,6 +130,13 @@ class PersonLensViewModel : ObservableObject {
     [void] Apply([PersonLens]$lens) {
         $this.Set('IsLoading', $false)
         if ($null -eq $lens) { return }
+        # An error-only result keeps whatever the partials painted under the banner.
+        if ($lens.Errors.Count -gt 0 -and -not $lens.DisplayName -and -not $lens.Upn -and
+            -not $lens.Sam -and $lens.Devices.Count -eq 0) {
+            $this.Set('HasError', $true)
+            $this.Set('StatusText', ($lens.Errors -join '  |  '))
+            return
+        }
         $this.Set('Upn', $lens.Upn)
         $this.Set('Sam', $lens.Sam)
         $this.Set('DisplayName', $(if ($lens.DisplayName) { $lens.DisplayName } else { $lens.Upn }))
@@ -138,8 +150,7 @@ class PersonLensViewModel : ObservableObject {
         if ($lens.Errors.Count -gt 0) {
             $this.Set('HasError', $true)
             $this.Set('StatusText', ($lens.Errors -join '  |  '))
-        }
-        else {
+        } else {
             $this.Set('HasError', $false)
             $this.Set('StatusText', '')
         }

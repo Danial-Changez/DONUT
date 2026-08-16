@@ -112,8 +112,7 @@ class PersonLens {
         try {
             $h = $json | ConvertFrom-Json -AsHashtable -Depth 8
             return [PersonLens]::FromHashtable([hashtable]$h)
-        }
-        catch {
+        } catch {
             $p = [PersonLens]::new()
             $p.Errors = @("Failed to parse the lens bundle: $($_.Exception.Message)")
             return $p
@@ -149,8 +148,7 @@ class LensDeployment {
             }
             $out.Rows = $rowList.ToArray()
             $out.Error = [string]$h['error']
-        }
-        catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
+        } catch { $out.Error = "Failed to parse the software bundle: $($_.Exception.Message)" }
         return $out
     }
 
@@ -168,13 +166,8 @@ class LensFormat {
     # Relative "last seen" from AD's lastLogonTimestamp, which replicates with up to
     # ~14 days of lag. Blank or 0001-01-01 reads as "no logon recorded".
     static [string] LogonLabel([string]$iso) {
-        if ([string]::IsNullOrWhiteSpace($iso)) { return 'no logon recorded' }
-        $dt = [datetime]::MinValue
-        $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
-        if ([datetime]::TryParse($iso, [System.Globalization.CultureInfo]::InvariantCulture,
-                $styles, [ref]$dt) -and $dt -gt [datetime]::MinValue) {
-            return "seen $([TimeFormat]::Relative($dt))"
-        }
+        $dt = [TimeFormat]::ParseIso($iso)
+        if ($dt -gt [datetime]::MinValue) { return "seen $([TimeFormat]::Relative($dt))" }
         return 'no logon recorded'
     }
 }

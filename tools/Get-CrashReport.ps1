@@ -35,10 +35,11 @@ Write-Host 'DONUT crash report (read-only)' -ForegroundColor White
 
 Write-Host "`n=== Donut.log, last $LogLines line(s) ===" -ForegroundColor Cyan
 if (Test-Path -LiteralPath $log) {
-    Get-Content -LiteralPath $log -Tail $LogLines -ErrorAction SilentlyContinue |
+    Get-Content -LiteralPath $log `
+                -Tail $LogLines `
+                -ErrorAction SilentlyContinue |
         ForEach-Object { Write-Host "  $_" }
-}
-else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
+} else { Write-Host "  (no log at $log)" -ForegroundColor Yellow }
 
 Write-Host "`n=== Application event log, last $Hours hour(s) ===" -ForegroundColor Cyan
 $since = (Get-Date).AddHours(-$Hours)
@@ -49,8 +50,7 @@ foreach ($p in $providers) {
         $events += @(Get-WinEvent -FilterHashtable @{
                 LogName = 'Application'; ProviderName = $p; StartTime = $since
             } -ErrorAction Stop)
-    }
-    catch { }
+    } catch { }
 }
 $hits = @($events | Where-Object { $_.Message -match 'pwsh|donut' } |
         Sort-Object TimeCreated)
@@ -59,7 +59,7 @@ if ($hits.Count -eq 0) {
 }
 foreach ($e in $hits) {
     Write-Host ("`n  -- {0}  {1}  (Id {2})" -f $e.TimeCreated, $e.ProviderName, $e.Id) `
-        -ForegroundColor White
+               -ForegroundColor White
     # The first dozen lines carry the exception type, module and offset that matter.
     @(($e.Message -split "`r?`n") | Select-Object -First 12) |
         ForEach-Object { Write-Host "  $_" }

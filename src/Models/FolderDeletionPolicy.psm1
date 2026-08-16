@@ -36,30 +36,21 @@ class FolderDeletionPolicy {
         'windows\downloaded program files'
     )
 
-    # Resolves "." / ".." and Windows' trailing dot-space stripping without touching the
-    # disk, so the lists cannot be walked around ("C:\temp\..\Windows"). $null when unusable.
+    # Resolves "." / ".." and mixed separators via GetFullPath so the string lists cannot
+    # be walked around ("C:\temp\..\Windows"), then re-guards. $null when unusable.
     static [string] Canonicalize([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) { return $null }
-        # Not [IO.Path]::GetFullPath: that is OS-relative, and this class is unit-tested headless.
-        $p = $path.Trim().Replace('/', '\')
-        if ($p -notmatch '^[A-Za-z]:\\') { return $null }
-        $stack = [System.Collections.Generic.List[string]]::new()
-        foreach ($raw in $p.Substring(3).Split('\')) {
-            if ($raw -eq '' -or $raw -eq '.') { continue }
-            if ($raw -eq '..') {
-                # Escaping above the volume root is never a real selection, so refuse the path.
-                if ($stack.Count -eq 0) { return $null }
-                $stack.RemoveAt($stack.Count - 1)
-                continue
-            }
-            # 8.3 aliases (PROGRA~1) resolve past a long-name blocklist, so they are never accepted.
-            if ($raw -match '~\d') { return $null }
-            $seg = $raw.TrimEnd(' ', '.')
-            if ($seg -eq '') { return $null }
-            $stack.Add($seg)
-        }
-        if ($stack.Count -eq 0) { return $null }
-        return $p.Substring(0, 3) + ($stack -join '\')
+        $p = $path.Trim()
+        if ($p -notmatch '^[A-Za-z]:[\\/]') { return $null }
+        # 8.3 aliases (PROGRA~1) resolve past a long-name blocklist, so they are never accepted.
+        if ($p -match '~\d') { return $null }
+        try { $p = [IO.Path]::GetFullPath($p).TrimEnd('\') }
+        catch { return $null }
+        # A segment still ending in a dot or space names a different folder than it compares as.
+        if ($p -match '[. ](\\|$)') { return $null }
+        # Anything resolving to a bare drive root ("C:\temp\..") gates the volume, so refuse it.
+        if ($p -notmatch '^[A-Za-z]:\\.+') { return $null }
+        return $p
     }
 
     # True when $path is safe to delete: an absolute local path, not the drive root, not the

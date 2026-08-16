@@ -72,9 +72,17 @@ class FakeHome {
         $this.DroppedRuns = [System.Collections.Generic.List[string]]::new()
         $this.Rendered = [System.Collections.Generic.List[string]]::new()
     }
+    # Mirrors AsyncJobPresenter.StartJob, the seam the coordinator launches jobs through.
+    [object] StartJob([object]$job, [hashtable]$prep) {
+        $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
+        $this.ActiveJobs.Add($job)
+        return $job
+    }
     [void] ReissueAfterResolve([string]$h, [bool]$online) { $this.Reissued.Add(@($h, $online)) }
     [void] DropPendingRunOnResolveFailure([string]$h) { $this.DroppedRuns.Add($h) }
     [void] RenderReachability([string]$h) { $this.Rendered.Add($h) }
+    [System.Collections.Generic.List[string]] $Verdicts = [System.Collections.Generic.List[string]]::new()
+    [void] OnIdentityVerdict([string]$h) { $this.Verdicts.Add($h) }
     [object] GetRecord([string]$h) { return $null }
     [System.Collections.Generic.List[string]] $DeferredWarmReasons =
     [System.Collections.Generic.List[string]]::new()
@@ -121,6 +129,16 @@ Describe "ResolutionCoordinator" {
             $script:fakeHome.Reissued[0] | Should -Be @('PC1', $true)
         }
 
+        It "hands a Name verdict back to Home, which owns the waiting apply" {
+            $job = [AsyncJob]::new('PC1', [JobKind]::Resolve)
+            $job.Status = 'Completed'
+            $job.Result = @([pscustomobject]@{ Mode = 'Name'; HostName = 'PC1'; ActualName = 'PC1' })
+
+            $script:coord.CompleteResolve($job)
+
+            $script:fakeHome.Verdicts | Should -Be @('PC1')
+        }
+
         It "clears the latch and drops the queued run on a failed resolve" {
             $job = [AsyncJob]::new('PC1', [JobKind]::Resolve)
             $job.Status = 'Failed'
@@ -135,7 +153,9 @@ Describe "ResolutionCoordinator" {
         It "sets + persists the active DC on a Warm result" {
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02')
+                })
 
             $script:coord.CompleteResolve($job)
 
@@ -161,7 +181,9 @@ Describe "ResolutionCoordinator" {
             $script:config.Settings['activeDomainController'] = 'DC01'
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC02')
+                })
 
             $script:coord.CompleteResolve($job)
 
@@ -172,7 +194,9 @@ Describe "ResolutionCoordinator" {
             # 'domainControllers' was never read back, and the warm re-discovers it every launch.
             $job = [AsyncJob]::new('', [JobKind]::Resolve)
             $job.Status = 'Completed'
-            $job.Result = @([pscustomobject]@{ Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03') })
+            $job.Result = @([pscustomobject]@{
+                    Mode = 'Warm'; ActiveDc = 'DC01'; DomainControllers = @('DC01', 'DC03')
+                })
 
             $script:coord.CompleteResolve($job)
 

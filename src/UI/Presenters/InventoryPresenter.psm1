@@ -124,7 +124,9 @@ class InventoryPresenter {
                     if ($parent) { $parent.RaiseEvent($ev) }
                 })
             # Tri-state cascade: a folder checkbox toggling propagates to descendants + ancestors.
-            $checkHandler = [System.Windows.RoutedEventHandler] { param($s, $e) $presenter.OnFolderCheckToggled($e) }.GetNewClosure()
+            $checkHandler = [System.Windows.RoutedEventHandler] {
+                param($s, $e) $presenter.OnFolderCheckToggled($e)
+            }.GetNewClosure()
             $folders.AddHandler([System.Windows.Controls.Primitives.ToggleButton]::CheckedEvent, $checkHandler)
             $folders.AddHandler([System.Windows.Controls.Primitives.ToggleButton]::UncheckedEvent, $checkHandler)
         }
@@ -190,12 +192,6 @@ class InventoryPresenter {
     # Clears the current selection and returns the detail pane to its empty state.
     [void] ClearSelection() {
         $this.Home.SelectedHost = $null
-    }
-
-    # Sets the detail-header subtitle (the resolved IP) on the host's view-model.
-    hidden [void] RenderDetailSubtitle([string]$hostName) {
-        $vm = $this.Home.GetRow($hostName)
-        if ($vm) { $vm.SetResolvedIp($this.Home.Resolver.GetCachedIp($hostName)) }
     }
 
     # The exception type dies at the runspace boundary, so re-derive the reason from the
@@ -269,8 +265,7 @@ class InventoryPresenter {
             if ($trimmed -or $null -eq $this.DetailLogItems) {
                 # Old lines were dropped, so re-render the capped buffer once.
                 $this.RenderHostLog($hostName)
-            }
-            else {
+            } else {
                 foreach ($l in $lines) { $this.DetailLogItems.Add($l) }
                 $this.ScrollLogToEnd()
             }
@@ -323,8 +318,7 @@ class InventoryPresenter {
         if ($percent -gt 0 -and -not $indeterminate) {
             $this.DetailProgress.IsIndeterminate = $false
             $this.DetailProgress.Value = $percent
-        }
-        else {
+        } else {
             $this.DetailProgress.IsIndeterminate = $true
         }
         $this.DetailProgress.Visibility = [System.Windows.Visibility]::Visible
@@ -344,11 +338,8 @@ class InventoryPresenter {
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.InventoryService.PrepareInventory($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
-        }
-        catch {
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Inventory, $this.Logger), $prep)
+        } catch {
             $this.AppendLog($hostName, "Inventory probe could not start: $_")
             $this.ShowJobProgress($hostName, $false, 0, $false)
         }
@@ -408,7 +399,8 @@ class InventoryPresenter {
         foreach ($j in $this.Home.ActiveJobs) {
             if ($j -and $j.HostName -eq $hostName -and $j.JobType -eq [JobKind]::DiskScan) {
                 # A silently ignored click reads as a dead button, so say so instead.
-                $this.AppendLog($hostName, "A storage scan is already running for $hostName - wait for it to finish (or time out).")
+                $this.AppendLog($hostName,
+                    "A storage scan is already running for $hostName - wait for it to finish (or time out).")
                 return
             }
         }
@@ -419,11 +411,8 @@ class InventoryPresenter {
             $this.ShowJobProgress($hostName, $true, 0, $true)
             $prep = $this.DiskUsageService.PrepareDiskScan($hostName)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
-        }
-        catch {
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::DiskScan, $this.Logger), $prep)
+        } catch {
             $this.AppendLog($hostName, "Disk scan could not start: $_")
             $this.Logger.LogException("Disk scan failed to start for $hostName", $_)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start disk scan.") }
@@ -452,7 +441,9 @@ class InventoryPresenter {
 
         $this.DiskReports[$hostName.ToLowerInvariant()] = $report
         $this.AppendLog($hostName, "Found $($report.Folders.Count) largest folders.")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Found the $($report.Folders.Count) largest folders on C:.") }
+        if ($this.Toasts) {
+            $this.Toasts.ShowSuccess($hostName, "Found the $($report.Folders.Count) largest folders on C:.")
+        }
 
         # Apply regardless of selection: shows now if selected, ready if selected later.
         $row = $this.Home.GetRow($hostName)
@@ -475,10 +466,14 @@ class InventoryPresenter {
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
         $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
+        $sizeLabel = [DiskUsageFormat]::SizeLabel($totalBytes)
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear Folder Contents on $hostName",
-            "Permanently clear the contents of $($selected.Count) folder(s) (~$([DiskUsageFormat]::SizeLabel($totalBytes))) on ${hostName}. The folders are kept. Runs as SYSTEM and cannot be undone.",
-            $list, 'Clear', $true)
+            "Permanently clear the contents of $($selected.Count) folder(s) (~$sizeLabel) on ${hostName}. " +
+            "The folders are kept. Runs as SYSTEM and cannot be undone.",
+            $list,
+            'Clear',
+            $true)
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
             return
@@ -491,11 +486,8 @@ class InventoryPresenter {
             $paths = @($selected | ForEach-Object { $_.Path })
             $prep = $this.DiskUsageService.PrepareDeleteFolders($hostName, $paths)
             $this.Home.AttachResolvedIp($prep, $hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::DeleteFolders, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
-        }
-        catch {
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::DeleteFolders, $this.Logger), $prep)
+        } catch {
             $this.AppendLog($hostName, "Clear could not start: $_")
             $this.Logger.LogException("Folder clear failed to start for $hostName", $_)
             if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Could not start the clear.") }

@@ -1,4 +1,5 @@
 using module "..\..\src\Models\HotkeyGesture.psm1"
+using namespace System.Windows.Input
 
 BeforeDiscovery {
     # The parse uses WPF's KeyConverter/KeyInterop at runtime.
@@ -52,7 +53,7 @@ Describe "HotkeyGesture.Parse" {
         It "Exposes the resolved WPF Key for a KeyBinding" {
             $g = [HotkeyGesture]::Parse('Ctrl+,')
             [string]$g.WpfKey | Should -Be 'OemComma'
-            ([System.Windows.Input.ModifierKeys]$g.Modifiers) | Should -Be ([System.Windows.Input.ModifierKeys]::Control)
+            ([ModifierKeys]$g.Modifiers) | Should -Be ([ModifierKeys]::Control)
         }
 
         It "Tolerates whitespace and mixed order around tokens" {
@@ -135,33 +136,33 @@ Describe "HotkeyGesture.FromKeys" {
     }
 
     It "Builds Ctrl+Alt+D from held modifiers + a key" {
-        $mods = [System.Windows.Input.ModifierKeys]::Control -bor [System.Windows.Input.ModifierKeys]::Alt
-        $g = [HotkeyGesture]::FromKeys($mods, [System.Windows.Input.Key]::D)
+        $mods = [ModifierKeys]::Control -bor [ModifierKeys]::Alt
+        $g = [HotkeyGesture]::FromKeys($mods, [Key]::D)
         $g.Valid | Should -BeTrue
         $g.Normalized | Should -Be 'Ctrl+Alt+D'
     }
 
     It "Normalizes a punctuation key back to its symbol (Ctrl+,)" {
-        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::Control, [System.Windows.Input.Key]::OemComma)
+        $g = [HotkeyGesture]::FromKeys([ModifierKeys]::Control, [Key]::OemComma)
         $g.Valid | Should -BeTrue
         $g.Normalized | Should -Be 'Ctrl+,'
     }
 
     It "Rejects a Shift-only recording (matches Parse rules)" {
-        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::Shift, [System.Windows.Input.Key]::A)
+        $g = [HotkeyGesture]::FromKeys([ModifierKeys]::Shift, [Key]::A)
         $g.Valid | Should -BeFalse
         $g.Reason | Should -Match 'Shift'
     }
 
     It "Rejects a bare key with no Ctrl/Alt/Win" {
-        $g = [HotkeyGesture]::FromKeys([System.Windows.Input.ModifierKeys]::None, [System.Windows.Input.Key]::F8)
+        $g = [HotkeyGesture]::FromKeys([ModifierKeys]::None, [Key]::F8)
         $g.Valid | Should -BeFalse
     }
 
     It "Round-trips through Parse (recorded == typed)" {
         $recorded = [HotkeyGesture]::FromKeys(
-            [System.Windows.Input.ModifierKeys]::Control -bor [System.Windows.Input.ModifierKeys]::Shift,
-            [System.Windows.Input.Key]::F5)
+            [ModifierKeys]::Control -bor [ModifierKeys]::Shift,
+            [Key]::F5)
         $typed = [HotkeyGesture]::Parse('Ctrl+Shift+F5')
         $recorded.Normalized | Should -Be $typed.Normalized
         $recorded.VirtualKey | Should -Be $typed.VirtualKey

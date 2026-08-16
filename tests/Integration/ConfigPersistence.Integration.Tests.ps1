@@ -11,19 +11,17 @@ using module "..\..\src\Services\RecentConnectionsStore.psm1"
 Describe "Config persistence on the real data root" {
 
     BeforeAll {
-        $script:originalProgramData = $env:ProgramData
-        $script:originalLocalAppData = $env:LOCALAPPDATA
-        $script:testRoot = Join-Path $env:TEMP "DonutConfigIntegration_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutConfigIntegration'
+        $script:testRoot = $script:redirect.Root
         $script:testSourceRoot = Join-Path $script:testRoot 'src'
-        New-Item -Path $script:testSourceRoot -ItemType Directory -Force | Out-Null
-        $env:ProgramData = $script:testRoot
-        $env:LOCALAPPDATA = $script:testRoot
+        New-Item -Path $script:testSourceRoot `
+                 -ItemType Directory `
+                 -Force | Out-Null
     }
 
     AfterAll {
-        $env:ProgramData = $script:originalProgramData
-        $env:LOCALAPPDATA = $script:originalLocalAppData
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     It "recent hosts and their owners survive an app restart via recents.json" {
@@ -41,7 +39,9 @@ Describe "Config persistence on the real data root" {
         $row | Should -Not -BeNullOrEmpty
         $row.Owner | Should -Be 'PC-ROUNDTRIP (Danial C)'
 
-        $configFile = Get-ChildItem -Path $script:testRoot -Recurse -Filter 'config.json' |
+        $configFile = Get-ChildItem -Path $script:testRoot `
+                                    -Recurse `
+                                    -Filter 'config.json' |
             Select-Object -First 1
         (Get-Content -LiteralPath $configFile.FullName -Raw) | Should -Not -BeLike '*recentHosts*'
     }
@@ -57,7 +57,9 @@ Describe "Config persistence on the real data root" {
         $config.Settings['domainControllers'] = @('DC01')
         $manager.SaveConfig($config)
         $recentsPath = [RecentConnectionsStore]::DefaultPath()
-        Remove-Item -LiteralPath $recentsPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $recentsPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
 
         # What HomePresenter's wiring does on the next launch.
         [RecentConnectionsStore]::MigrateFromConfig($config, $manager, $recentsPath, $null)
@@ -77,7 +79,9 @@ Describe "Config persistence on the real data root" {
     It "a corrupt config.json falls back to defaults instead of throwing" {
         $manager = [ConfigManager]::new($script:testSourceRoot)
         $manager.SaveConfig($manager.LoadConfig())
-        $configFile = Get-ChildItem -Path $script:testRoot -Recurse -Filter 'config.json' |
+        $configFile = Get-ChildItem -Path $script:testRoot `
+                                    -Recurse `
+                                    -Filter 'config.json' |
             Select-Object -First 1
         $configFile | Should -Not -BeNullOrEmpty
 

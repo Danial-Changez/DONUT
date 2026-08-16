@@ -48,6 +48,9 @@
     lookup logic here is unchanged from its previous inline home in LensAgent.ps1.
 #>
 
+# This file's own path, so nested thread jobs can dot-source the same helpers.
+$script:CommonSelf = $PSCommandPath
+
 # --- Crypto + atomic file I/O (format shared with PersonLensService) ---
 function Protect-Text([string]$text) {
     $aes = [System.Security.Cryptography.Aes]::Create()
@@ -56,8 +59,7 @@ function Protect-Text([string]$text) {
         $enc = $aes.CreateEncryptor()
         $plain = [Text.Encoding]::UTF8.GetBytes($text)
         return $enc.TransformFinalBlock($plain, 0, $plain.Length)
-    }
-    finally { $aes.Dispose() }
+    } finally { $aes.Dispose() }
 }
 
 function Unprotect-File([string]$path) {
@@ -67,8 +69,7 @@ function Unprotect-File([string]$path) {
         $dec = $aes.CreateDecryptor()
         $blob = [IO.File]::ReadAllBytes($path)
         return [Text.Encoding]::UTF8.GetString($dec.TransformFinalBlock($blob, 0, $blob.Length))
-    }
-    finally { $aes.Dispose() }
+    } finally { $aes.Dispose() }
 }
 
 function Write-LensBundle([string]$path, [string]$json) {
@@ -77,9 +78,64 @@ function Write-LensBundle([string]$path, [string]$json) {
     Move-Item -LiteralPath $tmp -Destination $path -Force
 }
 
+# Builds the sidecar script that raises one Action Center toast. Pure for testing:
+# title and body are XML-escaped, so no input can break out of the toast payload.
+function New-LensToastScript([string]$title, [string]$body) {
+    $t = [Security.SecurityElement]::Escape($title)
+    $b = [Security.SecurityElement]::Escape($body)
+    $xml = "<toast><visual><binding template=""ToastGeneric""><text>$t</text><text>$b</text></binding></visual></toast>"
+    $raise = @'
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
+$doc = New-Object Windows.Data.Xml.Dom.XmlDocument
+$doc.LoadXml('{XML}')
+$toast = New-Object Windows.UI.Notifications.ToastNotification $doc
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('DONUT').Show($toast)
+'@
+    return $raise.Replace('{XML}', $xml)
+}
+
+# Raises one Action Center toast as the current user, for KEY job outcomes only.
+# The stock powershell.exe does the WinRT projection, since pwsh has none inbox.
+function Show-LensToast([string]$title, [string]$body) {
+    # HKCU here is the interactive user, the only hive whose toasts the shell shows.
+    $reg = 'HKCU:\SOFTWARE\Classes\AppUserModelId\DONUT'
+    if (-not (Test-Path -LiteralPath $reg)) {
+        $null = New-Item -Path $reg -Force
+        $null = New-ItemProperty -Path $reg `
+                                 -Name 'DisplayName' `
+                                 -Value 'DONUT' `
+                                 -PropertyType String `
+                                 -Force
+    }
+    $script = New-LensToastScript -title $title -body $body
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+    Start-Process -FilePath 'powershell.exe' `
+                  -WindowStyle Hidden `
+                  -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $b64)
+}
+
 function Get-Cn([string]$dn) { if ($dn -match '^CN=([^,]+)') { $matches[1] } else { $dn } }
 
+# The cheap SAM guess both lookups share: the hint, a domain-slash tail, or a bare
+# token. UPNs and display names return '', and the caller decides on the GC read.
+function Get-SamGuess([string]$identity, [string]$samHint) {
+    if ($samHint) { return $samHint }
+    if ($identity -match '\\') { return $identity.Split('\')[-1] }
+    if ($identity -notmatch '[@\s]') { return $identity }
+    return ''
+}
+
 function Find-Gc([string]$Filter) {
+    try { return Search-Gc $Filter }
+    catch {
+        # A pooled LDAP socket dies while the agent idles, and a fresh bind heals it.
+        $script:ForestNc = Get-LensForestNc
+        return Search-Gc $Filter
+    }
+}
+
+function Search-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
@@ -103,9 +159,9 @@ $script:AffinityScript = {
     return @((Invoke-RestMethod @p).value)
 }
 
-# ResourceID eq N with a keyed-segment fallback, since string filters 404 here.
+# One device per call (the caller fans out), keyed-segment fallback when filters 404.
 $script:HardwareScript = {
-    param($server, $pairs)
+    param($server, $pair)
     function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
         # The braces are load-bearing: "$class?" parses as an undefined variable class?.
         $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
@@ -124,66 +180,112 @@ $script:HardwareScript = {
     function Get-InventoryRow([string]$srv, [string]$class, [string]$select, [string]$id) {
         if (-not $script:UseKey) {
             try {
-                $row = Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $false
+                $row = Get-AdminServiceRow -srv $srv `
+                                           -class $class `
+                                           -select $select `
+                                           -id $id `
+                                           -useKey $false
                 if ($row) { return $row }
-            }
-            catch { $script:FilterError = $_.Exception.Message }
+            } catch { $script:FilterError = $_.Exception.Message }
             $script:UseKey = $true
         }
-        return Get-AdminServiceRow -srv $srv -class $class -select $select -id $id -useKey $true
+        return Get-AdminServiceRow -srv $srv `
+                                   -class $class `
+                                   -select $select `
+                                   -id $id `
+                                   -useKey $true
     }
     $script:UseKey = $false
     $script:FilterError = ''
-    $results = @()
-    foreach ($pair in $pairs) {
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
-        if (-not $pair.resourceId) {
-            $out.error = 'no ResourceID in the affinity rows'
-            $out.ms = $sw.ElapsedMilliseconds
-            $results += $out
-            continue
-        }
-        try {
-            $cs = Get-InventoryRow -srv $server -class 'SMS_G_System_COMPUTER_SYSTEM' `
-                -select 'Manufacturer,Model' -id $pair.resourceId
-            if ($cs) {
-                $out.manufacturer = [string]$cs.Manufacturer
-                $out.model = [string]$cs.Model
-            }
-            $bios = Get-InventoryRow -srv $server -class 'SMS_G_System_PC_BIOS' `
-                -select 'SerialNumber' -id $pair.resourceId
-            if ($bios) { $out.serial = [string]$bios.SerialNumber }
-            # Both shapes answering nothing used to blank the card with no reason on it.
-            if (-not $out.model -and -not $out.serial) {
-                $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
-                if ($script:FilterError) { $out.error += " (filter form: $($script:FilterError))" }
-            }
-        }
-        catch { $out.error = $_.Exception.Message }
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
+    if (-not $pair.resourceId) {
+        $out.error = 'no ResourceID in the affinity rows'
         $out.ms = $sw.ElapsedMilliseconds
-        $results += $out
+        return $out
     }
-    return $results
+    try {
+        $cs = Get-InventoryRow -srv $server `
+                               -class 'SMS_G_System_COMPUTER_SYSTEM' `
+                               -select 'Manufacturer,Model' `
+                               -id $pair.resourceId
+        if ($cs) {
+            $out.manufacturer = [string]$cs.Manufacturer
+            $out.model = [string]$cs.Model
+        }
+        $bios = Get-InventoryRow -srv $server `
+                                 -class 'SMS_G_System_PC_BIOS' `
+                                 -select 'SerialNumber' `
+                                 -id $pair.resourceId
+        if ($bios) { $out.serial = [string]$bios.SerialNumber }
+        # Both shapes answering nothing used to blank the card with no reason on it.
+        if (-not $out.model -and -not $out.serial) {
+            $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
+            if ($script:FilterError) { $out.error += " (filter form: $($script:FilterError))" }
+        }
+    } catch { $out.error = $_.Exception.Message }
+    $out.ms = $sw.ElapsedMilliseconds
+    return $out
 }
 
 # One device's AD detail, self contained: nested jobs do not inherit Common's functions.
 $script:DeviceScript = {
-    param($forestNc, $wsid)
+    param($forestNc, $wsid, $fallbackDomains, $resourceId = '', $server = '')
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $dev = [ordered]@{ name = $wsid; os = ''; lastLogon = ''; domain = ''
         model = ''; serial = ''; manufacturer = ''
         note = ''; bitLockerKeys = @()
     }
     try {
+        $compDn = ''
         $gc = New-Object System.DirectoryServices.DirectorySearcher
         $gc.SearchRoot = [ADSI]"GC://$forestNc"
         $gc.Filter = "(&(objectCategory=computer)(cn=$wsid))"
         $gc.ClientTimeout = [TimeSpan]::FromSeconds(15)
         [void]$gc.PropertiesToLoad.Add('distinguishedName')
-        $cHit = $gc.FindOne()
-        if ($cHit) {
-            $compDn = [string]$cHit.Properties['distinguishedname'][0]
+        try {
+            $cHit = $gc.FindOne()
+            if ($cHit) { $compDn = [string]$cHit.Properties['distinguishedname'][0] }
+        } catch { }
+        # A sibling-forest machine is invisible to this GC, and SCCM's heartbeat SID pins it.
+        if (-not $compDn -and $resourceId -and $server) {
+            try {
+                $p = @{ Uri = "https://$server/AdminService/wmi/SMS_R_System($resourceId)?`$select=SID,FullDomainName"
+                    UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15
+                }
+                if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+                $r = Invoke-RestMethod @p
+                if ($null -ne $r.PSObject.Properties['value']) { $r = @($r.value) | Select-Object -First 1 }
+                # The heartbeat's domain leads the sweep either way, so a stale SID costs one bind.
+                $fullDomain = [string]$r.FullDomainName
+                if ($fullDomain) {
+                    $fallbackDomains = @($fullDomain) + @($fallbackDomains | Where-Object { $_ -ne $fullDomain })
+                }
+                $sid = [string]$r.SID
+                if ($sid) {
+                    # objectSid outlives renames and OU moves, which is what rots a discovery DN.
+                    $path = if ($fullDomain) { "LDAP://$fullDomain/<SID=$sid>" } else { "LDAP://<SID=$sid>" }
+                    $probe = [ADSI]$path
+                    $probe.psbase.RefreshCache()
+                    $compDn = [string]$probe.Properties['distinguishedname'][0]
+                }
+            } catch { }
+        }
+        # Every domain the finder knows, the person's own first, asked directly.
+        if (-not $compDn) {
+            foreach ($fd in @($fallbackDomains)) {
+                if (-not $fd) { continue }
+                try {
+                    $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$fd")
+                    $ds.Filter = "(&(objectCategory=computer)(cn=$wsid))"
+                    $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+                    [void]$ds.PropertiesToLoad.Add('distinguishedName')
+                    $hit = $ds.FindOne()
+                    if ($hit) { $compDn = [string]$hit.Properties['distinguishedname'][0]; break }
+                } catch { }
+            }
+        }
+        if ($compDn) {
             $dev.domain = (($compDn -split ',' |
                         Where-Object { $_ -match '^DC=' } |
                         ForEach-Object { $_.Substring(3) }) -join '.')
@@ -219,27 +321,22 @@ $script:DeviceScript = {
                         $iso = ''
                         if ($wc -is [datetime]) {
                             $iso = $wc.ToUniversalTime().ToString('o')
-                        }
-                        elseif ($wc) {
+                        } elseif ($wc) {
                             $dt = [datetime]::MinValue
                             if ([datetime]::TryParse([string]$wc, [ref]$dt)) {
                                 $iso = $dt.ToUniversalTime().ToString('o')
-                            }
-                            else { $iso = [string]$wc }
+                            } else { $iso = [string]$wc }
                         }
                         @{
                             password = [string]$_.Properties['msfve-recoverypassword'][0]
                             created  = $iso
                         }
                     })
-            }
-            elseif (-not $dev.note) {
+            } elseif (-not $dev.note) {
                 $dev.note = 'BitLocker not escrowed to AD (or not readable)'
             }
-        }
-        elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
-    }
-    catch {
+        } elseif (-not $dev.note) { $dev.note = 'computer object not found in AD' }
+    } catch {
         if (-not $dev.note) { $dev.note = "BitLocker: $($_.Exception.Message)" }
     }
     $dev.ms = $sw.ElapsedMilliseconds
@@ -253,8 +350,7 @@ function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
     try {
         $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
         Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
-    }
-    catch {
+    } catch {
         Write-Verbose "Lens partial $Seq not written: $($_.Exception.Message)"
     }
 }
@@ -296,18 +392,21 @@ function Get-OwnerDisplayName {
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $rows = @((Invoke-RestMethod @p).value)
         if ($rows.Count -gt 0) { $r.owner = [string]$rows[0].FullUserName }
-    }
-    catch { $r.error = "SCCM user: $($_.Exception.Message)" }
+    } catch { $r.error = "SCCM user: $($_.Exception.Message)" }
     if (-not $r.owner) {
         # The GC covers only the agent's own forest, never a sibling forest's user.
         try {
             $hit = Find-Gc "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$sam))"
             if ($hit) {
                 $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
-                $r.owner = [string]$user.Properties['displayname'][0]
+                # SCCM's DOMAIN\sam is in hand, so a same-SAM twin in this forest never names it.
+                $user.psbase.RefreshCache([string[]]@('msDS-PrincipalName', 'displayName'))
+                $principal = [string]$user.Properties['msDS-PrincipalName'][0]
+                if (-not $principal -or $principal -ieq $uniqueUserName) {
+                    $r.owner = [string]$user.Properties['displayname'][0]
+                }
             }
-        }
-        catch { $r.error = "AD user: $($_.Exception.Message)" }
+        } catch { $r.error = "AD user: $($_.Exception.Message)" }
     }
     # Only a found name is memoized, so a transient failure retries on the next batch.
     if ($r.owner) { $script:OwnerNameCache[$uniqueUserName] = $r.owner }
@@ -330,12 +429,13 @@ function Get-MachineOwner {
         # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
         $unique = [string]$rows[0].UniqueUserName
         $out.sam = ($unique -split '\\')[-1]
-    }
-    catch {
+    } catch {
         $out.error = "SCCM affinity: $($_.Exception.Message)"
         return $out
     }
-    $named = Get-OwnerDisplayName -uniqueUserName $unique -sam $out.sam -server $server
+    $named = Get-OwnerDisplayName -uniqueUserName $unique `
+                                  -sam $out.sam `
+                                  -server $server
     $out.owner = [string]$named.owner
     if ($named.error) { $out.error = [string]$named.error }
     # A SAM still tells them apart when the naming is what failed.
@@ -401,45 +501,95 @@ $script:SoftwareScript = {
     return @($rows | Sort-Object { $_.software })
 }
 
+# The picked row's DN to its SAM: one serverless bind, '' when it cannot bind.
+function Get-DnSam([string]$dn) {
+    if (-not $dn) { return '' }
+    try { return [string]([ADSI]"LDAP://$dn").Properties['samaccountname'][0] }
+    catch { return '' }
+}
+
 # The user's whole software list in one request, mirroring the owner batch shape.
 function Resolve-UserSoftware {
-    param([string]$identity, [string]$sam, [string]$server)
+    param([string]$identity, [string]$sam, [string]$server, [string]$dn = '')
     $bundle = [ordered]@{ deployments = @(); error = '' }
     if (-not $server) {
         $bundle.error = 'no AdminService host configured'
         return ($bundle | ConvertTo-Json -Compress -Depth 4)
     }
     try {
-        $resolved = $sam
+        $resolved = Get-SamGuess $identity $sam
+        # The DN pins the exact account, as Read-LensUser does, ahead of any GC guess.
+        if (-not $resolved) { $resolved = Get-DnSam $dn }
         if (-not $resolved) {
             # A UPN or display name pick carries no SAM, so one GC read supplies it.
-            if ($identity -match '\\') { $resolved = $identity.Split('\')[-1] }
-            elseif ($identity -notmatch '[@\s]') { $resolved = $identity }
-            else {
-                $uFilter =
-                if ($identity -match '@') {
-                    "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))"
-                }
-                else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
-                $hit = Find-Gc $uFilter
-                if ($hit) {
-                    $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
-                    $resolved = [string]$user.Properties['samaccountname'][0]
-                }
+            $uFilter =
+            if ($identity -match '@') {
+                "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))"
+            } else { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+            $hit = Find-Gc $uFilter
+            if ($hit) {
+                $user = [ADSI]"LDAP://$([string]$hit.Properties['distinguishedname'][0])"
+                $resolved = [string]$user.Properties['samaccountname'][0]
             }
         }
         if (-not $resolved) { throw "no SAM resolved for '$identity'." }
         $bundle.deployments = @(& $script:SoftwareScript $server $resolved)
-    }
-    catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
+    } catch { $bundle.error = "SCCM software: $($_.Exception.Message)" }
     return ($bundle | ConvertTo-Json -Compress -Depth 4)
 }
 
 # --- One lookup: the validated pipeline, emitting partials as it goes ---
+# The AD person read: the picked row's DN binds the exact account in whichever
+# forest it lives, and the GC search stays as the fallback for DN-less callers.
+function Read-LensUser([string]$identity, [string]$samGuess, [string]$dn) {
+    $r = [ordered]@{ upn = ''; sam = ''; displayName = ''; email = ''
+        manager = ''; office = ''; error = ''
+    }
+    $uFilter =
+    # objectClass=user alone also matches computers, which derive from it.
+    if ($identity -match '@') { "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))" }
+    elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
+    else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
+    try {
+        $user = $null
+        if ($dn) {
+            # Serverless DN bind: the locator reaches the right domain over the trust.
+            try {
+                $bound = [ADSI]"LDAP://$dn"
+                $bound.psbase.RefreshCache()
+                $user = $bound
+            } catch { $user = $null }
+        }
+        if ($null -eq $user) {
+            $uHit = Find-Gc $uFilter
+            if (-not $uHit) { throw "no AD user matched '$identity'." }
+            # Binding the DN reaches the user's home domain.
+            $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"
+        }
+        $r.sam         = [string]$user.Properties['samaccountname'][0]
+        $r.displayName = [string]$user.Properties['displayname'][0]
+        $r.upn         = [string]$user.Properties['userprincipalname'][0]
+        $r.email       = [string]$user.Properties['mail'][0]
+        $mgrDn = [string]$user.Properties['manager'][0]
+        if ($mgrDn) { $r.manager = Get-Cn $mgrDn }
+        # physicalDeliveryOfficeName duplicates the city and province here.
+        $office = @()
+        foreach ($k in 'streetaddress', 'l', 'st', 'postalcode') {
+            $v = [string]$user.Properties[$k][0]; if ($v) { $office += $v }
+        }
+        if (-not $office) {
+            $v = [string]$user.Properties['physicaldeliveryofficename'][0]; if ($v) { $office += $v }
+        }
+        $r.office = ($office -join ', ')
+    } catch { $r.error = [string]$_.Exception.Message }
+    return $r
+}
+
 function Resolve-Lens {
     # "Lens" is singular, and the rule misreads the trailing 's'.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '')]
-    param([string]$identity, [string]$samHint, [string]$server, [string]$reqId)
+    param([string]$identity, [string]$samHint, [string]$server, [string]$reqId,
+        [string]$dn = '', [string[]]$domains = @())
     $bundle = [ordered]@{
         upn = ''; sam = ''; displayName = ''; email = ''; manager = ''; office = ''
         devices = @(); errors = @()
@@ -449,98 +599,148 @@ function Resolve-Lens {
     $marks = [ordered]@{}
 
     # Affinity can start early only when the SAM is already trustworthy.
-    $samGuess =
-    if ($samHint) { $samHint }
-    elseif ($identity -match '\\') { $identity.Split('\')[-1] }
-    elseif ($identity -notmatch '[@\s]') { $identity }
-    else { '' }
+    $samGuess = Get-SamGuess $identity $samHint
+    $sam = $samGuess
     $affinityJob = $null
     if ($samGuess -and $server) {
-        try { $affinityJob = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $server, $samGuess } catch { $affinityJob = $null }
+        try {
+            $affinityJob = Start-ThreadJob -ThrottleLimit 16 `
+                                           -ScriptBlock $script:AffinityScript `
+                                           -ArgumentList $server, $samGuess
+        } catch { $affinityJob = $null }
     }
+    $affinityStarted = [bool]$affinityJob
 
-    # AD user (forest-wide GC -> home-domain bind).
-    $sam = $samGuess
-    $uFilter =
-    # objectClass=user alone also matches computers, which derive from it.
-    if ($identity -match '@') { "(&(objectCategory=person)(objectClass=user)(userPrincipalName=$identity))" }
-    elseif ($identity -match '\s') { "(&(objectCategory=person)(objectClass=user)(displayName=$identity))" }
-    else { "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$samGuess))" }
+    # The AD read rides its own job beside affinity, so neither lane gates the other.
+    $userJob = $null
     try {
-        $uHit = Find-Gc $uFilter
-        if (-not $uHit) { throw "no AD user matched '$identity'." }
-        # Binding the DN reaches the user's home domain.
-        $user = [ADSI]"LDAP://$([string]$uHit.Properties['distinguishedname'][0])"
-        $bundle.sam         = [string]$user.Properties['samaccountname'][0]
-        $bundle.displayName = [string]$user.Properties['displayname'][0]
-        $bundle.upn         = [string]$user.Properties['userprincipalname'][0]
-        $bundle.email       = [string]$user.Properties['mail'][0]
-        $mgrDn = [string]$user.Properties['manager'][0]
-        if ($mgrDn) { $bundle.manager = Get-Cn $mgrDn }
-        # physicalDeliveryOfficeName duplicates the city and province here.
-        $office = @()
-        foreach ($k in 'streetaddress', 'l', 'st', 'postalcode') {
-            $v = [string]$user.Properties[$k][0]; if ($v) { $office += $v }
-        }
-        if (-not $office) {
-            $v = [string]$user.Properties['physicaldeliveryofficename'][0]; if ($v) { $office += $v }
-        }
-        $bundle.office = ($office -join ', ')
-        if ($bundle.sam) { $sam = $bundle.sam }
-    }
-    catch {
-        $bundle.errors += "AD user: $($_.Exception.Message)"
-    }
+        $userJob = Start-ThreadJob -ThrottleLimit 16 `
+                                   -ScriptBlock {
+            param($commonSelf, $forestNc, $identity, $samGuess, $dn)
+            . $commonSelf
+            $script:ForestNc = $forestNc
+            Read-LensUser -identity $identity `
+                          -samGuess $samGuess `
+                          -dn $dn
+        } -ArgumentList $script:CommonSelf, $script:ForestNc, $identity, $samGuess, $dn
+    } catch { $userJob = $null }
+    $user = if ($userJob) { $null }
+    else { Read-LensUser -identity $identity -samGuess $samGuess -dn $dn }
 
-    # Partial 1: directory facts.
-    Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 1
-    $marks.user = $sw.ElapsedMilliseconds
-
-    # On a UPN or display-name pick, the SAM only became known from the AD read.
-    if (-not $affinityJob -and $sam -and $server) {
-        try { $affinityJob = Start-ThreadJob -ScriptBlock $script:AffinityScript -ArgumentList $server, $sam } catch { $affinityJob = $null }
-    }
-
-    # SCCM user -> WSID(s): collect the parallel affinity result.
+    # Each lane writes the next partial as it lands, so seq follows completion order.
     $wsids = @()
     $wsMap = [ordered]@{}
-    if ($sam -and $server) {
-        $rows = $null
-        try {
-            if ($affinityJob) {
-                if (Wait-Job -Job $affinityJob -Timeout 45) {
-                    $rows = Receive-Job -Job $affinityJob -ErrorAction Stop
-                }
-                else { throw 'timed out after 45s.' }
-            }
-            else {
-                $rows = & $script:AffinityScript $server $sam
-            }
-        }
-        catch {
-            $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): $($_.Exception.Message)"
-        }
-        finally {
-            if ($affinityJob) { Remove-Job -Job $affinityJob -Force -ErrorAction SilentlyContinue }
-        }
-        # name -> ResourceID pairs, where the id feeds the hardware-inventory query.
-        foreach ($row in @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam })) {
-            $rn = [string]$row.ResourceName
-            if ($rn -and -not $wsMap.Contains($rn)) { $wsMap[$rn] = [string]$row.ResourceID }
-        }
-        $wsids = @($wsMap.Keys)
-    }
-    $marks.affinity = $sw.ElapsedMilliseconds
+    $seq = 0
+    $userDone = $false
+    $affDone = $false
+    $gatherDeadline = [datetime]::UtcNow.AddSeconds(45)
+    while (-not ($userDone -and $affDone)) {
+        $landed = $false
 
-    # Partial 2: name-only device rows the moment affinity lands.
-    if ($wsids.Count -gt 0) {
-        $bundle.devices = @($wsids | ForEach-Object {
-                [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''
-                    model = ''; serial = ''; manufacturer = ''
-                    note = 'loading details…'; bitLockerKeys = @()
+        if (-not $userDone) {
+            if ($null -eq $user -and $userJob) {
+                if ([string]$userJob.State -in @('Completed', 'Failed', 'Stopped')) {
+                    try { $user = @(Receive-Job -Job $userJob -ErrorAction Stop) | Select-Object -Last 1 }
+                    catch { $user = @{ error = [string]$_.Exception.Message } }
+                    if ($null -eq $user) { $user = @{ error = 'the AD read returned nothing.' } }
+                    Remove-Job -Job $userJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                    $userJob = $null
+                } elseif ([datetime]::UtcNow -ge $gatherDeadline) {
+                    Stop-Job -Job $userJob -ErrorAction SilentlyContinue
+                    Remove-Job -Job $userJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                    $userJob = $null
+                    $user = @{ error = 'timed out after 45s.' }
                 }
-            })
-        Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq 2
+            }
+            if ($null -ne $user) {
+                if ($user.error) { $bundle.errors += "AD user: $($user.error)" }
+                foreach ($k in 'upn', 'sam', 'displayName', 'email', 'manager', 'office') {
+                    if ($user[$k]) { $bundle[$k] = [string]$user[$k] }
+                }
+                if ($bundle.sam) { $sam = [string]$bundle.sam }
+                $marks.user = $sw.ElapsedMilliseconds
+                $userDone = $true
+                $landed = $true
+                $seq++
+                Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq $seq
+                # On a UPN or display-name pick, the SAM only became known just now.
+                if (-not $affinityStarted -and $sam -and $server) {
+                    $affinityStarted = $true
+                    try {
+                        $affinityJob = Start-ThreadJob -ThrottleLimit 16 `
+                                                       -ScriptBlock $script:AffinityScript `
+                                                       -ArgumentList $server, $sam
+                    } catch { $affinityJob = $null }
+                }
+            }
+        }
+
+        if (-not $affDone) {
+            $rows = $null
+            $haveRows = $false
+            if ($affinityJob) {
+                if ([string]$affinityJob.State -in @('Completed', 'Failed', 'Stopped')) {
+                    try { $rows = Receive-Job -Job $affinityJob -ErrorAction Stop; $haveRows = $true }
+                    catch {
+                        $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                        $_.Exception.Message
+                    }
+                    Remove-Job -Job $affinityJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                    $affinityJob = $null
+                    $affDone = $true
+                    $landed = $true
+                } elseif ([datetime]::UtcNow -ge $gatherDeadline) {
+                    Stop-Job -Job $affinityJob -ErrorAction SilentlyContinue
+                    Remove-Job -Job $affinityJob `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                    $affinityJob = $null
+                    $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                    'timed out after 45s.'
+                    $affDone = $true
+                    $landed = $true
+                }
+            } elseif ($affinityStarted) {
+                # The job would not start, so this lane's turn runs the query inline.
+                try { $rows = & $script:AffinityScript $server $sam; $haveRows = $true }
+                catch {
+                    $bundle.errors += "SCCM affinity (SMS_UserMachineRelationship, endswith '$sam'): " +
+                    $_.Exception.Message
+                }
+                $affDone = $true
+                $landed = $true
+            } elseif ($userDone) {
+                # No SAM or no site server means there is no affinity to wait for.
+                $affDone = $true
+            }
+            if ($haveRows) {
+                # name -> ResourceID pairs, where the id feeds the hardware-inventory query.
+                foreach ($row in @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -eq $sam })) {
+                    $rn = [string]$row.ResourceName
+                    if ($rn -and -not $wsMap.Contains($rn)) { $wsMap[$rn] = [string]$row.ResourceID }
+                }
+                $wsids = @($wsMap.Keys)
+                if ($wsids.Count -gt 0) {
+                    $bundle.devices = @($wsids | ForEach-Object {
+                            [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''
+                                model = ''; serial = ''; manufacturer = ''
+                                note = 'loading details…'; bitLockerKeys = @()
+                            }
+                        })
+                    $seq++
+                    Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq $seq
+                }
+            }
+            if ($affDone -and $null -eq $marks['affinity']) { $marks.affinity = $sw.ElapsedMilliseconds }
+        }
+
+        if (-not $landed -and -not ($userDone -and $affDone)) { Start-Sleep -Milliseconds 100 }
     }
 
     # One hardware job per device, beside the AD loop: the provider is slow per call,
@@ -552,24 +752,39 @@ function Resolve-Lens {
         foreach ($hwPair in $hwPairs) {
             $hwJob = $null
             try {
-                $hwJob = Start-ThreadJob -ScriptBlock $script:HardwareScript `
-                    -ArgumentList $server, @($hwPair)
-            }
-            catch { $hwJob = $null }
+                $hwJob = Start-ThreadJob -ThrottleLimit 16 `
+                                         -ScriptBlock $script:HardwareScript `
+                                         -ArgumentList $server, $hwPair
+            } catch { $hwJob = $null }
             $hwJobs.Add(@{ Job = $hwJob; Pair = $hwPair })
         }
     }
 
+    # Computers can live outside the agent's forest, so on a GC miss the device read
+    # falls back to these domains directly, the user's own domain first.
+    $adFallback = @()
+    if ($dn) {
+        $ud = (($dn -split ',' | Where-Object { $_ -match '^DC=' } |
+                    ForEach-Object { $_.Substring(3) }) -join '.')
+        if ($ud) { $adFallback += $ud }
+    }
+    foreach ($d in @($domains)) {
+        if ($d -and $adFallback -notcontains $d) { $adFallback += $d }
+    }
+
     # Per WSID: OS / last-logon / BitLocker, one job per device beside the hardware jobs.
-    # ponytail: 2N nested jobs can outgrow the throttle, and overflow queues in this lane only.
+    # ThrottleLimit 16 everywhere: on the default 5, device jobs queue behind slow
+    # hardware jobs from 3 devices up, which held partial 3 to the hardware's pace.
     $devJobs = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($wsid in $wsids) {
         $devJob = $null
         try {
-            $devJob = Start-ThreadJob -ScriptBlock $script:DeviceScript `
-                -ArgumentList $script:ForestNc, $wsid
-        }
-        catch { $devJob = $null }
+            # The affinity's ResourceID rides along, so a GC miss reads SCCM's SID for it.
+            $devArgs = @($script:ForestNc, $wsid, $adFallback, [string]$wsMap[$wsid], $server)
+            $devJob = Start-ThreadJob -ThrottleLimit 16 `
+                                      -ScriptBlock $script:DeviceScript `
+                                      -ArgumentList $devArgs
+        } catch { $devJob = $null }
         $devJobs.Add(@{ Job = $devJob; Wsid = $wsid })
     }
 
@@ -582,20 +797,21 @@ function Resolve-Lens {
                 $left = [int][Math]::Max(1, ($devDeadline - [datetime]::UtcNow).TotalSeconds)
                 if (Wait-Job -Job $entry.Job -Timeout $left) {
                     $dev = @(Receive-Job -Job $entry.Job -ErrorAction Stop) | Select-Object -Last 1
-                }
-                else { throw 'timed out after 30s.' }
+                } else { throw 'timed out after 30s.' }
             }
             # No job means it would not start, and inline keeps the row filled.
-            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid }
-        }
-        catch {
+            else { $dev = & $script:DeviceScript $script:ForestNc $entry.Wsid $adFallback }
+        } catch {
             $dev = [ordered]@{ name = $entry.Wsid; os = ''; lastLogon = ''; domain = ''
                 model = ''; serial = ''; manufacturer = ''
                 note = "AD detail: $($_.Exception.Message)"; bitLockerKeys = @()
             }
-        }
-        finally {
-            if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+        } finally {
+            if ($entry.Job) {
+                Remove-Job -Job $entry.Job `
+                           -Force `
+                           -ErrorAction SilentlyContinue
+            }
         }
         # Each device's AD wall time joins the stage marks, then leaves the bundle row.
         if ($null -ne $dev.ms) {
@@ -605,6 +821,13 @@ function Resolve-Lens {
         $devices.Add($dev)
     }
     $marks.devices = $sw.ElapsedMilliseconds
+
+    # Next partial: AD-detailed rows, so the slow hardware crawl never holds the cards.
+    if ($devices.Count -gt 0) {
+        $bundle.devices = $devices.ToArray()
+        $seq++
+        Write-LensPartial -Bundle $bundle -ReqId $reqId -Seq $seq
+    }
 
     # Merges the parallel hardware results, where a failed source degrades to blanks.
     if ($hwPairs.Count -gt 0) {
@@ -618,20 +841,21 @@ function Resolve-Lens {
                     if (Wait-Job -Job $entry.Job -Timeout $left) {
                         $got = @(Receive-Job -Job $entry.Job -ErrorAction Stop)
                         foreach ($r in $got) { $hwRows.Add($r) }
-                    }
-                    else { throw 'timed out after 30s.' }
+                    } else { throw 'timed out after 30s.' }
                 }
                 # No job means it would not start, and inline keeps the cards filled.
                 else {
-                    $got = @(& $script:HardwareScript $server @($entry.Pair))
+                    $got = @(& $script:HardwareScript $server $entry.Pair)
                     foreach ($r in $got) { $hwRows.Add($r) }
                 }
-            }
-            catch {
+            } catch {
                 $bundle.errors += "SCCM hardware ($($entry.Pair.name)): $($_.Exception.Message)"
-            }
-            finally {
-                if ($entry.Job) { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue }
+            } finally {
+                if ($entry.Job) {
+                    Remove-Job -Job $entry.Job `
+                               -Force `
+                               -ErrorAction SilentlyContinue
+                }
             }
         }
 
@@ -655,8 +879,7 @@ function Resolve-Lens {
             $unique = @($hwErrors | ForEach-Object { ($_ -split ': ', 2)[-1] } | Select-Object -Unique)
             if ($unique.Count -eq 1 -and $hwErrors.Count -gt 1) {
                 $bundle.errors += "SCCM hardware inventory: $($unique[0])"
-            }
-            else { $bundle.errors += @($hwErrors | ForEach-Object { "SCCM hardware ($_)" }) }
+            } else { $bundle.errors += @($hwErrors | ForEach-Object { "SCCM hardware ($_)" }) }
         }
     }
     $bundle.devices = $devices.ToArray()

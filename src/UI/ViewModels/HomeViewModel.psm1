@@ -43,8 +43,7 @@ class HomeViewModel : ObservableObject {
         if ($null -ne $vm) {
             $this.Set('SelectedPerson', $null)
             $this.Set('DetailMode', 'Machine')
-        }
-        elseif ($this.DetailMode -eq 'Machine') {
+        } elseif ($this.DetailMode -eq 'Machine') {
             $this.Set('DetailMode', 'Empty')
         }
     }

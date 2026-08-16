@@ -58,50 +58,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style TargetType="RichTextBox">
-        <Setter Property="Background"
-                Value="Transparent" />
-        <Setter Property="Foreground"
-                Value="{DynamicResource TerminalText}" />
-        <Setter Property="FontFamily"
-                Value="{DynamicResource FontMono}" />
-        <Setter Property="FontSize"
-                Value="14" />
-        <Setter Property="BorderThickness"
-                Value="0" />
-        <Setter Property="Margin"
-                Value="10" />
-        <Setter Property="IsReadOnly"
-                Value="True" />
-        <Setter Property="Focusable"
-                Value="True" />
-    </Style>
-    <Style TargetType="TextBox">
-        <Setter Property="Background"
-                Value="Transparent" />
-        <Setter Property="Foreground"
-                Value="{DynamicResource TerminalText}" />
-        <Setter Property="FontFamily"
-                Value="{DynamicResource FontMono}" />
-        <Setter Property="FontSize"
-                Value="14" />
-        <Setter Property="BorderThickness"
-                Value="0" />
-        <Setter Property="AcceptsReturn"
-                Value="True" />
-        <Setter Property="TextWrapping"
-                Value="Wrap" />
-        <Setter Property="VerticalScrollBarVisibility"
-                Value="Hidden" />
-        <Setter Property="HorizontalScrollBarVisibility"
-                Value="Hidden" />
-        <Setter Property="Margin"
-                Value="10" />
-        <Setter Property="IsReadOnly"
-                Value="True" />
-        <Setter Property="Focusable"
-                Value="True" />
-    </Style>
     <!-- A TextBox so detail values can be copied. No ellipsis, so long values clip. -->
     <Style x:Key="SelectableText"
            TargetType="TextBox">
@@ -131,6 +87,34 @@
                 Value="Hidden" />
         <Setter Property="VerticalScrollBarVisibility"
                 Value="Hidden" />
+    </Style>
+    <!-- SelectableText for the disk tree labels, where the root row reads brighter. -->
+    <Style x:Key="SelectableTreeLabel"
+           TargetType="TextBox"
+           BasedOn="{StaticResource SelectableText}">
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextSecondary}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsRoot}"
+                         Value="True">
+                <Setter Property="Foreground"
+                        Value="{DynamicResource TitleTextPrimary}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <!-- SelectableText for optional notes: wraps, and collapses when there is no text. -->
+    <Style x:Key="SelectableNote"
+           TargetType="TextBox"
+           BasedOn="{StaticResource SelectableText}">
+        <Setter Property="TextWrapping"
+                Value="Wrap" />
+        <Style.Triggers>
+            <Trigger Property="Text"
+                     Value="">
+                <Setter Property="Visibility"
+                        Value="Collapsed" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
     <!-- Strips the default selection visuals, the row templates draw their own. -->
     <Style x:Key="MachineListItem"
@@ -222,22 +206,6 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-    </Style>
-    <Style TargetType="GroupBox">
-        <Setter Property="Margin"
-                Value="0,0,0,18" />
-        <Setter Property="Padding"
-                Value="10" />
-        <Setter Property="FontFamily"
-                Value="{DynamicResource FontSans}" />
-        <Setter Property="FontWeight"
-                Value="Bold" />
-        <Setter Property="Background"
-                Value="{DynamicResource GroupBoxBackground}" />
-        <Setter Property="BorderBrush"
-                Value="{DynamicResource PanelBorder}" />
-        <Setter Property="BorderThickness"
-                Value="1" />
     </Style>
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">

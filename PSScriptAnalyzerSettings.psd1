@@ -15,10 +15,12 @@
     # whitespace, $null-comparison order, automatic-variable shadowing) still surfaces.
 
     # NOTE on TypeNotFound: PSSA emits it from the PARSER, not the rule engine, so it
-    # canNOT be suppressed here (listing it in ExcludeRules has no effect). It fires on
-    # the runtime-compiled MVVM base types (ObservableObject / RelayCommand) that aren't
-    # known at parse time. tools\Invoke-Lint.ps1 filters those out; the VS Code extension
-    # will still squiggle them harmlessly.
+    # canNOT be suppressed here (listing it in ExcludeRules has no effect). The parser
+    # resolves type literals against the session's loaded assemblies, so
+    # tools\Invoke-Lint.ps1 loads the WPF/WinForms assemblies first and filters the
+    # runtime-compiled launcher types (ObservableObject / RelayCommand / Donut.Interop.*)
+    # by name. The VS Code extension's own session loads neither, so it still squiggles
+    # them harmlessly.
 
     ExcludeRules = @(
         # --- False positives from the class-based / runspace design ---------------
@@ -58,11 +60,12 @@
     # Formatting rules - DONUT's ".clang-format". Mapped from Zephyr's
     # (https://github.com/zephyrproject-rtos/zephyr/blob/main/.clang-format) with
     # PowerShell idiom where C conventions don't translate:
-    #   ColumnLimit 100            -> PSAvoidLongLines at 100 (report-only by default)
-    #   IndentWidth 8 / tabs       -> 4-space indent (the PowerShell convention)
-    #   BreakBeforeBraces: Linux   -> open brace on the same line; else/catch on their
-    #                                 own line (Stroustrup - the repo's dominant style,
-    #                                 per Zephyr's "follow existing code" fallback)
+    #   ColumnLimit 100            -> PSAvoidLongLines at 120 (PSSA's default; PowerShell's
+    #                                 class nesting and cmdlet names eat 100 fast), gating
+    #   IndentWidth 8 / tabs       -> 4-space indent (the PowerShell convention; by review,
+    #                                 since the analyzer's rule is off, see below)
+    #   BreakBeforeBraces: Linux   -> open brace on the same line, and else/catch/finally
+    #                                 cuddled after the closing brace (1TBS, "} else {")
     #   AlignConsecutiveMacros     -> align hashtable assignments
     #   InsertNewlineAtEndOfFile   -> enforced by tools\Invoke-Format.ps1
     # These rules are used by tools\Invoke-Format.ps1 (Invoke-Formatter), the VS Code
@@ -76,15 +79,16 @@
         }
         PSPlaceCloseBrace = @{
             Enable             = $true
-            NewLineAfter       = $true    # else/catch/finally start their own line
+            NewLineAfter       = $false   # "} else {", "} catch {": 1TBS
             IgnoreOneLineBlock = $true
             NoEmptyLineBefore  = $false
         }
+        # Off, deliberately: multi-parameter calls continue with each parameter aligned
+        # under the first (see coding-style.md), and this rule has no alignment mode, it
+        # rewrites every such continuation to one indent level. Indentation stays 4-space
+        # by convention, kept by review rather than by the formatter.
         PSUseConsistentIndentation = @{
-            Enable              = $true
-            IndentationSize     = 4
-            PipelineIndentation = 'IncreaseIndentationForFirstPipeline'
-            Kind                = 'space'
+            Enable = $false
         }
         PSUseConsistentWhitespace = @{
             Enable          = $true
@@ -106,7 +110,7 @@
         }
         PSAvoidLongLines = @{
             Enable            = $true
-            MaximumLineLength = 100
+            MaximumLineLength = 120
         }
     }
 }

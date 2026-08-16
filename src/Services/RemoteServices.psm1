@@ -120,11 +120,18 @@ class RemoteUpdateService : RemoteJobService {
             $xml = [xml](Get-Content -LiteralPath $reportPath)
             $this.ReportCache[$hostName] = @{ Ticks = $ticks; Xml = $xml }
             return $xml
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to parse update report for $hostName", $_)
             return $null
         }
+    }
+
+    # Clearing a machine deletes its report, so reports\ never needs a manual sweep.
+    [void] DeleteReport([string]$hostName) {
+        $reportPath = Join-Path $this.Config.ReportsPath "$hostName-Updates.xml"
+        Remove-Item -LiteralPath $reportPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     [hashtable] PrepareApplyUpdates([string]$hostName, [hashtable]$selectedUpdates) {
@@ -160,7 +167,8 @@ class RemoteUpdateService : RemoteJobService {
             [long]$bytes = 0
             [void][long]::TryParse($bytesText, [ref]$bytes)
 
-            $match = $this.DriverMatcher.FindBestDriverMatch($name, $installedDrivers)
+            $type = $this.NodeText($node, 'type')
+            $match = $this.DriverMatcher.FindBestDriverMatch($name, $type, $category, $installedDrivers)
             $currentVersion = ''
             $isNewer = $false
             $hasMatch = $false
@@ -171,7 +179,7 @@ class RemoteUpdateService : RemoteJobService {
                 if ([string]::IsNullOrWhiteSpace($category)) { $category = $match.Category }
             }
             $updateRows += [DcuUpdate]::Create($name, $newVersion, $currentVersion, $hasMatch, $isNewer,
-                $this.NodeText($node, 'urgency'), $this.NodeText($node, 'type'), $category, $bytes)
+                $this.NodeText($node, 'urgency'), $category, $bytes)
         }
         # Show most-urgent first (Urgent -> Recommended -> Optional -> unknown), then by name.
         return @($updateRows | Sort-Object @{ Expression = { [DcuUpdate]::UrgencyRank($_.Urgency) } }, Name)
@@ -194,6 +202,7 @@ class RemoteUpdateService : RemoteJobService {
                 ProviderName  = $_.GetAttribute("provider")
                 DriverVersion = $_.GetAttribute("version")
                 DriverDate    = $_.GetAttribute("date")
+                DeviceClass   = $_.GetAttribute("class")
             }
         }
     }

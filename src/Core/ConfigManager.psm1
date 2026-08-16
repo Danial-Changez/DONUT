@@ -47,8 +47,7 @@ class ConfigManager {
                 try {
                     New-Item -ItemType Directory -Path $dir -Force | Out-Null
                     $this.Logger.LogDebug("Created directory: $dir")
-                }
-                catch {
+                } catch {
                     $this.Logger.LogException("Failed to create directory '$dir'", $_)
                     throw
                 }
@@ -63,12 +62,15 @@ class ConfigManager {
         $root = [DonutPaths]::DataRoot()
         $reason = [DonutPaths]::Secure($root)
         if ($reason) { $this.Logger.LogWarning("Data root left with inherited permissions: $reason") }
-        else { $this.Logger.LogInfo("Secured the data root for SYSTEM, Administrators and the interactive user: $root") }
+        else {
+            $this.Logger.LogInfo("Secured the data root for SYSTEM, Administrators and the interactive user: $root")
+        }
 
         # The move off %LOCALAPPDATA% is manual, so say where the old data is.
         $legacy = [DonutPaths]::LegacyRoot()
         if ($legacy -and (Test-Path $legacy)) {
-            $this.Logger.LogWarning("Starting with a fresh data root at $root - earlier settings, logs and reports are still under $legacy.")
+            $this.Logger.LogWarning("Starting with a fresh data root at $root - " +
+                "earlier settings, logs and reports are still under $legacy.")
         }
     }
 
@@ -79,13 +81,12 @@ class ConfigManager {
                 $json = Get-Content -Path $this.ConfigPath -Raw
                 $settings = $json | ConvertFrom-Json -AsHashtable
                 $this.Logger.LogInfo("Loaded configuration from $($this.ConfigPath)")
-            }
-            catch {
-                $this.Logger.LogException("Failed to load config from '$($this.ConfigPath)'; falling back to defaults", $_)
+            } catch {
+                $this.Logger.LogException(
+                    "Failed to load config from '$($this.ConfigPath)'; falling back to defaults", $_)
                 $settings = @{}
             }
-        }
-        else {
+        } else {
             $this.Logger.LogInfo("No configuration found at $($this.ConfigPath); writing defaults.")
             $this.SaveConfig((New-Object AppConfig $this.SourceRoot, $this.LogsPath,
                     $this.ReportsPath, @{}))
@@ -99,8 +100,7 @@ class ConfigManager {
             $json = $config.Settings | ConvertTo-Json -Depth 10
             $json | Set-Content -Path $this.ConfigPath
             $this.Logger.LogDebug("Saved configuration to $($this.ConfigPath)")
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to save config to '$($this.ConfigPath)'", $_)
         }
     }

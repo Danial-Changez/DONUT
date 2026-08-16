@@ -15,8 +15,7 @@ Describe "PoolScriptJob" {
         [RunspaceManager]::Close()
         [RunspaceManager]::Initialize(1, 1)
 
-        $script:root = Join-Path ([System.IO.Path]::GetTempPath()) `
-            ("DonutPoolJob-" + [guid]::NewGuid().ToString('N'))
+        $script:root = Join-Path $TestDrive 'DonutPoolJob'
         New-Item -ItemType Directory -Force -Path $script:root | Out-Null
 
         function New-Stub([string]$name, [string]$body) {
@@ -37,7 +36,6 @@ Describe "PoolScriptJob" {
 
     AfterAll {
         [RunspaceManager]::Close()
-        Remove-Item -Path $script:root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It "Start returns the @{ Ps; Handle; StartedAt } envelope and the script's output completes" {

@@ -99,6 +99,13 @@ scoped to the public API:
 `GenerateDocumentationFile` is intentionally off: the docs are for readers, not a
 published API surface, so CS1591 is not a build gate.
 
+Layout follows the same brace style as the PowerShell (1TBS: `if (x) {` and
+`} else {` / `} catch {`), declared in the repo's `.editorconfig` and applied by
+`dotnet format whitespace src/Launcher/Donut.Launcher.csproj`. A short statement
+may share the `if` line (`if (x) return;`), matching clang-tidy's
+`braces-around-statements` with `ShortStatementLines = 1`; anything longer opens a
+block. CI runs the same command with `--verify-no-changes`. Lines stay under 120.
+
 ## XAML (`src/UI/`)
 
 The same rule, measured across a whole `<!-- -->` span: one line, and two only for
@@ -114,34 +121,83 @@ The `Rules` section of `PSScriptAnalyzerSettings.psd1` is the repo's
 
 | Zephyr `.clang-format`        | DONUT equivalent                                        |
 | ----------------------------- | ------------------------------------------------------- |
-| `ColumnLimit: 100`            | `PSAvoidLongLines` at 100 (reported, not build-breaking) |
-| `IndentWidth: 8` (tabs)       | 4-space indent (`PSUseConsistentIndentation`)            |
-| `BreakBeforeBraces: Linux`    | Open brace same line; `else`/`catch` on their own line   |
+| `ColumnLimit: 100`            | `PSAvoidLongLines` at 120 (PSScriptAnalyzer's default; a build gate) |
+| `IndentWidth: 8` (tabs)       | 4-space indent, by review (the analyzer rule is off, see below) |
+| `BreakBeforeBraces: Linux`    | Open brace same line; `} else {`, `} catch {` cuddled (1TBS) |
 | `AlignConsecutiveMacros`      | Hashtable assignment alignment                           |
 | proper capitalization         | `PSUseCorrectCasing`                                     |
 | `InsertNewlineAtEndOfFile`    | Enforced by `Invoke-Format.ps1`                          |
 
 ```powershell
-pwsh -File tools\Invoke-Format.ps1          # fix src\ in place
+pwsh -File tools\Invoke-Format.ps1          # fix src\, tests\ and tools\ in place
 pwsh -File tools\Invoke-Format.ps1 -Check   # CI / pre-commit gate
 ```
 
-The VS Code PowerShell extension picks up the same settings file, so **Format
-Document** produces identical output.
+Beyond the analyzer's rules, `Invoke-Format.ps1` strips trailing whitespace from
+every line outside a here-string (a fixture's trailing spaces may be the point) and
+guarantees a final newline. The VS Code PowerShell extension picks up the same
+settings file, so **Format Document** produces the same brace and whitespace shape.
 
 ## Linting
 
 `tools/Invoke-Lint.ps1` runs PSScriptAnalyzer with the repo settings over `src/`,
-then sweeps **every** PowerShell, C#, web, and XAML file in the repo for the
-comment-length rule above. PSScriptAnalyzer has no such rule and cannot parse the
-other languages at all, so nothing else would catch it. Run it (and
+`tests/` and `tools/`, then sweeps **every** PowerShell, C#, web, and XAML file in
+the repo for the comment-length rule above. PSScriptAnalyzer has no such rule and
+cannot parse the other languages at all, so nothing else would catch it. Run it (and
 `Invoke-Format.ps1 -Check`) before committing; new findings are fixed, not
-suppressed.
+suppressed. Test files follow the same layout rules as source: a repeated setup
+call becomes a `BeforeAll` helper rather than a wrapped one-liner in every `It`.
 
 The comment sweep starts clean and gates unconditionally, so any hit is something
 you just added. The `Invoke-StyleCheckForChange` hook applies the same rule per
 edit, so it usually surfaces before the lint run does.
 
-`PSAvoidLongLines` is report-only: wrap when it's free, but leave a line long when
-wrapping would hurt — long URLs, the here-string script templates, and string
-literals where a mid-string break reads worse than the overrun.
+`PSAvoidLongLines` gates at 120 (PSScriptAnalyzer's default; the 100 in Zephyr's
+table is a C column, and PowerShell's class nesting and cmdlet names spend it
+fast). When a line is over, or a cmdlet call carries more than two named
+parameters, go **one per line**, each continuation aligned under the first
+parameter:
+
+```powershell
+$auth = Get-CimInstance -Namespace 'root\ccm' `
+                        -ClassName 'SMS_Authority' `
+                        -ErrorAction Stop
+```
+
+Constructor and method arguments split the same way inside the parentheses, and
+array literals one element per line. A message string splits with `+` at a phrase
+boundary; a one-line `try {} catch {}` opens up. Inside the here-string script
+templates, break only where the shipped payload stays valid PowerShell (after a
+comma, a pipe, or a doubled backtick). `PSUseConsistentIndentation` is off for
+this reason: it has no alignment mode and would rewrite every such continuation
+to one indent level, so 4-space block indentation is kept by review.
+
+`TypeNotFound` also gates, but it is a parser diagnostic rather than a rule: the
+lint session loads the WPF and WinForms assemblies first so every `[Brush]` and
+`[DispatcherTimer]` resolves, and filters the runtime-compiled launcher types by
+name. A hit therefore means a real typo in a type name, or a new runtime-compiled
+type that needs adding to the filter in `Invoke-Lint.ps1`.
+
+### The repo's own rules
+
+`tools/Rules/DonutRules.psm1` holds the conventions no stock rule can express, and
+`Invoke-Lint.ps1` loads it beside the stock set:
+
+- **DonutParameterLayout** (Warning, gates): the one-per-line and alignment shape
+  above, for calls with more than two named parameters, and alignment for any
+  wrapped call. A call under 80 columns is left alone whatever it carries, and
+  Pester's `Should` is exempt: its switches are assertion operators, not
+  parameters, and `Should -Not -BeNullOrEmpty -Because '...'` reads as a sentence.
+- **DonutFunctionSize** (Information, report only): a function or method past
+  clang-tidy's `readability-function-size` limits — 150 lines or 100 statements — or
+  past 20 branches (every `if`/`elseif`/`else`, `switch` case, loop and `catch`) or
+  five nested blocks. Reported, never gated: the handful of known hotspots
+  (`Resolve-Lens`, `MainPresenter.Initialize`, `HomePresenter.OnJobCompleted`,
+  `ResolutionCoordinator.CompleteResolveCore`, `WizTreeCsv.ParseTopFoldersFromFile`)
+  print on every run so the list stays visible and cannot grow unnoticed. Split one
+  when its file is next touched, and promote the rule to Warning once the list is
+  empty. The thresholds are pylint's and clang-tidy's kind of limit, calibrated to
+  this codebase: pylint's own 40-statement cap would flag a fifth of it.
+
+Each rule is tested through the real analyzer on snippets in
+`tests/Unit/DonutRules.Tests.ps1`.

@@ -18,7 +18,7 @@ using module ".\LogService.psm1"
 
 .NOTES
     The raw AD/DNS calls are isolated in overridable seam methods
-    (QueryDomainControllers, ResolveViaServer, TestServerOnline) so the
+    (QueryDomainControllers, ResolveViaServer, IsOnline) so the
     discovery/selection logic can be unit-tested off a domain by subclassing
     this type and faking those seams.
 
@@ -53,16 +53,17 @@ class NetworkProbe {
         try {
             $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
             $found = @($this.QueryDomainControllers() | Where-Object { $_ })
-        }
-        catch {
-            $this.Logger.LogWarning("DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
+        } catch {
+            $this.Logger.LogWarning(
+                "DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
         }
         if ($found.Count -eq 0) {
             try {
                 $found = @($this.QueryDomainControllersViaLdap() | Where-Object { $_ })
-                if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).") }
-            }
-            catch {
+                if ($found.Count -gt 0) {
+                    $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).")
+                }
+            } catch {
                 $this.Logger.LogWarning("DC discovery via .NET DirectoryServices failed: $($_.Exception.Message)")
             }
         }
@@ -70,18 +71,18 @@ class NetworkProbe {
             try {
                 $found = @($this.QueryDomainControllersViaDns() | Where-Object { $_ })
                 if ($found.Count -gt 0) { $this.Logger.LogInfo("DC discovery fell back to DNS SRV records.") }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogWarning("DC discovery via DNS SRV failed: $($_.Exception.Message)")
             }
         }
         $this.DomainControllers = $found
 
         if ($this.DomainControllers.Count -eq 0) {
-            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - is the host domain-joined with working DNS?")
-        }
-        else {
-            $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): $($this.DomainControllers -join ', ')")
+            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - " +
+                "is the host domain-joined with working DNS?")
+        } else {
+            $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): " +
+                "$($this.DomainControllers -join ', ')")
         }
         return $this.DomainControllers
     }
@@ -95,7 +96,7 @@ class NetworkProbe {
         $controllers = $this.GetDomainControllers()
         foreach ($dc in $controllers) {
             $this.Logger.LogDebug("DC discovery: probing '$dc'...")
-            if ($this.TestServerOnline($dc)) {
+            if ($this.IsOnline($dc)) {
                 $this.ActiveDomainController = $dc
                 $this.Logger.LogInfo("Selected active domain controller: $dc")
                 return $dc
@@ -124,8 +125,7 @@ class NetworkProbe {
             }
             $this.Logger.LogError("DNS resolution for '$hostName' via domain controller '$server' returned no address.")
             return $null
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via domain controller '$server' failed", $_)
             return $null
         }
@@ -144,8 +144,7 @@ class NetworkProbe {
             $ipText = if ($null -ne $ip) { $ip.ToString() } else { 'no address' }
             $this.Logger.LogDebug("DNS: '$hostName' via '$dc' -> $ipText.")
             return $ip
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("DNS resolution for '$hostName' via '$dc' failed", $_)
             return $null
         }
@@ -153,15 +152,8 @@ class NetworkProbe {
 
     # --- Connectivity probes ---
 
-    # Shared bounded (2s) TCP connect probe behind IsRpcAvailable/IsSmbAvailable. The two
-    # label params preserve each wrapper's exact log strings. Logs a DEBUG line on failure.
-    hidden [bool] IsPortOpen([string]$hostName, [int]$port,
-        [string]$portDesc, [string]$checkLabel) {
-        return $this.IsPortOpen($hostName, $port, $portDesc, $checkLabel, $true)
-    }
-
-    # $logFailure=$false silences the failure DEBUG line for hot, high-frequency callers
-    # (the per-tick tail gate) that would otherwise log every ~1.5s while a host is down.
+    # Shared bounded (2s) TCP connect probe behind the wrappers below. $logFailure=$false
+    # keeps hot per-tick callers from logging a failure DEBUG line every ~1.5s.
     hidden [bool] IsPortOpen([string]$hostName, [int]$port,
         [string]$portDesc, [string]$checkLabel, [bool]$logFailure) {
         try {
@@ -186,22 +178,23 @@ class NetworkProbe {
             $client.Close()
             if ($logFailure) { $this.Logger.LogDebug("$portDesc (port $port) not reachable on '$hostName'.") }
             return $false
-        }
-        catch {
-            if ($logFailure) { $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)") }
+        } catch {
+            if ($logFailure) {
+                $this.Logger.LogDebug("$checkLabel availability check for '$hostName' failed: $($_.Exception.Message)")
+            }
             return $false
         }
     }
 
     # TCP 135 (RPC endpoint mapper) is what psexec and CIM need to connect.
     [bool] IsRpcAvailable([string]$hostName) {
-        return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC')
+        return $this.IsPortOpen($hostName, 135, 'RPC endpoint mapper', 'RPC', $true)
     }
 
     # TCP 445 (SMB) is the admin share and psexec transport. An open 135 does not imply
     # 445, and a blocked 445 hangs UNC operations with no timeout, so check it up front.
     [bool] IsSmbAvailable([string]$hostName) {
-        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB')
+        return $this.IsPortOpen($hostName, 445, 'SMB', 'SMB', $true)
     }
 
     # Same 445 reachability check, but silent on failure. The live-tail gate calls it every
@@ -215,17 +208,18 @@ class NetworkProbe {
     [bool] IsLocalOnline() {
         try {
             return [System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()
-        }
-        catch {
+        } catch {
             return $false
         }
     }
 
     [bool] IsOnline([string]$hostName) {
         try {
-            return (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)
-        }
-        catch {
+            return (Test-Connection -ComputerName $hostName `
+                                    -Count 1 `
+                                    -Quiet `
+                                    -ErrorAction SilentlyContinue)
+        } catch {
             $this.Logger.LogDebug("Online check for '$hostName' failed: $($_.Exception.Message)")
             return $false
         }
@@ -241,8 +235,7 @@ class NetworkProbe {
             $actual = $this.QueryComputerName($ip)
             $this.Logger.LogDebug("Identity check: '$ip' reports '$actual'.")
             return $actual
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Computer-name query for '$ip' failed", $_)
             return ''
         }
@@ -264,7 +257,9 @@ class NetworkProbe {
     # Last resort: the DC locator SRV records every domain publishes in DNS.
     hidden [string[]] QueryDomainControllersViaDns() {
         $fqdn = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).Domain
-        return @(Resolve-DnsName -Type SRV -Name "_ldap._tcp.dc._msdcs.$fqdn" -ErrorAction Stop |
+        return @(Resolve-DnsName -Type SRV `
+                                 -Name "_ldap._tcp.dc._msdcs.$fqdn" `
+                                 -ErrorAction Stop |
                 Where-Object NameTarget | Select-Object -ExpandProperty NameTarget -Unique)
     }
 
@@ -289,25 +284,22 @@ class NetworkProbe {
             }
             $cs = Get-CimInstance @query
             return [string]$cs.Name
-        }
-        finally {
+        } finally {
             Remove-CimSession -CimSession $session -ErrorAction SilentlyContinue
         }
     }
 
     # Resolves a host's A record using the given DNS server. Returns $null if none.
     hidden [IPAddress] ResolveViaServer([string]$hostName, [string]$server) {
-        $records = Resolve-DnsName -Name $hostName -Server $server -Type A -ErrorAction Stop
+        $records = Resolve-DnsName -Name $hostName `
+                                   -Server $server `
+                                   -Type A `
+                                   -ErrorAction Stop
         $aRecord = $records | Where-Object { $_.IPAddress } | Select-Object -First 1
         if ($null -ne $aRecord) {
             return [IPAddress]::Parse($aRecord.IPAddress)
         }
         return $null
-    }
-
-    # Reports whether a server is reachable (used to pick an active DC).
-    hidden [bool] TestServerOnline([string]$server) {
-        return $this.IsOnline($server)
     }
 
     # --- First-run org discovery ---
@@ -330,13 +322,11 @@ class NetworkProbe {
                         'Forest', [string]$t.TargetName)
                     $partner = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ctx)
                     foreach ($d in @($partner.Domains)) { $found.Add([string]$d.Name) }
-                }
-                catch {
+                } catch {
                     $this.Logger.LogDebug("Trusted forest '$($t.TargetName)' not expandable: $($_.Exception.Message)")
                 }
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug("Search-domain discovery unavailable: $($_.Exception.Message)")
         }
         return @($found | Where-Object { $_ } | Select-Object -Unique)
@@ -346,11 +336,12 @@ class NetworkProbe {
     # AdminService (SMS Provider) host. Config-editable when they differ, '' without SCCM.
     [string] DiscoverSiteServer() {
         try {
-            $auth = Get-CimInstance -Namespace 'root\ccm' -ClassName 'SMS_Authority' -ErrorAction Stop |
+            $auth = Get-CimInstance -Namespace 'root\ccm' `
+                                    -ClassName 'SMS_Authority' `
+                                    -ErrorAction Stop |
                 Select-Object -First 1
             return [string]$auth.CurrentManagementPoint
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug("Site-server discovery unavailable: $($_.Exception.Message)")
             return ''
         }

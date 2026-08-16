@@ -11,17 +11,25 @@ Describe "ResolveWorker" {
     BeforeAll {
         $script:workerPath = [System.IO.Path]::GetFullPath(
             (Join-Path $PSScriptRoot '../../src/Scripts/ResolveWorker.ps1'))
-        $script:root = Join-Path ([System.IO.Path]::GetTempPath()) `
-            ("DonutResolveWorker-" + [guid]::NewGuid().ToString('N'))
+        $script:root = Join-Path $TestDrive 'DonutResolveWorker'
         New-Item -ItemType Directory -Force -Path $script:root | Out-Null
 
         # Load the functions only (no -ResultFile = the main body returns early).
         . $script:workerPath
         $script:log = [NullLogService]::new()
-    }
 
-    AfterAll {
-        Remove-Item -Path $script:root -Recurse -Force -ErrorAction SilentlyContinue
+        # The worker's two functions, with the null logger threaded once here.
+        function Resolve-Ip([string]$targetHost, [string]$server, [string]$domain = '') {
+            return Resolve-TargetIp -TargetHost $targetHost `
+                                    -Server $server `
+                                    -Log $script:log `
+                                    -Domain $domain
+        }
+        function Test-Port([int]$port) {
+            return Test-RpcPort -Ip '127.0.0.1' `
+                                -Log $script:log `
+                                -Port $port
+        }
     }
 
     Context "Resolve-TargetIp" {
@@ -30,7 +38,7 @@ Describe "ResolveWorker" {
                 [CmdletBinding()] param($Name, $Server, $Type)
                 [pscustomobject]@{ IPAddress = '10.1.2.3' }
             }
-            Resolve-TargetIp -TargetHost 'PC1' -Server 'DC1' -Log $script:log | Should -Be '10.1.2.3'
+            Resolve-Ip 'PC1' 'DC1' | Should -Be '10.1.2.3'
         }
 
         It "returns '' when DNS has no answer (a verdict, not an error)" {
@@ -38,7 +46,7 @@ Describe "ResolveWorker" {
                 [CmdletBinding()] param($Name, $Server, $Type)
                 [pscustomobject]@{ NameHost = 'no-a-record' }   # nothing with an IPAddress
             }
-            Resolve-TargetIp -TargetHost 'PC1' -Server 'DC1' -Log $script:log | Should -Be ''
+            Resolve-Ip 'PC1' 'DC1' | Should -Be ''
         }
 
         It "returns '' when the lookup throws" {
@@ -46,7 +54,7 @@ Describe "ResolveWorker" {
                 [CmdletBinding()] param($Name, $Server, $Type)
                 throw 'DNS server failure'
             }
-            Resolve-TargetIp -TargetHost 'PC1' -Server 'DC1' -Log $script:log | Should -Be ''
+            Resolve-Ip 'PC1' 'DC1' | Should -Be ''
         }
 
         It "returns '' without querying when no DC is supplied" {
@@ -54,7 +62,41 @@ Describe "ResolveWorker" {
                 [CmdletBinding()] param($Name, $Server, $Type)
                 throw 'must not be called'
             }
-            Resolve-TargetIp -TargetHost 'PC1' -Server '' -Log $script:log | Should -Be ''
+            Resolve-Ip 'PC1' '' | Should -Be ''
+        }
+
+        It "asks for the FQDN first when the pick's domain is known, and only that on a hit" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                [pscustomobject]@{ IPAddress = '10.9.9.9' }
+            }
+            Resolve-Ip 'PC1' 'DC1' 'sibling.local' | Should -Be '10.9.9.9'
+            @($script:asked) | Should -Be @('PC1.sibling.local')
+        }
+
+        It "falls back to the bare name when the FQDN has no answer" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                if ($Name -match '\.') { throw 'DNS name does not exist' }
+                [pscustomobject]@{ IPAddress = '10.1.2.3' }
+            }
+            Resolve-Ip 'PC1' 'DC1' 'sibling.local' | Should -Be '10.1.2.3'
+            @($script:asked) | Should -Be @('PC1.sibling.local', 'PC1')
+        }
+
+        It "never re-qualifies a name that already carries a dot" {
+            $script:asked = [System.Collections.Generic.List[string]]::new()
+            function script:Resolve-DnsName {
+                [CmdletBinding()] param($Name, $Server, $Type)
+                $script:asked.Add($Name)
+                [pscustomobject]@{ IPAddress = '10.1.2.3' }
+            }
+            $null = Resolve-Ip 'pc1.corp.local' 'DC1' 'other.local'
+            @($script:asked) | Should -Be @('pc1.corp.local')
         }
     }
 
@@ -64,12 +106,11 @@ Describe "ResolveWorker" {
             $listener.Start()
             try {
                 $open = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
-                Test-RpcPort -Ip '127.0.0.1' -Log $script:log -Port $open | Should -BeTrue
-            }
-            finally { $listener.Stop() }
+                Test-Port $open | Should -BeTrue
+            } finally { $listener.Stop() }
 
             # Nothing listens here anymore: refused connect -> $false, no throw.
-            Test-RpcPort -Ip '127.0.0.1' -Log $script:log -Port $open | Should -BeFalse
+            Test-Port $open | Should -BeFalse
         }
     }
 
@@ -78,8 +119,14 @@ Describe "ResolveWorker" {
             # Fake DC or missing Resolve-DnsName: both are DNS failures, reported as a verdict.
             $resultFile = Join-Path $script:root 'verdict.json'
             $pwsh = [System.Environment]::ProcessPath
-            & $pwsh -NoProfile -NoLogo -NonInteractive -File $script:workerPath `
-                -HostName 'PC1' -Dc 'no-such-dc.invalid' -LogsDir $script:root -ResultFile $resultFile
+            & $pwsh -NoProfile `
+                    -NoLogo `
+                    -NonInteractive `
+                    -File $script:workerPath `
+                    -HostName 'PC1' `
+                    -Dc 'no-such-dc.invalid' `
+                    -LogsDir $script:root `
+                    -ResultFile $resultFile
 
             $LASTEXITCODE | Should -Be 0
             $verdict = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json -AsHashtable

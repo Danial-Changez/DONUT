@@ -6,14 +6,18 @@ Describe "Machine owner lookup" {
         $script:Owners = $script:OwnerScript
 
         function New-Affinity { param($Rows) return [pscustomobject]@{ value = @($Rows) } }
-        function New-SccmUser { param([string]$Full) return [pscustomobject]@{ value = @(
-                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' }) }
+        function New-SccmUser {
+ param([string]$Full) return [pscustomobject]@{ value = @(
+                    [pscustomobject]@{ FullUserName = $Full; UniqueUserName = 'CORP\whoever' })
+        }
         }
     }
 
     BeforeEach {
         # The memo lives for a batch job's runspace in the agent, so tests must not share it.
         $script:OwnerNameCache = @{}
+        # Default directory stub finds nothing, tests that need more redefine it inline.
+        function Find-Gc { param([string]$Filter) return $null }
     }
 
     Context "the whole list travels in one call" {
@@ -60,7 +64,8 @@ Describe "Machine owner lookup" {
             }
             # The stub hit proves the order: SCCM answered empty, so the directory is asked next.
             # Its [ADSI] bind fails off Windows, so the catch falls back to the SAM.
-            function Find-Gc { param([string]$Filter)
+            function Find-Gc {
+ param([string]$Filter)
                 return [pscustomobject]@{ Properties = @{ distinguishedname = @('CN=x') } }
             }
 
@@ -77,7 +82,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return [pscustomobject]@{ value = @() } }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com') | ConvertFrom-Json
 
@@ -90,7 +94,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return New-SccmUser 'Jane Doe' }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
@@ -105,9 +108,9 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'WS-BAD') { throw 'Response status code does not indicate success: 500.' }
                 return New-Affinity @()
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
-            $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-BAD', 'WS-NONE') -server 'sccm.corp.com') | ConvertFrom-Json
+            $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-BAD', 'WS-NONE') -server 'sccm.corp.com') |
+                ConvertFrom-Json
 
             @($bundle.owners).Count | Should -Be 2
             $bundle.owners[0].error | Should -Match 'SCCM affinity'
@@ -129,7 +132,6 @@ Describe "Machine owner lookup" {
                 if ($Uri -match 'SMS_R_User') { return New-SccmUser 'Jane Doe' }
                 return New-Affinity @([pscustomobject]@{ UniqueUserName = 'CORP\jdoe'; ResourceName = 'WS-1' })
             }
-            function Find-Gc { param([string]$Filter) return $null }
 
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1', '', $null) -server 'sccm.corp.com') | ConvertFrom-Json
 

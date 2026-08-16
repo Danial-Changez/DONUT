@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/Invoke-StyleCheckForChange.ps1\"",
+            "timeout": 60,
+            "statusMessage": "Checking comment style"
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/Invoke-PesterForChange.ps1\"",
+            "timeout": 600,
+            "statusMessage": "Running matching Pester tests"
+          }
+        ]
+      }
+    ]
+  }
+}

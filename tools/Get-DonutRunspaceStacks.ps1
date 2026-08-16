@@ -74,17 +74,14 @@ $probeScript = {
                     $lines.Add("    at $($frame.FunctionName) " +
                         "$($frame.ScriptName):$($frame.ScriptLineNumber)")
                 }
-            }
-            else {
+            } else {
                 $lines.Add("    NO SCRIPT BREAK within ${BreakWaitSec}s - pipeline " +
                     "is inside a single native/.NET call (hooked socket, AMSI " +
                     "scan, or loader lock; the wedge is below PowerShell).")
             }
-        }
-        catch {
+        } catch {
             $lines.Add("    probe failed: $($_.Exception.Message)")
-        }
-        finally {
+        } finally {
             try { Disable-RunspaceDebug -Runspace $rs }
             catch {
                 $lines.Add("    WARNING: Disable-RunspaceDebug failed - the " +
@@ -120,8 +117,7 @@ try {
             "engine is unresponsive - consistent with a process-wide loader wedge. " +
             "Fall back to the Donut.log barrier forensics or dotnet-stack.")
         $exitCode = 2
-    }
-    else {
+    } else {
         $shell = [powershell]::Create()
         $shell.Runspace = $attachRunspace
         [void]$shell.AddScript($probeScript.ToString()).AddArgument($TimeoutSec)
@@ -131,8 +127,7 @@ try {
         $budgetMs = ($TimeoutSec * 18 + 30) * 1000
         if ($handle.AsyncWaitHandle.WaitOne($budgetMs)) {
             foreach ($line in $shell.EndInvoke($handle)) { $report.Add([string]$line) }
-        }
-        else {
+        } else {
             $report.Add("PROBE WEDGED inside the target (no reply in " +
                 "$([int]($budgetMs / 1000))s) - even the attach session cannot " +
                 "run script. That is a process-wide engine wedge; record it and " +
@@ -140,12 +135,10 @@ try {
             $exitCode = 2
         }
     }
-}
-catch {
+} catch {
     $report.Add("ATTACH FAILED: $($_.Exception.Message)")
     $exitCode = 2
-}
-finally {
+} finally {
     if ($null -ne $shell) { $shell.Dispose() }
     if ($null -ne $attachRunspace) { $attachRunspace.Dispose() }
 }
@@ -153,8 +146,7 @@ finally {
 if ($OutFile) {
     $report | Set-Content -Path $OutFile -Encoding UTF8
     Write-Host "Runspace stack report written to $OutFile"
-}
-else {
+} else {
     $report | Write-Output
 }
 exit $exitCode

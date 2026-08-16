@@ -3,7 +3,15 @@ using module "..\..\src\Core\ViewLoader.psm1"
 
 BeforeDiscovery {
     # Check STA mode at discovery time so -Skip works correctly
-    $script:isStaMode = [System.Threading.Thread]::CurrentThread.GetApartmentState() -eq [System.Threading.ApartmentState]::STA
+    $script:isStaMode = [System.Threading.Thread]::CurrentThread.GetApartmentState() -eq
+    [System.Threading.ApartmentState]::STA
+    # Discovery runs before BeforeAll, so the -ForEach list resolves the views path itself.
+    $script:discoveredViews = @(
+        Get-ChildItem -Path (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\src")).Path "UI\Views") `
+                      -Filter '*.xaml' `
+                      -Recurse |
+            ForEach-Object { $_.FullName.Substring($_.FullName.IndexOf('UI')) }
+    )
 }
 
 Describe "View composition" -Tag "Integration", "WPF" {
@@ -14,10 +22,7 @@ Describe "View composition" -Tag "Integration", "WPF" {
     }
 
     Context "Every view file loads standalone" {
-        It "loads <_> via ViewLoader" -Skip:(-not $script:isStaMode) -ForEach @(
-            Get-ChildItem -Path (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..\src")).Path "UI\Views") -Filter '*.xaml' -Recurse |
-                ForEach-Object { $_.FullName.Substring($_.FullName.IndexOf('UI')) }
-        ) {
+        It "loads <_> via ViewLoader" -Skip:(-not $script:isStaMode) -ForEach $script:discoveredViews {
             # A missed per-file StaticResource (e.g. BoolToVis) throws right here.
             $root = [ViewLoader]::Load($script:srcRoot, $_)
             $root | Should -Not -BeNullOrEmpty

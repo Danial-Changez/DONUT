@@ -9,8 +9,7 @@ namespace Donut.Launcher;
 /// and <see cref="Complete"/> when the app is ready (or on failure). Both are invoked
 /// from the PowerShell worker thread and marshal onto the splash's UI thread.
 /// </summary>
-public sealed class StartupProgress
-{
+public sealed class StartupProgress {
     private readonly SplashForm _splash;
 
     public StartupProgress(SplashForm splash) => _splash = splash;
@@ -29,15 +28,15 @@ public sealed class StartupProgress
     public void Complete() => Post(_splash.CompleteAndClose);
 
     // Marshals a splash update onto its UI thread, tolerating an already-closed splash.
-    private void Post(Action action)
-    {
+    private void Post(Action action) {
         // No handle means a tray start or a closed splash, so drop the call.
         if (_splash.IsDisposed || !_splash.IsHandleCreated) return;
-        try
-        {
+        try {
             _splash.BeginInvoke(action);
+        } catch (ObjectDisposedException) {
+            // splash already closed
+        } catch (InvalidOperationException) {
+            // handle race during teardown
         }
-        catch (ObjectDisposedException) { /* splash already closed */ }
-        catch (InvalidOperationException) { /* handle race during teardown */ }
     }
 }

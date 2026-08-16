@@ -5,15 +5,15 @@ Describe "ElevationRelaunch" {
     Context "BuildSpec" {
         BeforeDiscovery {
             # -Skip evaluates at discovery, before any BeforeAll runs.
-            $script:isPwshHost =
-            [IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) -ieq 'pwsh.exe'
+            $hostExe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $script:isPwshHost = [IO.Path]::GetFileName($hostExe) -ieq 'pwsh.exe'
         }
 
         BeforeAll {
             # Discovery-time variables are invisible at run time, so isPwshHost is set again.
             $script:spec = [ElevationRelaunch]::BuildSpec('C:\My App\src')
-            $script:isPwshHost =
-            [IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) -ieq 'pwsh.exe'
+            $hostExe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $script:isPwshHost = [IO.Path]::GetFileName($hostExe) -ieq 'pwsh.exe'
         }
 
         It "names the running host, never a guessed path" {
@@ -31,8 +31,7 @@ Describe "ElevationRelaunch" {
             if ($script:isPwshHost) {
                 $script:spec.Arguments | Should -Match '-AwaitPid \d+'
                 $script:spec.Arguments | Should -Match '-File "C:\\My App\\src\\Start-Donut\.ps1"'
-            }
-            else {
+            } else {
                 $script:spec.Arguments | Should -Match '--await-pid \d+'
             }
         }

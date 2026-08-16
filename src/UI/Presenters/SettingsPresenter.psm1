@@ -30,7 +30,6 @@ class SettingsPresenter {
     [ConfigManager] $ConfigManager
     [LogService] $Logger
     [FrameworkElement] $ViewContent
-    [FrameworkElement] $Chrome      # where the page segments live (the overlay header)
     [RadioButton] $CmdScan
     [RadioButton] $CmdApplyUpdates
     [RadioButton] $CmdGeneral
@@ -42,25 +41,24 @@ class SettingsPresenter {
     hidden [object] $HotkeyRecorder
     hidden [object] $ShortcutRecorder
 
-    # $chrome hosts the page segments, which live in the overlay's header row rather than
-    # the scrolling body, so it is the window while $view stays the body.
-    SettingsPresenter([AppConfig] $config, [ConfigManager] $configManager, [FrameworkElement] $view,
-        [FrameworkElement] $chrome, [ToastService] $toast, [hashtable] $sideEffects) {
+    # $window is MainWindow: the page segments sit in its overlay header and the
+    # option views load into its settingsContent host.
+    SettingsPresenter([AppConfig] $config, [ConfigManager] $configManager,
+        [FrameworkElement] $window, [ToastService] $toast, [hashtable] $sideEffects) {
         $this.Config = $config
         $this.ConfigManager = $configManager
         $this.Logger = $configManager.Logger
-        $this.ViewContent = $view
-        $this.Chrome = if ($chrome) { $chrome } else { $view }
+        $this.ViewContent = $window
         $this.Toast = $toast
         $this.SideEffects = $sideEffects
         $this.Initialize()
     }
 
     [void] Initialize() {
-        $this.CmdScan = $this.Chrome.FindName('cmdScan')
-        $this.CmdApplyUpdates = $this.Chrome.FindName('cmdApplyUpdates')
-        $this.CmdGeneral = $this.Chrome.FindName('cmdGeneral')
-        $this.SettingsContent = $this.ViewContent.FindName('SettingsContent')
+        $this.CmdScan = $this.ViewContent.FindName('cmdScan')
+        $this.CmdApplyUpdates = $this.ViewContent.FindName('cmdApplyUpdates')
+        $this.CmdGeneral = $this.ViewContent.FindName('cmdGeneral')
+        $this.SettingsContent = $this.ViewContent.FindName('settingsContent')
 
         # Picking a segment is view navigation (which option form shows), not data.
         $presenter = $this
@@ -82,8 +80,7 @@ class SettingsPresenter {
         # Checking a segment fires its Checked handler, which loads the option view.
         if ($this.Config.GetActiveCommand() -eq 'applyUpdates' -and $this.CmdApplyUpdates) {
             $this.CmdApplyUpdates.IsChecked = $true
-        }
-        elseif ($this.CmdScan) {
+        } elseif ($this.CmdScan) {
             $this.CmdScan.IsChecked = $true
         }
     }
@@ -95,11 +92,17 @@ class SettingsPresenter {
             $this.CurrentSettingsView = [ViewLoader]::Load(
                 $this.Config.SourceRoot, "UI\Views\Settings\$fileName")
 
+            # Both DCU forms share one UPDATE OPTIONS card, composed into their slot.
+            $slot = $this.CurrentSettingsView.FindName('updateOptionsSlot')
+            if ($slot) {
+                $slot.Content = [ViewLoader]::Load(
+                    $this.Config.SourceRoot, 'UI\Views\Settings\UpdateOptionsView.xaml')
+            }
+
             $this.SettingsContent.Content = $this.CurrentSettingsView
             $this.CurrentSection = $viewName
             $this.PopulateFields()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Failed to load option view $fileName", $_)
         }
     }
@@ -136,11 +139,9 @@ class SettingsPresenter {
 
                 if ($ctrl -is [Controls.TextBox]) {
                     $ctrl.Text = $val
-                }
-                elseif ($ctrl -is [Controls.Primitives.ToggleButton]) {
+                } elseif ($ctrl -is [Controls.Primitives.ToggleButton]) {
                     $ctrl.IsChecked = ($val -eq 'enable' -or $val -eq $true -or $val -eq 'true')
-                }
-                elseif ($ctrl -is [Controls.Panel]) {
+                } elseif ($ctrl -is [Controls.Panel]) {
                     # Panels hold multi-checkbox groups (comma-joined values).
                     $values = if ($val) { $val -split "," | ForEach-Object { $_.Trim() } }
                     else { @() }
@@ -157,27 +158,15 @@ class SettingsPresenter {
         $this.WireDcuPersistence($allControls)
     }
 
+    # Named controls in the logical tree, which spans the composed option-view slots.
     [System.Collections.ArrayList] GetAllControls([FrameworkElement] $parent) {
         $controls = [System.Collections.ArrayList]::new()
         if (-not [string]::IsNullOrWhiteSpace($parent.Name)) { $controls.Add($parent) | Out-Null }
-
-        if ($parent -is [Controls.Panel]) {
-            foreach ($child in $parent.Children) {
-                if ($child -is [FrameworkElement]) {
-                    $controls.AddRange($this.GetAllControls($child))
-                }
+        foreach ($child in [LogicalTreeHelper]::GetChildren($parent)) {
+            if ($child -is [FrameworkElement]) {
+                $controls.AddRange($this.GetAllControls($child))
             }
         }
-        elseif ($parent -is [Controls.ContentControl] -and $parent.Content -is [FrameworkElement]) {
-            $controls.AddRange($this.GetAllControls($parent.Content))
-        }
-        elseif ($parent -is [Controls.ScrollViewer] -and $parent.Content -is [FrameworkElement]) {
-            $controls.AddRange($this.GetAllControls($parent.Content))
-        }
-        elseif ($parent -is [Controls.Decorator] -and $parent.Child -is [FrameworkElement]) {
-            $controls.AddRange($this.GetAllControls($parent.Child))
-        }
-
         return $controls
     }
 
@@ -190,11 +179,9 @@ class SettingsPresenter {
                 $h = { param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure()
                 $ctrl.Add_Checked($h)
                 $ctrl.Add_Unchecked($h)
-            }
-            elseif ($ctrl -is [Controls.TextBox]) {
+            } elseif ($ctrl -is [Controls.TextBox]) {
                 $ctrl.Add_LostFocus({ param($s, $e) $self.PersistDcuArg($s) }.GetNewClosure())
-            }
-            elseif ($ctrl -is [Controls.Panel]) {
+            } elseif ($ctrl -is [Controls.Panel]) {
                 $panel = $ctrl
                 foreach ($child in $ctrl.Children) {
                     if ($child -is [Controls.CheckBox]) {
@@ -235,14 +222,16 @@ class SettingsPresenter {
         if ($throttle) {
             $throttle.Text = [string]$this.Config.GetThrottleLimit()
             $throttle.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())
-            $throttle.Add_LostFocus({ param($s, $e) $self.PersistThrottle($s) }.GetNewClosure())
+            $throttle.Add_LostFocus({ param($s, $e)
+                    $self.PersistPositiveInt($s, 'Throttle Limit', 'SetThrottleLimit') }.GetNewClosure())
         }
 
         $folders = $view.FindName('folderScanCount')
         if ($folders) {
             $folders.Text = [string]$this.Config.GetFolderScanCount()
             $folders.Add_TextChanged({ param($s, $e) $s.Tag = $null }.GetNewClosure())
-            $folders.Add_LostFocus({ param($s, $e) $self.PersistFolderScanCount($s) }.GetNewClosure())
+            $folders.Add_LostFocus({ param($s, $e)
+                    $self.PersistPositiveInt($s, 'Folders to Scan', 'SetFolderScanCount') }.GetNewClosure())
         }
 
         $lensRx = $view.FindName('lensSoftwareCollectionFilter')
@@ -255,7 +244,9 @@ class SettingsPresenter {
         $startWin = $view.FindName('chkStartWithWindows')
         if ($startWin) {
             $startWin.IsChecked = $this.Config.GetStartWithWindows()
-            $h = { param($s, $e) $self.PersistToggle('startWithWindows', [bool]$s.IsChecked, 'StartupTask') }.GetNewClosure()
+            $h = {
+                param($s, $e) $self.PersistToggle('startWithWindows', [bool]$s.IsChecked, 'StartupTask')
+            }.GetNewClosure()
             $startWin.Add_Checked($h)
             $startWin.Add_Unchecked($h)
         }
@@ -290,7 +281,12 @@ class SettingsPresenter {
         $hkClear = $view.FindName('recGlobalHotkeyClear')
         if ($hkValue -and $hkRecord) {
             $commit = { param($v) $self.PersistGesture('globalHotkey', $v, 'Hotkey') }.GetNewClosure()
-            $this.HotkeyRecorder = [KeybindRecorder]::new($hkValue, $hkRecord, $hkClear, $this.Config.GetGlobalHotkey(), $commit)
+            $this.HotkeyRecorder = [KeybindRecorder]::new(
+                $hkValue,
+                $hkRecord,
+                $hkClear,
+                $this.Config.GetGlobalHotkey(),
+                $commit)
         }
 
         $osValue = $view.FindName('recOpenSettingsValue')
@@ -298,7 +294,12 @@ class SettingsPresenter {
         $osClear = $view.FindName('recOpenSettingsClear')
         if ($osValue -and $osRecord) {
             $commit = { param($v) $self.PersistGesture('openSettingsShortcut', $v, 'WindowShortcut') }.GetNewClosure()
-            $this.ShortcutRecorder = [KeybindRecorder]::new($osValue, $osRecord, $osClear, $this.Config.GetOpenSettingsShortcut(), $commit)
+            $this.ShortcutRecorder = [KeybindRecorder]::new(
+                $osValue,
+                $osRecord,
+                $osClear,
+                $this.Config.GetOpenSettingsShortcut(),
+                $commit)
         }
     }
 
@@ -309,31 +310,16 @@ class SettingsPresenter {
         if ($sideEffect) { $this.InvokeSideEffect([string]$sideEffect) }
     }
 
-    # Validates the throttle on lost-focus and persists when it's a whole number >= 1.
-    hidden [void] PersistThrottle([object]$box) {
+    # Validates a whole number >= 1 on lost focus, persisting via the named Config setter.
+    hidden [void] PersistPositiveInt([object]$box, [string]$title, [string]$setter) {
         $text = ([string]$box.Text).Trim()
         if ($text -match '^\d+$' -and [int]$text -ge 1) {
             $this.SetFieldError($box, $false)
-            $this.Config.SetThrottleLimit([int]$text)
+            $this.Config.$setter([int]$text)
             $this.SaveConfigSafely()
-        }
-        else {
+        } else {
             $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Throttle Limit', 'Enter a whole number, 1 or more.') }
-        }
-    }
-
-    # Validates the storage-scan folder count on lost-focus and persists when it's >= 1.
-    hidden [void] PersistFolderScanCount([object]$box) {
-        $text = ([string]$box.Text).Trim()
-        if ($text -match '^\d+$' -and [int]$text -ge 1) {
-            $this.SetFieldError($box, $false)
-            $this.Config.SetFolderScanCount([int]$text)
-            $this.SaveConfigSafely()
-        }
-        else {
-            $this.SetFieldError($box, $true)
-            if ($this.Toast) { $this.Toast.ShowError('Folders to Scan', 'Enter a whole number, 1 or more.') }
+            if ($this.Toast) { $this.Toast.ShowError($title, 'Enter a whole number, 1 or more.') }
         }
     }
 
@@ -346,8 +332,7 @@ class SettingsPresenter {
             $this.SetFieldError($box, $false)
             $this.Config.SetSetting('lensSoftwareCollectionFilter', $text)
             $this.SaveConfigSafely()
-        }
-        else {
+        } else {
             $this.SetFieldError($box, $true)
             if ($this.Toast) {
                 $this.Toast.ShowError('Lens Software Filter', 'Enter a valid regex or leave blank.')
@@ -372,8 +357,7 @@ class SettingsPresenter {
     hidden [void] SaveConfigSafely() {
         try {
             $this.ConfigManager.SaveConfig($this.Config)
-        }
-        catch {
+        } catch {
             $this.Logger.LogException('Config save failed', $_)
             if ($this.Toast) { $this.Toast.ShowError('Save Failed', "$_") }
         }
@@ -398,8 +382,7 @@ class SettingsPresenter {
                     ($ctrl.Children |
                         Where-Object { $_ -is [Controls.CheckBox] -and $_.IsChecked } |
                         ForEach-Object { $_.Content.ToString() }) -join ","
-                }
-                else { $null }
+                } else { $null }
             }
         }
 

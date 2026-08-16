@@ -47,13 +47,6 @@ Describe "DcuLog.ParseReturnCode" {
 }
 
 Describe "DcuLog return-code classification" {
-    It "treats ONLY 0, 1, 5 as success (2/3/4 are real errors, not benign)" {
-        foreach ($ok in 0, 1, 5) { [DcuLog]::IsSuccess($ok) | Should -BeTrue -Because "code $ok is success/reboot" }
-        foreach ($bad in 2, 3, 4, 6, 7, 8, 105, 500, 1000) {
-            [DcuLog]::IsSuccess($bad) | Should -BeFalse -Because "code $bad is only benign per-command (500 is scan-only - see Classify)"
-        }
-    }
-
     It "flags 1 and 5 (only) as needing a reboot" {
         [DcuLog]::NeedsReboot(1) | Should -BeTrue
         [DcuLog]::NeedsReboot(5) | Should -BeTrue

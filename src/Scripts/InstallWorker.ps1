@@ -67,8 +67,7 @@ function Get-DONUTUninstallInfo {
                     KeyPath         = $subKey.PSPath
                 }
             }
-        }
-        catch {}   # An unreadable key reads as not installed.
+        } catch {}   # An unreadable key reads as not installed.
     }
     return $null
 }
@@ -90,7 +89,10 @@ function Invoke-MsiInstall {
     $ui = if ($Passive) { '/passive' } else { '/qb!' }
     $logArg = if ($LogPath) { "/log `"$LogPath`"" } else { '' }
     $msiArguments = "/i `"$MsiPath`" REBOOT=ReallySuppress $ui $logArg"
-    $p = Start-Process -FilePath 'msiexec' -ArgumentList $msiArguments -Wait -PassThru
+    $p = Start-Process -FilePath 'msiexec' `
+                       -ArgumentList $msiArguments `
+                       -Wait `
+                       -PassThru
 
     return [int]$p.ExitCode
 }
@@ -104,7 +106,10 @@ function Invoke-MsiUninstall {
 
     $ui = if ($Passive) { '/passive' } else { '/qb!' }
     $msiArguments = "/x `"$ProdCode`" $ui REBOOT=ReallySuppress"
-    $p = Start-Process -FilePath 'msiexec' -ArgumentList $msiArguments -Wait -PassThru
+    $p = Start-Process -FilePath 'msiexec' `
+                       -ArgumentList $msiArguments `
+                       -Wait `
+                       -PassThru
 
     return [int]$p.ExitCode
 }
@@ -118,8 +123,7 @@ function Stop-DonutProcessGracefully {
     foreach ($p in $procs) {
         try {
             $null = $p.CloseMainWindow()
-        }
-        catch {}
+        } catch {}
     }
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 
@@ -134,8 +138,7 @@ function Stop-DonutProcessGracefully {
         foreach ($p in $still) {
             try {
                 Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-            }
-            catch {}
+            } catch {}
         }
     }
 }
@@ -150,8 +153,7 @@ function Show-UpdateError {
             $Message, 'DONUT Update',
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
-    }
-    catch {}
+    } catch {}
 }
 
 # --- Main install logic ---
@@ -163,8 +165,7 @@ try {
     $info = Get-DONUTUninstallInfo
     $exePath = if ($info -and $info.InstallLocation) {
         Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
-    }
-    else { $null }
+    } else { $null }
 
     # A rollback uninstalls the newer build first so the older MSI installs clean.
     if ($Rollback -and $info) {
@@ -177,7 +178,9 @@ try {
     }
 
     $logPath = Join-Path -Path ([IO.Path]::GetDirectoryName($MsiPath)) -ChildPath 'msi-install.log'
-    $exit = Invoke-MsiInstall -MsiPath $MsiPath -LogPath $logPath -Passive:$Passive
+    $exit = Invoke-MsiInstall -MsiPath $MsiPath `
+                              -LogPath $logPath `
+                              -Passive:$Passive
 
     if (@(0, 3010) -notcontains $exit) {
         Show-UpdateError "DONUT update failed (code $exit).`nSee log: $logPath"
@@ -190,8 +193,7 @@ try {
         if ($staged -and (Test-Path -LiteralPath $staged)) {
             try {
                 Remove-Item -LiteralPath $staged -Force -ErrorAction Stop
-            }
-            catch {
+            } catch {
                 Write-Host "[WARN] Failed to remove $staged`: $($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
@@ -200,16 +202,14 @@ try {
     if ($exePath -and (Test-Path $exePath)) {
         try {
             Start-Process -FilePath $exePath
-        }
-        catch {
+        } catch {
             Show-UpdateError "DONUT updated but couldn't relaunch. Open it from the Start Menu."
             Write-Host "[WARN] Failed to launch DONUT: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
     exit 0
-}
-catch {
+} catch {
     Show-UpdateError "DONUT update failed:`n$($_.Exception.Message)"
     Write-Host ("[ERROR] " + $_.Exception.Message) -ForegroundColor Red
     exit 1

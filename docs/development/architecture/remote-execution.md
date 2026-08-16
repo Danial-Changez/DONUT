@@ -43,6 +43,15 @@ configuration, and native `SYSTEM` execution.
 - **Remote file handling:** UNC copy of the remote `outputLog` and `report` files,
   per-host temp logs, report-XML consolidation; the `DellCommandUpdate` service is
   pre-stopped before running DCU.
+- **Installed-driver enrichment:** after a scan, the same target-side script appends
+  a `<drivers>` section to DCU's report (PnP driver rows for the audio, network,
+  Bluetooth and display classes, each carrying its device class, plus the BIOS from
+  `Win32_BIOS`) — DCU's own XML never lists installed versions, and this section is
+  what `BuildUpdateRows` matches against to render "installed → new". Only
+  driver-type updates are fuzzy-matched (category agreement plus a shared name
+  word); a BIOS update pairs exactly with the BIOS row, and applications and
+  firmware never borrow a driver's baseline. A failure there is swallowed on the
+  target: enrichment never changes dcu-cli's exit code.
 - Live progress rides dcu-cli's `-outputLog`, tailed over the admin share; the
   remote log is cleared before each run so a recovered code is always this run's.
 

@@ -23,10 +23,9 @@ class LiveAgentLensService : PersonLensService {
 Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
 
     BeforeAll {
-        $script:originalProgramData = $env:ProgramData
-        $stamp = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-        $script:testRoot = Join-Path $env:TEMP "DonutLensAgentIntegration_$stamp"
-        $env:ProgramData = $script:testRoot
+        . "$PSScriptRoot\..\Helpers\New-RedirectedDataRoot.ps1"
+        $script:redirect = New-RedirectedDataRoot -Prefix 'DonutLensAgentIntegration' -ProgramDataOnly
+        $script:testRoot = $script:redirect.Root
         $script:exchangeDir = Join-Path $script:testRoot 'DONUT\lens-agent'
         New-Item -ItemType Directory -Path $script:exchangeDir -Force | Out-Null
 
@@ -60,10 +59,8 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
     AfterAll {
         try {
             if ($script:agent -and -not $script:agent.HasExited) { $script:agent.Kill($true) }
-        }
-        catch { }
-        $env:ProgramData = $script:originalProgramData
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        } catch { }
+        Remove-RedirectedDataRoot $script:redirect
     }
 
     It "comes up and heartbeats within 10s" {
@@ -142,8 +139,23 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
                 Where-Object { $_.Name -ne 'key.bin' }) | Should -BeNullOrEmpty
     }
 
+    It "consumes warm.flag with an immediate keep-warm ping" {
+        $flag = Join-Path $script:exchangeDir 'warm.flag'
+        [IO.File]::WriteAllText($flag, [datetime]::UtcNow.ToString('o'))
+
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $deadline -and (Test-Path -LiteralPath $flag)) {
+            Start-Sleep -Milliseconds 100
+        }
+        Test-Path -LiteralPath $flag | Should -BeFalse -Because (
+            "an unconsumed warm.flag means the resume/network hook cannot heal " +
+            "dead binds ahead of the 4-minute ping")
+    }
+
     It "exits within 5s of stop.flag" {
-        New-Item -ItemType File -Path (Join-Path $script:exchangeDir 'stop.flag') -Force | Out-Null
+        New-Item -ItemType File `
+                 -Path (Join-Path $script:exchangeDir 'stop.flag') `
+                 -Force | Out-Null
         $script:agent.WaitForExit(5000) | Should -BeTrue -Because (
             "an agent that outlives stop.flag would leak a de-elevated process " +
             "holding BitLocker-grade data past app close")

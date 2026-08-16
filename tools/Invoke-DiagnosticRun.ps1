@@ -19,7 +19,7 @@
                             no machine policy is touched)
       - stacks.txt          runspace call stacks captured before killing a child
                             that blew its deadline (Get-DonutRunspaceStacks.ps1)
-      - app-donut-tail.log  tail of the real app's %LOCALAPPDATA% Donut.log
+      - app-donut-tail.log  tail of the real app's machine-wide Donut.log
 
     Self-contained by design: it imports nothing from src/, so a fixed copy of
     this script can drive `git bisect run` against any checkout via -SourceRoot
@@ -80,11 +80,13 @@ if (-not $SourceRoot) {
 $SourceRoot = (Resolve-Path $SourceRoot).Path
 if (-not $OutDir) {
     $OutDir = Join-Path ([System.IO.Path]::GetTempPath()) `
-    ("DonutDiag-" + $runStart.ToString('yyyyMMdd-HHmmss'))
+                        ("DonutDiag-" + $runStart.ToString('yyyyMMdd-HHmmss'))
 }
 $logsDir = Join-Path $OutDir 'logs'
 $reportsDir = Join-Path $OutDir 'reports'
-New-Item -ItemType Directory -Force -Path $OutDir, $logsDir, $reportsDir | Out-Null
+New-Item -ItemType Directory `
+         -Force `
+         -Path $OutDir, $logsDir, $reportsDir | Out-Null
 
 $timeouts = @{ Warm = 120; Dc = 90; Host = 90; Disk = 180 }
 foreach ($k in $PhaseTimeouts.Keys) { $timeouts[$k] = [int]$PhaseTimeouts[$k] }
@@ -116,19 +118,17 @@ try {
             $prov.Dirty = @(& git -C $repoRoot status --porcelain 2>$null).Count -gt 0
         }
     }
-}
-catch { $prov.ProvenanceNotes += "git probe failed: $($_.Exception.Message)" }
+} catch { $prov.ProvenanceNotes += "git probe failed: $($_.Exception.Message)" }
 try {
     # Signature versions and ages are the direct test for "the machine changed, not the code".
     $mp = Get-MpComputerStatus -ErrorAction Stop
     $prov.DefenderStatus = [ordered]@{
-        AMServiceVersion            = "$($mp.AMServiceVersion)"
-        AntivirusSignatureVersion   = "$($mp.AntivirusSignatureVersion)"
+        AMServiceVersion              = "$($mp.AMServiceVersion)"
+        AntivirusSignatureVersion     = "$($mp.AntivirusSignatureVersion)"
         AntivirusSignatureLastUpdated = "$($mp.AntivirusSignatureLastUpdated)"
-        RealTimeProtectionEnabled   = $mp.RealTimeProtectionEnabled
+        RealTimeProtectionEnabled     = $mp.RealTimeProtectionEnabled
     }
-}
-catch { $prov.ProvenanceNotes += "Get-MpComputerStatus unavailable: $($_.Exception.Message)" }
+} catch { $prov.ProvenanceNotes += "Get-MpComputerStatus unavailable: $($_.Exception.Message)" }
 [pscustomobject]$prov | ConvertTo-Json -Depth 4 |
     Set-Content -Path (Join-Path $OutDir 'provenance.json')
 Write-Note "provenance: commit=$($prov.Commit) dirty=$($prov.Dirty) machine=$($prov.Machine)"
@@ -319,10 +319,11 @@ $proc = [System.Diagnostics.Process]::Start($psi)
 function Invoke-StackProbe([int]$targetPid) {
     $probe = Join-Path $PSScriptRoot 'Get-DonutRunspaceStacks.ps1'
     try {
-        & $pwshPath -NoProfile -File $probe -ProcessId $targetPid -OutFile $stacksFile |
-            Out-Null
-    }
-    catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
+        & $pwshPath -NoProfile `
+                    -File $probe `
+                    -ProcessId $targetPid `
+                    -OutFile $stacksFile | Out-Null
+    } catch { Write-Note "stack probe failed: $($_.Exception.Message)" }
 }
 
 # Probe as soon as the child flags a barrier lapse, while the wedged shells are still alive.
@@ -355,34 +356,38 @@ if (-not $SkipEventLog -and $IsWindows) {
     if ($found) {
         try {
             Get-WinEvent -FilterHashtable @{ LogName = $found; StartTime = $runStart } `
-                -ErrorAction Stop |
+                         -ErrorAction Stop |
                 Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } } |
+                        $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) }
+                } |
                 Export-Csv -Path (Join-Path $OutDir 'events-powershell.csv') -NoTypeInformation
             Write-Note "exported PowerShell events from '$found'"
-        }
-        catch { Write-Note "PowerShell event export failed: $($_.Exception.Message)" }
-    }
-    else {
+        } catch { Write-Note "PowerShell event export failed: $($_.Exception.Message)" }
+    } else {
         Write-Note "no PowerShell operational channel registered (zip/Store install?) - skipped"
     }
     try {
         Get-WinEvent -FilterHashtable @{
-            LogName = 'Microsoft-Windows-Windows Defender/Operational'
-            StartTime = $runStart } -ErrorAction Stop |
+            LogName   = 'Microsoft-Windows-Windows Defender/Operational'
+            StartTime = $runStart
+        } -ErrorAction Stop |
             Select-Object Id, TimeCreated, @{ n = 'Message'; e = {
-                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) } } |
+                    $_.Message.Substring(0, [Math]::Min(600, $_.Message.Length)) }
+            } |
             Export-Csv -Path (Join-Path $OutDir 'events-defender.csv') -NoTypeInformation
         Write-Note "exported Defender events"
-    }
-    catch { Write-Note "Defender event export skipped: $($_.Exception.Message)" }
+    } catch { Write-Note "Defender event export skipped: $($_.Exception.Message)" }
 }
 
 # --- Cross-reference: the real app's log tail ---------------------------------
-$appLog = if ($env:LOCALAPPDATA) {
-    Join-Path $env:LOCALAPPDATA 'DONUT\logs\Donut.log'
+# The checkout's DonutPaths names the app log dir, loaded late to stay self-contained.
+$appLog = ''
+$donutPathsModule = Join-Path $SourceRoot 'Core\DonutPaths.psm1'
+if (Test-Path $donutPathsModule) {
+    $appLogsDir = & ([scriptblock]::Create(
+            "using module '$donutPathsModule'`n[DonutPaths]::LogsDir()"))
+    $appLog = Join-Path $appLogsDir 'Donut.log'
 }
-else { '' }
 if ($appLog -and (Test-Path $appLog)) {
     Get-Content $appLog -Tail 2000 |
         Set-Content -Path (Join-Path $OutDir 'app-donut-tail.log')
@@ -393,8 +398,7 @@ if ($appLog -and (Test-Path $appLog)) {
 # Broken means no verdict at all, symptom means an executed phase failed or timed out.
 $verdict = if (Test-Path $verdictFile) {
     Get-Content $verdictFile -Raw | ConvertFrom-Json
-}
-else { $null }
+} else { $null }
 
 $outcome = 'pass'
 if ($null -eq $verdict) { $outcome = 'broken' }
@@ -406,8 +410,7 @@ elseif ($null -eq $verdict.Dc -or -not [bool]$verdict.Dc.Completed) { $outcome =
 elseif ($TargetHost -and ($null -eq $verdict.Hosts -or
         -not [bool]$verdict.Hosts.Completed -or -not "$($verdict.Hosts.Ip)")) {
     $outcome = 'symptom'
-}
-elseif ($IncludeDiskScan -and $TargetHost -and ($null -eq $verdict.Disk -or
+} elseif ($IncludeDiskScan -and $TargetHost -and ($null -eq $verdict.Disk -or
         -not [bool]$verdict.Disk.Completed)) {
     $outcome = 'symptom'
 }
@@ -422,9 +425,10 @@ $zipName = "DonutDiag-{0}-{1}-{2}.zip" -f [System.Environment]::MachineName,
     $prov.Commit, $runStart.ToString('yyyyMMdd-HHmmss')
 $zipPath = Join-Path (Split-Path $OutDir -Parent) $zipName
 try {
-    Compress-Archive -Path (Join-Path $OutDir '*') -DestinationPath $zipPath -Force
-}
-catch { Write-Note "bundle failed: $($_.Exception.Message)"; $zipPath = $OutDir }
+    Compress-Archive -Path (Join-Path $OutDir '*') `
+                     -DestinationPath $zipPath `
+                     -Force
+} catch { Write-Note "bundle failed: $($_.Exception.Message)"; $zipPath = $OutDir }
 
 # The zip path is the LAST line on purpose: CI and humans both consume it.
 Write-Host $zipPath

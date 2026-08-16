@@ -34,11 +34,27 @@
 
 .PARAMETER SoftwareFor
     Identity: return their SCCM application deployments instead of running a person
-    lookup. Dispatched beside the person lookup, and it rides the same -Sam hint.
+    lookup. Dispatched beside the person lookup, and it rides the same -Sam and -Dn hints.
 
 .PARAMETER Sam
     Optional sAMAccountName hint from the finder row, so the agent can start SCCM
     affinity before the AD user read resolves it.
+
+.PARAMETER Dn
+    Optional distinguishedName from the finder row. The agent binds it directly,
+    which pins the exact picked account and works across sibling forests.
+
+.PARAMETER Domains
+    The finder's configured domain list. Device AD reads fall back to these when
+    the agent forest's GC does not hold a computer object.
+
+.PARAMETER ToastTitle
+    With ToastBody: raise one Action Center toast for a KEY job outcome instead of
+    running a lookup. Routed through the de-elevated agent when DONUT is elevated,
+    since only the interactive user's toasts reach the operator's shell.
+
+.PARAMETER ToastBody
+    The toast's second line (the title carries the host name).
 
 .PARAMETER TimeoutSec
     Max seconds to wait for a lookup result. Default 60.
@@ -60,8 +76,12 @@ param(
     [Parameter(Mandatory)] [string] $SiteServer,
     [Parameter(Mandatory)] [string] $SourceRoot,
     [string] $Sam = '',
+    [string] $Dn = '',
+    [string[]] $Domains = @(),
     [string[]] $OwnerOf = @(),
     [string] $SoftwareFor = '',
+    [string] $ToastTitle = '',
+    [string] $ToastBody = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
     [switch] $StopAgent
@@ -78,11 +98,15 @@ if ($StopAgent) { [PersonLensService]::StopAndPurgeAgent(); return }
 $svc = [PersonLensService]::new($SiteServer, $SourceRoot)
 $svc.TimeoutSec = $TimeoutSec
 $svc.SamHint = $Sam
+$svc.DnHint = $Dn
+$svc.SearchDomains = @($Domains)
 if ($WarmOnly) {
     # There is no agent to warm when DONUT is already the interactive user.
     if (-not [ElevationContext]::IsElevated()) { return '' }
     return $svc.EnsureAgent()
 }
+# Key-outcome toasts ride the agent too, since only its identity reaches the shell.
+if ($ToastTitle) { $svc.ShowKeyToast($ToastTitle, $ToastBody); return '' }
 # Owner lookups ride the same agent and RBAC scope, so they are a mode, not a worker.
 if (@($OwnerOf).Count -gt 0) { return $svc.RunOwnerLookupJson($OwnerOf) }
 # Software lookups too, dispatched beside the person lookup they never wait on.

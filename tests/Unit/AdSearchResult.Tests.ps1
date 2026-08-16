@@ -148,17 +148,6 @@ Describe "AdFilter account-control decode" {
 }
 
 Describe "AdSearchResult" {
-    It "Label() returns the UPN for users, falling back to sam" {
-        $u = [AdSearchResult]::new()
-        $u.Kind = 'User'; $u.UserPrincipalName = 'sarah.test@contoso.com'; $u.SamAccountName = 'sarah'
-        $u.Label() | Should -Be 'sarah.test@contoso.com'
-        $u.UserPrincipalName = ''
-        $u.Label() | Should -Be 'sarah'
-    }
-    It "Label() returns the name for computers" {
-        $c = [AdSearchResult]::new(); $c.Kind = 'Computer'; $c.Name = 'WS-014'
-        $c.Label() | Should -Be 'WS-014'
-    }
     It "Key() distinguishes kind+domain+sam case-insensitively" {
         $a = [AdSearchResult]::new(); $a.Kind = 'User'; $a.Domain = 'D'; $a.SamAccountName = 'Sam'
         $b = [AdSearchResult]::new(); $b.Kind = 'User'; $b.Domain = 'd'; $b.SamAccountName = 'sam'

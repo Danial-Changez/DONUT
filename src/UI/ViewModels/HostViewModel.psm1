@@ -40,12 +40,10 @@ class HostViewModel : ObservableObject {
     [double] $Percent = 0
     [bool]   $ProgressVisible = $false
     [bool]   $ProgressIndeterminate = $false
-    [string] $StepText = ''   # live milestone beside the bar, e.g. "2/5 scanning devices"
     [Brush]  $DotBrush
     [Brush]  $ChipForeground
     [Brush]  $ChipBackground
     [Brush]  $ChipBorderBrush
-    [Brush]  $ProgressBrush
     [object] $RunCommand      # RelayCommand, assigned by the coordinator
     [object] $GatherCommand   # RelayCommand, assigned by the coordinator
     [object] $RemoveCommand   # RelayCommand, assigned by the coordinator (card's X)
@@ -102,12 +100,10 @@ class HostViewModel : ObservableObject {
             $this.Set('ProgressVisible', $true)
             # Indeterminate until a percentage arrives (SetPercent flips it off).
             if ($this.Percent -le 0) { $this.Set('ProgressIndeterminate', $true) }
-        }
-        else {
+        } else {
             $this.Set('ProgressVisible', $false)
             $this.Set('ProgressIndeterminate', $false)
             $this.Set('Percent', [double]0)
-            $this.Set('StepText', '')
         }
         $this.RefreshShape()
     }
@@ -120,13 +116,6 @@ class HostViewModel : ObservableObject {
         $this.Set('ProgressIndeterminate', $false)
         $this.Set('ProgressVisible', $true)
         $this.Set('Percent', $pct)
-    }
-
-    # Shows a scan milestone beside the bar. $pct also drives the bar for percent-less
-    # jobs, and -1 leaves it alone because an apply owns its own bar.
-    [void] SetScanStep([string]$text, [double]$pct) {
-        $this.Set('StepText', $text)
-        if ($pct -ge 0) { $this.SetPercent($pct) }
     }
 
     # Switches the bar to indeterminate for a phase that reports activity but no
@@ -145,8 +134,7 @@ class HostViewModel : ObservableObject {
 
         $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
             'never run'
-        }
-        else {
+        } else {
             [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
         }
         $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
@@ -170,8 +158,7 @@ class HostViewModel : ObservableObject {
                 if ($inv.HasBattery -and $inv.ChargePercent -ge 0) {
                     $state = if ($inv.Charging) { 'charging' } else { 'on battery' }
                     "$($inv.ChargePercent)% - $state"
-                }
-                else { '' }))
+                } else { '' }))
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
         $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
@@ -246,8 +233,7 @@ class HostViewModel : ObservableObject {
         $tokens = if ($full.Contains(',')) {
             $half = $full -split ',\s*', 2
             @(@($half[1] -split '\s+')[0], @($half[0] -split '\s+')[-1])
-        }
-        else { @($full -split '\s+') }
+        } else { @($full -split '\s+') }
         $tokens = @($tokens | Where-Object { $_ })
         $shortForm = [string]$tokens[0]
         if ($tokens.Count -gt 1 -and $tokens[-1].Length -gt 0) {
@@ -262,8 +248,7 @@ class HostViewModel : ObservableObject {
             $sub = if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' }
             else { "$($this.BaseSubtitle)  ·  offline" }
             $this.Set('Subtitle', $sub)
-        }
-        else {
+        } else {
             $this.Set('Subtitle', $this.BaseSubtitle)
         }
     }
@@ -281,7 +266,6 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipForeground', [HostViewModel]::BrushFor($key))
         $this.Set('ChipBackground', [HostViewModel]::TintFor($key))
         $this.Set('ChipBorderBrush', [HostViewModel]::TintBorderFor($key))
-        $this.Set('ProgressBrush', [HostViewModel]::BrushFor($key))
     }
 
     # --- Pure status mapping (idle rows; running rows go through FleetCardStatus) ---------

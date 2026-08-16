@@ -73,7 +73,6 @@ package "Donut.Services" #221634 {
         +InvokeRemotePwsh(target, scriptText, serviceName, maxMinutes): void
         +RecoverByResumeTail(ip, computer, remoteLog, seenChars): Hashtable
         +TailAndScanLog(ip, remoteLog, seenChars): Hashtable
-        -EmitNewDcuLogLines(ip, remoteLog, seenChars): int
         +{static} BuildRemoteDcuScript(command, argsString, outputLog): string
         +CopyRemoteArtifacts(host, outputLog, copyReport): Hashtable
     }
@@ -104,13 +103,6 @@ package "Donut.Core" #102A20 {
 }
 
 package "Donut.Models" #15233B {
-    class DeviceContext {
-        +HostName: string
-        +IPAddress: string
-        +IsOnline: bool
-        +StatusMessage: string
-    }
-
     enum DcuCommandOutcome {
         Success
         RebootRequired
@@ -120,7 +112,6 @@ package "Donut.Models" #15233B {
 
     class DcuLog {
         +{static} ParseReturnCode(logText): Hashtable
-        +{static} IsSuccess(code): bool
         +{static} NeedsReboot(code): bool
         +{static} Classify(command, code): DcuCommandOutcome
         +{static} DescribeReturnCode(code): string
@@ -134,9 +125,9 @@ package "Donut.Models" #15233B {
     }
 
     class DcuUpdate {
-        +Name / Category / Type / Urgency: string
+        +Name / Category / Urgency: string
         +VersionText / SizeText: string
-        +IsNewer / HasMatch: bool
+        +IsNewer: bool
         +{static} Create(name, versions, match, urgency, ...): DcuUpdate
     }
 
@@ -220,14 +211,12 @@ package "Donut.Models" #15233B {
     }
 
     class DiskUsageReport {
-        +ScannedAt: string
         +Folders: FolderUsage[]
         +{static} FromHashtable(h): DiskUsageReport
         +ToHashtable(): Hashtable
     }
 
     class WizTreeCsv {
-        +{static} ParseTopFolders(csvText, topN): DiskUsageReport
         +{static} ParseTopFoldersFromFile(path, topN): DiskUsageReport
     }
 
@@ -267,7 +256,6 @@ DiskUsageService --> ExecutionService
 
 ExecutionService --> NetworkProbe
 ExecutionService --> DriverMatchingService
-ExecutionService ..> DeviceContext
 ExecutionService ..> DcuLog
 ExecutionService ..> RemoteConnectionLostException
 ExecutionService ..> RemoteTimeoutException

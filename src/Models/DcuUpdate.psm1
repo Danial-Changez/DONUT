@@ -17,28 +17,23 @@
 class DcuUpdate {
     [string] $Name = ''
     [string] $Category = ''
-    [string] $Type = ''
     [string] $Urgency = ''       # Urgent | Recommended | Optional (drives the severity badge)
     [string] $VersionText = ''   # "1.2.0 -> 1.4.1" (matched) or "1.36.0" (no installed baseline)
     [string] $SizeText = ''      # "26.7 MB" / "1.3 GB" (blank when size unknown)
     [bool]   $IsNewer = $false
-    [bool]   $HasMatch = $false
 
     static [DcuUpdate] Create(
         [string]$name, [string]$newVersion, [string]$currentVersion, [bool]$hasMatch,
-        [bool]$isNewer, [string]$urgency, [string]$type, [string]$category, [long]$sizeBytes
+        [bool]$isNewer, [string]$urgency, [string]$category, [long]$sizeBytes
     ) {
         $u = [DcuUpdate]::new()
         $u.Name = $name
         $u.Category = $category
-        $u.Type = $type
         $u.Urgency = $urgency
         $u.IsNewer = $isNewer
-        $u.HasMatch = $hasMatch
         if ($hasMatch -and -not [string]::IsNullOrWhiteSpace($currentVersion)) {
             $u.VersionText = "$currentVersion  →  $newVersion"
-        }
-        else {
+        } else {
             # Nothing to diff against, and "(latest)" was redundant since every update is latest.
             $u.VersionText = "$newVersion"
         }

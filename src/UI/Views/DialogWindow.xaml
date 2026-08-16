@@ -119,7 +119,7 @@
                           Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
                           MaxHeight="168" VerticalScrollBarVisibility="Auto"
                           Margin="24,12,24,0">
-                <ItemsControl x:Name="lstContent" ItemsSource="{Binding ListItems}">
+                <ItemsControl ItemsSource="{Binding ListItems}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="{DynamicResource SurfaceMuted}"
@@ -152,20 +152,17 @@
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">
                 <!-- Left of the buttons so the choice reads before the commit. -->
-                <CheckBox x:Name="chkRemember"
-                          Content="{Binding RememberText}"
+                <CheckBox Content="{Binding RememberText}"
                           IsChecked="{Binding Remember, Mode=TwoWay}"
                           Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
                           VerticalAlignment="Center"
                           Margin="0,0,16,0" />
-                <Button x:Name="btnSecondary"
-                        Content="{Binding SecondaryText}"
+                <Button Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"
                         Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVis}}"
                         MinWidth="96" Height="36" Margin="0,0,8,0"
                         Style="{DynamicResource ButtonSecondary}" />
-                <Button x:Name="btnPrimary"
-                        Content="{Binding PrimaryText}"
+                <Button Content="{Binding PrimaryText}"
                         Command="{Binding PrimaryCommand}"
                         MinWidth="96" Height="36"
                         Style="{Binding PrimaryStyle}" />

@@ -5,6 +5,7 @@ using module "..\..\Core\ResolveProcessJob.psm1"
 using module "..\..\Core\RunspaceManager.psm1"
 using module "..\..\Services\HostResolver.psm1"
 using module "..\..\Models\JobEnums.psm1"
+using namespace System.Collections.Generic
 
 <#
 .SYNOPSIS
@@ -51,9 +52,9 @@ class ResolutionCoordinator {
     # Fast-lane cap: a paste-add must not spawn an unbounded pwsh burst.
     hidden [int] $FastResolveCap = 4
     hidden [int] $FastResolveActive = 0
-    hidden [System.Collections.Generic.Queue[string]] $PendingFastResolves = [System.Collections.Generic.Queue[string]]::new()
+    hidden [Queue[string]] $PendingFastResolves = [Queue[string]]::new()
     # One classic-path retry per host attempt (cleared on a successful verdict).
-    hidden [System.Collections.Generic.HashSet[string]] $FastFallbacks = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    hidden [HashSet[string]] $FastFallbacks = [HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     # Latched off for the session after 3 consecutive ProcessFaults (worst case = classic path).
     hidden [bool] $FastLaneHealthy = $true
     hidden [int] $FastFaultStreak = 0
@@ -78,14 +79,12 @@ class ResolutionCoordinator {
     [void] StartWarm() {
         try {
             $prep = $this.Resolver.PrepareWarm()
-            $job = [AsyncJob]::new('', [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new('', [JobKind]::Resolve, $this.Logger), $prep)
             # Diagnostic: free 0 means a starved pool, free > 0 means the worker hung.
             $free = try { [RunspaceManager]::GetPool().GetAvailableRunspaces() } catch { -1 }
-            $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - discovering a live controller...")
-        }
-        catch {
+            $this.Logger.LogInfo("DC warm-up started (pool free: $free/$($this.Config.GetThrottleLimit())) - " +
+                "discovering a live controller...")
+        } catch {
             $this.Logger.LogException("Resolver warm-up could not start", $_)
         }
     }
@@ -123,16 +122,14 @@ class ResolutionCoordinator {
                         $erred++
                         $this.Logger.LogError("Runspace warm completed with errors: " +
                             $this.DescribeShell($ps, $tag, $started))
-                    }
-                    else {
+                    } else {
                         $warmed++
                     }
                     try { $ps.Dispose() }
                     catch {
                         $this.Logger.LogDebug("Warm shell dispose failed: $($_.Exception.Message)")
                     }
-                }
-                else {
+                } else {
                     # Never Dispose a running pipeline: park the wedged warm and stop piling on.
                     $this.Logger.LogWarning("Warm shell parked at barrier lapse: " +
                         $this.DescribeShell($ps, $tag, $started))
@@ -142,8 +139,7 @@ class ResolutionCoordinator {
                     $parked++
                     break
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Runspace warm-up failed ($tag)", $_)
                 if ($null -ne $ps -and $null -eq $handle) {
                     try { $ps.Dispose() }
@@ -160,14 +156,12 @@ class ResolutionCoordinator {
                     $this.Logger.LogWarning(
                         "Pool capacity raised to $newMax to compensate for $parked " +
                         "runspace(s) held by an unfinished warm job.")
-                }
-                else {
+                } else {
                     $this.Logger.LogWarning(
                         "Pool capacity raise to $newMax was rejected; jobs may starve " +
                         "behind $parked held runspace(s).")
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Pool capacity compensation failed", $_)
             }
         }
@@ -195,8 +189,7 @@ class ResolutionCoordinator {
                 $line += " errors=[" + ($errs -join ' | ') + "]"
             }
             return $line
-        }
-        catch {
+        } catch {
             return "$tag (state unreadable: $($_.Exception.Message))"
         }
     }
@@ -222,8 +215,7 @@ class ResolutionCoordinator {
                 $entry.Shell.EndInvoke($entry.Handle)
                 $this.Logger.LogInfo(
                     "A runspace warm ($($entry.Tag)) finished late ($elapsed s) - that runspace is warm.")
-            }
-            catch {
+            } catch {
                 $this.Logger.LogWarning(
                     "A late runspace warm ($($entry.Tag)) failed after $elapsed s - its runspace " +
                     "cold-loads on first use: $($_.Exception.Message)")
@@ -241,8 +233,7 @@ class ResolutionCoordinator {
                     $this.Logger.LogInfo(
                         "Pool capacity restored to $($max - 1) (late warm harvested).")
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Pool capacity restore failed", $_)
             }
         }
@@ -263,17 +254,20 @@ class ResolutionCoordinator {
         $this.StartFastResolve($hostName)
     }
 
+    # The pick's home domain rides along, so a sibling-forest name resolves as its FQDN.
+    [void] PrefetchIp([string]$hostName, [string]$domain) {
+        $this.Resolver.SetDomainHint($hostName, $domain)
+        $this.PrefetchIp($hostName)
+    }
+
     hidden [void] StartFastResolve([string]$hostName) {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolveFast($hostName)
-            $job = $this.NewFastResolveJob($hostName)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob($this.NewFastResolveJob($hostName), $prep)
             $this.FastResolveActive++
             $this.Logger.LogDebug("[$hostName] fast IP pre-resolve submitted (direct child, no pool slot).")
-        }
-        catch {
+        } catch {
             # Release the latch if the job never started, or the host wedges forever.
             $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] fast IP pre-resolve could not start", $_)
@@ -291,12 +285,9 @@ class ResolutionCoordinator {
         try {
             $this.Resolver.MarkInFlight($hostName)
             $prep = $this.Resolver.PrepareResolve($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger), $prep)
             $this.Logger.LogDebug("[$hostName] IP pre-resolve job submitted (worker path).")
-        }
-        catch {
+        } catch {
             $this.Resolver.ClearInFlight($hostName)
             $this.Logger.LogException("[$hostName] IP pre-resolve could not start", $_)
         }
@@ -325,11 +316,8 @@ class ResolutionCoordinator {
         $this.Resolver.ClearVerifiedName($hostName)
         try {
             $prep = $this.Resolver.PrepareName($hostName)
-            $job = [AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger)
-            $job.Start($prep.ScriptPath, $prep.Arguments, $prep.TempConfigPath)
-            $this.Home.ActiveJobs.Add($job)
-        }
-        catch {
+            $this.Home.StartJob([AsyncJob]::new($hostName, [JobKind]::Resolve, $this.Logger), $prep)
+        } catch {
             $this.Logger.LogException("[$hostName] identity check could not start", $_)
         }
     }
@@ -350,7 +338,8 @@ class ResolutionCoordinator {
         if ($job.Status -eq 'Failed') {
             if ($isFast) { $this.OnFastResolveFault($job); return }
             # Surface why a resolve failed (an empty HostName is the startup DC warm).
-            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
+            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' }
+            else { "[$($job.HostName)] resolve" }
             $this.Logger.LogWarning("$who failed: $($job.FailureMessage)")
             # Even a failed resolve must release the single-flight latch, or the host wedges.
             $this.Resolver.ClearInFlight($job.HostName)
@@ -370,7 +359,8 @@ class ResolutionCoordinator {
         $items = @(@($job.Result) | Where-Object { $null -ne $_ })
         if ($items.Count -eq 0) {
             # An empty payload must still release the latch, or the host wedges forever.
-            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' } else { "[$($job.HostName)] resolve" }
+            $who = if ([string]::IsNullOrWhiteSpace($job.HostName)) { 'DC warm-up' }
+            else { "[$($job.HostName)] resolve" }
             $this.Logger.LogWarning("$who completed with no verdict payload - treating it as failed.")
             $this.Resolver.ClearInFlight($job.HostName)
             $this.Home.DropPendingRunOnResolveFailure($job.HostName)
@@ -389,14 +379,12 @@ class ResolutionCoordinator {
                 if (-not [string]::IsNullOrWhiteSpace($dc)) {
                     $this.Resolver.SetActiveDc($dc)
                     $this.PersistDomainController($dc)
-                }
-                else {
+                } else {
                     $this.Logger.LogWarning("DC warm-up completed but found no reachable controller.")
                 }
                 # The startup crunch is over either way: release the deferred warms.
                 $this.Home.StartDeferredWarms('DC warm-up completed')
-            }
-            elseif ($mode -eq 'Host') {
+            } elseif ($mode -eq 'Host') {
                 $hn = [string]$item.HostName
                 $newIp = [string]$item.Ip
                 $online = [bool]$item.Online
@@ -414,15 +402,16 @@ class ResolutionCoordinator {
                 $this.Home.RenderReachability($hn)
                 # Surface the fresh IP in the detail subtitle if this host's panel is open.
                 if ($hn -eq $this.Home.SelectedHost) {
-                    $this.Home.Detail.RenderDetailSubtitle($hn)
+                    $row = $this.Home.GetRow($hn)
+                    if ($row) { $row.SetResolvedIp($this.Resolver.GetCachedIp($hn)) }
                 }
                 # HomePresenter owns the queue: hand the verdict back to re-issue queued work.
                 $this.Home.ReissueAfterResolve($hn, $online)
-            }
-            elseif ($mode -eq 'Name') {
+            } elseif ($mode -eq 'Name') {
                 $this.Resolver.CacheName([string]$item.HostName, [string]$item.ActualName)
-            }
-            elseif ($mode -eq 'WarmRunspace') {
+                # HomePresenter owns the apply gate: the verdict releases or drops a waiting apply.
+                $this.Home.OnIdentityVerdict([string]$item.HostName)
+            } elseif ($mode -eq 'WarmRunspace') {
                 # No-op: the job's purpose was loading the module graph into its runspace.
             }
         }
@@ -443,8 +432,7 @@ class ResolutionCoordinator {
         if ($this.FastFallbacks.Add($hn)) {
             $this.Logger.LogWarning("[$hn] fast resolve fault: $($job.FailureMessage); retrying on the worker path.")
             $this.StartClassicResolve($hn)
-        }
-        else {
+        } else {
             # Second fault in one attempt: give up like a classic failure would.
             $this.Logger.LogWarning("[$hn] fast resolve fault after a fallback: $($job.FailureMessage)")
             $this.Home.DropPendingRunOnResolveFailure($hn)

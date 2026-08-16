@@ -4,17 +4,20 @@ using module "..\..\src\Services\HostResolver.psm1"
 
 Describe "HostResolver" {
     BeforeAll {
-        $script:tempDir = Join-Path $env:TEMP "DonutTests_Resolver_$(Get-Random)"
-        New-Item -Path (Join-Path $script:tempDir "Scripts") -ItemType Directory -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempDir "Scripts\RemoteWorker.ps1") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempDir "Scripts\ResolveWorker.ps1") -ItemType File -Force | Out-Null
-        $script:config = [AppConfig]::new($script:tempDir, (Join-Path $script:tempDir "Logs"), (Join-Path $script:tempDir "Reports"), @{})
+        $script:tempDir = Join-Path $TestDrive "Resolver"
+        $scripts = Join-Path $script:tempDir "Scripts"
+        New-Item -Path $scripts -ItemType Directory -Force | Out-Null
+        foreach ($worker in 'RemoteWorker.ps1', 'ResolveWorker.ps1') {
+            New-Item -Path (Join-Path $scripts $worker) `
+                     -ItemType File `
+                     -Force | Out-Null
+        }
+        $script:config = [AppConfig]::new($script:tempDir,
+            (Join-Path $script:tempDir "Logs"),
+            (Join-Path $script:tempDir "Reports"),
+            @{})
 
         function New-Resolver { [HostResolver]::new($script:config, [NetworkProbe]::new()) }
-    }
-
-    AfterAll {
-        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Context "IP cache" {
@@ -180,15 +183,28 @@ Describe "HostResolver" {
             $prep.Arguments.Options.Ip   | Should -Be "10.0.0.5"
         }
 
-        It "PrepareResolveFast targets ResolveWorker with four CLI args and no Settings" {
+        It "PrepareResolveFast targets ResolveWorker with five CLI args and no Settings" {
             $r = New-Resolver
             $r.SetActiveDc("DC1")
             $prep = $r.PrepareResolveFast("PC-1")
             $prep.ScriptPath | Should -Match 'ResolveWorker\.ps1$'
             $prep.Arguments.HostName | Should -Be "PC-1"
             $prep.Arguments.Dc | Should -Be "DC1"
+            $prep.Arguments.Domain | Should -Be ''
             $prep.Arguments.ContainsKey('DebugLog') | Should -BeTrue
-            $prep.Arguments.Keys.Count | Should -Be 4   # No Settings snapshot rides along.
+            $prep.Arguments.Keys.Count | Should -Be 5   # No Settings snapshot rides along.
+        }
+
+        It "both resolve preps carry the pick's domain hint, blank for an unhinted host" {
+            $r = New-Resolver
+            $r.SetActiveDc("DC1")
+            $r.SetDomainHint("PC-1", " sibling.corp.local ")
+            $r.PrepareResolveFast("PC-1").Arguments.Domain | Should -Be "sibling.corp.local"
+            $r.PrepareResolve("PC-1").Arguments.Options.Domain | Should -Be "sibling.corp.local"
+            $r.PrepareResolve("PC-2").Arguments.Options.Domain | Should -Be ''
+            # A blank hint never overwrites a known domain (re-adds from recents pass none).
+            $r.SetDomainHint("PC-1", "")
+            $r.GetDomainHint("pc-1 ") | Should -Be "sibling.corp.local"
         }
     }
 
@@ -212,6 +228,12 @@ Describe "HostResolver" {
             $r.CacheName("PC-1", "OTHER-PC")
             $r.ClearVerifiedName("PC-1")
             $r.IdentityVerdict("PC-1") | Should -Be 'Unknown'
+        }
+        It "Failed when the check ran but the box gave no name, unlike a check that never ran" {
+            $r = New-Resolver
+            $r.CacheName("PC-1", "")
+            $r.IdentityVerdict("PC-1") | Should -Be 'Failed'
+            $r.IdentityVerdict("PC-2") | Should -Be 'Unknown'
         }
     }
 }

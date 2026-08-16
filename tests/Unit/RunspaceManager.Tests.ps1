@@ -6,13 +6,13 @@ Describe "RunspaceManager" {
 
     AfterEach {
         [RunspaceManager]::Close()
-        [RunspaceManager]::SetLogger($null)
+        [RunspaceManager]::Logger = [NullLogService]::new()
     }
 
     Context "Initialize" {
         It "Should create a RunspacePool with default parameters" {
             [RunspaceManager]::Initialize(1, 5)
-            
+
             $pool = [RunspaceManager]::RunspacePool
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
@@ -20,7 +20,7 @@ Describe "RunspaceManager" {
 
         It "Should create a RunspacePool with custom min/max" {
             [RunspaceManager]::Initialize(2, 10)
-            
+
             $pool = [RunspaceManager]::RunspacePool
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
@@ -83,7 +83,7 @@ Describe "RunspaceManager" {
         It "Should return existing pool if initialized" {
             [RunspaceManager]::Initialize(1, 5)
             $pool = [RunspaceManager]::GetPool()
-            
+
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
         }
@@ -92,7 +92,7 @@ Describe "RunspaceManager" {
             [RunspaceManager]::Close()
 
             $pool = [RunspaceManager]::GetPool()
-            
+
             $pool | Should -Not -BeNullOrEmpty
             $pool.RunspacePoolStateInfo.State | Should -Be 'Opened'
         }
@@ -124,7 +124,7 @@ Describe "RunspaceManager" {
     Context "Logging" {
         It "Should log pool open and close through the attached logger" {
             $logger = [CapturingLogService]::new()
-            [RunspaceManager]::SetLogger($logger)
+            [RunspaceManager]::Logger = $logger
 
             [RunspaceManager]::Initialize(1, 5)
             [RunspaceManager]::Close()
@@ -133,8 +133,8 @@ Describe "RunspaceManager" {
             ($logger.Contains("opened") -and $logger.Contains("closed")) | Should -Be $true
         }
 
-        It "Should not throw when no logger is attached" {
-            [RunspaceManager]::SetLogger($null)
+        It "Should not throw with the default no-op logger" {
+            [RunspaceManager]::Logger = [NullLogService]::new()
 
             { [RunspaceManager]::Initialize(1, 5); [RunspaceManager]::Close() } | Should -Not -Throw
         }

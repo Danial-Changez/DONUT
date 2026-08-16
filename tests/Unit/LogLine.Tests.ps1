@@ -82,14 +82,4 @@ Describe "LogLine" {
         }
     }
 
-    Context "WithText" {
-        It "keeps the stamp and severity, replaces the text" {
-            $orig = [LogLine]::FromWorkerLine('[2026-07-02 15:15:43] : original', [LogSeverity]::Warn)
-            $l = $orig.WithText('replaced')
-            $l.Stamp | Should -Be '15:15:43'
-            $l.Severity | Should -Be ([LogSeverity]::Warn)
-            $l.Text | Should -Be 'replaced'
-            $l.DisplayText | Should -Be '[Warn] replaced'
-        }
-    }
 }

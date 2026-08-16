@@ -33,7 +33,9 @@ Describe "Startup warm + resolve smoke" {
         $script:WorkDir = Join-Path ([System.IO.Path]::GetTempPath()) "DonutStartupSmoke-$PID"
         $script:LogsDir = Join-Path $WorkDir 'logs'
         $script:ReportsDir = Join-Path $WorkDir 'reports'
-        New-Item -ItemType Directory -Force -Path $LogsDir, $ReportsDir | Out-Null
+        New-Item -ItemType Directory `
+                 -Force `
+                 -Path $LogsDir, $ReportsDir | Out-Null
 
         # The harness deliberately leaks a lapsed shell, since disposing a running pipeline blocks.
         $script:ChildScript = Join-Path $WorkDir 'SmokeHarness.ps1'
@@ -118,12 +120,14 @@ catch { $result.Error = $_.Exception.Message }
         }
         $script:Smoke = if (Test-Path $script:OutJson) {
             Get-Content $script:OutJson -Raw | ConvertFrom-Json
-        }
-        else { $null }
+        } else { $null }
     }
 
     AfterAll {
-        Remove-Item $script:WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $script:WorkDir `
+                    -Recurse `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     It "the worker warm pass (the startup barrier body) terminates on a live pool" {

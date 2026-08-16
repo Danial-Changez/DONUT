@@ -2,14 +2,14 @@ using module "..\..\src\Services\SelfUpdateService.psm1"
 using module "..\..\src\Core\DonutPaths.psm1"
 
 Describe "SelfUpdateService" {
-    
+
     Context "Token Management" {
-        
+
         It "Saves and retrieves a token successfully" {
             $testTokenFile = Join-Path $TestDrive "GitHub_Token.json"
             $service = [SelfUpdateService]::new()
             $service.TokenFile = $testTokenFile
-            
+
             $fakeTokenData = [PSCustomObject]@{
                 access_token = "ghp_fake_token_123"
                 scope        = "repo"
@@ -26,26 +26,26 @@ Describe "SelfUpdateService" {
         It "Returns null if token file does not exist" {
             $service = [SelfUpdateService]::new()
             $service.TokenFile = "C:\NonExistent\Path\token.json"
-            
+
             $result = $service.GetStoredToken()
             $result | Should -BeNullOrEmpty
         }
     }
 
     Context "GitHub API Interaction" {
-        
+
         It "Initiates Device Flow correctly" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
-                
+
                 Mock Invoke-RestMethod {
                     return [PSCustomObject]@{
                         device_code      = "fake_device_code"
                         user_code        = "1234-5678"
                         verification_uri = "https://github.com/login/device"
                     }
-                } -ParameterFilter { 
-                    $Uri -eq "https://github.com/login/device/code" -and $Method -eq "Post" 
+                } -ParameterFilter {
+                    $Uri -eq "https://github.com/login/device/code" -and $Method -eq "Post"
                 }
 
                 $result = $service.InitiateDeviceFlow()
@@ -94,7 +94,7 @@ Describe "SelfUpdateService" {
     }
 
     Context "Asset Management" {
-        
+
         It "Finds the correct asset by pattern" {
             $service = [SelfUpdateService]::new()
             $release = [PSCustomObject]@{
@@ -112,14 +112,14 @@ Describe "SelfUpdateService" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
 
-                Mock Invoke-RestMethod { } 
+                Mock Invoke-RestMethod { }
                 Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
 
                 $asset = [PSCustomObject]@{ name = "file.txt"; url = "http://url/file" }
                 $dest = Join-Path $TestDrive "Downloads"
-                
+
                 $path = $service.DownloadAsset("token", $asset, $dest)
-                
+
                 $path | Should -Be (Join-Path $dest "file.txt")
                 Should -Invoke Invoke-RestMethod -Times 1
             }
@@ -127,7 +127,7 @@ Describe "SelfUpdateService" {
     }
 
     Context "Version Detection" {
-        
+
         It "Detects version from Registry" {
             InModuleScope "SelfUpdateService" {
                 $service = [SelfUpdateService]::new()
@@ -186,7 +186,7 @@ Describe "SelfUpdateService" {
                         DisplayVersion = "9.9.9"
                     }
                 }
-                
+
                 $versionFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
                 Mock Test-Path { return $false } -ParameterFilter { $Path -eq $versionFile }
 
@@ -197,7 +197,7 @@ Describe "SelfUpdateService" {
     }
 
     Context "Update Application" {
-    
+
         It "Verifies file hash correctly" {
             $service = [SelfUpdateService]::new()
             $file = Join-Path $TestDrive "test.txt"
@@ -210,9 +210,9 @@ Describe "SelfUpdateService" {
 
         It "Returns false for non-existent file" {
             $service = [SelfUpdateService]::new()
-            
+
             $result = $service.VerifyFileHash("C:\NonExistent\file.msi", "SOMEHASH")
-            
+
             $result | Should -Be $false
         }
 
@@ -256,7 +256,8 @@ Describe "SelfUpdateService" {
 
                 Mock Test-Path { return $false }
 
-                { $service.ApplyUpdate("C:\Temp\DONUT.msi", $false, "C:\NonExistent") } | Should -Throw "*InstallWorker.ps1 not found*"
+                { $service.ApplyUpdate("C:\Temp\DONUT.msi", $false, "C:\NonExistent") } |
+                    Should -Throw "*InstallWorker.ps1 not found*"
             }
         }
     }
@@ -265,13 +266,13 @@ Describe "SelfUpdateService" {
         It "Returns null when token file is corrupted" {
             $service = [SelfUpdateService]::new()
             $corruptFile = Join-Path $TestDrive "corrupt_token.json"
-            
+
             # Write non-DPAPI-encrypted garbage
-            [IO.File]::WriteAllBytes($corruptFile, [byte[]](1,2,3,4,5))
+            [IO.File]::WriteAllBytes($corruptFile, [byte[]](1, 2, 3, 4, 5))
             $service.TokenFile = $corruptFile
 
             $result = $service.GetStoredToken()
-            
+
             $result | Should -BeNullOrEmpty
         }
     }

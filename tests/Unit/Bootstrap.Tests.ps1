@@ -14,12 +14,9 @@ if (-not ('Donut.Launcher.Bootstrap' -as [type])) {
 
 Describe 'Bootstrap.FindOnPath' {
     BeforeAll {
-        $script:dir = Join-Path ([IO.Path]::GetTempPath()) "donut-bootstrap-test-$PID"
+        $script:dir = Join-Path $TestDrive 'donut-bootstrap-test'
         New-Item -ItemType Directory -Path $script:dir -Force | Out-Null
         Set-Content -Path (Join-Path $script:dir 'present.exe') -Value ''
-    }
-    AfterAll {
-        Remove-Item $script:dir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It 'resolves an exe that exists on the search path' {

@@ -75,7 +75,7 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     same agent.
     $Home is a duck-typed back-reference to HomePresenter (a typed import would be a
     using-module cycle); the complete machine-side seam is: Resolution.PrefetchIp,
-    EnsureRow, StartInventory, MoveRowToTop, UpdateEmptyHint. Event-handler scriptblocks capture
+    EnsureRow, StartInventory, MoveRowToTop. Event-handler scriptblocks capture
     $presenter, since in a WPF handler $this rebinds to the sender.
 #>
 class FinderPresenter {
@@ -122,11 +122,10 @@ class FinderPresenter {
     [List[hashtable]]     $LensJobs         # in-flight @{ Ps; Handle; Token }
     [object]              $OwnerJob         # the one in-flight machine-owner batch, or $null
     [object]              $SoftwareJob      # the one in-flight software lookup, or $null
+    [List[hashtable]]     $ToastJobs        # fire-and-forget key-outcome toast workers
     hidden [string]       $SoftwareKey = '' # the pick whose software the reap may apply
     # identity -> @{ At; Json }, memory only beside LensCache (no secrets, same lifetime).
     hidden [hashtable] $SoftwareCache = @{}
-    [bool]                $LensWarmTimed
-    [DispatcherTimer]     $WarmWatchTimer   # times the warms, stops itself once they land
     [DispatcherTimer]     $LensPollTimer
     [int]                 $LensToken = 0    # newest pick wins, stale results are discarded
     # Startup agent warm-up @{ Ps; Handle; StartedAt }, reaped on the first pick.
@@ -185,38 +184,12 @@ class FinderPresenter {
         # User Lens: one shared VM (reused per pick) + a poll timer for the lookups.
         $this.LensVm = [PersonLensViewModel]::new()
         $this.LensJobs = [List[hashtable]]::new()
+        $this.ToastJobs = [List[hashtable]]::new()
         $this.LensWarmExtras = [List[hashtable]]::new()
         $this.LensPollTimer = [DispatcherTimer]::new()
         # Gated on in-flight lookups, so a fast tick is free and it halves partial paint lag.
         $this.LensPollTimer.Interval = [TimeSpan]::FromMilliseconds(100)
         $this.LensPollTimer.Add_Tick({ $presenter.PollLens() }.GetNewClosure())
-
-        # The reaps fire on the first search or pick, so timing there measures the user.
-        $this.WarmWatchTimer = [DispatcherTimer]::new()
-        $this.WarmWatchTimer.Interval = [TimeSpan]::FromMilliseconds(250)
-        $this.WarmWatchTimer.Add_Tick({ $presenter.PollWarmTimings() }.GetNewClosure())
-    }
-
-    # Runs only during startup, so the tick costs nothing once the warms have landed.
-    [void] PollWarmTimings() {
-        $pending = 0
-        foreach ($j in @($this.AdWarmJobs)) {
-            if ($j.Timed) { continue }
-            if (-not $j.Handle.IsCompleted) { $pending++; continue }
-            $j.Timed = $true
-            $ms = [long]([datetime]::UtcNow - [datetime]$j.StartedAt).TotalMilliseconds
-            $this.Logger.LogDebug("AD warm $($j.Domain) ready in $($ms)ms")
-        }
-        if ($null -ne $this.LensWarmJob -and -not $this.LensWarmTimed) {
-            if ($this.LensWarmJob.Handle.IsCompleted) {
-                $this.LensWarmTimed = $true
-                $ms = [long]([datetime]::UtcNow -
-                    [datetime]$this.LensWarmJob.StartedAt).TotalMilliseconds
-                $this.Logger.LogDebug("Lens agent warm ready in $($ms)ms")
-            }
-            else { $pending++ }
-        }
-        if ($pending -eq 0) { $this.WarmWatchTimer.Stop() }
     }
 
     # The ActionBar namescope holds the finder's controls, composed by HomePresenter first.
@@ -300,15 +273,11 @@ class FinderPresenter {
     # Tears the Lens agent down through the pool worker, so the UI never parse-loads
     # PersonLensService. The Closed handler awaits $global:LensTeardownJob.
     [void] OnAppClosing() {
+        $triggers = 'Donut.Interop.LensWarmTriggers' -as [type]
+        if ($triggers) { try { $triggers::Unregister() } catch { } }
         try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $global:LensTeardownJob = $this.StartPoolScript($worker, @{
-                    SiteServer = $this.Config.GetAdminServiceHost()
-                    SourceRoot = $this.Config.SourceRoot
-                    StopAgent  = $true
-                })
-        }
-        catch {
+            $global:LensTeardownJob = $this.StartLensWorker(@{ StopAgent = $true })
+        } catch {
             $this.Logger.LogException("Lens agent teardown could not start", $_)
         }
     }
@@ -316,6 +285,15 @@ class FinderPresenter {
     # Thin seams over the shared PoolScriptJob mechanics. The timers stay owned here.
     hidden [hashtable] StartPoolScript([string]$scriptPath, [hashtable]$parameters) {
         return [PoolScriptJob]::Start($scriptPath, $parameters)
+    }
+
+    # Starts LensLookupWorker on the pool with the shared site and root arguments.
+    hidden [hashtable] StartLensWorker([hashtable]$extra) {
+        $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
+        return $this.StartPoolScript($worker, $extra + @{
+                SiteServer = $this.Config.GetAdminServiceHost()
+                SourceRoot = $this.Config.SourceRoot
+            })
     }
 
     hidden [void] DisposeJob([object]$ps) {
@@ -338,11 +316,8 @@ class FinderPresenter {
                 # 'zzz' is a throwaway prefix: it warms the bind, results are discarded.
                 $warm = $this.StartPoolScript($worker, @{ Domains = @($domain); Prefix = 'zzz' })
                 $warm.Domain = $domain
-                $warm.Timed = $false
                 $this.AdWarmJobs.Add($warm)
-                $this.WarmWatchTimer.Start()
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("AD search warm-up could not start for '$domain'", $_)
             }
         }
@@ -351,37 +326,50 @@ class FinderPresenter {
     # Disposes the startup AD warm jobs. Their results are never read.
     hidden [void] ReapAdWarm() {
         if ($null -eq $this.AdWarmJobs -or $this.AdWarmJobs.Count -eq 0) { return }
-        # Timing belongs to PollWarmTimings, which sees the warm land. This only disposes.
-        foreach ($j in @($this.AdWarmJobs)) {
-            if (-not $j.Timed) { $this.Logger.LogDebug("AD warm $($j.Domain) still running at first search") }
-            $this.DisposeJob($j.Ps)
-        }
+        foreach ($j in @($this.AdWarmJobs)) { $this.DisposeJob($j.Ps) }
         $this.AdWarmJobs.Clear()
     }
 
     # Never blocks. The handle is reaped on the first pick, and failures are logged then.
     [void] WarmLens() {
+        # Resume/network events drop the warm flag, healing binds before the 4-min ping.
         try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $this.LensWarmTimed = $false
-            $this.WarmWatchTimer.Start()
-            $this.LensWarmJob = $this.StartPoolScript($worker, @{
-                    SiteServer = $this.Config.GetAdminServiceHost()
-                    SourceRoot = $this.Config.SourceRoot
-                    WarmOnly   = $true
-                })
+            # Resolved by name, since the type only exists once Start-Donut compiles it.
+            $triggers = 'Donut.Interop.LensWarmTriggers' -as [type]
+            if ($triggers) {
+                $flag = Join-Path (Join-Path $env:ProgramData 'DONUT\lens-agent') 'warm.flag'
+                $triggers::Register($flag)
+            }
+        } catch { $this.Logger.LogException('Lens warm triggers could not register', $_) }
+        try {
+            $this.LensWarmJob = $this.StartLensWorker(@{ WarmOnly = $true })
             # A pick dispatches two jobs onto any free runspace, so every runspace must
             # already hold the worker graph. The agent mutex makes the extras near no-ops.
             for ($i = 1; $i -lt [RunspaceManager]::InteractiveSize; $i++) {
-                $this.LensWarmExtras.Add($this.StartPoolScript($worker, @{
-                            SiteServer = $this.Config.GetAdminServiceHost()
-                            SourceRoot = $this.Config.SourceRoot
-                            WarmOnly   = $true
-                        }))
+                $this.LensWarmExtras.Add($this.StartLensWorker(@{ WarmOnly = $true }))
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)
+        }
+    }
+
+    # Raises one Action Center toast for a KEY job outcome (fire and forget, on the
+    # pool like every lens call, so the UI thread never parse-loads the service).
+    [void] NotifyKeyEvent([string]$title, [string]$body) {
+        try {
+            $this.ToastJobs.Add($this.StartLensWorker(@{ ToastTitle = $title; ToastBody = $body }))
+            $this.LensPollTimer.Start()
+        } catch { $this.Logger.LogException('Key toast could not start', $_) }
+    }
+
+    # Disposes finished toast workers. They return nothing the UI needs.
+    hidden [void] ReapToasts() {
+        for ($i = $this.ToastJobs.Count - 1; $i -ge 0; $i--) {
+            $job = $this.ToastJobs[$i]
+            if (-not $job.Handle.IsCompleted) { continue }
+            try { $null = $job.Ps.EndInvoke($job.Handle) } catch { }
+            $this.DisposeJob($job.Ps)
+            $this.ToastJobs.RemoveAt($i)
         }
     }
 
@@ -389,18 +377,12 @@ class FinderPresenter {
     [void] ResolveOwners([string[]]$machines, [object]$onResolved) {
         if (@($machines).Count -eq 0 -or $null -ne $this.OwnerJob) { return }
         try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $job = $this.StartPoolScript($worker, @{
-                    SiteServer = $this.Config.GetAdminServiceHost()
-                    SourceRoot = $this.Config.SourceRoot
-                    OwnerOf    = @($machines)
-                })
+            $job = $this.StartLensWorker(@{ OwnerOf = @($machines) })
             $job.OnResolved = $onResolved
             $job.Count = @($machines).Count
             $this.OwnerJob = $job
             $this.LensPollTimer.Start()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException('Owner lookup could not start', $_)
         }
     }
@@ -422,16 +404,16 @@ class FinderPresenter {
                 # Per-machine cost decides whether this ever stops being one serial batch.
                 $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
                 $each = if ($job.Count -gt 0) { [long]($ms / $job.Count) } else { 0 }
-                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms (~$($each)ms each), $($map.Count) named")
+                $this.Logger.LogDebug("Owner batch: $($job.Count) machine(s) in $($ms)ms " +
+                    "(~$($each)ms each), $($map.Count) named")
                 if ($job.OnResolved -and $map.Count -gt 0) { & $job.OnResolved $map }
             }
-        }
-        catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
+        } catch { $this.Logger.LogException('Owner lookup result could not be read', $_) }
         finally { $this.DisposeJob($job.Ps) }
     }
 
     # The pick's parallel software lookup: a cache hit applies at once, else one job runs.
-    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$cacheKey) {
+    hidden [void] StartSoftwareLookup([string]$identity, [string]$sam, [string]$dn, [string]$cacheKey) {
         $this.SoftwareKey = $cacheKey
         $cached = $this.SoftwareCache[$cacheKey]
         if ($null -ne $cached -and
@@ -448,18 +430,12 @@ class FinderPresenter {
             $this.SoftwareJob = $null
         }
         try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            $job = $this.StartPoolScript($worker, @{
-                    SiteServer  = $this.Config.GetAdminServiceHost()
-                    SourceRoot  = $this.Config.SourceRoot
-                    Sam         = $sam
-                    SoftwareFor = $identity
-                })
+            # The DN rides along as on the person job, so a SAM-less pick still pins one account.
+            $job = $this.StartLensWorker(@{ Sam = $sam; Dn = $dn; SoftwareFor = $identity })
             $job.Key = $cacheKey
             $this.SoftwareJob = $job
             $this.LensPollTimer.Start()
-        }
-        catch { $this.Logger.LogException('Software lookup could not start', $_) }
+        } catch { $this.Logger.LogException('Software lookup could not start', $_) }
     }
 
     # Milliseconds the worker sat queued on the pool before its first statement ran.
@@ -470,8 +446,7 @@ class FinderPresenter {
                 $started = ([datetime]$rec.MessageData).ToUniversalTime()
                 return [long]($started - [datetime]$job.StartedAt).TotalMilliseconds
             }
-        }
-        catch { }
+        } catch { }
         return -1
     }
 
@@ -498,8 +473,7 @@ class FinderPresenter {
                     $this.Config.GetLensSoftwareCollectionFilter())
                 $this.LensVm.ApplySoftware($rows, [string]$parsed.Error)
             }
-        }
-        catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
+        } catch { $this.Logger.LogException('Software lookup result could not be read', $_) }
         finally { $this.DisposeJob($job.Ps) }
     }
 
@@ -517,8 +491,7 @@ class FinderPresenter {
             }
             # A hung warm agent must stop asynchronously or it blocks the UI thread.
             $this.DisposeJob($job.Ps)
-        }
-        catch { $this.DisposeJob($job.Ps) }
+        } catch { $this.DisposeJob($job.Ps) }
         # The extra runspace warms carry no result worth reading, so they just retire.
         foreach ($extra in @($this.LensWarmExtras)) { $this.DisposeJob($extra.Ps) }
         $this.LensWarmExtras.Clear()
@@ -575,8 +548,7 @@ class FinderPresenter {
                 $job.Domain = $domain
                 $job.Prefix = $prefix
                 $this.SearchJobs.Add($job)
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("AD search could not start for '$domain'", $_)
             }
         }
@@ -650,7 +622,8 @@ class FinderPresenter {
             $renderAt = [datetime]::UtcNow
             $drawn = $this.RenderDropdown()
             $renderMs = [long]([datetime]::UtcNow - $renderAt).TotalMilliseconds
-            $this.Logger.LogDebug("AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
+            $this.Logger.LogDebug(
+                "AD dropdown render: $drawn drawn of $($this.SearchResults.Count) pooled in $($renderMs)ms")
         }
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
@@ -683,7 +656,9 @@ class FinderPresenter {
             foreach ($c in ($computers | Select-Object -First $this.MaxDropdownRows)) {
                 $vm = [SearchRowViewModel]::FromResult($c)
                 $cap = [string]$c.Name
-                $pick = { param($p) $presenter.OnPickComputer($cap) }.GetNewClosure()
+                # The row's forest rides along, so the resolve never guesses the domain.
+                $capDomain = [string]$c.Domain
+                $pick = { param($p) $presenter.OnPickComputer($cap, $capDomain) }.GetNewClosure()
                 $vm.PickCommand = [RelayCommand]::new([System.Action[object]]$pick)
                 $items.Add($vm)
             }
@@ -728,11 +703,11 @@ class FinderPresenter {
     }
 
     # The pick is the add: straight onto the machine pane, and the dropdown closes.
-    [void] OnPickComputer([string]$name) {
+    [void] OnPickComputer([string]$name, [string]$domain) {
         if ([string]::IsNullOrWhiteSpace($name)) { return }
         $this.CloseSearchPopup()
         $vm = $this.Home.EnsureRow($name)
-        $this.Home.Resolution.PrefetchIp($name)
+        $this.Home.Resolution.PrefetchIp($name, $domain)
         $this.Home.StartInventory($name, $true)
         $this.Home.MoveRowToTop($name)
         # Shared-VM selection, same as OnSearch's flow: shows the new card's detail pane.
@@ -769,8 +744,7 @@ class FinderPresenter {
             $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()
             if ($this.Toasts) { $this.Toasts.ShowInfo("Unlocking...", $upn) }
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Unlock could not start for $upn", $_)
             if ($this.Toasts) { $this.Toasts.ShowError("Unlock Failed", "Could not start the unlock for $upn.") }
         }
@@ -783,13 +757,15 @@ class FinderPresenter {
             try {
                 $res = @($job.Ps.EndInvoke($job.Handle))
                 $ok = [bool]($res | Select-Object -Last 1)
-            }
-            catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
+            } catch { $this.Logger.LogException("Unlock failed for $($job.Upn)", $_) }
             $this.DisposeJob($job.Ps)
             [void]$this.UnlockJobs.Remove($job)
             if ($this.Toasts) {
                 if ($ok) { $this.Toasts.ShowSuccess("Account Unlocked", $job.Upn) }
-                else { $this.Toasts.ShowError("Unlock Failed", "Could not unlock $($job.Upn). Check your rights and connectivity.") }
+                else {
+                    $this.Toasts.ShowError("Unlock Failed",
+                        "Could not unlock $($job.Upn). Check your rights and connectivity.")
+                }
             }
         }
         if ($this.UnlockJobs.Count -eq 0) { $this.UnlockPollTimer.Stop() }
@@ -805,8 +781,7 @@ class FinderPresenter {
         elseif (-not [string]::IsNullOrWhiteSpace($r.Domain) -and
             -not [string]::IsNullOrWhiteSpace($r.SamAccountName)) {
             "$($r.Domain)\$($r.SamAccountName)"
-        }
-        else { [string]$r.SamAccountName }
+        } else { [string]$r.SamAccountName }
         if ([string]::IsNullOrWhiteSpace($identity)) { return }
         $who = if (-not [string]::IsNullOrWhiteSpace($r.DisplayName)) { [string]$r.DisplayName }
         else { $identity }
@@ -826,7 +801,7 @@ class FinderPresenter {
             $this.LensToken++   # stales any in-flight lookup, its late result is discarded
             $this.LensVm.Apply([PersonLens]::FromJson([string]$cached.Json))
             $this.WireLensDeviceCommands()
-            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
+            $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, [string]$r.DistinguishedName, $cacheKey)
             return
         }
 
@@ -837,13 +812,9 @@ class FinderPresenter {
         $this.LensJobs.Clear()
 
         try {
-            $worker = Join-Path $this.Config.SourceRoot 'Scripts\LensLookupWorker.ps1'
-            # The Sam hint lets the child run the SCCM query in parallel with its AD user read.
-            $job = $this.StartPoolScript($worker, @{
-                    Identity   = $identity
-                    SiteServer = $this.Config.GetAdminServiceHost()
-                    SourceRoot = $this.Config.SourceRoot
-                    Sam        = [string]$r.SamAccountName
+            # Sam starts SCCM early, and the DN pins the exact account across forests.
+            $job = $this.StartLensWorker(@{ Identity = $identity; Sam = [string]$r.SamAccountName
+                    Dn = [string]$r.DistinguishedName; Domains = @($this.AdService.Domains)
                 })
             $job.Token = $token
             $job.Key = $cacheKey
@@ -851,8 +822,7 @@ class FinderPresenter {
             $job.Who = $who   # Apply() blanks DisplayName on an error lens without it
             $this.LensJobs.Add($job)
             $this.LensPollTimer.Start()
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Lens lookup could not start for $identity", $_)
             $this.LensVm.SetLoading($who)
             $this.LensVm.Set('IsLoading', $false)
@@ -860,7 +830,7 @@ class FinderPresenter {
             $this.LensVm.Set('StatusText', "Could not start the lookup: $_")
         }
         # Dispatched last, so software can never queue ahead of the pick on a full pool.
-        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, $cacheKey)
+        $this.StartSoftwareLookup($identity, [string]$r.SamAccountName, [string]$r.DistinguishedName, $cacheKey)
     }
 
     # Streams any 'LensPartial' record into the VM before the final bundle lands.
@@ -868,6 +838,7 @@ class FinderPresenter {
         # Shares this tick rather than owning a second timer: all wait on the same agent.
         $this.ReapOwners()
         $this.ReapSoftware()
+        $this.ReapToasts()
         foreach ($job in @($this.LensJobs)) {
             # The partial lands before the SCCM/BitLocker crawl, so the pane fills early.
             if ($job.Token -eq $this.LensToken) {
@@ -917,8 +888,7 @@ class FinderPresenter {
                 if ($lens.Errors.Count -eq 0 -and $job.Key) {
                     $this.LensCache[[string]$job.Key] = @{ At = [datetime]::UtcNow; Json = $json }
                 }
-            }
-            catch {
+            } catch {
                 $this.Logger.LogException("Lens result could not be applied", $_)
                 $failed = [PersonLens]::FromError(
                     "The lookup finished but its result could not be displayed: $($_.Exception.Message)")
@@ -926,9 +896,10 @@ class FinderPresenter {
                 $this.LensVm.Apply($failed)
             }
         }
-        # Owner and software lookups outlive the pick that started them, so they keep it alive.
+        # Owner, software and toast calls outlive the pick that started them, so each
+        # keeps the shared tick alive until it lands.
         if ($this.LensJobs.Count -eq 0 -and $null -eq $this.OwnerJob -and
-            $null -eq $this.SoftwareJob) { $this.LensPollTimer.Stop() }
+            $null -eq $this.SoftwareJob -and $this.ToastJobs.Count -eq 0) { $this.LensPollTimer.Stop() }
     }
 
     # A lookup past LensDeadline is never coming back, so retire it with a reason.
@@ -951,7 +922,8 @@ class FinderPresenter {
         $presenter = $this
         foreach ($dev in $this.LensVm.Devices) {
             $capName = [string]$dev.Name
-            $add = { param($p) $presenter.OnAddDeviceToList($capName) }.GetNewClosure()
+            $capDomain = [string]$dev.Domain
+            $add = { param($p) $presenter.OnAddDeviceToList($capName, $capDomain) }.GetNewClosure()
             $dev.AddCommand = [RelayCommand]::new([System.Action[object]]$add)
 
             $vm = $dev
@@ -965,13 +937,12 @@ class FinderPresenter {
     }
 
     # The Lens person seeds the row's owner, so a name on screen is never re-queried.
-    [void] OnAddDeviceToList([string]$wsid) {
+    [void] OnAddDeviceToList([string]$wsid, [string]$domain) {
         if ([string]::IsNullOrWhiteSpace($wsid)) { return }
         $this.Home.EnsureRow($wsid, [string]$this.LensVm.DisplayName)
-        $this.Home.Resolution.PrefetchIp($wsid)
+        $this.Home.Resolution.PrefetchIp($wsid, $domain)
         $this.Home.StartInventory($wsid, $true)
         $this.Home.MoveRowToTop($wsid)
-        $this.Home.UpdateEmptyHint()
         if ($this.Toasts) { $this.Toasts.ShowInfo($wsid, "Added to the machine list.") }
     }
 

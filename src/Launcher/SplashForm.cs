@@ -11,8 +11,7 @@ namespace Donut.Launcher;
 /// an owner-drawn progress bar. Lives on the main thread while the app graph parses on
 /// the worker thread, so it stays responsive throughout.
 /// </summary>
-public sealed class SplashForm : Form
-{
+public sealed class SplashForm : Form {
     // Matches the app's violet accent, and loading.gif is keyed to this ground.
     private static readonly Color Violet = Color.FromArgb(0x8E, 0x51, 0xFF);
 
@@ -23,8 +22,7 @@ public sealed class SplashForm : Form
     private readonly SmoothProgressBar _bar;
 
     /// <summary>Builds the splash window and loads its art from embedded resources.</summary>
-    public SplashForm()
-    {
+    public SplashForm() {
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
@@ -36,16 +34,14 @@ public sealed class SplashForm : Form
         ClientSize = new Size(420, 300);
         DoubleBuffered = true;
 
-        _art = new PictureBox
-        {
+        _art = new PictureBox {
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.Transparent,
             Bounds = new Rectangle((420 - 132) / 2, 40, 132, 132),
         };
         TryLoadArtFromResources();
 
-        _word = new Label
-        {
+        _word = new Label {
             Text = "DONUT",
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 20f, FontStyle.Bold),
@@ -54,8 +50,7 @@ public sealed class SplashForm : Form
             BackColor = Color.Transparent,
         };
 
-        _status = new Label
-        {
+        _status = new Label {
             Text = "Starting up…",
             ForeColor = Color.FromArgb(0x9A, 0x9A, 0x9A),
             Font = new Font("Segoe UI", 10.5f),
@@ -64,8 +59,7 @@ public sealed class SplashForm : Form
             BackColor = Color.Transparent,
         };
 
-        _pct = new Label
-        {
+        _pct = new Label {
             Text = "",
             ForeColor = Violet,
             Font = new Font("Consolas", 10.5f),
@@ -74,8 +68,7 @@ public sealed class SplashForm : Form
             BackColor = Color.Transparent,
         };
 
-        _bar = new SmoothProgressBar
-        {
+        _bar = new SmoothProgressBar {
             Bounds = new Rectangle(44, 268, 332, 10),
             FillColor = Violet,
         };
@@ -88,19 +81,16 @@ public sealed class SplashForm : Form
     }
 
     // Falls back to the static logo, and a PictureBox animates a GIF on its own.
-    private void TryLoadArtFromResources()
-    {
+    private void TryLoadArtFromResources() {
         foreach (string logical in new[] { "assets/Images/loading.gif",
-                                           "assets/Images/logo yellow arrow.png" })
-        {
+                                           "assets/Images/logo yellow arrow.png" }) {
             Image? img = EmbeddedAssets.LoadImage(logical);
             if (img != null) { _art.Image = img; return; }
         }
     }
 
     // A borderless form gets no DWM rounding, so the corners are clipped by hand.
-    protected override void OnHandleCreated(EventArgs e)
-    {
+    protected override void OnHandleCreated(EventArgs e) {
         base.OnHandleCreated(e);
         using var path = new GraphicsPath();
         int r = 16;
@@ -112,8 +102,7 @@ public sealed class SplashForm : Form
         Region = new Region(path);
     }
 
-    protected override void OnPaint(PaintEventArgs e)
-    {
+    protected override void OnPaint(PaintEventArgs e) {
         base.OnPaint(e);
         using var pen = new Pen(Color.FromArgb(90, Violet), 2);
         e.Graphics.DrawLine(pen, 0, 1, Width, 1);   // hairline accent along the top edge
@@ -124,24 +113,21 @@ public sealed class SplashForm : Form
     /// <summary>Moves the bar to a determinate value and updates the status line.</summary>
     /// <param name="percent">Completion 0–100.</param>
     /// <param name="status">Status line shown under the bar.</param>
-    public void SetProgress(int percent, string status)
-    {
+    public void SetProgress(int percent, string status) {
         _status.Text = status;
-        _bar.Value = percent;               // leaves the indeterminate phase
+        _bar.Value = percent;
         _pct.Text = percent + "%";
     }
 
     /// <summary>Fills the bar to 100%, then dismisses the splash after a brief settle.</summary>
-    public void CompleteAndClose()
-    {
+    public void CompleteAndClose() {
         if (IsDisposed) return;
         _bar.Value = 100;
         _pct.Text = "100%";
         _status.Text = "Ready";
         // Let the bar visibly settle at 100% before dismissing.
         var t = new Timer { Interval = 220 };
-        t.Tick += (s, e) =>
-        {
+        t.Tick += (s, e) => {
             t.Stop();
             t.Dispose();
             Close();

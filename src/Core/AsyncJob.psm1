@@ -36,8 +36,6 @@ class AsyncJob {
     hidden [datetime] $NextStallLogUtc
     hidden [int] $StallWarnAfterSeconds = 90
     hidden [int] $StallRepeatSeconds = 300
-    # Process-wide latch: the dispatch-starvation self-heal fires at most once.
-    hidden static [bool] $ThreadPoolHealed = $false
 
     # Test convenience only. Production sites must pass the real logger, or job
     # failures leave no trace in Donut.log (AsyncJobLoggerCoverage.Tests enforces).
@@ -80,8 +78,7 @@ class AsyncJob {
             $this.NextStallLogUtc = $this.StartedAtUtc.AddSeconds($this.StallWarnAfterSeconds)
             $this.AsyncResult = $this.PowerShell.BeginInvoke()
             $this.Logger.LogDebug("[$($this.HostName)] Started $($this.JobType) job (child process).")
-        }
-        catch {
+        } catch {
             $this.Status = [JobStatus]::Failed
             $this.Logger.LogException("[$($this.HostName)] Failed to start $($this.JobType) job", $_)
             $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
@@ -103,20 +100,17 @@ class AsyncJob {
                     $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, $this.FailureMessage))
                     $this.Logger.LogError("[$($this.HostName)] $($this.JobType) worker failed " +
                         "(exit $($verdict.ExitCode)): $($this.FailureMessage)")
-                }
-                else {
+                } else {
                     $this.Status = [JobStatus]::Completed
                     $this.Logger.LogDebug("[$($this.HostName)] $($this.JobType) job completed.")
                 }
-            }
-            catch {
+            } catch {
                 $this.Status = [JobStatus]::Failed
                 $this.FailureMessage = $_.Exception.Message
                 $this.Logs.Enqueue([LogLine]::Donut([LogSeverity]::Error, "Exception: $_"))
                 $this.Logger.LogException("[$($this.HostName)] $($this.JobType) job failed during completion", $_)
             }
-        }
-        elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
+        } elseif ($this.NextStallLogUtc -ne [datetime]::MinValue -and
             [datetime]::UtcNow -ge $this.NextStallLogUtc) {
             # MinValue means Start() never armed the heartbeat (test doubles), not a stall.
             $this.LogStallHeartbeat()
@@ -138,8 +132,7 @@ class AsyncJob {
             $p = [RunspaceManager]::GetPool()
             $freeRunspaces = $p.GetAvailableRunspaces()
             $pool = "$freeRunspaces/$($p.GetMaxRunspaces()) free"
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: pool state unreadable: $($_.Exception.Message)")
         }
@@ -150,21 +143,17 @@ class AsyncJob {
             if ($this.PowerShell.Streams.Error.Count -gt 0) {
                 $firstError = " firstError=$($this.PowerShell.Streams.Error[0])"
             }
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: shell state unreadable: $($_.Exception.Message)")
         }
         # Near-zero free threads with idle runspaces means dispatch itself is starved.
         $tp = 'unknown'
-        $freeWorkers = -1
         try {
             $w = 0; $io = 0
             [System.Threading.ThreadPool]::GetAvailableThreads([ref]$w, [ref]$io)
-            $freeWorkers = $w
             $tp = "$w worker / $io IOCP free"
-        }
-        catch {
+        } catch {
             $this.Logger.LogDebug(
                 "Stall heartbeat: threadpool state unreadable: $($_.Exception.Message)")
         }
@@ -173,30 +162,7 @@ class AsyncJob {
             "(pool: $pool, threadpool: $tp, state: $state$firstError). Idle runspaces " +
             "with ~0 free threads means dispatch is starved; otherwise the worker " +
             "itself has not returned.")
-        $this.HealThreadPoolIfStarved($freeRunspaces, $freeWorkers)
         $this.NextStallLogUtc = [datetime]::UtcNow.AddSeconds($this.StallRepeatSeconds)
-    }
-
-    # Latched backstop for the confirmed ThreadPool-starvation regression: if a job
-    # stalls with idle runspaces and ~0 free ThreadPool threads, raise the floor once.
-    hidden [void] HealThreadPoolIfStarved([int]$freeRunspaces, [int]$freeWorkers) {
-        if ([AsyncJob]::ThreadPoolHealed) { return }
-        # A busy-runspace stall is a slow scan doing real work, not starvation.
-        if ($freeRunspaces -le 0 -or $freeWorkers -lt 0 -or $freeWorkers -gt 1) { return }
-        [AsyncJob]::ThreadPoolHealed = $true
-        try {
-            $w = 0; $io = 0
-            [System.Threading.ThreadPool]::GetMinThreads([ref]$w, [ref]$io)
-            $target = $w + 8
-            [void][System.Threading.ThreadPool]::SetMinThreads($target, [Math]::Max($io, $target))
-            $this.Logger.LogWarning(
-                "Pool dispatch looked starved ($freeRunspaces runspaces idle, $freeWorkers " +
-                "worker thread(s) free); raised ThreadPool floor to $target as a self-heal. " +
-                "The startup floor in RunspaceManager should prevent this - investigate if it recurs.")
-        }
-        catch {
-            $this.Logger.LogException("ThreadPool self-heal failed", $_)
-        }
     }
 
     # The stream a record arrived on is its severity, which was discarded here before.

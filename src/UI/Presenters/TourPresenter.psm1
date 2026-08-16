@@ -95,7 +95,7 @@ class TourPresenter {
         # Defer so the overlay has laid out, and catch render errors before they kill startup.
         $self = $this
         $action = {
-            try { $self.ShowStep($self.GetIndex()) }
+            try { $self.ShowStep($self.Index) }
             catch { $self.OnTourError($_) }
         }.GetNewClosure()
         $this.Window.Dispatcher.BeginInvoke(
@@ -115,8 +115,6 @@ class TourPresenter {
         $this.AutoRan = $true
         $this.Start()
     }
-
-    hidden [int] GetIndex() { return $this.Index }
 
     [void] Next() {
         if ($this.Index -ge ($this.Steps.Count - 1)) { $this.Finish(); return }
@@ -141,8 +139,7 @@ class TourPresenter {
         try {
             $this.Config.SetSetting('hasSeenTour', $true)
             $this.ConfigManager.SaveConfig($this.Config)
-        }
-        catch { $this.Logger.LogException('Could not persist hasSeenTour', $_) }
+        } catch { $this.Logger.LogException('Could not persist hasSeenTour', $_) }
     }
 
     hidden [void] ShowStep([int]$index) {
@@ -158,11 +155,11 @@ class TourPresenter {
         $this.BtnSkip.Visibility = if ($index -eq 0) { 'Visible' } else { 'Collapsed' }
         $this.BuildDots($index)
 
-        $target = if ([string]::IsNullOrWhiteSpace($step.TargetKey)) { $null } else { $this.ResolveTarget($step.TargetKey) }
+        $target = if ([string]::IsNullOrWhiteSpace($step.TargetKey)) { $null }
+        else { $this.ResolveTarget($step.TargetKey) }
         if ($null -eq $target -or $target.ActualWidth -le 0 -or $target.ActualHeight -le 0) {
             $this.ShowCentered()
-        }
-        else {
+        } else {
             $this.ShowSpotlight($target, $step.Placement)
         }
         # Focus the callout so the overlay's Esc key binding is in scope (settings idiom).
@@ -209,7 +206,9 @@ class TourPresenter {
         $this.PlaceCallout($x, $y, $rw, $rh, $placement, $ow, $oh)
     }
 
-    hidden [void] PlaceCallout([double]$x, [double]$y, [double]$rw, [double]$rh, [string]$placement, [double]$ow, [double]$oh) {
+    hidden [void] PlaceCallout(
+        [double]$x, [double]$y, [double]$rw, [double]$rh,
+        [string]$placement, [double]$ow, [double]$oh) {
         $cw = 340.0
         $this.Callout.UpdateLayout()
         $ch = if ($this.Callout.ActualHeight -gt 0) { $this.Callout.ActualHeight } else { 170.0 }

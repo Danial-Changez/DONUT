@@ -74,14 +74,13 @@ class TrayPresenter {
     hidden [System.Drawing.Icon] LoadTrayIcon() {
         try {
             $iconPath = Join-Path (Split-Path $this.Main.Config.SourceRoot -Parent) `
-                'assets\Images\donut icon48x48.ico'
+                                  'assets\Images\donut icon48x48.ico'
             if (Test-Path $iconPath) {
                 $fs = [System.IO.File]::OpenRead($iconPath)
                 try { return [System.Drawing.Icon]::new($fs) }
                 finally { $fs.Dispose() }
             }
-        }
-        catch { $this.Logger.LogException("Tray icon load failed", $_) }
+        } catch { $this.Logger.LogException("Tray icon load failed", $_) }
         return [System.Drawing.SystemIcons]::Application
     }
 
@@ -91,8 +90,7 @@ class TrayPresenter {
         try {
             $this.ShowRequestEvent = [System.Threading.EventWaitHandle]::new(
                 $false, [System.Threading.EventResetMode]::AutoReset, 'Local\DONUT.ShowRequest')
-        }
-        catch {
+        } catch {
             $this.Logger.LogException("Show-request event unavailable", $_)
             return
         }
@@ -124,8 +122,7 @@ class TrayPresenter {
             $w.Show()
             if ($w.WindowState -eq 'Minimized') { $w.WindowState = 'Normal' }
             $this.Main.BringToFront()
-        }
-        catch { $this.Logger.LogException("Show main window failed", $_) }
+        } catch { $this.Logger.LogException("Show main window failed", $_) }
         # The gap is the deferred sign-in and update check, not the window itself.
         $this.Logger.LogDebug("Tray surface took $($surfaceSw.ElapsedMilliseconds)ms to show.")
 
@@ -153,8 +150,7 @@ class TrayPresenter {
         try {
             $path = $this.Main.Config.LogsPath
             if ($path -and (Test-Path $path)) { Start-Process -FilePath $path }
-        }
-        catch { $this.Logger.LogException("Open logs folder failed", $_) }
+        } catch { $this.Logger.LogException("Open logs folder failed", $_) }
     }
 
     # Hotkey toggle: minimise DONUT when it's already up front, otherwise surface it (so
@@ -164,8 +160,7 @@ class TrayPresenter {
         if ($null -eq $w) { return }
         if ($w.IsVisible -and $w.WindowState -ne 'Minimized' -and $w.IsActive) {
             $w.WindowState = 'Minimized'
-        }
-        else {
+        } else {
             $this.ShowMainWindow()
         }
     }
@@ -185,8 +180,7 @@ class TrayPresenter {
             $this.Icon.BalloonTipTitle = 'DONUT'
             $this.Icon.BalloonTipText = 'DONUT is still running here. Right-click to exit.'
             $this.Icon.ShowBalloonTip(3000)
-        }
-        catch { }
+        } catch { }
     }
 
     # Removes the icon and releases handles. Called from the window's Closed handler
@@ -198,8 +192,7 @@ class TrayPresenter {
                 $this.Icon.Visible = $false
                 $this.Icon.Dispose()
             }
-        }
-        catch { }
+        } catch { }
         try { if ($this.Menu) { $this.Menu.Dispose() } } catch { }
         try { if ($this.ShowRequestEvent) { $this.ShowRequestEvent.Dispose() } } catch { }
     }

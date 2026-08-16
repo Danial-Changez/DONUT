@@ -18,7 +18,9 @@ Describe "Worker child-process protocol (real RemoteWorker.ps1)" {
         $script:testRoot = Join-Path $env:TEMP "DonutWorkerProtocol_$([Guid]::NewGuid().ToString('N').Substring(0,8))"
         $script:logsDir = Join-Path $script:testRoot 'logs'
         $script:reportsDir = Join-Path $script:testRoot 'reports'
-        New-Item -Path $script:logsDir, $script:reportsDir -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:logsDir, $script:reportsDir `
+                 -ItemType Directory `
+                 -Force | Out-Null
 
         $script:srcRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' 'src')).Path
         $script:config = [AppConfig]::new($script:srcRoot, $script:logsDir, $script:reportsDir, @{})
@@ -30,7 +32,10 @@ Describe "Worker child-process protocol (real RemoteWorker.ps1)" {
 
     AfterAll {
         [RunspaceManager]::Close()
-        Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $script:testRoot `
+                    -Recurse `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     # BuildWorkerArgs joins with '\', so normalize to keep the transport the same on Linux.
@@ -57,7 +62,8 @@ Describe "Worker child-process protocol (real RemoteWorker.ps1)" {
     }
 
     It "surfaces a worker failure as a Failed verdict, not a hang or a throw" {
-        $prep = ([RemoteUpdateService]::new($script:config, $script:probe, $null)).PrepareScanForUpdates('donut-proto-no-such-host-99')
+        $service = [RemoteUpdateService]::new($script:config, $script:probe, $null)
+        $prep = $service.PrepareScanForUpdates('donut-proto-no-such-host-99')
 
         $job = [AsyncJob]::new('donut-proto-no-such-host-99', 'Scan')
         $job.Start((& $script:normalize $prep.ScriptPath), $prep.Arguments, '')

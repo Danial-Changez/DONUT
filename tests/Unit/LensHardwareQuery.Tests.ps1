@@ -4,7 +4,7 @@ Describe "Lens hardware inventory query" {
         # Dot-sourcing is safe off Windows because the [ADSI] bind lives inside a function body.
         . (Join-Path $PSScriptRoot '..\..\src\Scripts\LensAgent.Common.ps1')
         $script:HwScript = $script:HardwareScript
-        $script:Pairs = @(@{ name = 'WS-1'; resourceId = '16777345' })
+        $script:Pair = @{ name = 'WS-1'; resourceId = '16777345' }
 
         # An OData collection answer. An empty one is how a site rejects the filter shape
         # without erroring, which is the case that used to blank the card in silence.
@@ -21,7 +21,7 @@ Describe "Lens hardware inventory query" {
                 return New-Collection @([pscustomobject]@{ SerialNumber = '9XKQ2Z3' })
             }
 
-            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pairs)
+            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pair)
 
             $rows.Count | Should -Be 1
             $rows[0].model | Should -Be 'Latitude 7450'
@@ -47,7 +47,7 @@ Describe "Lens hardware inventory query" {
                 return [pscustomobject]@{ SerialNumber = '9XKQ2Z3' }
             }
 
-            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pairs)
+            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pair)
 
             $rows[0].model | Should -Be 'Latitude 7450'
             $rows[0].serial | Should -Be '9XKQ2Z3'
@@ -60,7 +60,7 @@ Describe "Lens hardware inventory query" {
         It "names the reason rather than reporting a silent blank" {
             Mock Invoke-RestMethod { return New-Collection @() }
 
-            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pairs)
+            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pair)
 
             $rows[0].model | Should -BeNullOrEmpty
             $rows[0].serial | Should -BeNullOrEmpty
@@ -69,11 +69,13 @@ Describe "Lens hardware inventory query" {
 
         It "carries the filter form's own failure when it threw" {
             Mock Invoke-RestMethod {
-                if ($Uri -notmatch '\(16777345\)') { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                if ($Uri -notmatch '\(16777345\)') {
+                    throw 'Response status code does not indicate success: 404 (Not Found).'
+                }
                 return New-Collection @()
             }
 
-            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pairs)
+            $rows = @(& $script:HwScript 'sccm.corp.com' $script:Pair)
 
             $rows[0].error | Should -Match '404'
         }
@@ -84,7 +86,7 @@ Describe "Lens hardware inventory query" {
         It "says so and never calls the AdminService" {
             Mock Invoke-RestMethod { throw 'should not be reached' }
 
-            $rows = @(& $script:HwScript 'sccm.corp.com' @(@{ name = 'WS-1'; resourceId = '' }))
+            $rows = @(& $script:HwScript 'sccm.corp.com' @{ name = 'WS-1'; resourceId = '' })
 
             $rows[0].error | Should -Be 'no ResourceID in the affinity rows'
             Should -Not -Invoke Invoke-RestMethod
