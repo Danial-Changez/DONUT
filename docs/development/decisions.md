@@ -323,3 +323,35 @@ The BitLocker QR renders violet-on-transparent by choice, blending into the dark
 card. Field-gated on the hardware scanner: older 2D imagers often can't decode
 inverse QR — if it fails the scan test, revert to dark-on-light (recipe kept at the
 `QrModule*` keys) rather than tweaking colours.
+
+## Releasing
+
+The current rules live in [Releasing](./releasing.md); this is why the version
+looks the way it does.
+
+### Why the third field counts builds, not patches
+
+Semantic versioning has no place to put a build: a prerelease is a suffix
+(`2.5.0-beta.3`) and build metadata (`+776`) is defined as ignored when ordering.
+Neither survives the round trip. The number DONUT compares is not the git tag but
+the MSI's ProductVersion, read back as `DisplayVersion` from the uninstall key, and
+that field is three numeric fields with no suffix — `[version]` cannot parse one
+either. Something numeric and monotonic has to exist per build, and the third field
+is the only slot for it.
+
+`Major.Minor.Patch.Build` fails harder than it looks. Windows Installer parses the
+fourth field and then ignores it, so `2.4.0.776` and `2.4.0.777` are the same
+version to it. The package auto-generates a ProductCode per build and `MajorUpgrade`
+only removes products strictly older than the incoming one, so an equal version
+removes nothing: two builds in a row leave two live entries in Add/Remove Programs
+with the files of whichever installed last.
+
+### Rejected: semver-shaped stable releases
+
+Stable could read `X.Y.0` with betas at `X.Y.<build>` and each stable bumping the
+minor (`2.5.0` stable, `2.5.78x` betas, `2.6.0` stable). Ordering works and the
+workflow already supports it — a hand-pushed tag is the stable path. It was rejected
+because a stable release then has a different version from the beta it came from,
+which makes it a rebuild: what ships is no longer the artifact testers ran. Keeping
+promotion a flag flip is worth more than a patch digit, which in practice would only
+ever have been `0`.
