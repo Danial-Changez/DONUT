@@ -11,6 +11,11 @@ namespace Donut.Launcher;
 /// an owner-drawn progress bar. Lives on the main thread while the app graph parses on
 /// the worker thread, so it stays responsive throughout.
 /// </summary>
+/// <remarks>
+/// Minimizes, drags, and is not <c>TopMost</c>: <see cref="Bootstrap"/> raises an
+/// owner-less <c>MessageBox</c> from the worker thread, which a TopMost splash covered,
+/// leaving a first run that reads as frozen on its last milestone.
+/// </remarks>
 public sealed class SplashForm : Form {
     // Matches the app's violet accent, and loading.gif is keyed to this ground.
     private static readonly Color Violet = Color.FromArgb(0x8E, 0x51, 0xFF);
@@ -20,13 +25,14 @@ public sealed class SplashForm : Form {
     private readonly Label _status;
     private readonly Label _pct;
     private readonly SmoothProgressBar _bar;
+    private readonly Button _minimize;
 
     /// <summary>Builds the splash window and loads its art from embedded resources.</summary>
     public SplashForm() {
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        ShowInTaskbar = false;
-        TopMost = true;
+        ShowInTaskbar = true;
+        MaximizeBox = false;
         // Bounds below are designed at 96 DPI, so a scaled display needs this anchor.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -73,11 +79,36 @@ public sealed class SplashForm : Form {
             FillColor = Violet,
         };
 
+        _minimize = new Button {
+            FlatStyle = FlatStyle.Flat,
+            BackColor = BackColor,
+            Bounds = new Rectangle(420 - 50, 0, 50, 36),
+            Cursor = Cursors.Hand,
+            TabStop = false,
+        };
+        _minimize.FlatAppearance.BorderSize = 0;
+        _minimize.FlatAppearance.MouseOverBackColor = Color.FromArgb(0x1C, 0x1C, 0x1C);
+        _minimize.FlatAppearance.MouseDownBackColor = Color.FromArgb(0x26, 0x26, 0x26);
+        _minimize.Paint += PaintMinimize;
+        _minimize.Click += (s, e) => WindowState = FormWindowState.Minimized;
+
+        Controls.Add(_minimize);
         Controls.Add(_art);
         Controls.Add(_word);
         Controls.Add(_status);
         Controls.Add(_pct);
         Controls.Add(_bar);
+    }
+
+    // Draws the app's Minimize geometry ('M5 12h14') plus the accent it would otherwise cover.
+    private void PaintMinimize(object? sender, PaintEventArgs e) {
+        var button = (Control)sender!;
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var accent = new Pen(Color.FromArgb(90, Violet), 2))
+            e.Graphics.DrawLine(accent, 0, 1, button.Width, 1);
+        using var glyph = new Pen(Color.FromArgb(0x9A, 0x9A, 0x9A), 1.4f);
+        float mid = button.Height / 2f;
+        e.Graphics.DrawLine(glyph, (button.Width - 14) / 2f, mid, (button.Width + 14) / 2f, mid);
     }
 
     // Falls back to the static logo, and a PictureBox animates a GIF on its own.
@@ -100,6 +131,13 @@ public sealed class SplashForm : Form {
         path.AddArc(0, Height - r, r, r, 90, 90);
         path.CloseFigure();
         Region = new Region(path);
+    }
+
+    // No caption to drag by, so the ground answers as one (children still hit-test themselves).
+    protected override void WndProc(ref Message m) {
+        const int WM_NCHITTEST = 0x0084, HTCLIENT = 1, HTCAPTION = 2;
+        base.WndProc(ref m);
+        if (m.Msg == WM_NCHITTEST && (int)m.Result == HTCLIENT) { m.Result = HTCAPTION; }
     }
 
     protected override void OnPaint(PaintEventArgs e) {
