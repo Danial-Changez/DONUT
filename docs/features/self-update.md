@@ -16,8 +16,8 @@ Your settings, machine list, logs, and reports are never touched by an update.
 
 ## Updating without being asked
 
-The update prompt carries an **Install updates automatically from now on** checkbox,
-and **Settings → Updates → Automatic Updates** is the same switch. With it on, a
+The update prompt carries an **Install Updates Automatically** checkbox, and
+**Settings → Updates → Automatic Updates** is the same switch. With it on, a
 newer release installs the moment DONUT finds one, no prompt.
 
 A **rollback never happens automatically**. Going backwards is a decision — the one

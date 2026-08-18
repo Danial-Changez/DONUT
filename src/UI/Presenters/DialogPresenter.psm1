@@ -99,7 +99,7 @@ class DialogPresenter {
         }
         $vm = $this.NewVm("Update Available", $msg, @(), 'Update Now', 'Later')
         if (-not $isRollback) {
-            $vm.RememberText = 'Install updates automatically from now on'
+            $vm.RememberText = 'Install Updates Automatically'
             $vm.HasRemember = $true
         }
         $this.Window.DataContext = $vm

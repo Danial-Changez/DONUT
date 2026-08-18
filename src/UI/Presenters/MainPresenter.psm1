@@ -407,7 +407,7 @@ class MainPresenter {
             "$what needs administrator rights." +
             "`n`nDONUT will restart, ask for permission, and carry on where you left off.",
             'Restart as Administrator',
-            'Always run DONUT as administrator')
+            'Always Run DONUT as Administrator')
         if (-not $answer.Confirmed) { return $false }
 
         # Both writes land before the spawn, because the Closed handler hard-exits the process.

@@ -83,6 +83,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Popup chrome contract: the 48px header doubles as the drag region.
@@ -146,17 +147,20 @@
                 </ItemsControl>
             </ScrollViewer>
 
+            <!-- Its own row at the content gutter, never the footer: footers hold decisions,
+                 and this modifies the decision the footer commits. -->
+            <CheckBox Grid.Row="3"
+                      Style="{DynamicResource ModernCheckBox}"
+                      Content="{Binding RememberText}"
+                      IsChecked="{Binding Remember, Mode=TwoWay}"
+                      Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
+                      Margin="24,16,24,0" />
+
             <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
-            <StackPanel Grid.Row="3"
+            <StackPanel Grid.Row="4"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">
-                <!-- Left of the buttons so the choice reads before the commit. -->
-                <CheckBox Content="{Binding RememberText}"
-                          IsChecked="{Binding Remember, Mode=TwoWay}"
-                          Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
-                          VerticalAlignment="Center"
-                          Margin="0,0,16,0" />
                 <Button Content="{Binding SecondaryText}"
                         Command="{Binding SecondaryCommand}"
                         Visibility="{Binding HasSecondary, Converter={StaticResource BoolToVis}}"
