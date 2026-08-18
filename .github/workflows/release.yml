@@ -1,8 +1,10 @@
 # Two ways in, one artifact. A push to main is a beta build: the VERSION series
 # plus the commit count, published as a prerelease. A vX.Y.Z tag is a hand-cut
-# stable release. Promoting a tested beta is a flag flip on its release, never a
-# rebuild - see docs/development/releasing.md. The MSI is unsigned by design until
-# a sanctioned certificate exists. workflow_dispatch is the dry run: artifact only.
+# stable release. Every release carries both packages, the MSI and the zip, because
+# which one an install can apply depends on how it was installed. Promoting a tested
+# beta is a flag flip on its release, never a rebuild - see
+# docs/development/releasing.md. Unsigned by design until a sanctioned certificate
+# exists. workflow_dispatch is the dry run: artifact only.
 name: Release
 
 on:
@@ -66,18 +68,30 @@ jobs:
         id: build
         shell: pwsh
         run: |
-          ./tools/Build-Installer.ps1 -Version '${{ steps.ver.outputs.version }}' -SkipSigning
-          $msi = Get-ChildItem installer/bin -Recurse -Filter DONUT.msi | Select-Object -First 1
+          $version = '${{ steps.ver.outputs.version }}'
+          ./tools/Build-Installer.ps1 -Version $version -SkipSigning
           $dist = Join-Path $env:RUNNER_TEMP 'dist'
           New-Item -ItemType Directory $dist | Out-Null
+
+          $msi = Get-ChildItem installer/bin -Recurse -Filter DONUT.msi | Select-Object -First 1
           Copy-Item $msi.FullName (Join-Path $dist 'DONUT.msi')
-          $hash = (Get-FileHash (Join-Path $dist 'DONUT.msi') -Algorithm SHA256).Hash.ToLower()
-          "$hash  DONUT.msi" | Set-Content (Join-Path $dist 'DONUT.msi.sha256') -NoNewline
+
+          # The MSI's own staged payload, flat, for installs msiexec does not own. Its
+          # VERSION rides inside: a zip install has no uninstall key to read one from.
+          $stage = (Resolve-Path installer/obj/stage).Path
+          $version | Set-Content (Join-Path $stage 'VERSION') -NoNewline
+          [IO.Compression.ZipFile]::CreateFromDirectory($stage, (Join-Path $dist 'DONUT.zip'))
+
+          # A checksum each, since which package an install applies depends on the install.
+          foreach ($name in 'DONUT.msi', 'DONUT.zip') {
+              $hash = (Get-FileHash (Join-Path $dist $name) -Algorithm SHA256).Hash.ToLower()
+              "$hash  $name" | Set-Content (Join-Path $dist "$name.sha256") -NoNewline
+          }
           "dist=$dist" >> $env:GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DONUT-msi
+          name: DONUT-packages
           path: ${{ steps.build.outputs.dist }}
 
       # A beta creates its own tag here; a stable one was pushed by hand, so it is verified.
@@ -90,7 +104,6 @@ jobs:
           $dist = '${{ steps.build.outputs.dist }}'
           $tag = '${{ steps.ver.outputs.tag }}'
           $kind = if ('${{ steps.ver.outputs.beta }}' -eq 'true') { '--prerelease' } else { '--verify-tag' }
-          gh release create $tag `
-              (Join-Path $dist 'DONUT.msi') `
-              (Join-Path $dist 'DONUT.msi.sha256') `
+          $assets = Get-ChildItem $dist | ForEach-Object { $_.FullName }
+          gh release create $tag $assets `
               --title "DONUT $tag" --target '${{ github.sha }}' --generate-notes $kind

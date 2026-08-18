@@ -1,6 +1,14 @@
 using module "..\..\src\Services\SelfUpdateService.psm1"
 using module "..\..\src\Core\DonutPaths.psm1"
 
+# Stands the service in a directory of the test's choosing, which is the one thing
+# about a portable install that cannot be faked through the registry.
+class TestSelfUpdateService : SelfUpdateService {
+    [string] $Root
+
+    [string] InstallRoot() { return $this.Root }
+}
+
 Describe "SelfUpdateService" {
 
     Context "Token Management" {
@@ -140,6 +148,59 @@ Describe "SelfUpdateService" {
                 $path | Should -Be (Join-Path $dest "file.txt")
                 Should -Invoke Invoke-RestMethod -Times 1
             }
+        }
+    }
+
+    Context "Install shape" {
+
+        # One MSI install in Program Files, mocked into the module where the class runs.
+        BeforeEach {
+            # A filtered mock alone throws on any other path, so the default answers those.
+            Mock -CommandName Test-Path `
+                 -ModuleName SelfUpdateService `
+                 -MockWith { return $false }
+            Mock -CommandName Test-Path `
+                 -ModuleName SelfUpdateService `
+                 -ParameterFilter { $Path -like "*Uninstall*" } `
+                 -MockWith { return $true }
+            Mock -CommandName Get-ChildItem `
+                 -ModuleName SelfUpdateService `
+                 -MockWith { return @([PSCustomObject]@{ PSPath = "HKLM:\Uninstall\Key1" }) }
+            Mock -CommandName Get-ItemProperty `
+                 -ModuleName SelfUpdateService `
+                 -MockWith {
+                return [PSCustomObject]@{
+                    DisplayName     = "DONUT"
+                    Publisher       = "Bakery"
+                    DisplayVersion  = "2.3.0"
+                    InstallLocation = "C:\Program Files\Bakery\DONUT\"
+                }
+            }
+        }
+
+        It "Reads its own version file when it runs outside the registered install" {
+            $root = Join-Path $TestDrive "Safe\Donut"
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            "2.4.780" | Set-Content (Join-Path $root "VERSION")
+
+            Mock -CommandName Test-Path `
+                 -ModuleName SelfUpdateService `
+                 -ParameterFilter { $Path -like "*VERSION" } `
+                 -MockWith { return $true }
+
+            $service = [TestSelfUpdateService]::new()
+            $service.Root = $root
+
+            $service.IsPortable() | Should -BeTrue
+            $service.GetLocalVersion().ToString() | Should -Be "2.4.780"
+        }
+
+        It "Reads the uninstall key when it runs inside the registered install" {
+            $service = [TestSelfUpdateService]::new()
+            $service.Root = "C:\Program Files\Bakery\DONUT\bin\x64\DONUT"
+
+            $service.IsPortable() | Should -BeFalse
+            $service.GetLocalVersion().ToString() | Should -Be "2.3.0"
         }
     }
 

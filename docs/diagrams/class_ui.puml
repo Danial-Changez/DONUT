@@ -160,7 +160,7 @@ package "Donut.UI.Presenters" #2B1A12 {
     class DialogPresenter {
         +ShowConfirmation(title, message, listItems, primaryText, isDestructive): bool
         +ShowAlert(title, message, listItems): void
-        +ShowUpdatePrompt(currentVer, newVer, isRollback): bool
+        +ShowUpdatePrompt(currentVer, newVer, isRollback): hashtable
     }
 
     class LoginPresenter {

@@ -88,16 +88,23 @@ class DialogPresenter {
         [void]$this.ShowModal()
     }
 
-    [bool] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
+    # Returns @{ Confirmed; Remember }, Remember being "install updates without asking".
+    # A rollback hides that checkbox: it is not an answer worth making permanent.
+    [hashtable] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
         $this.Initialize()
         $msg = "Current: $currentVer`nNew: $newVer`n`nUpdate now?"
         if ($isRollback) {
             $msg = "Current: $currentVer`nTarget: $newVer`n`n" +
             "This rolls DONUT back to an older version. Continue?"
         }
-        $this.Window.DataContext = $this.NewVm("Update Available", $msg, @(),
-            'Update Now', 'Later')
-        return $this.ShowModal()
+        $vm = $this.NewVm("Update Available", $msg, @(), 'Update Now', 'Later')
+        if (-not $isRollback) {
+            $vm.RememberText = 'Install updates automatically from now on'
+            $vm.HasRemember = $true
+        }
+        $this.Window.DataContext = $vm
+        $confirmed = $this.ShowModal()
+        return @{ Confirmed = $confirmed; Remember = ($confirmed -and $vm.Remember) }
     }
 
     # Builds the dialog's content view-model: Has* flags for which parts show, plus the

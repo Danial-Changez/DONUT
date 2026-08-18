@@ -158,9 +158,11 @@ reference. See [Design decisions](../decisions.md#the-coordinator-seam).
   SHA-256-verified first). The version compare reads the installed
   `DisplayVersion` from the uninstall key.
 - The check follows the configured channel: stable reads `releases/latest`, beta
-  (`betaUpdates`) the release list, so prereleases count too. `InstallWorker.ps1`
-  passes the registered `InstallLocation` back as `INSTALLFOLDER`, which is what
-  keeps a beta install outside Program Files from migrating into it on an upgrade.
+  (`betaUpdates`) the release list, so prereleases count too. Which package it then
+  applies follows the install: a copy running inside the `InstallLocation` its
+  uninstall key records takes the MSI, anything else takes the zip and replaces its
+  own files (`IsPortable`). The MSI path passes that `InstallLocation` back as
+  `INSTALLFOLDER`, so an MSI install outside Program Files stays where it is.
 - **Publishing a release** is the workflow's job, not a checklist: a push to `main`
   publishes a prerelease and a promotion flips its flag, both covered in
   [Releasing](../releasing.md). The presenter picks the first `*.msi` asset and

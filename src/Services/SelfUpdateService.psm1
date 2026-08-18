@@ -3,9 +3,16 @@
     Self-updates the DONUT application from GitHub Releases.
 
 .DESCRIPTION
-    Discovers the latest release, downloads and SHA-256 verifies the MSI, and
+    Discovers the latest release, downloads and SHA-256 verifies the package, and
     hands off to InstallWorker.ps1 to install or roll back. Compares the
     installed version to the release tag to decide update vs. rollback vs. no-op.
+
+    Which package depends on how this copy was installed. An MSI install takes the MSI
+    and reads its version from the uninstall key; a zip install (tools/Install-Beta.ps1,
+    a directory of its own outside Program Files) takes the zip and reads its version
+    from the version.txt inside it, so an update never runs msiexec at all. A zip
+    unpacks into a directory only administrators can write, so that apply asks for the
+    rights msiexec would have prompted for, silent whenever DONUT already runs elevated.
 
     The default Owner/Repo is the public upstream, which answers anonymously -
     no sign-in involved. An org running a private fork points Owner/Repo at the
@@ -168,22 +175,70 @@ class SelfUpdateService {
         return $destPath
     }
 
-    [version] GetLocalVersion() {
-        # Registry first for MSI installs, with match criteria mirroring InstallWorker's.
+    # --- Install shape ---
+
+    # The directory this copy runs from, or '' on the dev path where the host is pwsh.
+    # Overridable so tests can place the exe without touching the real process.
+    [string] InstallRoot() {
+        $exe = [Environment]::ProcessPath
+        if (-not $exe -or [IO.Path]::GetFileName($exe) -ine 'DONUT.exe') { return '' }
+        return [IO.Path]::GetDirectoryName($exe)
+    }
+
+    # A zip install has no uninstall entry, so the registered location is what tells the
+    # two apart: running inside it means msiexec owns this copy, outside means the zip does.
+    [bool] IsPortable() {
+        $root = $this.InstallRoot()
+        if (-not $root) { return $false }
+        $registered = $this.RegisteredInstall()
+        if (-not $registered -or -not $registered.Location) { return $true }
+        return -not $root.StartsWith($registered.Location, [StringComparison]::OrdinalIgnoreCase)
+    }
+
+    # The uninstall-key entry for an MSI install, match criteria mirroring InstallWorker's.
+    hidden [PSCustomObject] RegisteredInstall() {
         $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
-        if (Test-Path $regPath) {
-            $subKeys = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
-            foreach ($key in $subKeys) {
-                $app = Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue
-                if ($app.DisplayName -like '*DONUT*' -and $app.Publisher -like '*Bakery*') {
-                    if ($app.DisplayVersion) {
-                        return [version]$app.DisplayVersion
-                    }
+        if (-not (Test-Path $regPath)) { return $null }
+
+        $subKeys = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
+        foreach ($key in $subKeys) {
+            $app = Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue
+            if ($app.DisplayName -like '*DONUT*' -and $app.Publisher -like '*Bakery*') {
+                return [PSCustomObject]@{
+                    Location = [string]$app.InstallLocation
+                    Version  = [string]$app.DisplayVersion
                 }
             }
         }
+        return $null
+    }
 
-        # Fallback for dev/portable installs: the version file.
+    # The version a zip install carries: the release build writes VERSION into the
+    # package, so the update replaces it and nothing keeps a separate marker in step.
+    hidden [version] PackagedVersion() {
+        $root = $this.InstallRoot()
+        if (-not $root) { return $null }
+        $file = Join-Path $root 'VERSION'
+        if (-not (Test-Path $file)) { return $null }
+        try {
+            return [version](Get-Content $file -Raw).Trim()
+        } catch {
+            return $null
+        }
+    }
+
+    [version] GetLocalVersion() {
+        # The exe first when the zip owns this copy: the uninstall key belongs to a
+        # different install then, and reading it would compare against someone else's build.
+        if ($this.IsPortable()) {
+            $packaged = $this.PackagedVersion()
+            if ($packaged) { return $packaged }
+        }
+
+        $registered = $this.RegisteredInstall()
+        if ($registered -and $registered.Version) { return [version]$registered.Version }
+
+        # Fallback for a dev checkout, which has neither an uninstall key nor a package.
         $verFile = Join-Path ([DonutPaths]::DataRoot()) "version.txt"
         if (Test-Path $verFile) {
             return [version](Get-Content $verFile -Raw).Trim()
@@ -198,28 +253,44 @@ class SelfUpdateService {
         return ($hash.Hash -eq $ExpectedHash)
     }
 
-    [void] ApplyUpdate([string]$MsiPath, [bool]$IsRollback, [string]$SourceRoot) {
+    # PackagePath is the MSI or the zip, and which one decides how the worker installs it.
+    # The zip branch asks for the rights msiexec would have prompted for. See .DESCRIPTION.
+    [void] ApplyUpdate([string]$PackagePath, [bool]$IsRollback, [string]$SourceRoot) {
         $workerScript = Join-Path $SourceRoot "Scripts\InstallWorker.ps1"
         if (-not (Test-Path $workerScript)) { throw "InstallWorker.ps1 not found at $workerScript" }
 
-        # Run the worker from the stage dir: the MSI replaces the source tree mid-install.
-        $stageDir = Split-Path $MsiPath -Parent
+        # Run the worker from the stage dir: the package replaces the source tree mid-install.
+        $stageDir = Split-Path $PackagePath -Parent
         $tempWorker = Join-Path $stageDir "InstallWorker.ps1"
         Copy-Item -Path $workerScript -Destination $tempWorker -Force
 
+        $isZip = $PackagePath -like '*.zip'
         $argList = @(
             "-File `"$tempWorker`"",
-            "-MsiPath `"$MsiPath`"",
             "-ProcessNameToClose `"DONUT`"",
             "-Passive"
         )
+
+        if ($isZip) {
+            $argList += "-ZipPath `"$PackagePath`""
+            $argList += "-InstallDir `"$($this.InstallRoot())`""
+        } else {
+            $argList += "-MsiPath `"$PackagePath`""
+        }
 
         if ($IsRollback) {
             $argList += "-Rollback"
         }
 
-        Start-Process -FilePath "powershell.exe" `
-                      -ArgumentList $argList `
-                      -WindowStyle Hidden
+        if ($isZip) {
+            Start-Process -FilePath "powershell.exe" `
+                          -ArgumentList $argList `
+                          -Verb RunAs `
+                          -WindowStyle Hidden
+        } else {
+            Start-Process -FilePath "powershell.exe" `
+                          -ArgumentList $argList `
+                          -WindowStyle Hidden
+        }
     }
 }

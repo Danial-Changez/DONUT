@@ -50,6 +50,8 @@ class AppConfig {
         hasSeenTour                  = $false
         # Update channel: on takes the newest prerelease too, off only what is marked latest.
         betaUpdates                  = $false
+        # Install a newer release without asking. A rollback still prompts, always.
+        autoUpdate                   = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
         debugLogging                 = $false
         commands                     = @{
@@ -240,6 +242,11 @@ class AppConfig {
     # Whether the update check follows the beta channel (prereleases), off by default.
     [bool] GetBetaUpdates() {
         return [AppConfig]::AsBool($this.GetSetting('betaUpdates', $null), $false)
+    }
+
+    # Whether a newer release installs without a prompt, off by default. Never a rollback.
+    [bool] GetAutoUpdate() {
+        return [AppConfig]::AsBool($this.GetSetting('autoUpdate', $null), $false)
     }
 
     # Verbose [DEBUG] logging, off by default (INFO, WARN and ERROR always flow).

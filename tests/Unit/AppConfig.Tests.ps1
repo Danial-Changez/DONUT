@@ -228,10 +228,12 @@ Describe "AppConfig" {
             $config.Settings.Remove('startWithWindows')
             $config.Settings.Remove('closeToTray')
             $config.Settings.Remove('betaUpdates')
+            $config.Settings.Remove('autoUpdate')
 
             $config.GetStartWithWindows() | Should -Be $false
             $config.GetCloseToTray() | Should -Be $false
             $config.GetBetaUpdates() | Should -Be $false
+            $config.GetAutoUpdate() | Should -Be $false
         }
 
         It "Should return a configured real boolean" {

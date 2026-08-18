@@ -43,6 +43,7 @@ Service --> Presenter: release
 deactivate Service
 
 Presenter -> Service: GetLocalVersion()
+note right of Service: uninstall key for an MSI install,\npackaged version.txt for a zip one
 Service --> Presenter: installed version
 Presenter -> Presenter: compare versions
 
@@ -50,23 +51,28 @@ alt Update / rollback needed
     Presenter -> User: ShowUpdatePrompt(current, new)
     User --> Presenter: Confirm
 
-    Presenter -> Service: DownloadAsset(token, "*.msi", staging)
+    Presenter -> Service: IsPortable()
+    Presenter -> Service: DownloadAsset(token, "*.msi" or "*.zip", staging)
     activate Service
-    Service -> GH: download MSI (+ checksum)
-    GH --> Service: MSI file
-    Service --> Presenter: local MSI path
+    Service -> GH: download package (+ its checksum)
+    GH --> Service: package file
+    Service --> Presenter: local package path
     deactivate Service
 
     Presenter -> Service: VerifyFileHash(path, expectedHash)
     note right of Service: SHA-256 — abort on mismatch
 
-    Presenter -> Service: ApplyUpdate(msiPath, isRollback, sourceRoot)
+    Presenter -> Service: ApplyUpdate(packagePath, isRollback, sourceRoot)
     activate Service
-    Service -> Worker: Start-Process powershell.exe (5.1) on a\nstaged COPY of InstallWorker.ps1 (the MSI\nreplaces the source tree mid-install)
+    Service -> Worker: Start-Process powershell.exe (5.1) on a\nstaged COPY of InstallWorker.ps1 (the package\nreplaces the source tree mid-install)
     activate Worker
     Worker -> Worker: stop DONUT (graceful)
-    Worker -> Worker: msiexec /i NewVersion.msi INSTALLFOLDER=(registered)\nREBOOT=ReallySuppress /passive /log (accept 0, 3010)
-    Worker -> Worker: relaunch Donut.Launcher.exe
+    alt MSI install
+        Worker -> Worker: msiexec /i NewVersion.msi INSTALLFOLDER=(registered)\nREBOOT=ReallySuppress /passive /log (accept 0, 3010)
+    else zip install
+        Worker -> Worker: expand the zip and copy it over InstallDir\n(elevated, keeping the extracted app tree)
+    end
+    Worker -> Worker: relaunch DONUT.exe
     deactivate Worker
     deactivate Service
     note over Presenter: app restarts on the new version

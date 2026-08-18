@@ -1,15 +1,23 @@
 <#
 .SYNOPSIS
-    Standalone updater that installs (or rolls back) the DONUT MSI.
+    Standalone updater that installs (or rolls back) a DONUT MSI or zip.
 
 .DESCRIPTION
-    Launched out-of-process by SelfUpdateService once an MSI is downloaded and
-    SHA-256 verified. Gracefully closes any running DONUT process, optionally
-    uninstalls the current version (rollback), installs the MSI via msiexec, then
-    cleans up the staging directory and relaunches the app.
+    Launched out-of-process by SelfUpdateService once a package is downloaded and
+    SHA-256 verified. Gracefully closes any running DONUT process, then either
+    installs the MSI via msiexec (optionally uninstalling first for a rollback) or
+    unpacks the zip over an existing directory, cleans up the staging directory and
+    relaunches the app.
 
 .PARAMETER MsiPath
     Path to the downloaded, verified MSI to install.
+
+.PARAMETER ZipPath
+    Path to the downloaded, verified zip, for an install that msiexec does not own.
+    Mutually exclusive with MsiPath, and needs InstallDir.
+
+.PARAMETER InstallDir
+    Directory a zip install owns, which is where it unpacks and relaunches from.
 
 .PARAMETER ProcessNameToClose
     Process to stop before installing (default 'DONUT').
@@ -33,6 +41,8 @@
 #>
 param(
     [string]$MsiPath,
+    [string]$ZipPath,
+    [string]$InstallDir,
     [string]$ProcessNameToClose = 'DONUT',
     [switch]$Passive,
     [switch]$Rollback,
@@ -123,6 +133,27 @@ function Invoke-MsiUninstall {
     return [int]$p.ExitCode
 }
 
+# Unpacks the zip over an install directory. Copy-over, not replace: the app tree the
+# launcher extracts beside the exe is not in the zip and must survive the update.
+function Install-DonutZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$ZipPath,
+        [Parameter(Mandatory = $true)][string]$InstallDir
+    )
+
+    if (-not (Test-Path $ZipPath)) { throw "Zip not found: $ZipPath" }
+    $unpack = Join-Path ([IO.Path]::GetDirectoryName($ZipPath)) 'unpack'
+    if (Test-Path $unpack) { Remove-Item $unpack -Recurse -Force }
+
+    Expand-Archive -LiteralPath $ZipPath -DestinationPath $unpack -Force
+    if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
+    Copy-Item -Path (Join-Path $unpack '*') `
+              -Destination $InstallDir `
+              -Recurse `
+              -Force
+    Remove-Item $unpack -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # Closes running DONUT windows, waits up to TimeoutSeconds, then force-kills any survivors.
 function Stop-DonutProcessGracefully {
     param([string]$Name, [int]$TimeoutSeconds = 10)
@@ -170,38 +201,47 @@ try {
     if ($ProcessNameToClose) {
         Stop-DonutProcessGracefully -Name $ProcessNameToClose -TimeoutSeconds $CloseTimeoutSeconds
     }
-    # Join-Path's mandatory -Path would throw under EAP=Stop when nothing is registered.
-    $info = Get-DONUTUninstallInfo
-    $exePath = if ($info -and $info.InstallLocation) {
-        Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
-    } else { $null }
+    $package = if ($ZipPath) { $ZipPath } else { $MsiPath }
+    $exePath = $null
 
-    # A rollback uninstalls the newer build first so the older MSI installs clean.
-    if ($Rollback -and $info) {
-        $unExit = Invoke-MsiUninstall -ProdCode $info.ProductCode -Passive:$Passive
-        if (@(0, 3010, 1605) -notcontains $unExit) {
-            Show-UpdateError "DONUT rollback failed (code $unExit). It may need a manual reinstall."
-            Write-Error "Uninstall failed with exit code $unExit"
+    if ($ZipPath) {
+        # A rollback is just an older zip: nothing to uninstall, the files are replaced.
+        Install-DonutZip -ZipPath $ZipPath -InstallDir $InstallDir
+        $exePath = Join-Path -Path $InstallDir -ChildPath 'DONUT.exe'
+    } else {
+        # Join-Path's mandatory -Path would throw under EAP=Stop when nothing is registered.
+        $info = Get-DONUTUninstallInfo
+        $exePath = if ($info -and $info.InstallLocation) {
+            Join-Path -Path $info.InstallLocation -ChildPath 'bin\x64\DONUT\DONUT.exe'
+        } else { $null }
+
+        # A rollback uninstalls the newer build first so the older MSI installs clean.
+        if ($Rollback -and $info) {
+            $unExit = Invoke-MsiUninstall -ProdCode $info.ProductCode -Passive:$Passive
+            if (@(0, 3010, 1605) -notcontains $unExit) {
+                Show-UpdateError "DONUT rollback failed (code $unExit). It may need a manual reinstall."
+                Write-Error "Uninstall failed with exit code $unExit"
+                exit 1
+            }
+        }
+
+        $logPath = Join-Path -Path ([IO.Path]::GetDirectoryName($MsiPath)) -ChildPath 'msi-install.log'
+        # The recorded location, or a beta install outside Program Files would migrate back into it.
+        $folder = if ($info) { [string]$info.InstallLocation } else { '' }
+        $exit = Invoke-MsiInstall -MsiPath $MsiPath `
+                                  -LogPath $logPath `
+                                  -InstallFolder $folder `
+                                  -Passive:$Passive
+
+        if (@(0, 3010) -notcontains $exit) {
+            Show-UpdateError "DONUT update failed (code $exit).`nSee log: $logPath"
+            Write-Error "MSI install failed with exit code $exit. See log: $logPath"
             exit 1
         }
     }
 
-    $logPath = Join-Path -Path ([IO.Path]::GetDirectoryName($MsiPath)) -ChildPath 'msi-install.log'
-    # The recorded location, or a beta install outside Program Files would migrate back into it.
-    $folder = if ($info) { [string]$info.InstallLocation } else { '' }
-    $exit = Invoke-MsiInstall -MsiPath $MsiPath `
-                              -LogPath $logPath `
-                              -InstallFolder $folder `
-                              -Passive:$Passive
-
-    if (@(0, 3010) -notcontains $exit) {
-        Show-UpdateError "DONUT update failed (code $exit).`nSee log: $logPath"
-        Write-Error "MSI install failed with exit code $exit. See log: $logPath"
-        exit 1
-    }
-
     # Remove the pair, or the staged .sha256 outlives every update forever.
-    foreach ($staged in @($MsiPath, "$MsiPath.sha256")) {
+    foreach ($staged in @($package, "$package.sha256")) {
         if ($staged -and (Test-Path -LiteralPath $staged)) {
             try {
                 Remove-Item -LiteralPath $staged -Force -ErrorAction Stop

@@ -10,6 +10,9 @@
     dropped, then builds installer\Donut.Installer.wixproj - the WiX SDK restores
     itself from NuGet, so plain dotnet is the only prerequisite.
 
+    The staged payload is left at installer\obj\stage, which is what the release
+    workflow packs as DONUT.zip for installs msiexec does not own.
+
 .PARAMETER Version
     MSI ProductVersion (x.y.z). SelfUpdateService compares this DisplayVersion
     against GitHub release tags, so use the release's version.

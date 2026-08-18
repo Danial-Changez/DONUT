@@ -54,14 +54,20 @@ To run one, install it into its own directory from an **elevated** PowerShell:
 pwsh -File tools\Install-Beta.ps1
 ```
 
-It takes the newest release, verifies it, installs into `C:\Safe\Donut` (override
-with `-InstallDir`), locks that folder down to administrators, and turns on the
-[beta channel](../features/self-update.md#beta-channel) so every later update
-follows the beta stream and stays in that directory. Exclude the folder you chose
-in Defender instead of the Program Files path above.
+Run it **as the admin account you elevate DONUT with** — that account ends up owning
+the folder and is the only one able to write it. Your everyday signed-in account is
+granted read and execute, which is all it needs to launch DONUT.
 
-One machine holds one DONUT, so an install already in Program Files moves into the
-beta folder rather than sitting beside it. Your settings, machine list and reports
-live outside the install and carry across either way.
+It takes the newest release, verifies it, unpacks into `C:\Safe\Donut` (override with
+`-InstallDir`), sets those permissions, adds a **DONUT (beta)** Start Menu shortcut,
+and turns on the [beta channel](../features/self-update.md#beta-channel) so every
+later update follows the beta stream and lands in that same directory without
+reinstalling anything. Exclude the folder you chose in Defender instead of the
+Program Files path above.
+
+A beta install registers nothing with Windows, so it sits **beside** a normal
+install rather than replacing it, and uninstalling is deleting the folder. Both
+share your settings, machine list and reports — including the beta toggle, so
+flipping it applies to whichever copy you open.
 
 Next: [First launch](./first-launch.md).

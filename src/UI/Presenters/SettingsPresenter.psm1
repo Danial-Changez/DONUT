@@ -268,6 +268,14 @@ class SettingsPresenter {
             $runAsAdmin.Add_Unchecked($h)
         }
 
+        $autoUpdate = $view.FindName('chkAutoUpdate')
+        if ($autoUpdate) {
+            $autoUpdate.IsChecked = $this.Config.GetAutoUpdate()
+            $h = { param($s, $e) $self.PersistToggle('autoUpdate', [bool]$s.IsChecked, $null) }.GetNewClosure()
+            $autoUpdate.Add_Checked($h)
+            $autoUpdate.Add_Unchecked($h)
+        }
+
         # No live effect: the channel is read by the next update check, not applied now.
         $beta = $view.FindName('chkBetaUpdates')
         if ($beta) {

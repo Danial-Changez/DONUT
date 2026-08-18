@@ -121,7 +121,9 @@ package "Donut.Services" #221634 {
         +GetLatestRelease(token, includeBeta): PSCustomObject
         +DownloadAsset(token, asset, destDir): string
         +VerifyFileHash(path, expectedHash): bool
-        +ApplyUpdate(msiPath, isRollback, sourceRoot): void
+        +InstallRoot(): string
+        +IsPortable(): bool
+        +ApplyUpdate(packagePath, isRollback, sourceRoot): void
     }
 
     class StartupTaskService {
