@@ -47,7 +47,7 @@ alt Pick a computer
     Presenter -> Presenter: OnPickComputer() -> add host row + prefetch
 else Unlock a locked user
     User -> Presenter: Click "Unlock"
-    Presenter -> Unlock: BeginInvoke(sam, domain) on pool
+    Presenter -> Unlock: BeginInvoke(sam, domain, dn) on pool
     activate Unlock
     Unlock -> AD: UnlockUser(user)
     AD --> Unlock: success
@@ -59,10 +59,10 @@ else Reset a user's password
     Presenter -> Shell: OnShowReset seam -> ShowReset(user)
     Shell -> User: Reset overlay (type or Generate;\nCopy / QR; change-at-logon pre-checked)
     User -> Shell: "Reset password"
-    Shell -> Reset: RunOnPool(sam, domain,\nSecureString, changeAtLogon)
+    Shell -> Reset: RunOnPool(sam, domain, dn,\nSecureString, changeAtLogon)
     activate Reset
     Reset -> AD: ResetPassword(user, pwd, flag)
-    note right of AD: Set-ADAccountPassword -Reset\n+ Set-ADUser -ChangePasswordAtLogon.\nThe password is never logged.
+    note right of AD: Binds the row's DN serverless, then\nIADsUser::SetPassword + pwdLastSet.\nNo RSAT. The password is never logged.
     AD --> Reset: success
     Reset --> Shell: (async) result
     deactivate Reset

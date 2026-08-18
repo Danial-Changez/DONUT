@@ -11,9 +11,11 @@ package "Donut.Services" #221634 {
         +Search(prefix): AdSearchResult[]
         +UnlockUser(user): bool
         +ResetPassword(user, newPassword, changeAtLogon): bool
+        +{static} BindPath(dn): string
         #QueryDirectory(domain, filter, props, max): Hashtable[]
-        #InvokeUnlock(sam, domain): void
-        #InvokeReset(sam, domain, newPassword, changeAtLogon): void
+        #BindUser(dn): DirectoryEntry
+        #InvokeUnlock(dn): void
+        #InvokeReset(dn, newPassword, changeAtLogon): void
     }
 
     class PersonLensService {

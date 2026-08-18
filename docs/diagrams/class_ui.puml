@@ -293,7 +293,7 @@ package "Donut.UI.ViewModels" #3A2A12 {
     }
 
     class ResetPasswordViewModel {
-        +TargetSam / TargetDomain / TargetUpn / DisplayName: string
+        +TargetSam / TargetDomain / TargetDn / TargetUpn / DisplayName: string
         +Password: string
         +ChangeAtLogon / IsBusy: bool
         +Generate/Copy/ShowQr/ApplyCommand: RelayCommand
