@@ -21,9 +21,13 @@ static class Program {
     /// <c>--tray</c> starts hidden in the tray for autostart. <c>--await-pid &lt;pid&gt;</c>
     /// waits for that process to exit first, so an elevation relaunch does not lose the
     /// single-instance race.
+    /// <c>--extract-only</c> writes the app tree and exits, for an elevated installer.
     /// </param>
     [STAThread]
     static void Main(string[] args) {
+        // Staged by an elevated installer, so the first desktop launch need not be.
+        if (args.Contains("--extract-only")) { ExtractEmbeddedApp(); return; }
+
         bool tray = args.Contains("--tray");
 
         // Before the mutex: it is per-session, so an elevated relaunch would collide.
@@ -84,6 +88,9 @@ static class Program {
                             MessageBox.Show(errors, "PowerShell Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
+                } catch (UnauthorizedAccessException ex) {
+                    MessageBox.Show(ex.Message, "DONUT setup",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 } catch (Exception ex) {
                     MessageBox.Show(ex.ToString(), "Thread Error");
                 } finally {
