@@ -33,6 +33,9 @@ public static class Bootstrap {
     // Unpinned: pin a tag here if a bad PowerShell release ever ships.
     const string PwshReleaseApi = "https://api.github.com/repos/PowerShell/PowerShell/releases/latest";
 
+    // An MSI still running at this point is wedged, not slow.
+    const int MsiTimeoutMinutes = 10;
+
     // The portable zip URL carries its version, so the current one is read off the page.
     const string WizTreeDownloadPage = "https://diskanalyzer.com/download";
 
@@ -180,10 +183,16 @@ public static class Bootstrap {
 
             using var p = Process.Start(new ProcessStartInfo {
                 FileName = "msiexec.exe",
-                Arguments = $"/i \"{msi}\" /passive /norestart",
+                Arguments = $"/i \"{msi}\" /quiet /norestart",
                 UseShellExecute = false,
             })!;
-            p.WaitForExit();
+            // Bounded because Windows Installer waits its turn rather than failing.
+            if (!p.WaitForExit(MsiTimeoutMinutes * 60 * 1000)) {
+                try { p.Kill(entireProcessTree: true); } catch { /* already gone */ }
+                throw new TimeoutException(
+                    $"msiexec did not finish within {MsiTimeoutMinutes} minutes (another install " +
+                    "holding the Windows Installer lock?).");
+            }
             if (p.ExitCode is not (0 or 3010))   // 3010 = success, reboot pending
                 throw new InvalidOperationException($"msiexec exited with {p.ExitCode}.");
 
