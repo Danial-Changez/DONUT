@@ -48,8 +48,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Sam,
-    [string] $Domain = $env:USERDNSDOMAIN,
-    [string] $Dc = ($env:LOGONSERVER -replace '^\\\\', ''),
+    [string] $Domain = '',
+    [string] $Dc = '',
     [switch] $WriteTest
 )
 
@@ -58,11 +58,13 @@ Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
 # Schema GUID of the Reset Password extended right.
 $script:ResetPasswordRight = [guid]'00299570-246d-11d0-a768-00aa006e0529'
 
-# No port in any path, since a port-qualified one cannot build the Kerberos SPN.
+# Host form and auth flags are separate axes, so a failure names which one broke it.
 $script:BindModes = @(
-    @{ Name = 'Secure'; Auth = 'Secure' }
-    @{ Name = 'Secure + Sealing + Signing'; Auth = 'Secure, Sealing, Signing' }
-    @{ Name = 'Secure + SSL'; Auth = 'Secure, SecureSocketsLayer' }
+    @{ Name = 'domain, Secure'; Via = 'domain'; Auth = 'Secure' }
+    @{ Name = 'domain, Sealing + Signing'; Via = 'domain'; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'domain, SSL'; Via = 'domain'; Auth = 'Secure, SecureSocketsLayer' }
+    @{ Name = 'serverless, Sealing + Signing'; Via = ''; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'dc, Sealing + Signing'; Via = 'dc'; Auth = 'Secure, Sealing, Signing' }
 )
 
 $script:Routes = @(
@@ -81,20 +83,31 @@ function Write-Result([string]$label, [string]$value, [string]$colour) {
     Write-Host ("  {0,-30} {1}" -f $label, $value) -ForegroundColor $colour
 }
 
-# PowerShell wraps a failed bind's COM error twice before rethrowing it.
+# PowerShell wraps a failed bind's COM error twice, and the HRESULT names it exactly.
 function Resolve-Reason($record) {
     $ex = $record.Exception
     while ($ex.InnerException) { $ex = $ex.InnerException }
-    return $ex.Message
+    $code = if ($ex.HResult) { ' (0x{0:X8})' -f $ex.HResult } else { '' }
+    return "$($ex.Message.Trim())$code"
 }
 
 function Close-Bind($entry) {
     if ($null -ne $entry) { try { $entry.Dispose() } catch { } }
 }
 
+function Get-BindPath([string]$dn, [hashtable]$mode) {
+    $prefix = switch ($mode.Via) {
+        'domain' { "$Domain/" }
+        'dc' { "$Dc/" }
+        default { '' }
+    }
+    return "LDAP://$prefix$dn"
+}
+
 function New-Bind([string]$dn, [hashtable]$mode) {
     $auth = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
-    return New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Dc/$dn", $null, $null, $auth)
+    $path = Get-BindPath $dn $mode
+    return New-Object System.DirectoryServices.DirectoryEntry($path, $null, $null, $auth)
 }
 
 function Test-Port([int]$port) {
@@ -144,7 +157,25 @@ function New-ProbePassword {
     return -join ($chars | Sort-Object { Get-Random })
 }
 
-$script:RootPath = "LDAP://$Dc/DC=$($Domain -replace '\.', ',DC=')"
+# GetComputerDomain reads domain membership rather than the token, so an elevated
+# session as a local or cross-domain admin resolves the same as the desktop user's.
+if (-not $Domain -or -not $Dc) {
+    try {
+        $computerDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()
+        if (-not $Domain) { $Domain = $computerDomain.Name }
+        if (-not $Dc) { $Dc = $computerDomain.FindDomainController().Name }
+    } catch {
+        if (-not $Domain) { $Domain = $env:USERDNSDOMAIN }
+        if (-not $Dc) { $Dc = ($env:LOGONSERVER -replace '^\\\\', '') }
+    }
+}
+if (-not $Domain -or -not $Dc) {
+    Write-Host "Could not resolve a domain and DC (domain='$Domain', dc='$Dc'). Pass -Domain and -Dc." `
+               -ForegroundColor Red
+    return
+}
+
+$script:RootPath = "LDAP://$Domain/DC=$($Domain -replace '\.', ',DC=')"
 
 function New-Searcher([string]$path) {
     $root = New-Object System.DirectoryServices.DirectoryEntry($path)
@@ -154,9 +185,9 @@ function New-Searcher([string]$path) {
 # lockoutTime and pwdLastSet are named in an ACE by schema GUID, never by name.
 function Get-AttributeGuid([string]$ldapName) {
     try {
-        $rootDse = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Dc/RootDSE")
+        $rootDse = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Domain/RootDSE")
         $schema = [string]$rootDse.Properties['schemaNamingContext'].Value
-        $finder = New-Searcher "LDAP://$Dc/$schema"
+        $finder = New-Searcher "LDAP://$Domain/$schema"
         $finder.Filter = "(lDAPDisplayName=$ldapName)"
         [void]$finder.PropertiesToLoad.Add('schemaIDGUID')
         $row = $finder.FindOne()
@@ -175,7 +206,7 @@ $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated = ([System.Security.Principal.WindowsPrincipal]::new($me)).IsInRole(
     [System.Security.Principal.WindowsBuiltInRole]::Administrator)
 Write-Result 'running as' "$($me.Name)$(if ($elevated) { '  (elevated)' })" 'Gray'
-Write-Result 'dc' $Dc 'Gray'
+Write-Result 'domain / dc' "$Domain  /  $Dc" 'Gray'
 
 $searcher = New-Searcher $script:RootPath
 $searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$Sam))"
@@ -229,6 +260,7 @@ foreach ($mode in $script:BindModes) {
         $usable += $mode
     } catch {
         Write-Result $mode.Name (Resolve-Reason $_) 'Yellow'
+        Write-Result '' (Get-BindPath $dn $mode) 'DarkGray'
     } finally {
         Close-Bind $entry
     }
