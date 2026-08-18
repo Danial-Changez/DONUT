@@ -48,4 +48,18 @@
     <!-- WizTree is deliberately NOT embedded. Its EULA forbids incorporating it into
          other software without a paid Distribution License, so Bootstrap downloads it. -->
   </ItemGroup>
+
+  <!-- PowerShell resolves its built-ins under $PSHOME\Modules, which when the SDK is
+       hosted is the app root; the package stages them under runtimes\ instead, so a
+       launch inheriting no pwsh PSModulePath finds only Desktop-edition copies. -->
+  <Target Name="StagePSHomeModules" AfterTargets="Publish">
+    <ItemGroup>
+      <PSHomeModule Include="$(PublishDir)runtimes\win\lib\net10.0\Modules\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PSHomeModule)"
+          DestinationFiles="@(PSHomeModule->'$(PublishDir)Modules\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <!-- Loud, because a miss here only shows up much later as a broken Get-CimInstance. -->
+    <Error Condition="!Exists('$(PublishDir)Modules\CimCmdlets\CimCmdlets.psd1')"
+           Text="Built-in modules did not land at $PSHOME\Modules; check the SDK's runtimes path." />
+  </Target>
 </Project>
