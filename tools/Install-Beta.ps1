@@ -68,9 +68,8 @@ function Get-InteractiveUser {
     try {
         $session = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
         foreach ($filter in @("Name='explorer.exe' AND SessionId=$session", "Name='explorer.exe'")) {
-            $explorer = Get-CimInstance Win32_Process -Filter $filter
-                                                      -ErrorAction SilentlyContinue |
-                                                       Select-Object -First 1
+            $explorer = Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
+                Select-Object -First 1
             if (-not $explorer) { continue }
 
             $owner = Invoke-CimMethod -InputObject $explorer `

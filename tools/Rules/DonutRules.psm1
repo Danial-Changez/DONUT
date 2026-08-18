@@ -16,6 +16,9 @@
     PSUseConsistentIndentation is off in the repo settings because it has no alignment
     mode, so this rule is what keeps continuation lines honest.
 
+    It also reports a statement that opens with a parameter, which is what a dropped
+    backtick leaves behind: the line still parses, so nothing else catches it.
+
     DonutFunctionSize: a function or method that outgrows clang-tidy's readability
     limits (150 lines, 100 statements) or a branch and nesting cap (20 branches, depth 5)
     is reported at Information severity. That never gates, so the known hotspots stay a
@@ -84,6 +87,13 @@ function Measure-DonutParameterLayout {
     )
     process {
         $elements = @($CommandAst.CommandElements)
+        # In command position a parameter parses as the command name, which only a
+        # dropped continuation produces.
+        if ($elements[0] -is [StringConstantExpressionAst] -and $elements[0].Value -match '^-\D') {
+            New-LayoutRecord ("'$($elements[0].Extent.Text)' begins a statement: the line " +
+                'above it is missing its backtick continuation.') $CommandAst.Extent
+            return
+        }
         if ($elements.Count -lt 2) { return }
         if ($elements[0].Extent.Text -in $script:LayoutExemptCommands) { return }
         $named = @($elements | Where-Object { $_ -is [CommandParameterAst] })

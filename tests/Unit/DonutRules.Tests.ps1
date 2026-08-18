@@ -79,6 +79,18 @@ $p = Join-Path (Split-Path $root -Parent) `
         (Get-LayoutFinding $code).Count | Should -Be 0
     }
 
+    It "flags a dropped backtick, which still parses but splits the statement" {
+        $code = @'
+$explorer = Get-CimInstance Win32_Process -Filter $filter
+                                          -ErrorAction SilentlyContinue |
+                                           Select-Object -First 1
+'@
+        $f = Get-LayoutFinding $code
+        $f.Count | Should -Be 1
+        $f[0].Line | Should -Be 2
+        $f[0].Message | Should -BeLike "*'-ErrorAction' begins a statement*"
+    }
+
     It "ignores a call whose only line break is inside a script block argument" {
         $code = @'
 $job = Start-ThreadJob -ScriptBlock {
