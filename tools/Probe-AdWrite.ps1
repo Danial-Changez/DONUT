@@ -37,6 +37,7 @@
     Performs the writes: pwdLastSet, lockoutTime, then SetPassword under each bind
     mode that section 3 proved. DESTRUCTIVE - it sets a random password on -Sam and
     does not tell you what it was. The account is left with pwdLastSet cleared.
+    Refused when -Sam is the account running the probe.
 
 .EXAMPLE
     pwsh -File tools\Probe-AdWrite.ps1 -Sam testuser01
@@ -72,6 +73,17 @@ function Write-Result([string]$label, [string]$value, [string]$colour) {
     Write-Host ("  {0,-30} {1}" -f $label, $value) -ForegroundColor $colour
 }
 
+# PowerShell wraps a failed bind's COM error twice before rethrowing it.
+function Resolve-Reason($record) {
+    $ex = $record.Exception
+    while ($ex.InnerException) { $ex = $ex.InnerException }
+    return $ex.Message
+}
+
+function Close-Bind($entry) {
+    if ($null -ne $entry) { try { $entry.Dispose() } catch { } }
+}
+
 function New-Bind([string]$dn, [hashtable]$mode) {
     $path = "LDAP://${Dc}:$($mode.Port)/$dn"
     $auth = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
@@ -101,7 +113,18 @@ foreach ($p in @('distinguishedName', 'lockoutTime', 'pwdLastSet', 'userAccountC
     [void]$searcher.PropertiesToLoad.Add($p)
 }
 
-$hit = $searcher.FindOne()
+$me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$elevated = ([System.Security.Principal.WindowsPrincipal]::new($me)).IsInRole(
+    [System.Security.Principal.WindowsBuiltInRole]::Administrator)
+Write-Result 'running as' "$($me.Name)$(if ($elevated) { '  (elevated)' })" 'Gray'
+
+$hit = $null
+try {
+    $hit = $searcher.FindOne()
+} catch {
+    Write-Result 'search' (Resolve-Reason $_) 'Red'
+    return
+}
 if (-not $hit) {
     Write-Result 'account' "NOT FOUND ($Sam in $Domain)" 'Red'
     return
@@ -141,17 +164,14 @@ foreach ($mode in $script:BindModes) {
     $entry = $null
     try {
         $entry = New-Bind $dn $mode
-        $read = [string]$entry.Properties['distinguishedName'].Value
-        if ($read) {
-            Write-Result $mode.Name "bound and read (port $($mode.Port))" 'Green'
-            $usable += $mode
-        } else {
-            Write-Result $mode.Name 'bound but read nothing' 'Yellow'
-        }
+        # A method, not a property read: ETS turns a failed bind's error into a null.
+        $entry.RefreshCache()
+        Write-Result $mode.Name "bound and read (port $($mode.Port))" 'Green'
+        $usable += $mode
     } catch {
-        Write-Result $mode.Name "failed: $($_.Exception.Message)" 'Yellow'
+        Write-Result $mode.Name (Resolve-Reason $_) 'Yellow'
     } finally {
-        if ($entry) { $entry.Dispose() }
+        Close-Bind $entry
     }
 }
 
@@ -201,6 +221,11 @@ if ($usable.Count -eq 0) {
     Write-Result 'skipped' 'no bind mode succeeded in section 3' 'Red'
     return
 }
+if ($Sam -ieq $env:USERNAME) {
+    Write-Result 'refused' 'that is the account running this, so pass a throwaway one' 'Red'
+    return
+}
+Write-Result 'target' $dn 'Yellow'
 
 # The two plain attribute writes, which are what Unlock-ADAccount and Set-ADUser do.
 $entry = New-Bind $dn $usable[0]
@@ -211,11 +236,11 @@ try {
             $entry.CommitChanges()
             Write-Result $pair.Name "wrote $($pair.Value) via $($usable[0].Name)" 'Green'
         } catch {
-            Write-Result $pair.Name "failed: $($_.Exception.Message)" 'Red'
+            Write-Result $pair.Name (Resolve-Reason $_) 'Red'
         }
     }
 } finally {
-    $entry.Dispose()
+    Close-Bind $entry
 }
 
 # SetPassword is the whole reason this probe exists: each mode reports separately.
@@ -227,11 +252,9 @@ foreach ($mode in $usable) {
         $target.CommitChanges()
         Write-Result "SetPassword ($($mode.Name))" 'accepted' 'Green'
     } catch {
-        $reason = $_.Exception.InnerException.Message
-        if (-not $reason) { $reason = $_.Exception.Message }
-        Write-Result "SetPassword ($($mode.Name))" "refused: $reason" 'Red'
+        Write-Result "SetPassword ($($mode.Name))" "refused: $(Resolve-Reason $_)" 'Red'
     } finally {
-        if ($target) { $target.Dispose() }
+        Close-Bind $target
     }
 }
 
@@ -242,7 +265,7 @@ try {
     $entry.CommitChanges()
     Write-Result 'pwdLastSet' 'restored to -1' 'Gray'
 } catch {
-    Write-Result 'pwdLastSet' "could not restore: $($_.Exception.Message)" 'Yellow'
+    Write-Result 'pwdLastSet' "could not restore: $(Resolve-Reason $_)" 'Yellow'
 } finally {
-    $entry.Dispose()
+    Close-Bind $entry
 }
