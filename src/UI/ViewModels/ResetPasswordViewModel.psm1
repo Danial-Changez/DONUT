@@ -15,6 +15,7 @@ using namespace Donut.Mvvm
 class ResetPasswordViewModel : ObservableObject {
     [string] $TargetSam = ''
     [string] $TargetDomain = ''
+    [string] $TargetDn = ''
     [string] $TargetUpn = ''
     [string] $DisplayName = ''
     [string] $Password = ''
@@ -30,6 +31,7 @@ class ResetPasswordViewModel : ObservableObject {
         if ($null -eq $user) { return }
         $this.Set('TargetSam', [string]$user.SamAccountName)
         $this.Set('TargetDomain', [string]$user.Domain)
+        $this.Set('TargetDn', [string]$user.DistinguishedName)
         $this.Set('TargetUpn', [string]$user.UserPrincipalName)
         $name = [string]$user.DisplayName
         $this.Set('DisplayName', $(if ($name) { $name } else { [string]$user.Name }))

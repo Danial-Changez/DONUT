@@ -722,6 +722,7 @@ class MainPresenter {
         $this.RunOnPool($workerPath, @{
                 Sam           = $vm.TargetSam
                 Domain        = $vm.TargetDomain
+                Dn            = $vm.TargetDn
                 Password      = [TempPassword]::ToSecure($plain)
                 ChangeAtLogon = [bool]$vm.ChangeAtLogon
             }, $onDone)

@@ -18,15 +18,17 @@ using module ".\LogService.psm1"
 
 .NOTES
     The raw AD/DNS calls are isolated in overridable seam methods
-    (QueryDomainControllers, ResolveViaServer, IsOnline) so the
+    (QueryDomainControllersViaLdap, ResolveViaServer, IsOnline) so the
     discovery/selection logic can be unit-tested off a domain by subclassing
     this type and faking those seams.
 
-    The ADWS stage stays even though nothing installs RSAT any more, because it is
-    already guarded and still the most authoritative answer on the admin boxes that
-    happen to carry the module. Its absence is a debug line rather than a warning:
-    once RSAT is not being installed, a warning on every launch would report the
-    expected case, and the LDAP stage below it is what actually answers.
+    Discovery used to lead with Get-ADDomainController over ADWS. That stage is gone
+    with the RSAT dependency: it sat on the startup path, where a missing module costs
+    a full module-path scan before it can even fail and a present one costs importing
+    the ActiveDirectory module and an ADWS round trip on port 9389 - all to reach an
+    answer QueryDomainControllersViaLdap already had over 389. Removing it takes that
+    cost out of every launch and takes a warning that would fire on every launch with
+    it. Nothing is lost: the LDAP stage was already the one that answered.
 
     First-run org discovery (DiscoverSearchDomains, DiscoverSiteServer) persists its
     results to config.json. The repo itself ships no organization names.
@@ -48,8 +50,8 @@ class NetworkProbe {
 
     # --- Domain controller discovery ---
 
-    # Returns the cached DC list, discovering once: RSAT/ADWS where it happens to be
-    # installed, then .NET DirectoryServices (LDAP), then DNS SRV. See .NOTES.
+    # Returns the cached DC list, discovering once: .NET DirectoryServices (LDAP),
+    # then DNS SRV when no bind is possible at all. See .NOTES.
     [string[]] GetDomainControllers() {
         if ($null -ne $this.DomainControllers) {
             return $this.DomainControllers
@@ -58,25 +60,9 @@ class NetworkProbe {
         $found = @()
         try {
             $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
-            $found = @($this.QueryDomainControllers() | Where-Object { $_ })
+            $found = @($this.QueryDomainControllersViaLdap() | Where-Object { $_ })
         } catch {
-            # Absent is the normal case now, so only a real ADWS failure is worth a warning.
-            $note = "DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)"
-            if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
-                $this.Logger.LogDebug($note)
-            } else {
-                $this.Logger.LogWarning($note)
-            }
-        }
-        if ($found.Count -eq 0) {
-            try {
-                $found = @($this.QueryDomainControllersViaLdap() | Where-Object { $_ })
-                if ($found.Count -gt 0) {
-                    $this.Logger.LogInfo("DC discovery fell back to .NET DirectoryServices (LDAP).")
-                }
-            } catch {
-                $this.Logger.LogWarning("DC discovery via .NET DirectoryServices failed: $($_.Exception.Message)")
-            }
+            $this.Logger.LogWarning("DC discovery via .NET DirectoryServices failed: $($_.Exception.Message)")
         }
         if ($found.Count -eq 0) {
             try {
@@ -89,7 +75,7 @@ class NetworkProbe {
         $this.DomainControllers = $found
 
         if ($this.DomainControllers.Count -eq 0) {
-            $this.Logger.LogError("All three DC discovery stages failed (ADWS, LDAP, DNS SRV) - " +
+            $this.Logger.LogError("Both DC discovery stages failed (LDAP, DNS SRV) - " +
                 "is the host domain-joined with working DNS?")
         } else {
             $this.Logger.LogInfo("Cached $($this.DomainControllers.Count) domain controller(s): " +
@@ -253,10 +239,6 @@ class NetworkProbe {
     }
 
     # --- Overridable seams (raw side effects; faked in unit tests) ---
-
-    hidden [string[]] QueryDomainControllers() {
-        return @(Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName)
-    }
 
     # Same LDAP stack as user search (DirectorySearcher), proven to work as the machine
     # account. GetComputerDomain reads domain membership, not the token.

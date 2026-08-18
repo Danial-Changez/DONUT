@@ -28,12 +28,20 @@ Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
 
     Unlock and reset write through System.DirectoryServices rather than the RSAT module,
     which is why nothing here needs a Feature on Demand that a first run used to spend
-    minutes installing and that policy often blocks outright. BindUser searches the home
-    domain for the SAM and binds what it finds, which scopes the write exactly as
-    -Server did, and it constructs the entry with the path alone: handing
-    AuthenticationTypes to the four-argument constructor beside a null user binds
-    unauthenticated, and the DC then answers every operation with
-    ERROR_DS_OPERATIONS_ERROR (measured by tools/Probe-AdWrite.ps1).
+    minutes installing and that policy often blocks outright.
+
+    Both bind the picked row's distinguishedName, serverless, the way the Lens binds a
+    person: a DN carries its own domain, so the locator routes it over the trust and a
+    child or sibling domain resolves without anyone naming a server. Binding
+    'LDAP://<domain>/<dn>' instead would pin the row's forest and fail exactly where the
+    account does not live in that domain's own naming context. The DN also pins the
+    account that was clicked, so a same-SAM twin in another domain cannot be reset by
+    mistake - which is why both entry points now require it.
+
+    They construct the entry with the path alone: handing AuthenticationTypes to the
+    four-argument constructor beside a null user binds unauthenticated, and the DC then
+    answers every operation with ERROR_DS_OPERATIONS_ERROR (measured across a regular and
+    an admin account by tools/Probe-AdWrite.ps1).
 
     LastErrors exists because logging the per-forest failure is not enough: the usual
     caller is AdSearchWorker.ps1, which passes a null logger, so Coalesce turns that
@@ -97,11 +105,12 @@ class ActiveDirectoryService {
     # Unlocks a locked-out user against its home domain. Returns success.
     [bool] UnlockUser([AdSearchResult]$user) {
         if ($null -eq $user -or $user.Kind -ne 'User' -or
-            [string]::IsNullOrWhiteSpace($user.SamAccountName)) {
+            [string]::IsNullOrWhiteSpace($user.SamAccountName) -or
+            [string]::IsNullOrWhiteSpace($user.DistinguishedName)) {
             return $false
         }
         try {
-            $this.InvokeUnlock($user.SamAccountName, $user.Domain)
+            $this.InvokeUnlock($user.DistinguishedName)
             $this.Logger.LogInfo("Unlocked AD account $($user.SamAccountName) in $($user.Domain).")
             return $true
         } catch {
@@ -116,11 +125,12 @@ class ActiveDirectoryService {
         [bool]$changeAtLogon) {
         if ($null -eq $user -or $user.Kind -ne 'User' -or
             [string]::IsNullOrWhiteSpace($user.SamAccountName) -or
+            [string]::IsNullOrWhiteSpace($user.DistinguishedName) -or
             $null -eq $newPassword -or $newPassword.Length -eq 0) {
             return $false
         }
         try {
-            $this.InvokeReset($user.SamAccountName, $user.Domain, $newPassword, $changeAtLogon)
+            $this.InvokeReset($user.DistinguishedName, $newPassword, $changeAtLogon)
             $this.Logger.LogInfo(("Reset password for {0} in {1} (change at logon: {2})." -f
                     $user.SamAccountName, $user.Domain, $changeAtLogon))
             return $true
@@ -188,25 +198,18 @@ class ActiveDirectoryService {
         }
     }
 
-    # Binds the account in its home domain, scoping it the way -Server did. See .NOTES.
-    hidden [System.DirectoryServices.DirectoryEntry] BindUser([string]$sam, [string]$domain) {
-        $root = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
-        $searcher = [System.DirectoryServices.DirectorySearcher]::new($root)
-        try {
-            $searcher.Filter = '(&(objectCategory=person)(objectClass=user)' +
-            "(sAMAccountName=$([AdFilter]::EscapeLdap($sam))))"
-            $found = $searcher.FindOne()
-            if (-not $found) { throw "no account named '$sam' in $domain." }
-            return $found.GetDirectoryEntry()
-        } finally {
-            $searcher.Dispose()
-            $root.Dispose()
-        }
+    # Pure, so the shape is asserted without a directory. See .NOTES.
+    static [string] BindPath([string]$dn) {
+        return "LDAP://$dn"
+    }
+
+    hidden [System.DirectoryServices.DirectoryEntry] BindUser([string]$dn) {
+        return [System.DirectoryServices.DirectoryEntry]::new([ActiveDirectoryService]::BindPath($dn))
     }
 
     # Clearing lockoutTime is what Unlock-ADAccount does.
-    hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
-        $entry = $this.BindUser($sam, $domain)
+    hidden [void] InvokeUnlock([string]$dn) {
+        $entry = $this.BindUser($dn)
         try {
             $entry.Properties['lockoutTime'].Value = 0
             $entry.CommitChanges()
@@ -214,9 +217,8 @@ class ActiveDirectoryService {
     }
 
     # SetPassword needs the plaintext, so the decode lives here and nowhere wider.
-    hidden [void] InvokeReset([string]$sam, [string]$domain,
-        [securestring]$newPassword, [bool]$changeAtLogon) {
-        $entry = $this.BindUser($sam, $domain)
+    hidden [void] InvokeReset([string]$dn, [securestring]$newPassword, [bool]$changeAtLogon) {
+        $entry = $this.BindUser($dn)
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newPassword)
         try {
             $entry.Invoke('SetPassword',

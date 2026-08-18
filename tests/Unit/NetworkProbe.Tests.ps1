@@ -6,26 +6,17 @@ using namespace System.Net
 # Fakes NetworkProbe's raw AD/DNS seams so the discovery/selection/resolution
 # logic can be exercised off a domain.
 class FakeNetworkProbe : NetworkProbe {
-    [string[]] $DCs = @()
     [string[]] $LdapDCs = @()
     [string[]] $DnsDCs = @()
     [hashtable] $OnlineMap = @{}     # server -> bool
     [hashtable] $ForwardMap = @{}    # hostname -> ip string
-    [int] $QueryCount = 0
     [int] $LdapQueryCount = 0
     [int] $DnsQueryCount = 0
-    [bool] $ThrowOnQuery = $false
     [bool] $ThrowOnLdap = $false
     [bool] $ThrowOnDns = $false
 
     FakeNetworkProbe() : base() {}
     FakeNetworkProbe([LogService]$logger) : base($logger) {}
-
-    hidden [string[]] QueryDomainControllers() {
-        $this.QueryCount++
-        if ($this.ThrowOnQuery) { throw "ActiveDirectory module not available" }
-        return $this.DCs
-    }
 
     hidden [string[]] QueryDomainControllersViaLdap() {
         $this.LdapQueryCount++
@@ -64,20 +55,20 @@ Describe "NetworkProbe" {
     Context "GetDomainControllers" {
         It "Should query AD once and cache the result across calls" {
             $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1.contoso.local", "DC2.contoso.local")
+            $probe.LdapDCs = @("DC1.contoso.local", "DC2.contoso.local")
 
             $first = $probe.GetDomainControllers()
             $second = $probe.GetDomainControllers()
 
             $first.Count | Should -Be 2
             $second.Count | Should -Be 2
-            $probe.QueryCount | Should -Be 1
+            $probe.LdapQueryCount | Should -Be 1
         }
 
         It "Should log an error and cache empty when every discovery stage comes back empty" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.DCs = @()
+            $probe.LdapDCs = @()
 
             $result = $probe.GetDomainControllers()
 
@@ -90,7 +81,6 @@ Describe "NetworkProbe" {
         It "Should log an error and cache empty when every discovery stage throws" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.ThrowOnQuery = $true
             $probe.ThrowOnLdap = $true
             $probe.ThrowOnDns = $true
 
@@ -100,43 +90,31 @@ Describe "NetworkProbe" {
             $logger.HasLevel("ERROR") | Should -Be $true
         }
 
-        It "Should not touch the fallbacks when ADWS answers" {
+        # LDAP binds under tokens ADWS refused, which is why it is the only stage now.
+        It "Should not touch the DNS fallback when LDAP answers" {
             $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1.contoso.local")
+            $probe.LdapDCs = @("DC1.contoso.local")
 
             $probe.GetDomainControllers().Count | Should -Be 1
-            $probe.LdapQueryCount | Should -Be 0
+            $probe.LdapQueryCount | Should -Be 1
             $probe.DnsQueryCount | Should -Be 0
         }
 
-        # ADWS refuses the autostarted SYSTEM instance's machine account, so LDAP must work.
-        It "Should fall back to LDAP when the ADWS query throws" {
+        It "Should warn and fall back to DNS SRV when the LDAP bind throws" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.ThrowOnQuery = $true
-            $probe.LdapDCs = @("DC1.contoso.local", "DC2.contoso.local")
-
-            $result = $probe.GetDomainControllers()
-
-            $result.Count | Should -Be 2
-            $probe.DnsQueryCount | Should -Be 0
-            $logger.HasLevel("WARN") | Should -Be $true
-        }
-
-        It "Should fall back to DNS SRV when ADWS and LDAP both fail" {
-            $probe = [FakeNetworkProbe]::new()
-            $probe.ThrowOnQuery = $true
             $probe.ThrowOnLdap = $true
             $probe.DnsDCs = @("DC2.contoso.local")
 
             $probe.GetDomainControllers() | Should -Be @("DC2.contoso.local")
+            $logger.HasLevel("WARN") | Should -Be $true
         }
     }
 
     Context "GetActiveDomainController" {
         It "Should select the first reachable controller" {
             $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1", "DC2")
+            $probe.LdapDCs = @("DC1", "DC2")
             $probe.OnlineMap = @{ "DC1" = $true; "DC2" = $true }
 
             $probe.GetActiveDomainController() | Should -Be "DC1"
@@ -144,7 +122,7 @@ Describe "NetworkProbe" {
 
         It "Should skip offline controllers" {
             $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1", "DC2")
+            $probe.LdapDCs = @("DC1", "DC2")
             $probe.OnlineMap = @{ "DC1" = $false; "DC2" = $true }
 
             $probe.GetActiveDomainController() | Should -Be "DC2"
@@ -153,7 +131,7 @@ Describe "NetworkProbe" {
         It "Should return null and log an error when none are reachable" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.DCs = @("DC1", "DC2")
+            $probe.LdapDCs = @("DC1", "DC2")
             $probe.OnlineMap = @{ "DC1" = $false; "DC2" = $false }
 
             $probe.GetActiveDomainController() | Should -BeNullOrEmpty
@@ -164,7 +142,7 @@ Describe "NetworkProbe" {
     Context "ResolveHost" {
         It "Should resolve a host via the active domain controller" {
             $probe = [FakeNetworkProbe]::new()
-            $probe.DCs = @("DC1")
+            $probe.LdapDCs = @("DC1")
             $probe.OnlineMap = @{ "DC1" = $true }
             $probe.ForwardMap = @{ "PC-01" = "10.0.0.5" }
 
@@ -177,7 +155,7 @@ Describe "NetworkProbe" {
         It "Should fail hard (null + ERROR) when no domain controller is available" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.DCs = @()
+            $probe.LdapDCs = @()
 
             $ip = $probe.ResolveHost("PC-01")
 
@@ -188,7 +166,7 @@ Describe "NetworkProbe" {
         It "Should return null and log an error when the DC cannot resolve the host" {
             $logger = [CapturingLogService]::new()
             $probe = [FakeNetworkProbe]::new($logger)
-            $probe.DCs = @("DC1")
+            $probe.LdapDCs = @("DC1")
             $probe.OnlineMap = @{ "DC1" = $true }
             $probe.ForwardMap = @{}   # no record for the host
 
@@ -207,7 +185,7 @@ Describe "NetworkProbe" {
             $ip = $probe.ResolveWith("PC-01", "DC1")
 
             $ip.ToString() | Should -Be "10.0.0.9"
-            $probe.QueryCount | Should -Be 0   # no DC discovery on this path
+            $probe.LdapQueryCount | Should -Be 0   # no DC discovery on this path
         }
 
         It "Returns null and logs when no DC is supplied" {

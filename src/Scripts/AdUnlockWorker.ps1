@@ -12,14 +12,18 @@
     sAMAccountName of the user to unlock.
 
 .PARAMETER Domain
-    The user's home domain, used as the LDAP server target.
+    The user's home domain, carried for logging.
+
+.PARAMETER Dn
+    The picked row's distinguishedName, which is what the unlock binds.
 #>
 using module "..\Services\ActiveDirectoryService.psm1"
 using module "..\Models\AdSearchResult.psm1"
 
 param(
     [string]$Sam,
-    [string]$Domain
+    [string]$Domain,
+    [string]$Dn
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,4 +33,5 @@ $user = [AdSearchResult]::new()
 $user.Kind = 'User'
 $user.SamAccountName = $Sam
 $user.Domain = $Domain
+$user.DistinguishedName = $Dn
 [bool]$svc.UnlockUser($user)

@@ -748,8 +748,10 @@ class FinderPresenter {
         # Unlock-ADAccount can take a moment, so it runs off the UI thread.
         try {
             $worker = Join-Path $this.Config.SourceRoot 'Scripts\AdUnlockWorker.ps1'
-            $job = $this.StartPoolScript($worker,
-                @{ Sam = [string]$r.SamAccountName; Domain = [string]$r.Domain })
+            $job = $this.StartPoolScript($worker, @{
+                    Sam = [string]$r.SamAccountName; Domain = [string]$r.Domain
+                    Dn = [string]$r.DistinguishedName
+                })
             $job.Upn = $upn
             $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()

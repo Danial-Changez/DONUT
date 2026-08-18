@@ -33,16 +33,15 @@ class FakeAdService : ActiveDirectoryService {
         return @($rows)
     }
 
-    hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
-        $this.Unlocks.Add(@{ sam = $sam; domain = $domain })
+    hidden [void] InvokeUnlock([string]$dn) {
+        $this.Unlocks.Add(@{ dn = $dn })
         if ($this.UnlockThrows) { throw "access is denied" }
     }
 
     # Records HasPassword only, the fake must never hold the plaintext either.
-    hidden [void] InvokeReset([string]$sam, [string]$domain,
-        [securestring]$newPassword, [bool]$changeAtLogon) {
+    hidden [void] InvokeReset([string]$dn, [securestring]$newPassword, [bool]$changeAtLogon) {
         $this.Resets.Add(@{
-                sam = $sam; domain = $domain; changeAtLogon = $changeAtLogon
+                dn = $dn; changeAtLogon = $changeAtLogon
                 HasPassword = ($null -ne $newPassword -and $newPassword.Length -gt 0)
             })
         if ($this.ResetThrows) { throw "access is denied" }
@@ -61,6 +60,13 @@ BeforeAll {
             'distinguishedName'                  = "CN=$sam,DC=x"
             'objectCategory'                     = 'CN=Person,CN=Schema,CN=Configuration,DC=x'
         }
+    }
+    # Carries a DN, since unlock and reset both bind it now.
+    function New-User([string]$sam, [string]$domain) {
+        $u = [AdSearchResult]::new()
+        $u.Kind = 'User'; $u.SamAccountName = $sam; $u.Domain = $domain
+        $u.DistinguishedName = "CN=$sam,DC=$($domain -replace '\.', ',DC=')"
+        return $u
     }
     function New-CompRow([string]$name) {
         return @{
@@ -148,16 +154,29 @@ Describe "ActiveDirectoryService.Search" {
     }
 }
 
+Describe "ActiveDirectoryService.BindPath" {
+    It "binds the DN serverless, so the locator routes it to the DN's own domain" {
+        [ActiveDirectoryService]::BindPath('CN=sarah,OU=Staff,DC=child,DC=corp,DC=com') |
+            Should -BeExactly 'LDAP://CN=sarah,OU=Staff,DC=child,DC=corp,DC=com'
+    }
+
+    # Naming a server is what pinned the row's forest and broke child/sibling domains.
+    It "never names a server" {
+        foreach ($dn in @('CN=x,DC=sib,DC=com', 'CN=y,OU=z,DC=a,DC=b,DC=c')) {
+            [ActiveDirectoryService]::BindPath($dn) | Should -Not -Match '^LDAP://[^/]+/'
+        }
+    }
+}
+
 Describe "ActiveDirectoryService.UnlockUser" {
     It "unlocks a user against its home domain and logs INFO" {
         $log = [CapturingLogService]::new()
         $svc = [FakeAdService]::new(@('d1'), $log)
-        $u = [AdSearchResult]::new(); $u.Kind = 'User'; $u.SamAccountName = 'sarah'; $u.Domain = 'prod.contoso.com'
+        $u = New-User 'sarah' 'prod.contoso.com'
 
         $svc.UnlockUser($u) | Should -BeTrue
         $svc.Unlocks.Count | Should -Be 1
-        $svc.Unlocks[0].sam | Should -Be 'sarah'
-        $svc.Unlocks[0].domain | Should -Be 'prod.contoso.com'
+        $svc.Unlocks[0].dn | Should -Be 'CN=sarah,DC=prod,DC=contoso,DC=com'
         $log.HasLevel('INFO') | Should -BeTrue
     }
 
@@ -165,9 +184,8 @@ Describe "ActiveDirectoryService.UnlockUser" {
         $log = [CapturingLogService]::new()
         $svc = [FakeAdService]::new(@('d1'), $log)
         $svc.UnlockThrows = $true
-        $u = [AdSearchResult]::new(); $u.Kind = 'User'; $u.SamAccountName = 'sarah'; $u.Domain = 'd1'
 
-        $svc.UnlockUser($u) | Should -BeFalse
+        $svc.UnlockUser((New-User 'sarah' 'd1')) | Should -BeFalse
         $log.HasLevel('ERROR') | Should -BeTrue
     }
 
@@ -178,19 +196,13 @@ Describe "ActiveDirectoryService.UnlockUser" {
         $svc.UnlockUser($comp) | Should -BeFalse
         $blank = [AdSearchResult]::new(); $blank.Kind = 'User'; $blank.SamAccountName = ''
         $svc.UnlockUser($blank) | Should -BeFalse
+        $noDn = [AdSearchResult]::new(); $noDn.Kind = 'User'; $noDn.SamAccountName = 'sarah'
+        $svc.UnlockUser($noDn) | Should -BeFalse
         $svc.Unlocks.Count | Should -Be 0
     }
 }
 
 Describe "ActiveDirectoryService.ResetPassword" {
-    BeforeAll {
-        function New-User([string]$sam, [string]$domain) {
-            $u = [AdSearchResult]::new()
-            $u.Kind = 'User'; $u.SamAccountName = $sam; $u.Domain = $domain
-            return $u
-        }
-    }
-
     It "resets against the home domain, records the flag, and logs INFO" {
         $log = [CapturingLogService]::new()
         $svc = [FakeAdService]::new(@('d1'), $log)
@@ -198,8 +210,7 @@ Describe "ActiveDirectoryService.ResetPassword" {
 
         $svc.ResetPassword((New-User 'sarah' 'prod.contoso.com'), $secure, $true) | Should -BeTrue
         $svc.Resets.Count | Should -Be 1
-        $svc.Resets[0].sam | Should -Be 'sarah'
-        $svc.Resets[0].domain | Should -Be 'prod.contoso.com'
+        $svc.Resets[0].dn | Should -Be 'CN=sarah,DC=prod,DC=contoso,DC=com'
         $svc.Resets[0].changeAtLogon | Should -BeTrue
         $svc.Resets[0].HasPassword | Should -BeTrue
         $log.HasLevel('INFO') | Should -BeTrue
@@ -241,6 +252,8 @@ Describe "ActiveDirectoryService.ResetPassword" {
         $svc.ResetPassword($comp, $secure, $true) | Should -BeFalse
         $blank = [AdSearchResult]::new(); $blank.Kind = 'User'; $blank.SamAccountName = ''
         $svc.ResetPassword($blank, $secure, $true) | Should -BeFalse
+        $noDn = [AdSearchResult]::new(); $noDn.Kind = 'User'; $noDn.SamAccountName = 'sarah'
+        $svc.ResetPassword($noDn, $secure, $true) | Should -BeFalse
         $svc.ResetPassword((New-User 'sarah' 'd1'), [TempPassword]::ToSecure(''), $true) |
             Should -BeFalse
         $svc.ResetPassword((New-User 'sarah' 'd1'), $null, $true) | Should -BeFalse

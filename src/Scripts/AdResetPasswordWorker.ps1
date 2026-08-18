@@ -12,7 +12,10 @@
     sAMAccountName of the user to reset.
 
 .PARAMETER Domain
-    The user's home domain, used as the LDAP server target.
+    The user's home domain, carried for logging.
+
+.PARAMETER Dn
+    The picked row's distinguishedName, which is what the reset binds.
 
 .PARAMETER Password
     The temporary password. SecureString end-to-end: the pool runs in-process,
@@ -27,6 +30,7 @@ using module "..\Models\AdSearchResult.psm1"
 param(
     [string]$Sam,
     [string]$Domain,
+    [string]$Dn,
     [securestring]$Password,
     [bool]$ChangeAtLogon
 )
@@ -38,4 +42,5 @@ $user = [AdSearchResult]::new()
 $user.Kind = 'User'
 $user.SamAccountName = $Sam
 $user.Domain = $Domain
+$user.DistinguishedName = $Dn
 [bool]$svc.ResetPassword($user, $Password, $ChangeAtLogon)
