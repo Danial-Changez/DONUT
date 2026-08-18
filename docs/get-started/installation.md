@@ -22,10 +22,9 @@ management tools — installs itself on first launch.
    [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases) page.
 
 2. **Launch DONUT and approve the prompt.** The first run sets up your machine:
-   it installs PsExec, PowerShell 7, the RSAT Active Directory tools, and the
-   disk-scan tool if they're missing. This needs administrator rights and takes a
-   minute or two. Anything that fails is retried the next time you start DONUT as
-   administrator.
+   it installs PsExec, PowerShell 7, and the disk-scan tool if they're missing.
+   This needs administrator rights. Anything that fails is retried the next time
+   you start DONUT as administrator.
 
    :::caution
    The disk-scan tool is [WizTree](https://diskanalyzer.com/), which is free for

@@ -49,8 +49,14 @@ The launcher finishes machine setup on the first elevated run, in two steps:
 |---|---|---|
 | PsExec | Sysinternals `PSTools.zip` | `System32`, so `PATH` resolves it |
 | PowerShell 7 | Latest GitHub release MSI, silent | Its own installer location |
-| RSAT ActiveDirectory | `dism /Add-Capability` | The Windows module path |
 | WizTree | The vendor's portable zip | `<app tree>\src\Tools\wiztree64.exe` |
+
+The RSAT ActiveDirectory module used to sit in that table, fetched through
+`dism /Add-Capability`. It bought three cmdlets — `Unlock-ADAccount`,
+`Set-ADAccountPassword`, `Set-ADUser` — and cost a Feature-on-Demand download that
+ran for minutes on a first run and never returned at all where Windows Update was
+blocked by policy. All three have `System.DirectoryServices` equivalents, which is
+what `ActiveDirectoryService` writes through now, so nothing installs it.
 
 Every download is Authenticode-verified against its expected publisher before it
 is used, because each one later runs elevated. Neither PsExec nor WizTree may be

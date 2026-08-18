@@ -22,7 +22,6 @@ namespace Donut.Launcher;
 /// <list type="bullet">
 /// <item>PsExec, which every remote operation runs through.</item>
 /// <item>PowerShell 7, which worker processes need.</item>
-/// <item>The RSAT ActiveDirectory module, for password reset and unlock.</item>
 /// </list>
 /// A failure warns and defers to the next elevated launch, so an offline install
 /// still opens the app and setup finishes once the network returns.
@@ -39,9 +38,13 @@ public static class Bootstrap {
 
     /// <summary>
     /// Installs whatever prerequisite is missing, reporting progress to the splash.
-    /// Two things deliberately need no install:
+    /// Three things deliberately need no install:
     /// <list type="bullet">
     /// <item>AD search and the Lens run on .NET's built-in DirectoryServices.</item>
+    /// <item>Account unlock and password reset do too, which is why the RSAT
+    /// ActiveDirectory module is no longer fetched: it was a Feature on Demand that
+    /// cost minutes on a first run, hung indefinitely wherever Windows Update was
+    /// blocked, and bought three cmdlets with LDAP equivalents.</item>
     /// <item>SCCM is reached over HTTPS, and adminServiceHost names the host when
     /// there is no local client to discover it from.</item>
     /// </list>
@@ -56,8 +59,6 @@ public static class Bootstrap {
         var missing = new List<(string Name, Action Install)>();
         if (FindOnPath("psexec.exe") is null) missing.Add(("PsExec", InstallPsExec));
         if (FindOnPath("pwsh.exe") is null) missing.Add(("PowerShell 7", InstallPwsh));
-        // The password reset and unlock workers import the ActiveDirectory module.
-        if (!HasAdModule()) missing.Add(("AD management tools", InstallRsatAd));
         // Skipped when a copy is already staged, as that one carries a supporter code.
         string wizTree = WizTreePath(appRoot);
         if (!File.Exists(wizTree)) missing.Add(("disk scan tool", () => InstallWizTree(wizTree)));
@@ -114,26 +115,6 @@ public static class Bootstrap {
     static bool IsElevated() {
         using var identity = WindowsIdentity.GetCurrent();
         return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
-    }
-
-    // The RSAT FoD drops the module under System32's Windows PowerShell module root.
-    static bool HasAdModule() => Directory.Exists(Path.Combine(
-        Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules", "ActiveDirectory"));
-
-    // Client-SKU capability name, as Server SKUs want Install-WindowsFeature.
-    static void InstallRsatAd() {
-        using var p = Process.Start(new ProcessStartInfo {
-            FileName = "dism.exe",
-            Arguments = "/Online /Add-Capability " +
-                "/CapabilityName:Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0 " +
-                "/Quiet /NoRestart",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        })!;
-        p.WaitForExit();
-        if (p.ExitCode is not (0 or 3010))   // 3010 = installed, reboot pending
-            throw new InvalidOperationException(
-                $"dism exited with {p.ExitCode} (offline, or Features on Demand blocked by policy?).");
     }
 
     // System32 because it is already on the PATH that bare 'psexec.exe' resolves against.
