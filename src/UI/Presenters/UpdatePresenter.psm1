@@ -8,6 +8,7 @@ using module '..\..\Core\DonutPaths.psm1'
 using module '..\..\Core\LogService.psm1'
 using module '.\LoginPresenter.psm1'
 using module '.\DialogPresenter.psm1'
+using module '.\ToastService.psm1'
 
 <#
 .SYNOPSIS
@@ -40,6 +41,9 @@ class UpdatePresenter {
     [LogService]$Logger
     [AppConfig]$Config
     [ConfigManager]$ConfigManager
+
+    # Assigned after MainPresenter builds it, since this presenter is constructed first.
+    [ToastService]$Toasts
 
     UpdatePresenter(
         [SelfUpdateService]$service,
@@ -166,9 +170,9 @@ class UpdatePresenter {
 
             [System.Windows.Application]::Current.Shutdown()
         } catch {
-            # Themed alert, not a raw MessageBox, so the failure matches the app's dialogs.
             $this.Logger.LogException("Update failed", $_)
-            $this.Dialog.ShowAlert('Update Failed', "$_", @())
+            # Reported, not blocked: nothing installed, so there is no decision to make.
+            if ($this.Toasts) { $this.Toasts.ShowError('Update Failed', $_.Exception.Message) }
         }
     }
 }

@@ -393,5 +393,7 @@ PersonLensViewModel --> LensDeviceViewModel
 ToastService --> ToastViewModel
 DialogPresenter --> DialogViewModel
 LoginPresenter --> LoginViewModel
+UpdatePresenter --> DialogPresenter
+UpdatePresenter --> ToastService
 
 @enduml

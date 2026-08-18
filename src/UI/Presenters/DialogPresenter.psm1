@@ -89,15 +89,19 @@ class DialogPresenter {
     }
 
     # Returns @{ Confirmed; Remember }, Remember being "install updates without asking".
-    # A rollback hides that checkbox: it is not an answer worth making permanent.
+    # A rollback names itself and hides that checkbox: it is not worth making permanent.
     [hashtable] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
         $this.Initialize()
+        $title = 'Update Available'
+        $primary = 'Update Now'
         $msg = "Current: $currentVer`nNew: $newVer`n`nUpdate now?"
         if ($isRollback) {
+            $title = 'Roll Back'
+            $primary = 'Roll Back'
             $msg = "Current: $currentVer`nTarget: $newVer`n`n" +
             "This rolls DONUT back to an older version. Continue?"
         }
-        $vm = $this.NewVm("Update Available", $msg, @(), 'Update Now', 'Later')
+        $vm = $this.NewVm($title, $msg, @(), $primary, 'Later')
         if (-not $isRollback) {
             $vm.RememberText = 'Install Updates Automatically'
             $vm.HasRemember = $true

@@ -155,6 +155,7 @@ try {
     try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
+        $updatePresenter.Toasts = $mainPresenter.ToastService
         $logger.LogInfo("Main window preloaded (+$($bootSw.ElapsedMilliseconds)ms).")
         Update-Splash 90 'Preparing sign-in'
     } catch {
