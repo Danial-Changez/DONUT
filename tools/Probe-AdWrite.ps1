@@ -1,31 +1,34 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Probes whether the three RSAT write operations work over plain System.DirectoryServices.
+    Probes whether the three RSAT write operations would work over plain
+    System.DirectoryServices, without performing any of them.
 
 .DESCRIPTION
-    Settles the one open question behind dropping the RSAT ActiveDirectory module:
-    Unlock-ADAccount and Set-ADUser map to plain attribute writes, but
-    Set-ADAccountPassword maps to IADsUser::SetPassword, which needs a secure
-    channel and picks its own route (LDAPS, then Kerberos set-password, then
-    NetUserSetInfo). Which of those this site's DCs accept cannot be read out of
-    code.
+    Settles the one open question behind dropping the RSAT ActiveDirectory module.
+    Unlock-ADAccount and Set-ADUser map to attribute writes on lockoutTime and
+    pwdLastSet; Set-ADAccountPassword maps to IADsUser::SetPassword, which needs a
+    secure channel and tries LDAPS, then Kerberos set-password, then NetUserSetInfo.
+    Whether those succeed comes down to two things a read can settle: a route that
+    answers, and the rights on the account.
 
     Run as the account that performs resets today, from a box that reaches the DC.
 
-      1. Target: resolves the account and prints its DN, lock state and pwdLastSet.
-      2. Transport: whether 389 and 636 answer on the DC, since LDAPS is the route
-         SetPassword prefers.
+      1. Target: the account, the identity probing it, and its current state.
+      2. Routes: the ports each SetPassword fallback needs, with a real TLS
+         handshake on 636 rather than a bare connect, since a listening port with
+         an unusable certificate is the case that matters.
       3. Binds: binds the DN under each candidate AuthenticationTypes combination
-         and reads it back, which separates a bind failure from a write failure.
-      4. Rights: whether this caller holds the Reset Password extended right, so a
-         failed write in section 5 reads as transport rather than permissions.
+         and forces the bind, which separates a transport failure from a rights one.
+      4. Rights: the caller's own ACEs on the account - the Reset Password extended
+         right, and write access to the two attributes - resolved through the schema
+         so an attribute-scoped grant is not mistaken for a blanket one.
 
-    Sections 1-4 are reads and change nothing. Section 5 runs only with -WriteTest.
+    Sections 1 to 4 change nothing. Section 5 exists only for a final confirmation
+    on a throwaway account and runs only with -WriteTest.
 
 .PARAMETER Sam
-    sAMAccountName to probe. With -WriteTest this account's password IS CHANGED, so
-    pass a throwaway account and nothing else.
+    sAMAccountName to probe. Reads only, unless -WriteTest is passed.
 
 .PARAMETER Domain
     AD DNS domain to search. Defaults to this session's domain.
@@ -34,16 +37,13 @@
     Domain controller to bind. Defaults to this session's logon server.
 
 .PARAMETER WriteTest
-    Performs the writes: pwdLastSet, lockoutTime, then SetPassword under each bind
-    mode that section 3 proved. DESTRUCTIVE - it sets a random password on -Sam and
-    does not tell you what it was. The account is left with pwdLastSet cleared.
-    Refused when -Sam is the account running the probe.
+    Optional final confirmation, and not needed to decide: performs the writes and
+    reports SetPassword per bind mode. DESTRUCTIVE - it sets a random password on
+    -Sam and does not tell you what it was. Refused when -Sam is the account
+    running the probe.
 
 .EXAMPLE
-    pwsh -File tools\Probe-AdWrite.ps1 -Sam testuser01
-
-.EXAMPLE
-    pwsh -File tools\Probe-AdWrite.ps1 -Sam testuser01 -WriteTest
+    pwsh -File tools\Probe-AdWrite.ps1 -Sam someuser
 #>
 [CmdletBinding()]
 param(
@@ -58,10 +58,18 @@ Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
 # Schema GUID of the Reset Password extended right.
 $script:ResetPasswordRight = [guid]'00299570-246d-11d0-a768-00aa006e0529'
 
+# No port in any path, since a port-qualified one cannot build the Kerberos SPN.
 $script:BindModes = @(
-    @{ Name = 'Secure'; Port = 389; Auth = 'Secure' }
-    @{ Name = 'Secure + Sealing + Signing'; Port = 389; Auth = 'Secure, Sealing, Signing' }
-    @{ Name = 'Secure + SSL'; Port = 636; Auth = 'Secure, SecureSocketsLayer' }
+    @{ Name = 'Secure'; Auth = 'Secure' }
+    @{ Name = 'Secure + Sealing + Signing'; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'Secure + SSL'; Auth = 'Secure, SecureSocketsLayer' }
+)
+
+$script:Routes = @(
+    @{ Port = 389; Needs = 'the two attribute writes' }
+    @{ Port = 636; Needs = "SetPassword's first choice (LDAPS)" }
+    @{ Port = 464; Needs = 'its Kerberos set-password fallback' }
+    @{ Port = 445; Needs = 'its NetUserSetInfo fallback' }
 )
 
 function Write-Section([string]$title) {
@@ -85,9 +93,43 @@ function Close-Bind($entry) {
 }
 
 function New-Bind([string]$dn, [hashtable]$mode) {
-    $path = "LDAP://${Dc}:$($mode.Port)/$dn"
     $auth = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
-    return New-Object System.DirectoryServices.DirectoryEntry($path, $null, $null, $auth)
+    return New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Dc/$dn", $null, $null, $auth)
+}
+
+function Test-Port([int]$port) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        if ($client.ConnectAsync($Dc, $port).Wait(3000)) { return '' }
+        return 'no answer within 3s'
+    } catch {
+        return (Resolve-Reason $_)
+    } finally {
+        $client.Dispose()
+    }
+}
+
+# A listening 636 with a certificate ADSI will not accept is the case a connect misses.
+function Test-SecureLdap {
+    $client = New-Object System.Net.Sockets.TcpClient
+    $ssl = $null
+    try {
+        if (-not $client.ConnectAsync($Dc, 636).Wait(3000)) { return 'no answer within 3s' }
+        $accept = [System.Net.Security.RemoteCertificateValidationCallback] { return $true }
+        $ssl = New-Object System.Net.Security.SslStream($client.GetStream(), $false, $accept)
+        $ssl.AuthenticateAsClient($Dc)
+        $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]$ssl.RemoteCertificate
+        $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+        $trusted = $chain.Build($cert)
+        $expiry = $cert.NotAfter.ToString('yyyy-MM-dd')
+        if (-not $trusted) { return "handshake ok but the chain does not validate (expires $expiry)" }
+        return "handshake ok, chain valid, expires $expiry"
+    } catch {
+        return (Resolve-Reason $_)
+    } finally {
+        if ($ssl) { $ssl.Dispose() }
+        $client.Dispose()
+    }
 }
 
 # 20 chars across four classes, so no site policy rejects the probe for complexity.
@@ -102,21 +144,44 @@ function New-ProbePassword {
     return -join ($chars | Sort-Object { Get-Random })
 }
 
+$script:RootPath = "LDAP://$Dc/DC=$($Domain -replace '\.', ',DC=')"
+
+function New-Searcher([string]$path) {
+    $root = New-Object System.DirectoryServices.DirectoryEntry($path)
+    return New-Object System.DirectoryServices.DirectorySearcher($root)
+}
+
+# lockoutTime and pwdLastSet are named in an ACE by schema GUID, never by name.
+function Get-AttributeGuid([string]$ldapName) {
+    try {
+        $rootDse = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Dc/RootDSE")
+        $schema = [string]$rootDse.Properties['schemaNamingContext'].Value
+        $finder = New-Searcher "LDAP://$Dc/$schema"
+        $finder.Filter = "(lDAPDisplayName=$ldapName)"
+        [void]$finder.PropertiesToLoad.Add('schemaIDGUID')
+        $row = $finder.FindOne()
+        if (-not $row) { return $null }
+        return [guid][byte[]]$row.Properties['schemaidguid'][0]
+    } catch {
+        return $null
+    }
+}
+
 # --- 1. Target -------------------------------------------------------------
 
 Write-Section '1. Target account'
-
-$root = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Dc/DC=$($Domain -replace '\.', ',DC=')")
-$searcher = New-Object System.DirectoryServices.DirectorySearcher($root)
-$searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$Sam))"
-foreach ($p in @('distinguishedName', 'lockoutTime', 'pwdLastSet', 'userAccountControl')) {
-    [void]$searcher.PropertiesToLoad.Add($p)
-}
 
 $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated = ([System.Security.Principal.WindowsPrincipal]::new($me)).IsInRole(
     [System.Security.Principal.WindowsBuiltInRole]::Administrator)
 Write-Result 'running as' "$($me.Name)$(if ($elevated) { '  (elevated)' })" 'Gray'
+Write-Result 'dc' $Dc 'Gray'
+
+$searcher = New-Searcher $script:RootPath
+$searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$Sam))"
+foreach ($p in @('distinguishedName', 'lockoutTime', 'pwdLastSet', 'userAccountControl')) {
+    [void]$searcher.PropertiesToLoad.Add($p)
+}
 
 $hit = $null
 try {
@@ -138,21 +203,15 @@ Write-Result 'dn' $dn 'Gray'
 Write-Result 'lockoutTime' "$lockoutTime$(if ($lockoutTime -ne 0) { '  (locked)' })" 'Gray'
 Write-Result 'pwdLastSet' "$pwdLastSet$(if ($pwdLastSet -eq 0) { '  (must change at logon)' })" 'Gray'
 
-# --- 2. Transport ----------------------------------------------------------
+# --- 2. Routes -------------------------------------------------------------
 
-Write-Section '2. Transport'
+Write-Section '2. Routes SetPassword can take'
 
-foreach ($port in @(389, 636)) {
-    $client = New-Object System.Net.Sockets.TcpClient
-    try {
-        $open = $client.ConnectAsync($Dc, $port).Wait(3000)
-        $colour = if ($open) { 'Green' } else { 'Yellow' }
-        Write-Result "${Dc}:$port" $(if ($open) { 'open' } else { 'no answer within 3s' }) $colour
-    } catch {
-        Write-Result "${Dc}:$port" "failed: $($_.Exception.Message)" 'Yellow'
-    } finally {
-        $client.Dispose()
-    }
+foreach ($route in $script:Routes) {
+    $reason = if ($route.Port -eq 636) { Test-SecureLdap } else { Test-Port $route.Port }
+    $open = -not $reason -or $reason.StartsWith('handshake ok')
+    $detail = if ($reason) { $reason } else { 'open' }
+    Write-Result "$($Dc):$($route.Port)" "$detail  -  $($route.Needs)" $(if ($open) { 'Green' } else { 'Yellow' })
 }
 
 # --- 3. Binds --------------------------------------------------------------
@@ -166,7 +225,7 @@ foreach ($mode in $script:BindModes) {
         $entry = New-Bind $dn $mode
         # A method, not a property read: ETS turns a failed bind's error into a null.
         $entry.RefreshCache()
-        Write-Result $mode.Name "bound and read (port $($mode.Port))" 'Green'
+        Write-Result $mode.Name 'bound and read' 'Green'
         $usable += $mode
     } catch {
         Write-Result $mode.Name (Resolve-Reason $_) 'Yellow'
@@ -177,10 +236,10 @@ foreach ($mode in $script:BindModes) {
 
 # --- 4. Rights -------------------------------------------------------------
 
-Write-Section '4. Reset Password right'
+Write-Section '4. Rights this account holds on the target'
 
 try {
-    $aclSearcher = New-Object System.DirectoryServices.DirectorySearcher($root)
+    $aclSearcher = New-Searcher $script:RootPath
     $aclSearcher.Filter = "(distinguishedName=$dn)"
     $aclSearcher.SecurityMasks = [System.DirectoryServices.SecurityMasks]::Dacl
     [void]$aclSearcher.PropertiesToLoad.Add('ntsecuritydescriptor')
@@ -188,29 +247,45 @@ try {
 
     $sd = New-Object System.DirectoryServices.ActiveDirectorySecurity
     $sd.SetSecurityDescriptorBinaryForm($bytes)
-    $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     $mine = @($me.User) + @($me.Groups)
+    $ours = @($sd.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
+        Where-Object { $_.AccessControlType -eq 'Allow' -and $mine -contains $_.IdentityReference })
 
-    $granted = @($sd.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
-        Where-Object {
-            $_.AccessControlType -eq 'Allow' -and $mine -contains $_.IdentityReference -and
-            ($_.ObjectType -eq $script:ResetPasswordRight -or $_.ObjectType -eq [guid]::Empty)
-        })
+    $lockoutGuid = Get-AttributeGuid 'lockoutTime'
+    $pwdGuid = Get-AttributeGuid 'pwdLastSet'
 
-    if ($granted.Count -gt 0) {
-        Write-Result 'reset password' "granted by $($granted.Count) ACE(s)" 'Green'
-    } else {
-        Write-Result 'reset password' 'no matching ACE, so a write failure is permissions' 'Yellow'
+    # An ACE covers an attribute when it names it, or names nothing and so covers all.
+    function Test-Right([guid]$target, [string]$rights) {
+        return @($ours | Where-Object {
+                ($_.ObjectType -eq $target -or $_.ObjectType -eq [guid]::Empty) -and
+                ($_.ActiveDirectoryRights.ToString() -match $rights)
+            }).Count -gt 0
+    }
+
+    $checks = @(
+        @{ Label = 'reset password'; Guid = $script:ResetPasswordRight; Rights = 'ExtendedRight|GenericAll' }
+        @{ Label = 'write lockoutTime'; Guid = $lockoutGuid; Rights = 'WriteProperty|GenericAll|GenericWrite' }
+        @{ Label = 'write pwdLastSet'; Guid = $pwdGuid; Rights = 'WriteProperty|GenericAll|GenericWrite' }
+    )
+    Write-Result 'matching ACEs' "$($ours.Count) for this account and its groups" 'Gray'
+    foreach ($check in $checks) {
+        if ($null -eq $check.Guid) {
+            Write-Result $check.Label 'schema GUID unreadable, so undecided' 'Yellow'
+            continue
+        }
+        $held = Test-Right $check.Guid $check.Rights
+        $verdict = if ($held) { 'granted' } else { 'NOT granted' }
+        Write-Result $check.Label $verdict $(if ($held) { 'Green' } else { 'Red' })
     }
 } catch {
-    Write-Result 'reset password' "could not read the DACL: $($_.Exception.Message)" 'Yellow'
+    Write-Result 'rights' "could not read the DACL: $(Resolve-Reason $_)" 'Yellow'
 }
 
 # --- 5. Writes -------------------------------------------------------------
 
 if (-not $WriteTest) {
     Write-Host ''
-    Write-Host 'Reads only. Re-run with -WriteTest on a throwaway account to test the writes.' `
+    Write-Host 'Reads only. Sections 2 to 4 are the decision; -WriteTest only confirms it.' `
                -ForegroundColor DarkGray
     return
 }
@@ -249,7 +324,6 @@ foreach ($mode in $usable) {
     try {
         $target = New-Bind $dn $mode
         [void]$target.Invoke('SetPassword', @(New-ProbePassword))
-        $target.CommitChanges()
         Write-Result "SetPassword ($($mode.Name))" 'accepted' 'Green'
     } catch {
         Write-Result "SetPassword ($($mode.Name))" "refused: $(Resolve-Reason $_)" 'Red'
