@@ -187,6 +187,12 @@ if (-not (Test-Path $exe)) {
     throw "The zip unpacked without a DONUT.exe in $InstallDir."
 }
 
+# Elevated here, and the desktop launch will not be: the app tree is admin-only by design.
+Start-Process -FilePath $exe -ArgumentList '--extract-only' -Wait
+if (-not (Test-Path (Join-Path $InstallDir 'app\src\Start-Donut.ps1'))) {
+    Write-Warning 'The app tree was not staged, so start DONUT as an administrator once.'
+}
+
 $lnk = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\DONUT (beta).lnk'
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
 $shortcut.TargetPath = $exe
