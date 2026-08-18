@@ -42,6 +42,15 @@
     valid positional calls (e.g. Split-Path -Parent $x) when the analyzer session
     fails to resolve the cmdlet's metadata, so a hit proves nothing by itself.
 
+    The scan stays serial, and the piped form above is the fast one. ForEach-Object
+    -Parallel cannot host the analyzer at all (it writes from the wrong thread and
+    returns nothing), and splitting the files across child processes does run, but
+    each session resolves cmdlet metadata independently: measured over 200 files it
+    returned 156, 91 and 70 findings on three runs of identical input, and corrupted
+    an internal collection on a fourth. That is the session-dependence above, once per
+    process instead of once per run. A gate that answers differently each time is
+    worse than a slow one, so the wall-clock win was not taken.
+
 .EXAMPLE
     pwsh -File tools\Invoke-Lint.ps1
 .EXAMPLE
