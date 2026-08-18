@@ -26,6 +26,15 @@ Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
     and FinderPresenter.MaxDropdownRows decide who is drawn. Keep the two separate - widening
     the filter against a tight cap here is what makes a search quietly worse.
 
+    Unlock and reset write through System.DirectoryServices rather than the RSAT module,
+    which is why nothing here needs a Feature on Demand that a first run used to spend
+    minutes installing and that policy often blocks outright. BindUser searches the home
+    domain for the SAM and binds what it finds, which scopes the write exactly as
+    -Server did, and it constructs the entry with the path alone: handing
+    AuthenticationTypes to the four-argument constructor beside a null user binds
+    unauthenticated, and the DC then answers every operation with
+    ERROR_DS_OPERATIONS_ERROR (measured by tools/Probe-AdWrite.ps1).
+
     LastErrors exists because logging the per-forest failure is not enough: the usual
     caller is AdSearchWorker.ps1, which passes a null logger, so Coalesce turns that
     warning into a no-op and an unreachable forest looks identical to one that matched
@@ -179,22 +188,45 @@ class ActiveDirectoryService {
         }
     }
 
-    # Unlocks via the AD module against the user's home domain (one-shot).
-    hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
-        Unlock-ADAccount -Identity $sam -Server $domain -ErrorAction Stop
+    # Binds the account in its home domain, scoping it the way -Server did. See .NOTES.
+    hidden [System.DirectoryServices.DirectoryEntry] BindUser([string]$sam, [string]$domain) {
+        $root = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domain")
+        $searcher = [System.DirectoryServices.DirectorySearcher]::new($root)
+        try {
+            $searcher.Filter = '(&(objectCategory=person)(objectClass=user)' +
+            "(sAMAccountName=$([AdFilter]::EscapeLdap($sam))))"
+            $found = $searcher.FindOne()
+            if (-not $found) { throw "no account named '$sam' in $domain." }
+            return $found.GetDirectoryEntry()
+        } finally {
+            $searcher.Dispose()
+            $root.Dispose()
+        }
     }
 
-    # Resets via the AD module against the user's home domain (one-shot).
+    # Clearing lockoutTime is what Unlock-ADAccount does.
+    hidden [void] InvokeUnlock([string]$sam, [string]$domain) {
+        $entry = $this.BindUser($sam, $domain)
+        try {
+            $entry.Properties['lockoutTime'].Value = 0
+            $entry.CommitChanges()
+        } finally { $entry.Dispose() }
+    }
+
+    # SetPassword needs the plaintext, so the decode lives here and nowhere wider.
     hidden [void] InvokeReset([string]$sam, [string]$domain,
         [securestring]$newPassword, [bool]$changeAtLogon) {
-        Set-ADAccountPassword -Identity $sam `
-                              -Server $domain `
-                              -Reset `
-                              -NewPassword $newPassword `
-                              -ErrorAction Stop
-        Set-ADUser -Identity $sam `
-                   -Server $domain `
-                   -ChangePasswordAtLogon $changeAtLogon `
-                   -ErrorAction Stop
+        $entry = $this.BindUser($sam, $domain)
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newPassword)
+        try {
+            $entry.Invoke('SetPassword',
+                [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr))
+            # 0 forces a change at next logon, -1 stamps it as set now.
+            $entry.Properties['pwdLastSet'].Value = $(if ($changeAtLogon) { 0 } else { -1 })
+            $entry.CommitChanges()
+        } finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+            $entry.Dispose()
+        }
     }
 }

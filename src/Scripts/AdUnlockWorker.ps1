@@ -3,10 +3,10 @@
     Runspace-pool worker that unlocks a locked-out AD user account.
 
 .DESCRIPTION
-    Runs ActiveDirectoryService.UnlockUser off the UI thread. Imports the
-    ActiveDirectory module (for Unlock-ADAccount) here in the worker; the service
-    swallows and logs failures and returns the bool this worker emits back to
-    HomePresenter.
+    Runs ActiveDirectoryService.UnlockUser off the UI thread; the service swallows
+    and logs failures and returns the bool this worker emits back to HomePresenter.
+    Nothing is imported: the unlock writes through System.DirectoryServices, so the
+    RSAT module this worker used to require is no longer on the path at all.
 
 .PARAMETER Sam
     sAMAccountName of the user to unlock.
@@ -24,7 +24,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Import-Module ActiveDirectory -ErrorAction Stop
 $svc = [ActiveDirectoryService]::new(@(), $null)
 $user = [AdSearchResult]::new()
 $user.Kind = 'User'

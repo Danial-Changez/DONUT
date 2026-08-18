@@ -365,7 +365,7 @@ foreach ($mode in $usable) {
     $target = $null
     try {
         $target = New-Bind $dn $mode
-        [void]$target.Invoke('SetPassword', @(New-ProbePassword))
+        $target.Invoke('SetPassword', (New-ProbePassword))
         Write-Result "SetPassword ($($mode.Name))" 'accepted' 'Green'
     } catch {
         Write-Result "SetPassword ($($mode.Name))" "refused: $(Resolve-Reason $_)" 'Red'

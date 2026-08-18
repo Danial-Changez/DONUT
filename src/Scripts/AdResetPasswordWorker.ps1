@@ -3,10 +3,10 @@
     Runspace-pool worker that resets an AD user's password to a temporary one.
 
 .DESCRIPTION
-    Runs ActiveDirectoryService.ResetPassword off the UI thread. Imports the
-    ActiveDirectory module (for Set-ADAccountPassword / Set-ADUser) here in the
-    worker; the service swallows and logs failures and returns the bool this
-    worker emits back to MainPresenter.
+    Runs ActiveDirectoryService.ResetPassword off the UI thread; the service swallows
+    and logs failures and returns the bool this worker emits back to MainPresenter.
+    Nothing is imported: the reset writes through System.DirectoryServices, so the
+    RSAT module this worker used to require is no longer on the path at all.
 
 .PARAMETER Sam
     sAMAccountName of the user to reset.
@@ -33,7 +33,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Import-Module ActiveDirectory -ErrorAction Stop
 $svc = [ActiveDirectoryService]::new(@(), $null)
 $user = [AdSearchResult]::new()
 $user.Kind = 'User'

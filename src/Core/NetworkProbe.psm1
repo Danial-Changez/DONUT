@@ -22,6 +22,12 @@ using module ".\LogService.psm1"
     discovery/selection logic can be unit-tested off a domain by subclassing
     this type and faking those seams.
 
+    The ADWS stage stays even though nothing installs RSAT any more, because it is
+    already guarded and still the most authoritative answer on the admin boxes that
+    happen to carry the module. Its absence is a debug line rather than a warning:
+    once RSAT is not being installed, a warning on every launch would report the
+    expected case, and the LDAP stage below it is what actually answers.
+
     First-run org discovery (DiscoverSearchDomains, DiscoverSiteServer) persists its
     results to config.json. The repo itself ships no organization names.
 #>
@@ -42,8 +48,8 @@ class NetworkProbe {
 
     # --- Domain controller discovery ---
 
-    # Returns the cached DC list, discovering once: RSAT/ADWS, then .NET DirectoryServices
-    # (plain LDAP works under tokens ADWS refuses, e.g. SYSTEM), then DNS SRV (no auth).
+    # Returns the cached DC list, discovering once: RSAT/ADWS where it happens to be
+    # installed, then .NET DirectoryServices (LDAP), then DNS SRV. See .NOTES.
     [string[]] GetDomainControllers() {
         if ($null -ne $this.DomainControllers) {
             return $this.DomainControllers
@@ -54,8 +60,13 @@ class NetworkProbe {
             $this.Logger.LogDebug("DC discovery: querying AD for domain controllers...")
             $found = @($this.QueryDomainControllers() | Where-Object { $_ })
         } catch {
-            $this.Logger.LogWarning(
-                "DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)")
+            # Absent is the normal case now, so only a real ADWS failure is worth a warning.
+            $note = "DC discovery via Get-ADDomainController (RSAT/ADWS) failed: $($_.Exception.Message)"
+            if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
+                $this.Logger.LogDebug($note)
+            } else {
+                $this.Logger.LogWarning($note)
+            }
         }
         if ($found.Count -eq 0) {
             try {

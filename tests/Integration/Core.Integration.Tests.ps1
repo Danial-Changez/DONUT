@@ -193,10 +193,11 @@ $result | ConvertTo-Json | Set-Content -LiteralPath $ResultFile
 
             # Resolution is DC-authoritative: an address only comes back when a DC is reachable.
             $ip = $probe.ResolveHost("localhost")
-            if (Get-Command Get-ADDomainController -ErrorAction SilentlyContinue) {
+            # Domain membership, not the AD module: nothing installs RSAT now, and a box
+            # can carry the module without being joined, which is what used to fail here.
+            if ((Get-CimInstance Win32_ComputerSystem).PartOfDomain) {
                 $ip | Should -Not -BeNullOrEmpty
             } else {
-                # Off-domain (no AD module): resolution fails hard, returning null.
                 $ip | Should -BeNullOrEmpty
             }
 
