@@ -3,14 +3,13 @@
 # their own pipelines (docs.yml, web-check.yml); the remote-lab harness
 # (tools/Invoke-DiagnosticRun.ps1) is manual-only - see
 # docs/development/testing.md. Test suite needs Windows: WPF tests run STA.
+# No path filter: a filtered run never reports, and these are main's required checks.
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore: ['web/**', 'docs/**']
   pull_request:
-    paths-ignore: ['web/**', 'docs/**']
   workflow_dispatch:
 
 concurrency:
