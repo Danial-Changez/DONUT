@@ -18,8 +18,10 @@
       2. Routes: the ports each SetPassword fallback needs, with a real TLS
          handshake on 636 rather than a bare connect, since a listening port with
          an unusable certificate is the case that matters.
-      3. Binds: binds the DN under each candidate AuthenticationTypes combination
-         and forces the bind, which separates a transport failure from a rights one.
+      3. Binds: binds the DN two ways over, varying the host form and how the
+         AuthenticationTypes reach the entry, since passing them to the constructor
+         alongside a null user is not the same as setting them afterwards, and the
+         plain one-argument form is what ActiveDirectoryService already uses.
       4. Rights: the caller's own ACEs on the account - the Reset Password extended
          right, and write access to the two attributes - resolved through the schema
          so an attribute-scoped grant is not mistaken for a blanket one.
@@ -58,13 +60,14 @@ Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
 # Schema GUID of the Reset Password extended right.
 $script:ResetPasswordRight = [guid]'00299570-246d-11d0-a768-00aa006e0529'
 
-# Host form and auth flags are separate axes, so a failure names which one broke it.
+# Host form and how the auth flags are applied vary separately. See .DESCRIPTION.
 $script:BindModes = @(
-    @{ Name = 'domain, Secure'; Via = 'domain'; Auth = 'Secure' }
-    @{ Name = 'domain, Sealing + Signing'; Via = 'domain'; Auth = 'Secure, Sealing, Signing' }
-    @{ Name = 'domain, SSL'; Via = 'domain'; Auth = 'Secure, SecureSocketsLayer' }
-    @{ Name = 'serverless, Sealing + Signing'; Via = ''; Auth = 'Secure, Sealing, Signing' }
-    @{ Name = 'dc, Sealing + Signing'; Via = 'dc'; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'domain, no auth argument'; Via = 'domain'; Style = 'default' }
+    @{ Name = 'domain, auth set after'; Via = 'domain'; Style = 'property'; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'domain, auth in constructor'; Via = 'domain'; Style = 'ctor'; Auth = 'Secure, Sealing, Signing' }
+    @{ Name = 'domain, SSL set after'; Via = 'domain'; Style = 'property'; Auth = 'Secure, SecureSocketsLayer' }
+    @{ Name = 'serverless, no auth argument'; Via = ''; Style = 'default' }
+    @{ Name = 'dc, no auth argument'; Via = 'dc'; Style = 'default' }
 )
 
 $script:Routes = @(
@@ -105,9 +108,16 @@ function Get-BindPath([string]$dn, [hashtable]$mode) {
 }
 
 function New-Bind([string]$dn, [hashtable]$mode) {
-    $auth = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
     $path = Get-BindPath $dn $mode
-    return New-Object System.DirectoryServices.DirectoryEntry($path, $null, $null, $auth)
+    if ($mode.Style -eq 'ctor') {
+        $auth = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
+        return New-Object System.DirectoryServices.DirectoryEntry($path, $null, $null, $auth)
+    }
+    $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
+    if ($mode.Style -eq 'property') {
+        $entry.AuthenticationType = [System.DirectoryServices.AuthenticationTypes]$mode.Auth
+    }
+    return $entry
 }
 
 function Test-Port([int]$port) {
