@@ -62,6 +62,12 @@
 .PARAMETER WarmOnly
     Start/verify the agent and return, without running a lookup.
 
+.PARAMETER ParseOnly
+    Return immediately, so the runspace keeps the parsed class graph and nothing else.
+    WarmOnly cannot serve this: elevated it blocks in EnsureAgent, and the interactive
+    pool has one runspace per configured forest, so a WarmOnly per runspace leaves the
+    finder's fan-out with nowhere to dispatch.
+
 .PARAMETER StopAgent
     Stop/unregister the agent and purge every Lens exchange dir, without running a lookup.
 
@@ -84,10 +90,15 @@ param(
     [string] $ToastBody = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
+    [switch] $ParseOnly,
     [switch] $StopAgent
 )
 
 $ErrorActionPreference = 'Stop'
+
+# First, and before the timing stamp: the using-module graph above is the whole point,
+# and it is already parsed by the time this line runs.
+if ($ParseOnly) { return '' }
 
 # The parent subtracts this from its dispatch time to see pool queueing, not work.
 Write-Information -MessageData ([datetime]::UtcNow.ToString('o')) -Tags 'WorkerStart'

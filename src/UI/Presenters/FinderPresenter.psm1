@@ -67,6 +67,17 @@ using module "..\ViewModels\PersonLensViewModel.psm1"
     which people appear (including the row Enter pre-selects) would depend on which forest
     won the race. Cancel-on-supersede is the legitimate form and AbortSearch already does it.
 
+    WarmLens dispatches one WarmOnly and the rest ParseOnly, because a pick needs every
+    runspace to already hold the parsed worker graph but only one of them needs to start
+    the agent. WarmOnly on all of them is what shipped, and elevated it deadlocked the
+    finder: EnsureAgent blocks for the agent's cold start (up to 20s waiting on the first
+    heartbeat, serialized behind its mutex), one job per runspace pinned the whole
+    interactive pool, and every search job queued behind them. The log said so and said
+    nothing else - a fan-out line with no per-forest line after it, since PollSearch only
+    logs a leg that completed. De-elevated it was invisible: LensLookupWorker returns
+    before EnsureAgent, so the extras cost nothing and the pool stayed free. A forest
+    count above InteractiveSize is what makes it fatal rather than slow.
+
     ResolveOwners keeps exactly one batch in flight, and the batch is deliberate. The
     agent serves owner requests inline on its 150ms serve loop, so a second parent job
     would queue behind the first for no extra throughput while holding a second of the
@@ -343,10 +354,9 @@ class FinderPresenter {
         } catch { $this.Logger.LogException('Lens warm triggers could not register', $_) }
         try {
             $this.LensWarmJob = $this.StartLensWorker(@{ WarmOnly = $true })
-            # A pick dispatches two jobs onto any free runspace, so every runspace must
-            # already hold the worker graph. The agent mutex makes the extras near no-ops.
+            # ParseOnly, never WarmOnly: the extras must not block. See .NOTES.
             for ($i = 1; $i -lt [RunspaceManager]::InteractiveSize; $i++) {
-                $this.LensWarmExtras.Add($this.StartLensWorker(@{ WarmOnly = $true }))
+                $this.LensWarmExtras.Add($this.StartLensWorker(@{ ParseOnly = $true }))
             }
         } catch {
             $this.Logger.LogException("Lens agent warm-up could not start", $_)

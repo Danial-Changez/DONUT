@@ -2,6 +2,7 @@
 using module "..\..\src\UI\Presenters\FinderPresenter.psm1"
 using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Models\PersonLens.psm1"
+using module "..\..\src\Core\RunspaceManager.psm1"
 using module "..\Helpers\CapturingLogService.psm1"
 
 # --- Test doubles -----------------------------------------------------------
@@ -13,6 +14,20 @@ class ThrowingFinderPresenter : FinderPresenter {
     : base($c, $null, $l, $null, $null, $null) {}
 
     hidden [void] WireLensDeviceCommands() { throw "device wiring blew up" }
+}
+
+# Records what WarmLens dispatches instead of touching the pool, so the warm's shape is
+# assertable headless. Returns a job shaped like PoolScriptJob.Start's.
+class RecordingFinderPresenter : FinderPresenter {
+    [System.Collections.Generic.List[hashtable]] $Dispatched =
+    [System.Collections.Generic.List[hashtable]]::new()
+
+    RecordingFinderPresenter([AppConfig]$c, [object]$l) : base($c, $null, $l, $null, $null, $null) {}
+
+    hidden [hashtable] StartPoolScript([string]$scriptPath, [hashtable]$parameters) {
+        $this.Dispatched.Add($parameters)
+        return @{ Ps = $null; Handle = $null; StartedAt = [datetime]::UtcNow }
+    }
 }
 
 Describe "FinderPresenter Lens poll" {
@@ -157,6 +172,21 @@ Describe "FinderPresenter Lens poll" {
         It "degrades to nothing when the record is not three fields" {
             $job = New-TimedSearchJob -StartedAt ([datetime]::UtcNow) -Payload '123 456'
             $script:presenter.DescribeSearchTiming($job) | Should -BeExactly ''
+        }
+    }
+
+    Context "lens warm" {
+        It "starts the agent once and leaves the rest of the pool free" {
+            $p = [RecordingFinderPresenter]::new($script:config, $script:logger)
+
+            $p.WarmLens()
+
+            $blocking = @($p.Dispatched | Where-Object { $_.WarmOnly })
+            $blocking.Count | Should -Be 1 -Because "EnsureAgent holds a runspace for its cold start"
+            $parseOnly = @($p.Dispatched | Where-Object { $_.ParseOnly })
+            $parseOnly.Count | Should -Be ([RunspaceManager]::InteractiveSize - 1)
+            # One blocking job per runspace is what left the finder's fan-out nowhere to go.
+            $p.Dispatched.Count | Should -Be ([RunspaceManager]::InteractiveSize)
         }
     }
 
