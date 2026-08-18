@@ -21,13 +21,15 @@ concurrency:
 # every test file opens with `using module`, and concurrent class-graph
 # compiles deadlock on the module-load lock (docs/development/decisions.md).
 jobs:
-  checks:
+  # Split from lint, which takes an order of magnitude longer: a brace nit should
+  # not report four minutes late because an analyzer pass was queued in front of it.
+  format:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      # No cache here: the runner image ships PSScriptAnalyzer, and this job wants no Pester.
+      # No cache: the runner image ships PSScriptAnalyzer, and neither job wants Pester.
       - name: Install PowerShell modules
         shell: pwsh
         run: |
@@ -39,6 +41,20 @@ jobs:
         shell: pwsh
         run: ./tools/Invoke-Format.ps1 -Check
 
+  lint:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install PowerShell modules
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+              Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          }
+
+      # Serial on purpose: splitting the scan across processes changes its findings.
       - name: Lint
         shell: pwsh
         run: ./tools/Invoke-Lint.ps1 -FailOn Warning
