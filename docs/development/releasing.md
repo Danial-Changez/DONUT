@@ -3,10 +3,20 @@ title: Releasing
 description: Where the version number comes from, how a push becomes a beta, and how a beta is promoted to stable.
 ---
 
-Every push to `main` publishes a build. `VERSION` holds the series (`2.4`), the
-release workflow appends the commit count, and the result is tagged `v2.4.57` and
-published as a **prerelease**. Nothing about that artifact is beta-only: it is the
-same MSI a stable release ships, from the same `tools/Build-Installer.ps1`.
+Every merge to `main` that touches code publishes a build. `VERSION` holds the
+series (`2.5`), the release workflow appends the commit count, and the result is
+tagged `v2.5.57` and published as a **prerelease**. Nothing about that artifact is
+beta-only: it is the same MSI a stable release ships, from the same
+`tools/Build-Installer.ps1`.
+
+A merge carrying only `docs/` or `web/` changes is not a build: the workflow's
+`guard` job diffs what the push brought in and skips the rest when nothing outside
+those two directories moved. A path filter cannot do this, because the same `push`
+trigger also carries the `v*.*.*` tags that cut stable releases.
+
+`main` requires a pull request and four passing checks (`checks`, `tests (Unit)`,
+`tests (Integration)`, `build`), so nothing reaches the beta channel without the
+gate having run against what actually landed.
 
 The third field is a build counter, not a patch level. A fix and a feature both
 advance it by however many commits they took, so versions are ordered but not
@@ -20,7 +30,7 @@ the one that has to compare, and it counts three fields
 A tested build becomes stable by flipping the flag on the release it already is:
 
 ```powershell
-gh release edit v2.4.57 --prerelease=false --latest
+gh release edit v2.5.57 --prerelease=false --latest
 ```
 
 No rebuild, no second tag, no version bump: what operators install is the exact
