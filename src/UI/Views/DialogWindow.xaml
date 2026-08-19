@@ -84,6 +84,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Popup chrome contract: the 48px header doubles as the drag region.
@@ -147,9 +148,53 @@
                 </ItemsControl>
             </ScrollViewer>
 
+            <!-- A labelled fact wears the Card recipe, like the Lens tiles. The release
+                 link rides the value row so the card stays one fact, not two. -->
+            <Border Grid.Row="3"
+                    Style="{DynamicResource Card}"
+                    Padding="16,14"
+                    Margin="24,14,24,0"
+                    Visibility="{Binding HasVersionCard, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="VERSION"
+                               Style="{DynamicResource MicroLabel}" />
+                    <Grid Margin="0,7,0,0">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding VersionFrom}"
+                                       FontFamily="{DynamicResource FontMono}"
+                                       FontSize="15"
+                                       Foreground="{DynamicResource BodyTextSecondary}" />
+                            <TextBlock Text="&#x2192;"
+                                       FontFamily="{DynamicResource FontMono}"
+                                       FontSize="15"
+                                       Foreground="{DynamicResource BodyTextPrimary}"
+                                       Margin="7,0,7,0" />
+                            <TextBlock Text="{Binding VersionTo}"
+                                       FontFamily="{DynamicResource FontMono}"
+                                       FontSize="15"
+                                       Foreground="{DynamicResource TitleTextPrimary}" />
+                        </StackPanel>
+                        <TextBlock HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{DynamicResource FontSans}"
+                                   FontSize="12.5"
+                                   Visibility="{Binding HasReleaseUrl, Converter={StaticResource BoolToVis}}">
+                            <Hyperlink x:Name="linkRelease"
+                                       NavigateUri="{Binding ReleaseUrl}"
+                                       Foreground="{DynamicResource AccentPurpleLight}"
+                                       TextDecorations="None">
+                                <TextBlock Text="{Binding ReleaseLinkText}" />
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Its own row at the content gutter, never the footer: footers hold decisions,
                  and this modifies the decision the footer commits. -->
-            <CheckBox Grid.Row="3"
+            <CheckBox Grid.Row="4"
                       Style="{DynamicResource ModernCheckBox}"
                       Content="{Binding RememberText}"
                       IsChecked="{Binding Remember, Mode=TwoWay}"
@@ -157,7 +202,7 @@
                       Margin="24,16,24,0" />
 
             <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
-            <StackPanel Grid.Row="4"
+            <StackPanel Grid.Row="5"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">

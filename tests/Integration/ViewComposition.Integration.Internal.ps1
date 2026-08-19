@@ -69,6 +69,12 @@ Describe "View composition" -Tag "Integration", "WPF" {
             }
         }
 
+        # The presenter wires RequestNavigate by name, so a rename breaks the link silently.
+        It "keeps the update prompt's release link findable" -Skip:(-not $script:isStaMode) {
+            $dlg = [ViewLoader]::Load($script:srcRoot, 'UI\Views\DialogWindow.xaml')
+            $dlg.FindName('linkRelease') | Should -Not -BeNullOrEmpty
+        }
+
         # The headline values were TextBlocks, so only the grey sub-lines could be copied.
         It "keeps every stat card value selectable" -Skip:(-not $script:isStaMode) {
             $cards = [ViewLoader]::Load($script:srcRoot, 'UI\Views\Home\StatCards.xaml')

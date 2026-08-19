@@ -120,8 +120,9 @@ class UpdatePresenter {
             return
         }
 
+        # The release page, not the notes: nothing here renders unbounded markdown.
         $answer = $this.Dialog.ShowUpdatePrompt($LocalVer.ToString(), $RemoteVer.ToString(),
-            $isRollback)
+            $isRollback, [string]$Release.html_url)
         if (-not $answer.Confirmed) { return }
 
         if ($answer.Remember) { $this.PersistAutoUpdate() }
