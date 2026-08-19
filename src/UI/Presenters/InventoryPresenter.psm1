@@ -469,8 +469,7 @@ class InventoryPresenter {
         $sizeLabel = [DiskUsageFormat]::SizeLabel($totalBytes)
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear Folder Contents on $hostName",
-            "Permanently clear the contents of $($selected.Count) folder(s) (~$sizeLabel) on ${hostName}. " +
-            "The folders are kept. Runs as SYSTEM and cannot be undone.",
+            "Clears ~$sizeLabel and cannot be undone. The folders are kept.",
             $list,
             'Clear',
             $true)
@@ -508,7 +507,7 @@ class InventoryPresenter {
         $count = 0
         if ($job.Result -and $job.Result.Deleted) { $count = [int]$job.Result.Deleted }
         $this.AppendLog($hostName, "Cleared $count folder(s). Re-scanning...")
-        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder(s).") }
+        if ($this.Toasts) { $this.Toasts.ShowSuccess($hostName, "Cleared $count folder$(if ($count -ne 1) { 's' }).") }
         $this.FindBigFolders($hostName)
     }
 }

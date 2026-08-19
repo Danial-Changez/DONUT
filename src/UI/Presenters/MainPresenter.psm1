@@ -404,8 +404,8 @@ class MainPresenter {
 
         $answer = $dialogs.ShowRememberableConfirmation(
             'Administrator Rights Needed',
-            "$what needs administrator rights." +
-            "`n`nDONUT will restart, ask for permission, and carry on where you left off.",
+            "$what needs administrator rights. " +
+            'DONUT will restart, ask for permission, and carry on where you left off.',
             'Restart as Administrator',
             'Always Run DONUT as Administrator')
         if (-not $answer.Confirmed) { return $false }

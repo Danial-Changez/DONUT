@@ -739,7 +739,7 @@ class FinderPresenter {
 
         $confirmed = $this.DialogPresenter.ShowConfirmation(
             "Unlock Account",
-            "Unlock the locked-out account '$upn'.",
+            'This account is locked out.',
             @("$([string]$r.SamAccountName)  @  $([string]$r.Domain)"),
             'Unlock', $false
         )
@@ -755,7 +755,7 @@ class FinderPresenter {
             $job.Upn = $upn
             $this.UnlockJobs.Add($job)
             $this.UnlockPollTimer.Start()
-            if ($this.Toasts) { $this.Toasts.ShowInfo("Unlocking...", $upn) }
+            if ($this.Toasts) { $this.Toasts.ShowInfo('Unlock Account', "Unlocking $upn...") }
         } catch {
             $this.Logger.LogException("Unlock could not start for $upn", $_)
             if ($this.Toasts) { $this.Toasts.ShowError("Unlock Failed", "Could not start the unlock for $upn.") }

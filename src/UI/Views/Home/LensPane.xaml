@@ -277,7 +277,7 @@
         </ItemsControl>
         </Grid>
       </ScrollViewer>
-      <TextBlock Grid.Row="1" Text="No SCCM devices."
+      <TextBlock Grid.Row="1" Text="No SCCM devices"
                  Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
         <TextBlock.Style>
