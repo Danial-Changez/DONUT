@@ -55,8 +55,8 @@ class DialogPresenter {
                     }.GetNewClosure())
             }
         } catch {
-            [Donut.Launcher.ErrorDialog]::Show('DONUT', 'DONUT could not open a dialog.',
-                'Restart DONUT. If it keeps happening, reinstall it.', "$_")
+            [System.Windows.Forms.MessageBox]::Show(
+                "DONUT could not open a dialog. Restart it.`n`n$_", 'DONUT')
             throw
         }
     }

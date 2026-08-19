@@ -103,8 +103,8 @@ class MainPresenter {
                     $msg += "`nRoot Cause: $($_.Exception.InnerException.InnerException.Message)"
                 }
             }
-            [Donut.Launcher.ErrorDialog]::Show('DONUT', 'DONUT could not build its window.',
-                'Restart DONUT. If it keeps happening, reinstall it.', $msg)
+            [System.Windows.Forms.MessageBox]::Show(
+                "DONUT could not build its window. Restart it.`n`n$msg", 'DONUT')
             throw $msg
         }
 

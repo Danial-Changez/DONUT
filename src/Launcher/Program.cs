@@ -64,7 +64,9 @@ static class Program {
                     }
 
                     // Quiet on a tray start: no dialogs on the logon screen.
-                    Bootstrap.Run(progress.Report, appRoot, quiet: tray);
+                    Bootstrap.Run(progress.Report, appRoot, quiet: tray,
+                        warn: (reason, action, detail) =>
+                            ErrorDialog.Show("DONUT Setup", reason, action, detail));
 
                     var iss = InitialSessionState.CreateDefault();
                     iss.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
