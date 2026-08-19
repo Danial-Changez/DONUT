@@ -200,6 +200,8 @@ class MainPresenter {
             catch { $presenter.Logger.LogException('Failed to open documentation', $_) }
         }.GetNewClosure()
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
+        $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
+        $this.MainVm.CopyVersionCommand = [RelayCommand]::new([System.Action[object]]$copyVersion)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -348,6 +350,17 @@ class MainPresenter {
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
         } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+    }
+
+    # Reporting a version is why the badge exists, so a click puts it on the clipboard.
+    [void] CopyVersion() {
+        if ([string]::IsNullOrWhiteSpace($this.MainVm.AppVersion)) { return }
+        try {
+            Set-Clipboard -Value $this.MainVm.AppVersion
+            if ($this.ToastService) {
+                $this.ToastService.ShowInfo('Version', "Copied $($this.MainVm.AppVersion).")
+            }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
     }
 
     # Registers/unregisters the elevated startup task to match the setting. Runs on the

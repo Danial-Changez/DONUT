@@ -24,6 +24,11 @@ class MainViewModel : ObservableObject {
     [object] $MaximizeCommand     # toggles Maximized <-> Normal
     [object] $CloseCommand
 
+    # The running build, standing beside LIMITED so a report can name it.
+    [string] $AppVersion = ''
+    [bool]   $HasAppVersion = $false
+    [object] $CopyVersionCommand
+
     # QR overlay: a secret rendered to an in-memory image, never to disk.
     [bool]   $IsQrOpen = $false
     [object] $QrImage             # ImageSource bound to the overlay's Image.Source

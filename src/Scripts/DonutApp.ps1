@@ -156,6 +156,9 @@ try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
         $updatePresenter.Toasts = $mainPresenter.ToastService
+        # The same resolver the update check uses, so the badge cannot disagree with it.
+        $mainPresenter.MainVm.AppVersion = $selfUpdateService.GetLocalVersion().ToString()
+        $mainPresenter.MainVm.HasAppVersion = $true
         $logger.LogInfo("Main window preloaded (+$($bootSw.ElapsedMilliseconds)ms).")
         Update-Splash 90 'Preparing sign-in'
     } catch {
