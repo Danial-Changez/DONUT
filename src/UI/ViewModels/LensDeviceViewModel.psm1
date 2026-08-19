@@ -18,6 +18,7 @@ class LensDeviceViewModel : ObservableObject {
     [string] $LastSeenText = ''
     [string] $Model = ''
     [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
+    [string] $Serial = ''                 # the tag alone, which is what a warranty lookup wants
     # $null rather than '' so an unknown OS/manufacturer pair shows no tooltip at all.
     [object] $DetailTip
     [string] $BitLockerText = ''          # the joined keys, shown only once revealed
@@ -37,6 +38,7 @@ class LensDeviceViewModel : ObservableObject {
             $this.Domain = $d.Domain
             $this.Model = $d.Model
             # "Tag" spelled out matches the MACHINE stat tile, so one fact keeps one name.
+            $this.Serial = [string]$d.Serial
             if ($d.Serial) { $this.TagText = "Tag $($d.Serial)" }
             # OS lives in the tooltip: usually shared, but it still spots a Windows 10 holdout.
             $tip = @()

@@ -69,6 +69,39 @@ Describe "View composition" -Tag "Integration", "WPF" {
             }
         }
 
+        # DetailTitle, TagText and OvModelSub are all decorated, so copying them pastes junk.
+        It "copies the raw value, never the decorated label" -Skip:(-not $script:isStaMode) {
+            $decorated = 'DetailTitle', 'TagText', 'OvModelSub'
+            $views = 'UI\Views\Home\DetailPane.xaml', 'UI\Views\Home\LensPane.xaml',
+            'UI\Views\Home\StatCards.xaml', 'UI\Views\MainWindow.xaml'
+            foreach ($view in $views) {
+                $raw = Get-Content (Join-Path $script:srcRoot $view) -Raw
+                foreach ($bad in $decorated) {
+                    # Tag carries the clipboard payload; CommandParameter does on the one glyph.
+                    $raw | Should -Not -Match "Tag=`"\{Binding [^}]*$bad\}" `
+                        -Because "$view must copy the underlying value, not $bad"
+                    $raw | Should -Not -Match "CommandParameter=`"\{Binding [^}]*$bad\}" `
+                        -Because "$view must copy the underlying value, not $bad"
+                }
+            }
+        }
+
+        # Every copyable value needs a payload, or the click silently copies nothing.
+        It "gives every copyable value a Tag to copy" -Skip:(-not $script:isStaMode) {
+            $views = 'UI\Views\Home\DetailPane.xaml', 'UI\Views\Home\LensPane.xaml',
+            'UI\Views\Home\StatCards.xaml', 'UI\Views\MainWindow.xaml'
+            $total = 0
+            foreach ($view in $views) {
+                $raw = Get-Content (Join-Path $script:srcRoot $view) -Raw
+                $uses = [regex]::Matches($raw, 'CopyableValue')
+                $total += $uses.Count
+                foreach ($m in [regex]::Matches($raw, '(?s)<TextBox[^>]*?CopyableValue.*?/>')) {
+                    $m.Value | Should -Match 'Tag="\{Binding ' -Because "a CopyableValue in $view needs a Tag"
+                }
+            }
+            $total | Should -Be 8 -Because 'eight values are their own copy target'
+        }
+
         # The presenter wires RequestNavigate by name, so a rename breaks the link silently.
         It "keeps the update prompt's release link findable" -Skip:(-not $script:isStaMode) {
             $dlg = [ViewLoader]::Load($script:srcRoot, 'UI\Views\DialogWindow.xaml')

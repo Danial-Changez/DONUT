@@ -201,8 +201,19 @@ class MainPresenter {
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
         $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
         $this.MainVm.CopyVersionCommand = [RelayCommand]::new([System.Action[object]]$copyVersion)
+        # Only the BitLocker key still binds this: it wraps, so it keeps a glyph.
+        $copyValue = { param($p) $presenter.CopyValue([string]$p) }.GetNewClosure()
+        $this.MainVm.CopyValueCommand = [RelayCommand]::new([System.Action[object]]$copyValue)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
+
+        # Bubbles from every CopyableValue, including rows built later by a template.
+        $this.Window.AddHandler(
+            [System.Windows.UIElement]::MouseLeftButtonUpEvent,
+            [System.Windows.Input.MouseButtonEventHandler] {
+                param($s, $e) $presenter.OnValueClicked($e.OriginalSource)
+            }.GetNewClosure(),
+            $true)
 
         # On the whole borderless window, every click-drag moved it and text was unselectable.
         $controlBar = $this.Window.FindName("panelControlBar")
@@ -349,6 +360,29 @@ class MainPresenter {
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
         } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+    }
+
+    # A click that selected nothing copies the whole value; a drag still selects, which is
+    # free because a read-only box with no caret does nothing with a plain click otherwise.
+    [void] OnValueClicked([object]$source) {
+        $box = $source -as [System.Windows.Controls.TextBox]
+        if (-not $box) {
+            $box = [System.Windows.Media.VisualTreeHelper]::GetParent($source) -as
+            [System.Windows.Controls.TextBox]
+        }
+        if (-not $box -or -not $box.IsReadOnly) { return }
+        if ($box.SelectionLength -gt 0) { return }
+        $this.CopyValue([string]$box.Tag)
+    }
+
+    # Tag rather than Text, since the rendered value may be decorated: DetailTitle appends
+    # an offline suffix and TagText is prefixed with the word Tag.
+    [void] CopyValue([string]$text) {
+        if ([string]::IsNullOrWhiteSpace($text)) { return }
+        try {
+            Set-Clipboard -Value $text
+            if ($this.ToastService) { $this.ToastService.ShowInfo('Copied', $text) }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
     }
 
     # Reporting a version is why the badge exists, so a click puts it on the clipboard.

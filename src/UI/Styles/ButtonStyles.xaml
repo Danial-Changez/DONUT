@@ -188,6 +188,61 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+    <!-- Dim at rest rather than hidden: nobody hovers for an affordance they cannot see. -->
+    <Style x:Key="ButtonCopyGlyph"
+           TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Opacity" Value="0.4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="ToolTip" Value="Copy" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="5">
+                        <Path x:Name="glyph"
+                              Data="{DynamicResource Copy}"
+                              Width="11"
+                              Height="11"
+                              Stretch="Uniform"
+                              StrokeThickness="1"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Stroke="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background"
+                                    Value="{DynamicResource SurfaceMuted}" />
+                            <Setter TargetName="glyph" Property="Stroke"
+                                    Value="{DynamicResource TitleTextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.85" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="Opacity" Value="1" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
     <!-- Dim when there is nothing to clear and destructive on hover, so it encodes its state. -->
     <Style x:Key="fieldClearButton"
            TargetType="Button">

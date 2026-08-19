@@ -53,14 +53,17 @@
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailTitle}"
-                   ToolTip="{Binding SelectedMachine.DetailTitle}" FontFamily="{DynamicResource FontSans}" FontSize="18"
+        <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left">
+          <!-- Tag is HostName, never DetailTitle, which appends an offline suffix for display. -->
+          <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.DetailTitle}"
+                   Tag="{Binding SelectedMachine.HostName}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="18"
                    FontWeight="Bold" Foreground="{DynamicResource TitleTextPrimary}" />
           <!-- IP only, since probe freshness already shows on the machine card. -->
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.DetailIp}"
-                   ToolTip="{Binding SelectedMachine.DetailIp}" FontFamily="{DynamicResource FontSans}" FontSize="11"
-                   Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+          <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.DetailIp}"
+                   Tag="{Binding SelectedMachine.DetailIp}"
+                   FontFamily="{DynamicResource FontSans}" FontSize="11"
+                   Foreground="{DynamicResource BodyTextTertiary}" Margin="-4,2,0,0" />
         </StackPanel>
         <!-- Utility actions subordinate to Run, so colour stays with status and the primary. -->
         <Button x:Name="btnFindFolders" Grid.Column="1" Content="Storage"
