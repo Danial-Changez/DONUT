@@ -200,6 +200,8 @@ class MainPresenter {
             catch { $presenter.Logger.LogException('Failed to open documentation', $_) }
         }.GetNewClosure()
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
+        $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
+        $this.MainVm.CopyVersionCommand = [RelayCommand]::new([System.Action[object]]$copyVersion)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -350,6 +352,17 @@ class MainPresenter {
         } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
     }
 
+    # Reporting a version is why the badge exists, so a click puts it on the clipboard.
+    [void] CopyVersion() {
+        if ([string]::IsNullOrWhiteSpace($this.MainVm.AppVersion)) { return }
+        try {
+            Set-Clipboard -Value $this.MainVm.AppVersion
+            if ($this.ToastService) {
+                $this.ToastService.ShowInfo('Version', "Copied $($this.MainVm.AppVersion).")
+            }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
+    }
+
     # Registers/unregisters the elevated startup task to match the setting. Runs on the
     # pool (Get/Register-ScheduledTask can stall) and toasts on failure from the reap.
     [void] ApplyStartupTask() {
@@ -404,8 +417,8 @@ class MainPresenter {
 
         $answer = $dialogs.ShowRememberableConfirmation(
             'Administrator Rights Needed',
-            "$what needs administrator rights." +
-            "`n`nDONUT will restart, ask for permission, and carry on where you left off.",
+            "$what needs administrator rights. " +
+            'DONUT will restart, ask for permission, and carry on where you left off.',
             'Restart as Administrator',
             'Always Run DONUT as Administrator')
         if (-not $answer.Confirmed) { return $false }

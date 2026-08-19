@@ -62,16 +62,6 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource BodyTextPrimary}" />
     </Style>
-    <!-- Sub-lines stay SelectableText so values can be copied, hence no sub style here. -->
-    <Style x:Key="StatValue"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="19" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource TitleTextPrimary}" />
-        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        <Setter Property="Margin" Value="0,6,0,0" />
-    </Style>
     <!-- PART_Track and PART_Indicator are required names, WPF sizes the indicator by them. -->
     <Style x:Key="ThinProgressBar"
            TargetType="ProgressBar">

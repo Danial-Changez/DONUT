@@ -27,4 +27,11 @@ class DialogViewModel : ObservableObject {
     [string] $RememberText = ''
     [bool]   $HasRemember = $false  # opt-in checkbox, off for every existing caller
     [bool]   $Remember = $false     # two-way bound, read by the caller after the modal
+    # The update prompt's version card, whose arrow reverses on a rollback.
+    [string] $VersionFrom = ''
+    [string] $VersionTo = ''
+    [bool]   $HasVersionCard = $false
+    [string] $ReleaseUrl = ''
+    [bool]   $HasReleaseUrl = $false
+    [string] $ReleaseLinkText = ''
 }

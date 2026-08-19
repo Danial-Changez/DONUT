@@ -16,6 +16,9 @@ using module '..\ViewModels\DialogViewModel.psm1'
 .NOTES
     Event-handler scriptblocks capture $self, since in a WPF handler $this rebinds
     to the sender (the button), not the presenter.
+
+    A Hyperlink raises RequestNavigate and does nothing else, so the release link is
+    handed to the shell the way LoginPresenter hands over the device-flow URL.
 #>
 class DialogPresenter {
     [ResourceService]$Resources
@@ -90,18 +93,27 @@ class DialogPresenter {
 
     # Returns @{ Confirmed; Remember }, Remember being "install updates without asking".
     # A rollback names itself and hides that checkbox: it is not worth making permanent.
-    [hashtable] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback) {
+    [hashtable] ShowUpdatePrompt([string]$currentVer, [string]$newVer, [bool]$isRollback,
+        [string]$releaseUrl) {
         $this.Initialize()
         $title = 'Update Available'
         $primary = 'Update Now'
-        $msg = "Current: $currentVer`nNew: $newVer`n`nUpdate now?"
+        $msg = 'A newer version of DONUT is ready to install.'
+        $linkText = "What's new"
         if ($isRollback) {
             $title = 'Roll Back'
             $primary = 'Roll Back'
-            $msg = "Current: $currentVer`nTarget: $newVer`n`n" +
-            "This rolls DONUT back to an older version. Continue?"
+            $msg = 'This puts DONUT back on an older version.'
+            $linkText = 'Release notes'
         }
         $vm = $this.NewVm($title, $msg, @(), $primary, 'Later')
+        $vm.VersionFrom = $currentVer
+        $vm.VersionTo = $newVer
+        $vm.HasVersionCard = $true
+        $vm.ReleaseUrl = $releaseUrl
+        $vm.HasReleaseUrl = -not [string]::IsNullOrWhiteSpace($releaseUrl)
+        $vm.ReleaseLinkText = $linkText
+        if ($vm.HasReleaseUrl) { $this.WireReleaseLink() }
         if (-not $isRollback) {
             $vm.RememberText = 'Install Updates Automatically'
             $vm.HasRemember = $true
@@ -109,6 +121,21 @@ class DialogPresenter {
         $this.Window.DataContext = $vm
         $confirmed = $this.ShowModal()
         return @{ Confirmed = $confirmed; Remember = ($confirmed -and $vm.Remember) }
+    }
+
+    # WPF navigates nothing on its own, so the shell opens the release page. See .NOTES.
+    hidden [void] WireReleaseLink() {
+        $link = $this.Window.FindName('linkRelease')
+        if (-not $link) { return }
+        $self = $this
+        $link.Add_RequestNavigate({
+                param($s, $e)
+                try { Start-Process $e.Uri.AbsoluteUri } catch {
+                    $self.Resources.Logger.LogWarning(
+                        "Could not open the release page: $($_.Exception.Message)")
+                }
+                $e.Handled = $true
+            }.GetNewClosure())
     }
 
     # Builds the dialog's content view-model: Has* flags for which parts show, plus the

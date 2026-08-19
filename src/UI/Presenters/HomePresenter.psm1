@@ -442,8 +442,8 @@ class HomePresenter : AsyncJobPresenter {
         if ($command -eq 'applyUpdates') {
             # Applies are irreversible (BIOS/firmware), so the modal is destructive-tinted.
             $confirmed = $this.DialogPresenter.ShowConfirmation(
-                "Apply Updates",
-                "Apply updates to $($idleHosts.Count) machine(s). BIOS and firmware installs cannot be rolled back.",
+                "Apply Updates to $($idleHosts.Count) Machine$(if ($idleHosts.Count -ne 1) { 's' })",
+                'BIOS and firmware installs cannot be rolled back.',
                 $idleHosts, 'Apply', $true
             )
             if (-not $confirmed) { return }
@@ -612,7 +612,7 @@ class HomePresenter : AsyncJobPresenter {
         } catch {
             $this.Detail.AppendLog($hostName, "Error starting process: $_", [LogSeverity]::Error)
             $row.ApplyStatus([FleetCardStatus]::FromJob('Scan', 'Failed', $false))
-            if ($this.Toasts) { $this.Toasts.ShowError($hostName, "Failed to start: $_") }
+            if ($this.Toasts) { $this.Toasts.ShowError($hostName, 'Could not start. Open the log for details.') }
         }
     }
 
@@ -689,6 +689,20 @@ class HomePresenter : AsyncJobPresenter {
         $this.RefreshCardStatus($job)
     }
 
+    # JobKind names the code's job, not the operator's, so failures are reported by what
+    # they started. Anything unmapped is background work they never named.
+    static [string] JobLabel([JobKind]$kind) {
+        $names = @{
+            [JobKind]::Scan          = 'Scan'
+            [JobKind]::UpdateScan    = 'Scan'
+            [JobKind]::UpdateApply   = 'Apply'
+            [JobKind]::DiskScan      = 'Storage scan'
+            [JobKind]::DeleteFolders = 'Clear'
+        }
+        if ($names.ContainsKey($kind)) { return $names[$kind] }
+        return 'Run'
+    }
+
     # Terminal per-job step, dispatching background kinds to their Complete* handler.
     [void] OnJobCompleted([AsyncJob]$job) {
         if ($job.JobType -eq [JobKind]::Resolve) {
@@ -759,7 +773,8 @@ class HomePresenter : AsyncJobPresenter {
         if ($job.Status -eq 'Failed') {
             $this.Resolution.InvalidateResolved($job.HostName)
             if ($this.Toasts) {
-                $this.Toasts.ShowError($job.HostName, "$($job.JobType) failed. Open the log for details.")
+                $label = [HomePresenter]::JobLabel($job.JobType)
+                $this.Toasts.ShowError($job.HostName, "$label failed. Open the log for details.")
             }
             if ($job.JobType -eq 'UpdateApply') {
                 $this.NotifySystem($job.HostName, "Apply failed. Open the log for details.")
@@ -920,9 +935,8 @@ class HomePresenter : AsyncJobPresenter {
         # Single run: one small confirm (the list itself lives in the pane, not the dialog).
         $this.Detail.AppendLog($hostName, "Review the updates in the pane, then confirm.")
         $confirmed = $this.DialogPresenter.ShowConfirmation(
-            "Apply Updates",
-            "Apply $($updateRows.Count) update(s) to ${hostName}, listed in the detail pane. " +
-            "BIOS and firmware installs cannot be rolled back.",
+            "Apply $($updateRows.Count) Update$(if ($updateRows.Count -ne 1) { 's' }) to $hostName",
+            'Listed in the detail pane. BIOS and firmware installs cannot be rolled back.',
             @(),
             'Apply',
             $true)

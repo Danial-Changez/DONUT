@@ -69,6 +69,38 @@ Describe "View composition" -Tag "Integration", "WPF" {
             }
         }
 
+        # The presenter wires RequestNavigate by name, so a rename breaks the link silently.
+        It "keeps the update prompt's release link findable" -Skip:(-not $script:isStaMode) {
+            $dlg = [ViewLoader]::Load($script:srcRoot, 'UI\Views\DialogWindow.xaml')
+            $dlg.FindName('linkRelease') | Should -Not -BeNullOrEmpty
+        }
+
+        # The headline values were TextBlocks, so only the grey sub-lines could be copied.
+        It "keeps every stat card value selectable" -Skip:(-not $script:isStaMode) {
+            $cards = [ViewLoader]::Load($script:srcRoot, 'UI\Views\Home\StatCards.xaml')
+            $boxes = @()
+            $walk = {
+                param($node)
+                $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($node)
+                for ($i = 0; $i -lt $n; $i++) {
+                    $c = [System.Windows.Media.VisualTreeHelper]::GetChild($node, $i)
+                    if ($c -is [System.Windows.Controls.TextBox]) { $script:found += $c }
+                    & $walk $c
+                }
+            }
+            $cards.Measure([System.Windows.Size]::new(1200, 400))
+            $cards.Arrange([System.Windows.Rect]::new(0, 0, 1200, 400))
+            $script:found = @()
+            & $walk $cards
+            $boxes = @($script:found | Where-Object {
+                    $b = [System.Windows.Data.BindingOperations]::GetBinding(
+                        $_, [System.Windows.Controls.TextBox]::TextProperty)
+                    $b -and $b.Path.Path -in @('SelectedMachine.OvModel', 'SelectedMachine.OvBattery',
+                        'SelectedMachine.OvDisk', 'SelectedMachine.OvBios')
+                })
+            $boxes.Count | Should -Be 4 -Because 'model, battery, disk and BIOS must all be copyable'
+        }
+
         It "hosts the Lens slot inside the detail region, not the shell" -Skip:(-not $script:isStaMode) {
             $shell = [ViewLoader]::Load($script:srcRoot, 'UI\Views\HomeView.xaml')
             $detail = [ViewLoader]::Load($script:srcRoot, 'UI\Views\Home\DetailPane.xaml')

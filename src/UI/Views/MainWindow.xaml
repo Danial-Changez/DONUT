@@ -136,6 +136,22 @@
                                                Style="{DynamicResource BadgeAmberText}"
                                                VerticalAlignment="Center" />
                                 </Border>
+                                <!-- The build is a fact you carry all session, like LIMITED.
+                                     Clicking copies it, since reporting one is why it is here. -->
+                                <Button x:Name="btnVersion"
+                                        Command="{Binding CopyVersionCommand}"
+                                        Style="{DynamicResource ButtonBadge}"
+                                        VerticalAlignment="Center"
+                                        Margin="10,0,0,0"
+                                        ToolTip="Copy the version"
+                                        Visibility="{Binding HasAppVersion, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding AppVersion}"
+                                               FontFamily="{DynamicResource FontMono}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource BodyTextPrimary}"
+                                               VerticalAlignment="Center" />
+                                </Button>
                             </StackPanel>
                         </DockPanel>
                         <ContentControl x:Name="contentMain"
