@@ -48,7 +48,8 @@ Service --> Presenter: installed version
 Presenter -> Presenter: compare versions
 
 alt Update / rollback needed
-    Presenter -> User: ShowUpdatePrompt(current, new)
+    Presenter -> User: ShowUpdatePrompt(current, new, isRollback, releaseUrl)
+    note right of User: version pair in a card, old to new;\nthe arrow reverses on a rollback, and the release page opens in a browser
     User --> Presenter: Confirm
 
     Presenter -> Service: IsPortable()
@@ -77,6 +78,6 @@ alt Update / rollback needed
     deactivate Service
     note over Presenter: app restarts on the new version
 else Already current
-    Presenter -> User: "Already up to date"
+    note over Presenter: nothing is shown; the check just returns
 end
 @enduml

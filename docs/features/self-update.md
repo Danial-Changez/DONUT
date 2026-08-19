@@ -12,6 +12,10 @@ DONUT keeps itself current from your org's **GitHub Releases**.
    release is older than what you have (how a bad release gets pulled).
 4. The download is integrity-checked before it installs.
 
+The prompt shows the version you are on and the one you would move to, with a link
+to that release's notes on GitHub. A rollback shows the same pair the other way
+round, and says **Roll Back** rather than **Update Now**.
+
 Your settings, machine list, logs, and reports are never touched by an update.
 
 ## Updating without being asked
@@ -27,7 +31,7 @@ you make when a release is pulled — so it always asks, whatever this is set to
 
 **Settings → Updates → Beta Channel** puts DONUT on the beta stream, where every
 build is published as it lands rather than only the finished ones. Betas carry the
-same integrity check — they are simply newer, and less proven.
+same integrity check — they are newer, and less proven.
 
 Turning it back off offers the current stable build as a **rollback**, since the
 stable release is older than the beta you are running. Nothing else changes: both

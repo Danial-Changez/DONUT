@@ -35,7 +35,7 @@ lets the target machine's DCU defaults apply.
 Keybinds aren't typed — they're **recorded**:
 
 1. Click **Record Keybind**. The field starts listening.
-2. Hold your modifier(s) and press one key (e.g. hold `Ctrl+Alt`, tap `D`).
+2. Hold your modifiers and press one key (e.g. hold `Ctrl+Alt`, tap `D`).
    Releasing the modifiers commits it.
 3. **Esc** cancels a recording; **Clear** removes the keybind entirely.
 
