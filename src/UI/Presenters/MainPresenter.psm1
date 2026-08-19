@@ -201,6 +201,8 @@ class MainPresenter {
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
         $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
         $this.MainVm.CopyVersionCommand = [RelayCommand]::new([System.Action[object]]$copyVersion)
+        $copyValue = { param($p) $presenter.CopyValue([string]$p) }.GetNewClosure()
+        $this.MainVm.CopyValueCommand = [RelayCommand]::new([System.Action[object]]$copyValue)
         # Pages set their own DataContext, so the shell's context never leaks into them.
         $this.Window.DataContext = $this.MainVm
 
@@ -349,6 +351,16 @@ class MainPresenter {
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
         } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+    }
+
+    # Bound by every copy glyph. Callers pass the value, never the rendered label:
+    # DetailTitle appends an offline suffix and TagText is prefixed with the word Tag.
+    [void] CopyValue([string]$text) {
+        if ([string]::IsNullOrWhiteSpace($text)) { return }
+        try {
+            Set-Clipboard -Value $text
+            if ($this.ToastService) { $this.ToastService.ShowInfo('Copied', $text) }
+        } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
     }
 
     # Reporting a version is why the badge exists, so a click puts it on the clipboard.

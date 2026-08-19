@@ -28,6 +28,8 @@ class MainViewModel : ObservableObject {
     [string] $AppVersion = ''
     [bool]   $HasAppVersion = $false
     [object] $CopyVersionCommand
+    # Shared by every copy glyph: the value rides in as the CommandParameter.
+    [object] $CopyValueCommand
 
     # QR overlay: a secret rendered to an in-memory image, never to disk.
     [bool]   $IsQrOpen = $false

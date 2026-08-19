@@ -66,9 +66,14 @@
       <Border Grid.Row="0" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,12">
         <StackPanel>
           <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}"
-                   FontFamily="{DynamicResource FontMono}" FontSize="12"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+          <DockPanel LastChildFill="True">
+            <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
+                    Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding Email}" />
+            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}"
+                     FontFamily="{DynamicResource FontMono}" FontSize="12" VerticalAlignment="Center"
+                     Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+          </DockPanel>
         </StackPanel>
       </Border>
       <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,12">
@@ -82,9 +87,14 @@
       <Border Grid.Row="1" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,0">
         <StackPanel>
           <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}"
-                   FontFamily="{DynamicResource FontMono}" FontSize="12"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+          <DockPanel LastChildFill="True">
+            <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
+                    Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding Sam}" />
+            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}"
+                     FontFamily="{DynamicResource FontMono}" FontSize="12" VerticalAlignment="Center"
+                     Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+          </DockPanel>
         </StackPanel>
       </Border>
       <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,0">
@@ -174,7 +184,12 @@
                         <!-- Mono: a service tag is read off a sticker, where 0/O and 1/I must differ. -->
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding TagText}"
                                  FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                 VerticalAlignment="Center"
                                  Foreground="{DynamicResource BodyTextTertiary}" />
+                        <!-- Serial, not TagText, which is prefixed with the word Tag. -->
+                        <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
+                                Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding Serial}" />
                         <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
                                    Foreground="{DynamicResource BodyTextTertiary}" />
                       </StackPanel>
@@ -186,9 +201,15 @@
                     <Border Background="{DynamicResource TintGreen}" BorderBrush="{DynamicResource TintGreenBorder}"
                             BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0"
                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
-                      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
-                               FontFamily="{DynamicResource FontMono}" FontSize="12"
-                               Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
+                      <DockPanel LastChildFill="True">
+                        <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
+                                VerticalAlignment="Top"
+                                Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding BitLockerText}" />
+                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
+                                 FontFamily="{DynamicResource FontMono}" FontSize="12"
+                                 Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
+                      </DockPanel>
                     </Border>
                     <!-- The note explains a missing key or a device SCCM could not find. -->
                     <TextBox Style="{DynamicResource SelectableNote}" Text="{Binding Note}"

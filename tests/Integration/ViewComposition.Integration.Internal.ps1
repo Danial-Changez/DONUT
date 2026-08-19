@@ -69,6 +69,18 @@ Describe "View composition" -Tag "Integration", "WPF" {
             }
         }
 
+        # DetailTitle appends " - offline" and TagText prefixes "Tag ", so either would paste junk.
+        It "copies the raw value, never the decorated label" -Skip:(-not $script:isStaMode) {
+            $decorated = 'DetailTitle', 'TagText'
+            foreach ($view in 'UI\Views\Home\DetailPane.xaml', 'UI\Views\Home\LensPane.xaml') {
+                $raw = Get-Content (Join-Path $script:srcRoot $view) -Raw
+                foreach ($bad in $decorated) {
+                    $raw | Should -Not -Match "CommandParameter=`"\{Binding [^}]*$bad" `
+                        -Because "$view must copy the underlying value, not $bad"
+                }
+            }
+        }
+
         # The presenter wires RequestNavigate by name, so a rename breaks the link silently.
         It "keeps the update prompt's release link findable" -Skip:(-not $script:isStaMode) {
             $dlg = [ViewLoader]::Load($script:srcRoot, 'UI\Views\DialogWindow.xaml')
