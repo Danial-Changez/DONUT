@@ -13,8 +13,8 @@ namespace Donut.Launcher;
 /// </summary>
 /// <remarks>
 /// Minimizes, drags, and is not <c>TopMost</c>: <see cref="Bootstrap"/> raises an
-/// owner-less <c>MessageBox</c> from the worker thread, which a TopMost splash covered,
-/// leaving a first run that reads as frozen on its last milestone.
+/// owner-less <see cref="ErrorDialog"/> from the worker thread, which a TopMost splash
+/// covered, leaving a first run that reads as frozen on its last milestone.
 /// </remarks>
 public sealed class SplashForm : Form {
     // Matches the app's violet accent, and loading.gif is keyed to this ground.
