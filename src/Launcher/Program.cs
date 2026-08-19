@@ -57,13 +57,16 @@ static class Program {
                     string appRoot = ExtractEmbeddedApp();
                     string scriptPath = Path.Combine(appRoot, "src", "Start-Donut.ps1");
                     if (!File.Exists(scriptPath)) {
-                        MessageBox.Show($"Could not find Start-Donut.ps1 at:\n{scriptPath}", "Error",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        ErrorDialog.Show("DONUT Setup", "DONUT could not find its app files.",
+                            "Reinstall DONUT, or start it as administrator once to unpack them again.",
+                            scriptPath);
                         return;
                     }
 
                     // Quiet on a tray start: no dialogs on the logon screen.
-                    Bootstrap.Run(progress.Report, appRoot, quiet: tray);
+                    Bootstrap.Run(progress.Report, appRoot, quiet: tray,
+                        warn: (reason, action, detail) =>
+                            ErrorDialog.Show("DONUT Setup", reason, action, detail));
 
                     var iss = InitialSessionState.CreateDefault();
                     iss.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
@@ -85,14 +88,18 @@ static class Program {
 
                         if (ps.HadErrors) {
                             string errors = string.Join("\n", ps.Streams.Error.Select(e => e.ToString()));
-                            MessageBox.Show(errors, "PowerShell Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            ErrorDialog.Show("DONUT", "DONUT started with errors.",
+                                "It may not work correctly. Open the log for the full run.", errors);
                         }
                     }
                 } catch (UnauthorizedAccessException ex) {
-                    MessageBox.Show(ex.Message, "DONUT setup",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    ErrorDialog.Show("DONUT Setup", "DONUT needs one administrator launch.",
+                        "Start it as administrator once to finish setup. Normal launches work after that.",
+                        ex.ToString());
                 } catch (Exception ex) {
-                    MessageBox.Show(ex.ToString(), "Thread Error");
+                    ErrorDialog.Show("DONUT", "DONUT could not start.",
+                        "Open the log for the full run, or start it as administrator once.",
+                        ex.ToString());
                 } finally {
                     // Backstop: dismiss the splash if startup threw before DonutApp closed it.
                     progress.Complete();
@@ -110,7 +117,8 @@ static class Program {
             Application.Run(new ApplicationContext());
             GC.KeepAlive(instanceMutex);
         } catch (Exception ex) {
-            MessageBox.Show(ex.Message, "Fatal Error");
+            ErrorDialog.Show("DONUT", "DONUT could not start.",
+                "Try again. If it keeps happening, reinstall DONUT.", ex.ToString());
         }
     }
 

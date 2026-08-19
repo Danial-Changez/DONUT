@@ -58,7 +58,12 @@ public static class Bootstrap {
     /// shown. A hidden start is de-elevated by design, and a dialog at the sign-in
     /// screen is exactly what the autostart lane must never produce.
     /// </param>
-    public static void Run(Action<int, string> report, string appRoot, bool quiet = false) {
+    /// <param name="warn">
+    /// Raises a reason, an action and a detail. A callback rather than a dialog so this
+    /// stays testable without a UI assembly graph behind it.
+    /// </param>
+    public static void Run(Action<int, string> report, string appRoot, bool quiet = false,
+                           Action<string, string, string>? warn = null) {
         var missing = new List<(string Name, Action Install)>();
         if (FindOnPath("psexec.exe") is null) missing.Add(("PsExec", InstallPsExec));
         if (FindOnPath("pwsh.exe") is null) missing.Add(("PowerShell 7", InstallPwsh));
@@ -70,10 +75,9 @@ public static class Bootstrap {
         if (!IsElevated()) {
             // Same funnel as the app-tree extraction: one elevated launch finishes setup.
             if (!quiet)
-                MessageBox.Show(
-                    "This machine is missing: " + string.Join(", ", missing.Select(m => m.Name)) +
-                    ".\nStart DONUT as administrator once to finish setting it up.",
-                    "DONUT setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                warn?.Invoke("DONUT needs one administrator launch.",
+                    "Start it as administrator once to finish setup. Normal launches work after that.",
+                    "Missing: " + string.Join(", ", missing.Select(m => m.Name)));
             return;
         }
 
@@ -84,10 +88,9 @@ public static class Bootstrap {
             try { install(); } catch (Exception ex) { failures.Add($"{name}: {ex.Message}"); }
         }
         if (failures.Count > 0 && !quiet)
-            MessageBox.Show(
-                "Setup could not finish (it retries on the next elevated launch):\n\n" +
-                string.Join("\n", failures),
-                "DONUT setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            warn?.Invoke("Setup could not finish.",
+                "It retries the next time you start DONUT as administrator.",
+                string.Join("\n", failures));
     }
 
     /// <summary>Resolves an executable through PATH, or null when absent.</summary>

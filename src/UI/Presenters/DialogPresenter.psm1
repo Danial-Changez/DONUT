@@ -55,7 +55,8 @@ class DialogPresenter {
                     }.GetNewClosure())
             }
         } catch {
-            [System.Windows.Forms.MessageBox]::Show("Failed to load DialogWindow: $_", "Error")
+            [System.Windows.Forms.MessageBox]::Show(
+                "DONUT could not open a dialog. Restart it.`n`n$_", 'DONUT')
             throw
         }
     }
