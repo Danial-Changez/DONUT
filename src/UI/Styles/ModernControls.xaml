@@ -116,6 +116,22 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+    <!-- SelectableText at the stat headline tier. A TextBox cannot trim, so the tooltip
+         these carry is what reveals a clipped value. -->
+    <Style x:Key="StatValue"
+           TargetType="TextBox"
+           BasedOn="{StaticResource SelectableText}">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="19" />
+        <Setter Property="FontWeight"
+                Value="SemiBold" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource TitleTextPrimary}" />
+        <Setter Property="Margin"
+                Value="0,6,0,0" />
+    </Style>
     <!-- Strips the default selection visuals, the row templates draw their own. -->
     <Style x:Key="MachineListItem"
            TargetType="ListBoxItem">
