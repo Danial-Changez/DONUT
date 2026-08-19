@@ -211,5 +211,6 @@ try {
 } catch {
     Close-Splash
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
-    [System.Windows.Forms.MessageBox]::Show("DONUT could not start. $_", "Startup Error")
+    [Donut.Launcher.ErrorDialog]::Show('DONUT', 'DONUT could not start.',
+        'Open the log for the full run, or start it as administrator once.', "$_")
 }

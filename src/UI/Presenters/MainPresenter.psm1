@@ -103,9 +103,8 @@ class MainPresenter {
                     $msg += "`nRoot Cause: $($_.Exception.InnerException.InnerException.Message)"
                 }
             }
-            [System.Windows.Forms.MessageBox]::Show($msg, "XAML Load Error",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error)
+            [Donut.Launcher.ErrorDialog]::Show('DONUT', 'DONUT could not build its window.',
+                'Restart DONUT. If it keeps happening, reinstall it.', $msg)
             throw $msg
         }
 

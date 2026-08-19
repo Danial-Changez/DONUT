@@ -70,10 +70,9 @@ public static class Bootstrap {
         if (!IsElevated()) {
             // Same funnel as the app-tree extraction: one elevated launch finishes setup.
             if (!quiet)
-                MessageBox.Show(
-                    "This machine is missing: " + string.Join(", ", missing.Select(m => m.Name)) +
-                    ".\nStart DONUT as administrator once to finish setting it up.",
-                    "DONUT setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ErrorDialog.Show("DONUT Setup", "DONUT needs one administrator launch.",
+                    "Start it as administrator once to finish setup. Normal launches work after that.",
+                    "Missing: " + string.Join(", ", missing.Select(m => m.Name)));
             return;
         }
 
@@ -84,10 +83,9 @@ public static class Bootstrap {
             try { install(); } catch (Exception ex) { failures.Add($"{name}: {ex.Message}"); }
         }
         if (failures.Count > 0 && !quiet)
-            MessageBox.Show(
-                "Setup could not finish (it retries on the next elevated launch):\n\n" +
-                string.Join("\n", failures),
-                "DONUT setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ErrorDialog.Show("DONUT Setup", "Setup could not finish.",
+                "It retries the next time you start DONUT as administrator.",
+                string.Join("\n", failures));
     }
 
     /// <summary>Resolves an executable through PATH, or null when absent.</summary>
