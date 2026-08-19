@@ -43,7 +43,16 @@ The launcher finishes machine setup on the first elevated run, in two steps:
 2. **`Bootstrap.Run`** (`src/Launcher/Bootstrap.cs`) installs missing operator
    prerequisites. Idempotent: each later launch re-checks cheaply and skips, and a
    failure warns and retries at the next elevated launch, so an offline install
-   still opens the app.
+   still opens the app. It raises that warning through a `warn` callback rather
+   than a dialog of its own, so it stays compilable without a UI assembly graph;
+   `Program` supplies one that opens `ErrorDialog`.
+
+Both funnel into the same window. `ErrorDialog` (`src/Launcher/ErrorDialog.cs`) is
+a hand-themed WinForms form, because these paths run before WPF exists and two of
+them run *because* it failed to load. It leads with a one-line reason, follows with
+what to do, and keeps the exception behind a Details toggle. The three PowerShell
+call sites still use `MessageBox`: the dev path runs under plain `pwsh` with no
+launcher assembly, so a hard type reference there would not parse.
 
 | Prerequisite | Source | Lands at |
 |---|---|---|

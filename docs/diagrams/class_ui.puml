@@ -38,9 +38,13 @@ package "Donut.UI.Presenters" #2B1A12 {
         +EnsureElevated(action, hosts, what): bool
         -SpawnElevated(): bool
         +ResumePendingIntent(): void
+        +OnValueClicked(source): void
+        +CopyValue(text): void
+        +CopyVersion(): void
     }
 
     class HomePresenter extends AsyncJobPresenter {
+        +{static} JobLabel(kind): string
         -UpdateService: RemoteUpdateService
         -Resolver: HostResolver
         -Store: RecentConnectionsStore
@@ -160,7 +164,8 @@ package "Donut.UI.Presenters" #2B1A12 {
     class DialogPresenter {
         +ShowConfirmation(title, message, listItems, primaryText, isDestructive): bool
         +ShowAlert(title, message, listItems): void
-        +ShowUpdatePrompt(currentVer, newVer, isRollback): hashtable
+        +ShowUpdatePrompt(currentVer, newVer, isRollback, releaseUrl): hashtable
+        -WireReleaseLink(): void
     }
 
     class LoginPresenter {
@@ -180,6 +185,14 @@ package "Donut.UI.Presenters" #2B1A12 {
         +ShowInfo(title, message): void
         +ShowWarning(title, message): void
         +ShowError(title, message): void
+    }
+}
+
+package "Donut.Launcher (C#)" #1F2A12 {
+    class ErrorDialog {
+        +{static} Show(caption, reason, action, details): void
+        -Toggle(): void
+        -Layout_(): void
     }
 }
 

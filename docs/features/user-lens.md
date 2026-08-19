@@ -8,13 +8,15 @@ detail pane: who they are and what machines they have.
 
 ## What it shows
 
-- **Directory facts** — UPN, email, manager, office.
+- **Directory facts** — UPN, email, manager, office. Click the email or SAM to
+  copy it; click a device's tag to copy the service tag alone.
 - **Their devices** — the person's SCCM-assigned machines, each on one line of
   model, `Tag <service tag>`, and last domain logon, so a person with three similar
   laptops is tellable apart at a glance. The OS and manufacturer are in the row's
   tooltip. Any device can be **added to the machine list** in one click.
 - **BitLocker recovery keys** — revealed on click per device (never shown by
-  default), with a QR code for typing-free entry on the target.
+  default), with a **Copy** button and a QR code for typing-free entry on the
+  target.
 - **Their software** — the deployments targeted at the user: install-intent
   applications plus package deployments (each package shows its program name, so
   software and maintenance are tellable apart), as software over its carrying

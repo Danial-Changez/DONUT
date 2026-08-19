@@ -9,7 +9,10 @@ background, so it's usually already there when you look.
 ## Overview strip
 
 Model, Dell service tag, BIOS version, battery health, free disk space, and uptime.
-It refreshes when stale; **Refresh** forces it.
+It refreshes when stale; **Refresh** forces it. Click the service tag to copy it —
+you get the tag alone, without the word Tag in front of it.
+
+The hostname and IP above the pane copy the same way.
 
 ## Available updates
 

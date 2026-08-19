@@ -28,6 +28,10 @@ Settings. One idea per step:
 - The **global hotkey** (default `Ctrl+Alt+D`) shows/restores DONUT from anywhere.
   Change or disable it in [Settings](../features/settings.md).
 - Launching DONUT a second time just surfaces the running instance.
+- The **version** sits beside the DONUT wordmark. Click it to copy it, which is
+  what a bug report needs first.
+- **Click a value to copy it** — a hostname, IP, service tag, SAM, UPN, email.
+  Dragging still selects part of one.
 
 ## Where DONUT keeps its data
 
