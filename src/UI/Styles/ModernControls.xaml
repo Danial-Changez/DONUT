@@ -102,6 +102,48 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
+    <!-- SelectableText that also copies. Tag carries the raw value, since the rendered one
+         may be decorated; MainPresenter reads it on a click that selected nothing. -->
+    <Style x:Key="CopyableValue"
+           TargetType="TextBox"
+           BasedOn="{StaticResource SelectableText}">
+        <Setter Property="Cursor"
+                Value="Hand" />
+        <Setter Property="ToolTip"
+                Value="Copy" />
+        <Setter Property="Padding"
+                Value="4,1" />
+        <Setter Property="Margin"
+                Value="-4,0,0,0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="pill"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter TargetName="pill"
+                                    Property="Background"
+                                    Value="{DynamicResource SurfaceMuted}" />
+                            <Setter TargetName="pill"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource PanelBorder}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- SelectableText for optional notes: wraps, and collapses when there is no text. -->
     <Style x:Key="SelectableNote"
            TargetType="TextBox"

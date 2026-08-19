@@ -66,14 +66,9 @@
       <Border Grid.Row="0" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,12">
         <StackPanel>
           <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
-          <DockPanel LastChildFill="True">
-            <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                    Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                    CommandParameter="{Binding Email}" />
-            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Email}" ToolTip="{Binding Email}"
-                     FontFamily="{DynamicResource FontMono}" FontSize="12" VerticalAlignment="Center"
-                     Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
-          </DockPanel>
+          <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding Email}" Tag="{Binding Email}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="12"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-4,3,0,0" />
         </StackPanel>
       </Border>
       <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,12">
@@ -87,14 +82,9 @@
       <Border Grid.Row="1" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,0">
         <StackPanel>
           <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
-          <DockPanel LastChildFill="True">
-            <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                    Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                    CommandParameter="{Binding Sam}" />
-            <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Sam}" ToolTip="{Binding Sam}"
-                     FontFamily="{DynamicResource FontMono}" FontSize="12" VerticalAlignment="Center"
-                     Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
-          </DockPanel>
+          <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding Sam}" Tag="{Binding Sam}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="12"
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-4,3,0,0" />
         </StackPanel>
       </Border>
       <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,0">
@@ -182,14 +172,11 @@
                           </Style>
                         </StackPanel.Style>
                         <!-- Mono: a service tag is read off a sticker, where 0/O and 1/I must differ. -->
-                        <TextBox Style="{DynamicResource SelectableText}" Text="{Binding TagText}"
+                        <!-- Tag is Serial, not TagText, which is prefixed with the word Tag. -->
+                        <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding TagText}"
+                                 Tag="{Binding Serial}"
                                  FontFamily="{DynamicResource FontMono}" FontSize="11"
-                                 VerticalAlignment="Center"
                                  Foreground="{DynamicResource BodyTextTertiary}" />
-                        <!-- Serial, not TagText, which is prefixed with the word Tag. -->
-                        <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding Serial}" />
                         <TextBlock Text="   ·   " FontFamily="{DynamicResource FontSans}" FontSize="12"
                                    Foreground="{DynamicResource BodyTextTertiary}" />
                       </StackPanel>

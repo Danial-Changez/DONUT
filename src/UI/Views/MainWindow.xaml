@@ -283,19 +283,13 @@
                             <StackPanel>
                                 <TextBlock Text="UPN"
                                            Style="{DynamicResource MicroLabel}" />
-                                <DockPanel LastChildFill="True">
-                                    <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                            Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding ResetVm.TargetUpn}" />
-                                    <TextBox Style="{DynamicResource SelectableText}"
-                                             Text="{Binding ResetVm.TargetUpn, Mode=OneWay}"
-                                             ToolTip="{Binding ResetVm.TargetUpn}"
-                                             FontFamily="{DynamicResource FontMono}"
-                                             FontSize="12"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource TitleTextPrimary}"
-                                             Margin="0,3,0,0" />
-                                </DockPanel>
+                                <TextBox Style="{DynamicResource CopyableValue}"
+                                         Text="{Binding ResetVm.TargetUpn, Mode=OneWay}"
+                                         Tag="{Binding ResetVm.TargetUpn}"
+                                         FontFamily="{DynamicResource FontMono}"
+                                         FontSize="12"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
+                                         Margin="-4,3,0,0" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="1"
@@ -305,19 +299,13 @@
                             <StackPanel>
                                 <TextBlock Text="SAM"
                                            Style="{DynamicResource MicroLabel}" />
-                                <DockPanel LastChildFill="True">
-                                    <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                            Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding ResetVm.TargetSam}" />
-                                    <TextBox Style="{DynamicResource SelectableText}"
-                                             Text="{Binding ResetVm.TargetSam, Mode=OneWay}"
-                                             ToolTip="{Binding ResetVm.TargetSam}"
-                                             FontFamily="{DynamicResource FontMono}"
-                                             FontSize="12"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource TitleTextPrimary}"
-                                             Margin="0,3,0,0" />
-                                </DockPanel>
+                                <TextBox Style="{DynamicResource CopyableValue}"
+                                         Text="{Binding ResetVm.TargetSam, Mode=OneWay}"
+                                         Tag="{Binding ResetVm.TargetSam}"
+                                         FontFamily="{DynamicResource FontMono}"
+                                         FontSize="12"
+                                         Foreground="{DynamicResource TitleTextPrimary}"
+                                         Margin="-4,3,0,0" />
                             </StackPanel>
                         </Border>
                     </Grid>

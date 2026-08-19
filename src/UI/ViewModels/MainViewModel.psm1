@@ -28,7 +28,7 @@ class MainViewModel : ObservableObject {
     [string] $AppVersion = ''
     [bool]   $HasAppVersion = $false
     [object] $CopyVersionCommand
-    # Shared by every copy glyph: the value rides in as the CommandParameter.
+    # The BitLocker key's glyph, the one value too long to be its own target.
     [object] $CopyValueCommand
 
     # QR overlay: a secret rendered to an in-memory image, never to disk.

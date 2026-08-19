@@ -56,6 +56,7 @@ class HostViewModel : ObservableObject {
     [string] $DetailIp = ''   # resolved IP under the hostname (freshness lives on the card)
     [string] $OvModel = '—'
     [string] $OvModelSub = 'double-click to gather inventory'
+    [string] $OvModelSubValue = ''     # the tag or hostname alone, without the "Tag " prefix
     [string] $OvBattery = '—'
     [string] $OvBatterySub = ''
     [string] $OvDisk = '—'
@@ -151,6 +152,7 @@ class HostViewModel : ObservableObject {
         if ($null -eq $inv) { return }
         $this.Set('OvModel', $(if ($inv.Model) { $inv.Model } else { '—' }))
         $this.Set('OvModelSub', $(if ($inv.ServiceTag) { "Tag $($inv.ServiceTag)" } else { $this.HostName }))
+        $this.Set('OvModelSubValue', $(if ($inv.ServiceTag) { [string]$inv.ServiceTag } else { $this.HostName }))
         $this.Set('OvBios', $(if ($inv.BiosVersion) { $inv.BiosVersion } else { '—' }))
 
         $health = [InventoryFormat]::BatteryHealthPercent($inv.DesignCapacity, $inv.FullChargeCapacity)
