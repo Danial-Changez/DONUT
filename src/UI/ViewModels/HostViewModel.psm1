@@ -137,7 +137,8 @@ class HostViewModel : ObservableObject {
         } else {
             [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
         }
-        $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update(s)" } else { $when }
+        $plural = if ($rc.UpdateCount -ne 1) { 's' } else { '' }
+        $this.BaseSubtitle = if ($rc.UpdateCount -gt 0) { "$when - $($rc.UpdateCount) update$plural" } else { $when }
 
         $this.RenderDot()
         $this.ApplyChip()
