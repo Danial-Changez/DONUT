@@ -39,8 +39,8 @@
       <LogicalName>assets/Images/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
 
-    <!-- Embedded UI fonts (Geist Mono; OFL). Extracted beside the styles so the
-         ./Fonts/#Geist Mono FontFamily token resolves from the app tree. -->
+    <!-- Embedded UI fonts (Geist and Geist Mono; OFL). Extracted beside the styles so
+         the ./Fonts/#Geist FontFamily tokens resolve from the app tree. -->
     <EmbeddedResource Include="$(DonutSrcDir)\UI\Styles\Fonts\*.*">
       <LogicalName>src/UI/Styles/Fonts/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>

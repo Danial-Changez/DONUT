@@ -6,7 +6,7 @@ description: Every key in DONUT's config.json - types, defaults, and what each o
 DONUT's configuration lives at `%ProgramData%\DONUT\data\config\config.json`. It
 persists across updates and reinstalls (the MSI never touches the data root).
 User settings are merged over `[AppConfig]::Defaults`, so every expected key always
-exists — you only ever see (and edit) real keys.
+exists. You only ever see (and edit) real keys.
 
 Most keys are managed through the [Settings overlay](../features/settings.md) and
 save in real time; editing the file by hand also works (restart DONUT to pick it
@@ -24,7 +24,7 @@ up).
 | `adminServiceHost` | string, discovered | The SCCM AdminService host the [User Lens](../features/user-lens.md) queries. Discovered on first run; edit it when the SMS Provider is a different box |
 | `startWithWindows` | bool, `false` | Register the logon scheduled task, which starts DONUT as you at your normal rights ([details](../features/tray-hotkey-autostart.md)) |
 | `closeToTray` | bool, `false` | The window's X hides to the tray instead of exiting |
-| `runAsAdmin` | bool, **`true`** | Elevate DONUT at launch — remote work needs it. Turning it off applies at the next launch; turning it on relaunches through UAC now. Two exceptions: a tray/autostart launch never elevates, and a declined prompt never rewrites the key |
+| `runAsAdmin` | bool, **`true`** | Elevate DONUT at launch; remote work needs it. Turning it off applies at the next launch; turning it on relaunches through UAC now. Two exceptions: a tray/autostart launch never elevates, and a declined prompt never rewrites the key |
 | `globalHotkey` | string, `"Ctrl+Alt+D"` | Global show/restore hotkey; blank disables it |
 | `openSettingsShortcut` | string, `"Ctrl+,"` | In-app shortcut (while DONUT is focused) that toggles Settings open/closed; blank disables |
 | `activeDomainController` | string, discovered | The domain controller DONUT resolves names against; rewritten whenever it picks a different one |
@@ -32,7 +32,7 @@ up).
 | `betaUpdates` | bool, `false` | Follow the [beta channel](../features/self-update.md#beta-channel): the update check also sees prereleases. Off again offers the stable build as a rollback. Machine-wide, so it wins for every copy installed on the machine |
 | `autoUpdate` | bool, `false` | Install a newer release without prompting. A rollback always prompts. Also set by the checkbox on the update prompt itself |
 | `debugLogging` | bool, `false` | Verbose `[DEBUG]` breadcrumbs in `Donut.log`. Warnings and errors always log; this applies live, no restart |
-| `commands` | object | Per-command DCU argument maps — see the [DCU command reference](./dcu-commands.md) |
+| `commands` | object | Per-command DCU argument maps; see the [DCU command reference](./dcu-commands.md) |
 
 ## Example
 
@@ -55,7 +55,7 @@ up).
 ```
 
 Discovered keys (`domains`, `adminServiceHost`, `activeDomainController`) are
-omitted above — add them only to override a wrong guess.
+omitted above. Add them only to override a wrong guess.
 
 ## What config.json does not hold
 

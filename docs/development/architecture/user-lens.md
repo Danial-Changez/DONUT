@@ -16,7 +16,7 @@ de-elevated and how the agent works; the feature itself is described in
 Elevated, DONUT runs as an admin account, but the Lens data is only readable by the
 operator's regular account: SCCM's AdminService is RBAC-scoped to it, and the
 BitLocker keys in AD carry the same scoping. Elevation does not grant a different
-identity's rights — a separate identity means a separate process.
+identity's rights; a separate identity means a separate process.
 
 The agent is only needed when DONUT is elevated. De-elevated, DONUT already *is*
 the right identity, so `PersonLensService.RunLookupJson` calls `Resolve-Lens` in
@@ -31,10 +31,10 @@ no partials, so the pane fills in one step. See
   token, no password), `RunLevel Limited`, wrapped in `conhost.exe --headless` so no
   console window flashes.
 - `FinderPresenter.WarmLens` starts it at app startup (fire-and-forget), and the
-  agent pre-warms on a thread job while DONUT boots — the GC and home-domain
+  agent pre-warms on a thread job while DONUT boots (the GC and home-domain
   binds, a person-shaped GC read, plus throwaway AdminService affinity, hardware
   and software queries, so even the first pick reuses warm connections on every
-  path — and the serve loop starts serving before the warm lands. `WarmLens` also
+  path), and the serve loop starts serving before the warm lands. `WarmLens` also
   runs a `-WarmOnly` pass on every interactive runspace, so the worker's class
   graph is parsed before the first pick instead of by it.
 - That warm decays while DONUT idles (the site server's IIS pool spins down, and
@@ -42,11 +42,11 @@ no partials, so the pane fills in one step. See
   minutes the serve loop re-runs a throwaway affinity query and a GC read to keep
   both routes hot for the next pick. Resume-from-sleep and network-change events
   (hooked in `LensWarmTriggers.cs`, debounced 30s) drop a `warm.flag` in the
-  exchange dir, and the loop answers with the same ping immediately — so the exact
+  exchange dir, and the loop answers with the same ping immediately, so the exact
   moments that kill pooled binds re-warm them, instead of waiting out the timer.
   `Find-Gc` also retries once over a fresh RootDSE bind, so a pick that races the
   ping still heals instead of erroring.
-- `PersonLensService` is the supervisor + client and stays **transport-only** — it
+- `PersonLensService` is the supervisor + client and stays **transport-only**: it
   never queries AD or SCCM itself. `EnsureAgent` (mutex-guarded) treats a
   `heartbeat.txt` older than 15 s as a dead or wedged agent and re-registers the
   task; two lookup timeouts in a row (`timeouts.txt`) force the same recycle even
@@ -58,16 +58,16 @@ no partials, so the pane fills in one step. See
   so a fresh beat proves requests are being read and a stale one means dead or
   wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
   purged exchange dir.
-- The AD finder search does **not** route through this agent — it fans out
+- The AD finder search does **not** route through this agent. It fans out
   in-process on the pool (AD reads don't need de-elevation). Rejected designs are
   in [Design decisions](../decisions.md#rejected-agent-designs).
 
 ## Query design (Resolve-Lens)
 
-`Resolve-Lens` in `LensAgent.Common.ps1` is the data-access composition point — a
+`Resolve-Lens` in `LensAgent.Common.ps1` is the data-access composition point, so a
 future source (e.g. an Intune API) slots in beside the existing ones:
 
-1. The AD user read binds the picked row's `distinguishedName` directly — a
+1. The AD user read binds the picked row's `distinguishedName` directly, a
    serverless DN bind the locator routes to the right domain over the trust, so
    the exact account you clicked resolves even in a sibling forest, and a
    multi-account person never lands on the wrong twin. The forest-wide GC search
@@ -76,7 +76,7 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    a thread job in parallel with the AD read.
 3. A hardware-inventory pass (model/serial/manufacturer, keyed by the affinity
    row's `ResourceID`) runs one thread job per device in parallel with the
-   per-device AD loop — the AdminService answers slowly per query, so serial
+   per-device AD loop. The AdminService answers slowly per query, so serial
    pairs were the whole lookup's tail.
 4. Everything else per-device (OS, last logon, BitLocker keys) reads from the
    computer's AD object, one thread job per device running beside the hardware
@@ -86,30 +86,30 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    `SID` (bound as `LDAP://<domain>/<SID=...>`, so the pane shows the exact
    machine SCCM asserted, and it outlives renames and OU moves, which is what
    rots a discovery DN) and its `FullDomainName`, which then leads the fallback
-   sweep over the finder's configured domain list, the person's own domain next
-   — so a stale SID costs one bind, not the whole sweep. Both fields answered
+   sweep over the finder's configured domain list, the person's own domain next,
+   so a stale SID costs one bind, not the whole sweep. Both fields answered
    and bound on the site this ships to (`tools/Probe-DeviceIdentity.ps1`).
 
-The gather's nested jobs ride the `ThreadJob` lane — inside the agent process on
-the elevated path, and a lane no other DONUT code uses on the in-process path —
+The gather's nested jobs ride the `ThreadJob` lane (inside the agent process on
+the elevated path, and a lane no other DONUT code uses on the in-process path),
 which is disjoint from the worker and interactive runspace pools. A many-device
 pick that outgrows the throttle queues against other lens jobs only; disk scans,
 DCU runs and inventories are never displaced.
 
-Rules the AdminService imposes (each learned the hard way — see
+Rules the AdminService imposes (each learned the hard way, see
 [Design decisions](../decisions.md#adminservice-filter-shapes)):
 
 - The affinity query filters on the forest-unique SAM with `endswith` and
-  exact-matches client-side — no `DOMAIN\sam` backslash ever enters the URL.
+  exact-matches client-side, so no `DOMAIN\sam` backslash ever enters the URL.
 - The hardware pass filters `ResourceID eq N`, falls back once to the keyed segment
   `Class(N)`, and never uses a string filter.
 - A rejected filter answers 404 **or** 200-empty; both fall through to the keyed
   segment, and a device empty from both records `no inventory rows for ResourceID
   N` rather than a blank card.
 - Owner naming: `SMS_R_User.FullUserName` first (the site aggregates every forest),
-  the agent's own-forest GC as fallback — accepted only when the hit's
+  the agent's own-forest GC as fallback (accepted only when the hit's
   `msDS-PrincipalName` equals the `DOMAIN\sam` SCCM handed over, so a same-SAM
-  twin in this forest never names a sibling-forest machine's owner — the SAM as
+  twin in this forest never names a sibling-forest machine's owner), the SAM as
   last resort; names memoize per batch, and the batched owner lookup is one
   request for all machines, served on a thread job off the serve loop.
 - The software list (`Resolve-UserSoftware`, request kind `software`) walks the user
@@ -118,7 +118,7 @@ Rules the AdminService imposes (each learned the hard way — see
   fallback for its compound key), then one `$select`-trimmed `SMS_DeploymentSummary`
   fetch is filtered client-side to install-intent applications plus every package
   deployment (packages carry their program name, since no generic filter can sort
-  them apart) — an or-filter over the collections would 404. It rides its own
+  them apart), since an or-filter over the collections would 404. It rides its own
   request, dispatched in parallel with the person lookup, so neither ever waits on
   the other, and carries the same SAM and DN hints: a SAM-less pick binds the DN
   for its SAM before any GC guess, exactly as the person read does; the optional
@@ -128,10 +128,10 @@ Rules the AdminService imposes (each learned the hard way — see
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.
 
-The final bundle also carries a `timings` map — cumulative milliseconds at each
+The final bundle also carries a `timings` map: cumulative milliseconds at each
 gather stage (user read, affinity collect, device collect, hardware merge) plus
 each device's own wall times (`ad <name>` for the AD detail job, `hw <name>` for
-the hardware job) — which debug logging prints beside the parent's queued/total
+the hardware job). Debug logging prints it beside the parent's queued/total
 numbers, so a slow pick can be attributed to a stage rather than argued about.
 
 A failed source degrades: each appends to the bundle's `errors` list and the lens
@@ -143,10 +143,10 @@ agent/task I/O is the overridable `RunLookupJson` seam.
 Fixed `%ProgramData%\DONUT\lens-agent` dir:
 
 1. The parent drops `request-<id>.bin`.
-2. The agent answers `partial-<id>-N.bin` — cumulative bundle snapshots numbered in
+2. The agent answers `partial-<id>-N.bin`, cumulative bundle snapshots numbered in
    completion order: directory facts and name-only device rows as each lane lands
    (AD and SCCM affinity run beside each other, so neither gates the other), then
-   AD-detailed rows — and finally `result-<id>.bin` (the filled detail), so the UI
+   AD-detailed rows, and finally `result-<id>.bin` (the filled detail), so the UI
    paints progressively and the slow hardware inventory only ever adds model/serial.
 3. Each side deletes what it consumed; the agent sweeps anything older than 10
    minutes.
@@ -155,7 +155,7 @@ Fixed `%ProgramData%\DONUT\lens-agent` dir:
    recycles the agent.
 5. Two extras ride the same dir: `warm.flag` (plain, dropped by the parent's
    resume/network hooks, answered with an immediate keep-warm ping) and
-   `kind='toast'` requests — the two KEY job outcomes (apply failed, manual
+   `kind='toast'` requests, the two KEY job outcomes (apply failed, manual
    reboot required) raised as Action Center toasts by the agent, because only
    the interactive user's toasts reach the operator's shell. The parent skips
    them entirely while the DONUT window is focused, so they never spam an

@@ -15,29 +15,29 @@
 
 DONUT searches Active Directory for machines and people, runs remote driver and
 BIOS updates through Dell Command Update in parallel, inspects hardware and
-storage per machine, and looks up a user's devices and BitLocker recovery keys —
-a WPF app driven by PowerShell classes, shipped as a single self-updating MSI.
+storage per machine, and looks up a user's devices and BitLocker recovery keys.
+It is a WPF app driven by PowerShell classes, shipped as a single self-updating MSI.
 
 ## Documentation
 
 Everything lives at **<https://danial-changez.github.io/DONUT/>**, built from
 [`docs/`](docs/README.md):
 
-- [What is DONUT?](docs/get-started/what-is-donut.md) — the tour of what it does
+- [What is DONUT?](docs/get-started/what-is-donut.md): the tour of what it does
 - [Installation](docs/get-started/installation.md) and
   [first launch](docs/get-started/first-launch.md)
-- [Feature guides](docs/features/) — scanning, applying updates, the AD finder,
+- [Feature guides](docs/features/): scanning, applying updates, the AD finder,
   the User Lens, machine details, settings
 - [`config.json` reference](docs/configuration/config-reference.md)
 - [Architecture](docs/development/architecture/overview.md) and the
-  [developer pages](docs/development/testing.md) — how it's built and tested
+  [developer pages](docs/development/testing.md): how it's built and tested
 
 ## Install
 
 Grab `DONUT.msi` from the
 [latest release](https://github.com/Danial-Changez/DONUT/releases/latest). The
-first launch installs what the machine still needs (PsExec, PowerShell 7, RSAT AD
-tools, and WizTree for disk scans), and the .NET runtime ships inside the MSI.
+installer fetches what the machine still needs (PsExec, PowerShell 7, and WizTree
+for disk scans), and the .NET runtime ships inside the MSI.
 WizTree is free for personal use only, so business use needs a purchased licence.
 
 To run from source instead, with nothing but PowerShell 7+:

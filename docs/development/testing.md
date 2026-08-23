@@ -7,7 +7,7 @@ The core principle is **dependency injection**: a class whose only job is to tou
 the network or file system is wrapped so tests can substitute a fake.
 
 ```powershell
-# Wrapper (src/Core/NetworkProbe.psm1) — the only thing that touches the network
+# Wrapper (src/Core/NetworkProbe.psm1), the only thing that touches the network
 class NetworkProbe {
     [System.Net.IPAddress] ResolveHost([string]$hostname) {
         return [System.Net.Dns]::GetHostAddresses($hostname)[0]
@@ -27,12 +27,12 @@ class MockNetworkProbe : NetworkProbe {
 | **Models** | Properties, validation, pure mappers/parsers | No mocking needed |
 | **Services** | Logic, error handling, orchestration | Mock `NetworkProbe`, file system, PsExec wrapper |
 | **Presenters** | UI flow (did clicking Scan call the service?) | Fake the service + a duck-typed `$Home` back-ref |
-| **Core** | The actual .NET/exe calls | Don't unit test — use Integration tests |
+| **Core** | The actual .NET/exe calls | Don't unit test; use Integration tests |
 
 - **Unit (`tests/Unit`):** config parse/build, service logic with mocks,
   self-update decision logic, the presenter coordinators with faked services.
 - **Static guards (`tests/Unit`):** whole-`src` AST/text sweeps for mistakes that
-  only surface at runtime on Windows — unassigned class variables
+  only surface at runtime on Windows: unassigned class variables
   (`ClassVariableCoverage`), logger-less `AsyncJob`s (`AsyncJobLoggerCoverage`),
   un-imported `[ProjectClass]::` uses (`TypeImportCoverage`).
 - **Integration (`tests/Integration`):** the real child-process worker transport,
@@ -58,7 +58,7 @@ Always run the suite through `tools/Invoke-Tests.ps1`, never a bare
 and fail every remaining test with bogus operator errors. The runner pins Pester 6.
 :::
 
-- `-FailFast` stops at the first failing test — use it for a tight fix-and-rerun
+- `-FailFast` stops at the first failing test. Use it for a tight fix-and-rerun
   loop; leave it off for CI so every failure is visible.
 - **Stale classes:** `using module` never reloads an already-imported module, so a
   session that ran the suite before an edit keeps testing old classes from memory.
@@ -68,7 +68,7 @@ and fail every remaining test with bogus operator errors. The runner pins Pester
 ## Assertions
 
 New tests prefer Pester 6's type-aware `Should-*` family (`Should-Be`,
-`Should-Throw`, `Should-BeEquivalent`) — clearer failures, and input-shape mistakes
+`Should-Throw`, `Should-BeEquivalent`): clearer failures, and input-shape mistakes
 surface as errors. Existing `Should -Be` assertions stay as they are; never set
 `Should.DisableV5`. Analyzer rules live in `PSScriptAnalyzerSettings.psd1`; the
 conventions are in [Coding style](./coding-style.md).
@@ -84,15 +84,15 @@ pwsh -File tools\Get-DonutRunspaceStacks.ps1 -ProcessId <donut pwsh PID>
 
 It attaches over PowerShell's named-pipe IPC, breaks every busy runspace, and
 prints each script call stack. A runspace that never breaks is wedged inside a
-single native/.NET call — that verdict is itself the diagnostic. An attach timeout
+single native/.NET call, and that verdict is itself the diagnostic. An attach timeout
 (exit 2) means the whole engine is unresponsive. Read the log forensics first,
 probe second, `dotnet-stack report` only if native stacks are needed.
 
 ## Headless diagnostic runs and the bisect protocol
 
-`tools/Invoke-DiagnosticRun.ps1` runs the startup pool sequence without the UI —
-warm passes behind the barrier, DC discovery, optionally a real resolve and disk
-scan — and bundles every signal into one zip (per-phase verdict JSON, the run's
+`tools/Invoke-DiagnosticRun.ps1` runs the startup pool sequence without the UI
+(warm passes behind the barrier, DC discovery, optionally a real resolve and disk
+scan) and bundles every signal into one zip (per-phase verdict JSON, the run's
 `Donut.log`, provenance incl. Defender signature age, script-block events, and
 live runspace stacks when the barrier lapses). Run it from an **elevated** pwsh:
 
@@ -111,7 +111,7 @@ regression has no obvious first-bad commit:
    pwsh -File tools\Invoke-DiagnosticRun.ps1 -SourceRoot .diag\wt\<sha>\src -TargetHost <host> -OutDir .diag\out\<sha>
    ```
    A historically-good commit failing today means the machine changed, not the
-   code — diff the runs' `provenance.json`.
+   code; diff the runs' `provenance.json`.
 2. **Bisect each symptom separately.** `git bisect` rewrites the working tree, so
    keep the predicate script in `.diag/` (untracked):
    ```powershell
@@ -122,7 +122,7 @@ regression has no obvious first-bad commit:
    ```
    `-BisectExitCodes` maps pass→0, symptom→1, harness-broken→125 (`bisect skip`).
 3. **Keep full-app checkout runs hermetic.** Launching the app from an old
-   checkout re-saves the shared config — back up
+   checkout re-saves the shared config, so back up
    `%ProgramData%\DONUT\data\config\config.json` first and restore after.
 
 ## Code coverage

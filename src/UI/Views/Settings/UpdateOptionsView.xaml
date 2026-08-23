@@ -4,7 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Style="{DynamicResource Card}">
     <StackPanel>
-        <TextBlock Text="UPDATE OPTIONS"
+        <TextBlock Text="Update Options"
                    Style="{DynamicResource SettingsSectionLabel}" />
         <StackPanel Margin="0,0,0,10">
             <TextBlock Text="Severity"

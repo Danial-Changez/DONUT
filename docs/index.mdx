@@ -17,33 +17,13 @@ hero:
 import { CardGrid } from '@astrojs/starlight/components';
 import IconLinkCard from '../web/src/components/IconLinkCard.astro';
 
-<div class="dw-window" aria-hidden="true">
-  <div class="dw-bar">
-    <span class="dw-dot dw-red"></span>
-    <span class="dw-dot dw-yellow"></span>
-    <span class="dw-dot dw-green"></span>
-    <span class="dw-title">DONUT — fleet</span>
-    <span class="dw-pill">Scan</span>
-  </div>
-  <div class="dw-row">
-    <span class="dw-status dw-busy"></span>
-    <span class="dw-host">CAP-9F3KQ2</span>
-    <span class="dw-meta">Scanning — step 3/5</span>
-    <span class="dw-progress"><span class="dw-fill" style="width:62%"></span></span>
-  </div>
-  <div class="dw-row">
-    <span class="dw-status dw-ok"></span>
-    <span class="dw-host">B4021-LAB</span>
-    <span class="dw-meta">Completed — 4 updates</span>
-    <span class="dw-progress"><span class="dw-fill" style="width:100%"></span></span>
-  </div>
-  <div class="dw-row">
-    <span class="dw-status dw-warn"></span>
-    <span class="dw-host">WVD-PROD-07</span>
-    <span class="dw-meta">Reboot required</span>
-    <span class="dw-progress"><span class="dw-fill dw-fill-warn" style="width:100%"></span></span>
-  </div>
-</div>
+<img
+  class="dw-shot"
+  src="/screenshots/home.png"
+  width="1300"
+  height="700"
+  alt="The DONUT main window: a machine list with status chips, and a selected machine's updates, inventory tiles, and live scan log."
+/>
 
 ## What DONUT does
 
@@ -53,42 +33,36 @@ import IconLinkCard from '../web/src/components/IconLinkCard.astro';
     description="Queue machines and scan them in parallel, with live progress per row."
     href="./features/scanning/"
     icon="magnifier"
-    foot="Scanning"
   />
   <IconLinkCard
-    title="Update applies"
+    title="Apply updates"
     description="See what will install, confirm per host, and track which machines need a reboot."
     href="./features/applying-updates/"
     icon="approve-check-circle"
-    foot="Applying updates"
   />
   <IconLinkCard
     title="Live AD finder"
     description="Search computers and people across every forest as you type; unlock accounts inline."
     href="./features/ad-finder/"
     icon="open-book"
-    foot="AD finder"
   />
   <IconLinkCard
     title="User Lens"
     description="Pick a person to see their devices and BitLocker recovery keys."
     href="./features/user-lens/"
     icon="information"
-    foot="User Lens"
   />
   <IconLinkCard
     title="Details & storage"
     description="Inventory, available updates, and a biggest-folders scan for every machine."
     href="./features/machine-details/"
     icon="laptop"
-    foot="Machine details"
   />
   <IconLinkCard
     title="Runs in the background"
     description="Tray icon, global hotkey, start-with-Windows, and self-updates from GitHub releases."
     href="./features/tray-hotkey-autostart/"
     icon="download"
-    foot="Tray & self-update"
   />
 </CardGrid>
 

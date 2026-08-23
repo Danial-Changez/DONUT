@@ -5,34 +5,25 @@
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="STARTUP &amp; TRAY"
+            <TextBlock Text="Startup &amp; Tray"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <StackPanel Orientation="Horizontal"
-                        Margin="0,0,0,10">
-                <ToggleButton x:Name="chkStartWithWindows"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Start with Windows"
-                           Style="{DynamicResource SettingsToggleLabel}" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal"
-                        Margin="0,0,0,10">
-                <ToggleButton x:Name="chkCloseToTray"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Close to Tray"
-                           Style="{DynamicResource SettingsToggleLabel}" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <ToggleButton x:Name="chkRunAsAdmin"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Run as Administrator"
-                           Style="{DynamicResource SettingsToggleLabel}" />
-            </StackPanel>
+            <ToggleButton x:Name="chkStartWithWindows"
+                          Content="Start with Windows"
+                          Style="{DynamicResource ModernToggleSwitch}"
+                          Margin="0,0,0,10" />
+            <ToggleButton x:Name="chkCloseToTray"
+                          Content="Close to Tray"
+                          Style="{DynamicResource ModernToggleSwitch}"
+                          Margin="0,0,0,10" />
+            <ToggleButton x:Name="chkRunAsAdmin"
+                          Content="Run as Administrator"
+                          Style="{DynamicResource ModernToggleSwitch}" />
         </StackPanel>
     </Border>
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="SHORTCUTS"
+            <TextBlock Text="Shortcuts"
                        Style="{DynamicResource SettingsSectionLabel}" />
             <TextBlock Text="App Hotkey: minimizes or restores DONUT into focus"
                        Style="{DynamicResource SettingsFieldLabel}"
@@ -55,6 +46,7 @@
                                    VerticalAlignment="Center" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                    Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
                         <Button x:Name="recGlobalHotkeyClear" Grid.Column="1" ToolTip="Clear"
+                                AutomationProperties.Name="Clear the app hotkey"
                                 Style="{DynamicResource fieldClearButton}" VerticalAlignment="Center"
                                 ToolTipService.ShowOnDisabled="True" />
                     </Grid>
@@ -83,6 +75,7 @@
                                    VerticalAlignment="Center" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                    Foreground="{DynamicResource BodyTextPrimary}" TextTrimming="CharacterEllipsis" />
                         <Button x:Name="recOpenSettingsClear" Grid.Column="1" ToolTip="Clear"
+                                AutomationProperties.Name="Clear the settings shortcut"
                                 Style="{DynamicResource fieldClearButton}" VerticalAlignment="Center"
                                 ToolTipService.ShowOnDisabled="True" />
                     </Grid>
@@ -96,7 +89,7 @@
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="TUNING"
+            <TextBlock Text="Tuning"
                        Style="{DynamicResource SettingsSectionLabel}" />
             <TextBlock Text="Throttle Limit: machines run at once"
                        Style="{DynamicResource SettingsFieldLabel}"
@@ -123,36 +116,27 @@
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="UPDATES"
+            <TextBlock Text="Updates"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <StackPanel Orientation="Horizontal"
-                        Margin="0,0,0,10">
-                <ToggleButton x:Name="chkAutoUpdate"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Automatic Updates"
-                           Style="{DynamicResource SettingsToggleLabel}"
-                           ToolTip="Install a newer release without asking. A rollback always asks first." />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <ToggleButton x:Name="chkBetaUpdates"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Beta Channel"
-                           Style="{DynamicResource SettingsToggleLabel}"
-                           ToolTip="Offer prerelease builds. Turning this off offers the stable build as a rollback." />
-            </StackPanel>
+            <ToggleButton x:Name="chkAutoUpdate"
+                          Content="Automatic Updates"
+                          Style="{DynamicResource ModernToggleSwitch}"
+                          Margin="0,0,0,10"
+                          ToolTip="Install a newer release without asking. A rollback always asks first." />
+            <ToggleButton x:Name="chkBetaUpdates"
+                          Content="Beta Channel"
+                          Style="{DynamicResource ModernToggleSwitch}"
+                          ToolTip="Offer prerelease builds. Turning this off offers the stable build as a rollback." />
         </StackPanel>
     </Border>
     <!-- Off by default, and applied live to the app and its worker processes. -->
     <Border Style="{DynamicResource Card}">
         <StackPanel>
-            <TextBlock Text="DIAGNOSTICS"
+            <TextBlock Text="Diagnostics"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <StackPanel Orientation="Horizontal">
-                <ToggleButton x:Name="chkDebugLogging"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Debug Logging"
-                           Style="{DynamicResource SettingsToggleLabel}" />
-            </StackPanel>
+            <ToggleButton x:Name="chkDebugLogging"
+                          Content="Debug Logging"
+                          Style="{DynamicResource ModernToggleSwitch}" />
         </StackPanel>
     </Border>
 </StackPanel>

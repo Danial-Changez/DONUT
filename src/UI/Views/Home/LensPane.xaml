@@ -31,7 +31,7 @@
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" ToolTip="{Binding DisplayName}"
                FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                Foreground="{DynamicResource TitleTextPrimary}" />
-      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" ToolTip="{Binding Upn}" />
     </StackPanel>
 
@@ -137,7 +137,7 @@
                     <ColumnDefinition Width="Auto" />
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="14" FontWeight="SemiBold"
                              Foreground="{DynamicResource TitleTextPrimary}" ToolTip="{Binding Name}" />
                     <!-- Model leads because it is what separates a person's machines. -->
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
@@ -190,7 +190,7 @@
                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
                       <DockPanel LastChildFill="True">
                         <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                VerticalAlignment="Top"
+                                VerticalAlignment="Top" AutomationProperties.Name="Copy BitLocker key"
                                 Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding BitLockerText}" />
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
@@ -254,7 +254,7 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
-                             FontFamily="{DynamicResource FontSans}" FontSize="13.5" FontWeight="SemiBold"
+                             FontFamily="{DynamicResource FontSans}" FontSize="14" FontWeight="SemiBold"
                              Foreground="{DynamicResource TitleTextPrimary}" />
                     <!-- The collection name shows verbatim, the install/application filter went generic. -->
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
@@ -286,10 +286,12 @@
         </Grid>
       </ScrollViewer>
       <TextBlock Grid.Row="1" Text="No SCCM devices"
-                 Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
         <TextBlock.Style>
           <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
               <MultiDataTrigger>
@@ -307,10 +309,12 @@
       </TextBlock>
       <!-- One line covers the software view's loading, error and empty states. -->
       <TextBlock Grid.Row="1" Text="{Binding SoftwareStatusText}"
-                 Foreground="{DynamicResource BodyTextTertiary}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                  TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
         <TextBlock.Style>
           <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
               <DataTrigger Binding="{Binding IsSoftwareShown}" Value="True">

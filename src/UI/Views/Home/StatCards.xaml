@@ -29,7 +29,7 @@
       <TextBox Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}"
-               Tag="{Binding SelectedMachine.OvModelSubValue}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               Tag="{Binding SelectedMachine.OvModelSubValue}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="-4,2,0,0" />
     </StackPanel>
   </Border>
@@ -40,7 +40,7 @@
       <TextBox Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}"
-               ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
     </StackPanel>
   </Border>
@@ -51,7 +51,7 @@
       <TextBox Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}"
-               ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="11.5"
+               ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
     </StackPanel>
   </Border>

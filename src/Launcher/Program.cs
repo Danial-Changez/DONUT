@@ -21,19 +21,27 @@ static class Program {
     /// <c>--tray</c> starts hidden in the tray for autostart. <c>--await-pid &lt;pid&gt;</c>
     /// waits for that process to exit first, so an elevation relaunch does not lose the
     /// single-instance race.
-    /// <c>--extract-only</c> writes the app tree and exits, for an elevated installer.
+    /// <c>--extract-only</c> writes the app tree, installs the prerequisites, and exits,
+    /// for an elevated installer.
     /// </param>
     [STAThread]
     static void Main(string[] args) {
-        // Staged by an elevated installer, so the first desktop launch need not be.
-        if (args.Contains("--extract-only")) { ExtractEmbeddedApp(); return; }
+        // Staged by the elevated installer; a download it cannot finish retries at the next elevated launch.
+        if (args.Contains("--extract-only")) {
+            Bootstrap.Run((_, _) => { }, ExtractEmbeddedApp(), quiet: true);
+            return;
+        }
 
         bool tray = args.Contains("--tray");
 
         // Before the mutex: it is per-session, so an elevated relaunch would collide.
-        AwaitPredecessor(args);
+        bool successor = AwaitPredecessor(args);
 
         var instanceMutex = new Mutex(true, "Local\\DONUT.SingleInstance", out bool createdNew);
+        // A successor waits for the lock itself, since an interactive predecessor never exits.
+        if (!createdNew && successor) {
+            try { createdNew = instanceMutex.WaitOne(AwaitPredecessorSeconds * 1000); } catch (AbandonedMutexException) { createdNew = true; }
+        }
         if (!createdNew) {
             try {
                 using var evt = EventWaitHandle.OpenExisting("Local\\DONUT.ShowRequest");
@@ -122,11 +130,11 @@ static class Program {
         }
     }
 
-    // Best-effort: a gone or unreadable pid means there is nothing left to wait for.
-    static void AwaitPredecessor(string[] args) {
+    // Best-effort (a gone pid is nothing to wait for); true when this launch is a successor.
+    static bool AwaitPredecessor(string[] args) {
         int flag = Array.IndexOf(args, "--await-pid");
-        if (flag < 0 || flag + 1 >= args.Length) return;
-        if (!int.TryParse(args[flag + 1], out int pid)) return;
+        if (flag < 0 || flag + 1 >= args.Length) return false;
+        if (!int.TryParse(args[flag + 1], out int pid)) return false;
 
         try {
             using var predecessor = Process.GetProcessById(pid);
@@ -136,6 +144,7 @@ static class Program {
         } catch (InvalidOperationException) {
             // exited between the lookup and the wait
         }
+        return true;
     }
 
     // Beside the exe, not ProgramData: an MSI install makes that admin-only NTFS.

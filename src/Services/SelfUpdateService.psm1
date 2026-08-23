@@ -265,9 +265,12 @@ class SelfUpdateService {
         Copy-Item -Path $workerScript -Destination $tempWorker -Force
 
         $isZip = $PackagePath -like '*.zip'
+        # The pid as well as the name: a publish-folder launcher is not called DONUT.
+        $ownPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
         $argList = @(
             "-File `"$tempWorker`"",
             "-ProcessNameToClose `"DONUT`"",
+            "-CallerPid $ownPid",
             "-Passive"
         )
 

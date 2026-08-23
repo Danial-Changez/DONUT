@@ -51,26 +51,30 @@
                             <StackPanel DockPanel.Dock="Right"
                                         Orientation="Horizontal"
                                         FlowDirection="RightToLeft">
+                                <!-- Windows chrome: neutral hover, with red reserved for Close. -->
                                 <Button x:Name="btnClose"
                                         Command="{Binding CloseCommand}"
                                         Style="{DynamicResource controlButton}"
                                         Tag="{DynamicResource Destructive}"
-                                        ToolTip="Close">
+                                        ToolTip="Close"
+                                        AutomationProperties.Name="Close">
                                     <Path Style="{DynamicResource controlButtonIcon}"
                                           Data="{DynamicResource xMark}" />
                                 </Button>
                                 <Button Command="{Binding MaximizeCommand}"
                                         Style="{DynamicResource controlButton}"
-                                        Tag="{DynamicResource AccentYellow}"
-                                        ToolTip="Maximize / restore">
+                                        Tag="{DynamicResource TitleTextPrimary}"
+                                        ToolTip="Maximize / restore"
+                                        AutomationProperties.Name="Maximize or restore">
                                     <Path Style="{DynamicResource controlButtonIcon}"
                                           Data="{DynamicResource Square}" />
                                 </Button>
                                 <Button x:Name="btnMinimize"
                                         Command="{Binding MinimizeCommand}"
                                         Style="{DynamicResource controlButton}"
-                                        Tag="{DynamicResource AccentBlueLight}"
-                                        ToolTip="Minimize">
+                                        Tag="{DynamicResource TitleTextPrimary}"
+                                        ToolTip="Minimize"
+                                        AutomationProperties.Name="Minimize">
                                     <Path Style="{DynamicResource controlButtonIcon}"
                                           Width="13"
                                           StrokeThickness="1.08"
@@ -85,8 +89,9 @@
                                             FlowDirection="LeftToRight">
                                     <Button Command="{Binding OpenSettingsCommand}"
                                             Style="{DynamicResource controlButton}"
-                                            Tag="{DynamicResource Primary}"
-                                            ToolTip="Settings">
+                                            Tag="{DynamicResource TitleTextPrimary}"
+                                            ToolTip="Settings"
+                                            AutomationProperties.Name="Settings">
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
@@ -95,8 +100,9 @@
                                     </Button>
                                     <Button Command="{Binding OpenTourCommand}"
                                             Style="{DynamicResource controlButton}"
-                                            Tag="{DynamicResource Primary}"
-                                            ToolTip="Take a tour">
+                                            Tag="{DynamicResource TitleTextPrimary}"
+                                            ToolTip="Take a tour"
+                                            AutomationProperties.Name="Take a tour">
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
@@ -105,8 +111,9 @@
                                     </Button>
                                     <Button Command="{Binding OpenDocsCommand}"
                                             Style="{DynamicResource controlButton}"
-                                            Tag="{DynamicResource Primary}"
-                                            ToolTip="Documentation">
+                                            Tag="{DynamicResource TitleTextPrimary}"
+                                            ToolTip="Documentation"
+                                            AutomationProperties.Name="Documentation">
                                         <Path Style="{DynamicResource controlButtonIcon}"
                                               Width="14"
                                               Height="14"
@@ -144,6 +151,7 @@
                                         VerticalAlignment="Center"
                                         Margin="10,0,0,0"
                                         ToolTip="Copy the version"
+                                        AutomationProperties.Name="Copy the version"
                                         Visibility="{Binding HasAppVersion, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding AppVersion}"
                                                FontFamily="{DynamicResource FontMono}"
@@ -215,7 +223,8 @@
                                 Command="{Binding CloseSettingsCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
-                                ToolTip="Close">
+                                ToolTip="Close"
+                                AutomationProperties.Name="Close settings">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
@@ -265,7 +274,8 @@
                                 Command="{Binding CloseResetCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
-                                ToolTip="Close">
+                                ToolTip="Close"
+                                AutomationProperties.Name="Close password reset">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
@@ -334,7 +344,7 @@
                                            VerticalAlignment="Center"
                                            Margin="11,0,0,0"
                                            FontFamily="{DynamicResource FontSans}"
-                                           FontSize="12.5"
+                                           FontSize="13"
                                            Foreground="{DynamicResource BodyTextPrimary}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
@@ -371,7 +381,8 @@
                                         Width="36"
                                         Height="32"
                                         Padding="0"
-                                        ToolTip="Copy password">
+                                        ToolTip="Copy password"
+                                        AutomationProperties.Name="Copy password">
                                     <Path Data="{DynamicResource Copy}"
                                           Style="{DynamicResource lucideIcon}"
                                           Stroke="{DynamicResource SecondaryForeground}"
@@ -397,7 +408,8 @@
                                         Width="36"
                                         Height="32"
                                         Padding="0"
-                                        ToolTip="Show QR code">
+                                        ToolTip="Show QR code"
+                                        AutomationProperties.Name="Show QR code">
                                     <Path Data="{DynamicResource QrCode}"
                                           Style="{DynamicResource lucideIcon}"
                                           Stroke="{DynamicResource SecondaryForeground}"
@@ -407,6 +419,14 @@
                                 </Button>
                             </ContentControl>
                         </Grid>
+                        <!-- The rule the field failed, inline, so the red border is never the only carrier. -->
+                        <TextBlock Text="{Binding ResetVm.PasswordError}"
+                                   Style="{DynamicResource TextMeta}"
+                                   Foreground="{DynamicResource AccentRed}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,0"
+                                   AutomationProperties.LiveSetting="Assertive"
+                                   Visibility="{Binding ResetVm.HasPasswordError, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                     <!-- Good Defaults: a temp password should force a change at next logon. -->
                     <CheckBox Grid.Row="3"
@@ -468,7 +488,8 @@
                                 Command="{Binding CloseQrCommand}"
                                 Style="{DynamicResource controlButtonCardClose}"
                                 Tag="{DynamicResource Destructive}"
-                                ToolTip="Close">
+                                ToolTip="Close"
+                                AutomationProperties.Name="Close QR code">
                             <Path Style="{DynamicResource controlButtonIcon}"
                                   Data="{DynamicResource xMark}" />
                         </Button>
@@ -488,11 +509,9 @@
                     <TextBlock Grid.Row="2"
                                Margin="24,12,24,20"
                                Text="{Binding QrHint}"
-                               FontFamily="{DynamicResource FontSans}"
-                               FontSize="11"
+                               Style="{DynamicResource TextCaption}"
                                TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource BodyTextTertiary}" />
+                               TextWrapping="Wrap" />
                 </Grid>
             </Border>
         </Grid>
@@ -523,7 +542,7 @@
                     <TextBlock x:Name="tourTitle" Text="Welcome"
                                Style="{DynamicResource TextTitle}" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <TextBlock x:Name="tourBody" Text=""
-                               FontFamily="{DynamicResource FontSans}" FontSize="13.5"
+                               FontFamily="{DynamicResource FontSans}" FontSize="14"
                                Foreground="{DynamicResource BodyTextPrimary}" TextWrapping="Wrap" Margin="0,0,0,14" />
                     <Grid>
                         <!-- TourPresenter fills the dots at runtime. -->
@@ -531,11 +550,11 @@
                                     HorizontalAlignment="Left" VerticalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button x:Name="btnTourSkip" Content="Skip Tour" Style="{DynamicResource ButtonGhost}"
-                                    FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                                    Height="32" Margin="0,0,8,0" />
                             <Button x:Name="btnTourBack" Content="Back" Style="{DynamicResource ButtonOutline}"
-                                    FontSize="12.5" Height="32" Margin="0,0,8,0" />
+                                    Height="32" Margin="0,0,8,0" />
                             <Button x:Name="btnTourNext" Content="Next" Style="{DynamicResource ButtonTintPrimary}"
-                                    FontSize="12.5" Height="32" MinWidth="72" />
+                                    Height="32" MinWidth="72" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -553,22 +572,19 @@
                  before the item is removed. -->
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
+                    <!-- Two carriers of the accent (bar and title), and a live region for readers. -->
                     <Border x:Name="card"
-                            BorderBrush="{Binding Accent}" BorderThickness="1"
+                            BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
                             CornerRadius="10" Margin="0,0,0,10" Cursor="Hand"
-                            Opacity="0">
+                            AutomationProperties.LiveSetting="Polite">
                         <Border.Background>
                             <!-- Arcane surface at 92% opacity gives the glass toast look. -->
                             <SolidColorBrush Color="{DynamicResource SurfaceSolidColor}"
                                              Opacity="0.92" />
                         </Border.Background>
                         <Border.RenderTransform>
-                            <TranslateTransform x:Name="slide" X="40" />
+                            <TranslateTransform x:Name="slide" X="0" />
                         </Border.RenderTransform>
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="18" ShadowDepth="0" Opacity="0.55"
-                                              Color="{Binding AccentColor}" />
-                        </Border.Effect>
                         <Border.InputBindings>
                             <MouseBinding MouseAction="LeftClick" Command="{Binding DismissCommand}" />
                         </Border.InputBindings>
@@ -583,31 +599,45 @@
                                            FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TitleTextTertiary}"
-                                           FontFamily="{DynamicResource FontSans}" FontSize="12.5" TextWrapping="Wrap"
+                                           FontFamily="{DynamicResource FontSans}" FontSize="13" TextWrapping="Wrap"
                                            Margin="0,4,0,0"
                                            Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
                             </StackPanel>
                         </Grid>
                     </Border>
                     <DataTemplate.Triggers>
-                        <EventTrigger RoutedEvent="FrameworkElement.Loaded" SourceName="card">
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <DoubleAnimation Storyboard.TargetName="card"
-                                                     Storyboard.TargetProperty="Opacity"
-                                                     From="0" To="1" Duration="0:0:0.2" />
-                                    <DoubleAnimation Storyboard.TargetName="slide"
-                                                     Storyboard.TargetProperty="X"
-                                                     From="40" To="0" Duration="0:0:0.22">
-                                        <DoubleAnimation.EasingFunction>
-                                            <QuadraticEase EasingMode="EaseOut" />
-                                        </DoubleAnimation.EasingFunction>
-                                    </DoubleAnimation>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </EventTrigger>
-                        <DataTrigger Binding="{Binding IsClosing}" Value="True">
-                            <DataTrigger.EnterActions>
+                        <!-- Both storyboards wait on the OS animation setting, so a reduced-motion
+                             user gets an instant show and hide. -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Source={x:Static SystemParameters.ClientAreaAnimation}}"
+                                           Value="True" />
+                                <Condition Binding="{Binding IsClosing}" Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <MultiDataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="card"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="0" To="1" Duration="0:0:0.2" />
+                                        <DoubleAnimation Storyboard.TargetName="slide"
+                                                         Storyboard.TargetProperty="X"
+                                                         From="40" To="0" Duration="0:0:0.22">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiDataTrigger.EnterActions>
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Source={x:Static SystemParameters.ClientAreaAnimation}}"
+                                           Value="True" />
+                                <Condition Binding="{Binding IsClosing}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <MultiDataTrigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="card"
@@ -618,8 +648,8 @@
                                                          To="40" Duration="0:0:0.18" />
                                     </Storyboard>
                                 </BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                        </DataTrigger>
+                            </MultiDataTrigger.EnterActions>
+                        </MultiDataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

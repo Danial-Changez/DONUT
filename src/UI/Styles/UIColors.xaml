@@ -30,9 +30,6 @@
     <Color x:Key="AccentRedColor"> #F87171</Color>
     <SolidColorBrush x:Key="AccentRed"
                      Color="{StaticResource AccentRedColor}" />
-    <Color x:Key="AccentBlueLightColor"> #93C5FD</Color>
-    <SolidColorBrush x:Key="AccentBlueLight"
-                     Color="{StaticResource AccentBlueLightColor}" />
     <Color x:Key="AccentPurpleLightColor"> #C4B5FD</Color>
     <SolidColorBrush x:Key="AccentPurpleLight"
                      Color="{StaticResource AccentPurpleLightColor}" />
@@ -116,9 +113,8 @@
     <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
     <SolidColorBrush x:Key="InputBorder"
                      Color="{StaticResource InputBorderColor}" />
-    <!-- Font tokens. Geist Mono is embedded under ./Fonts (OFL) and covers code and logs.
-         Composite families fall through per glyph, so a missing font degrades quietly. -->
-    <FontFamily x:Key="FontSans">Montserrat, Segoe UI</FontFamily>
+    <!-- Geist and Geist Mono are embedded under ./Fonts (OFL), the docs site's own families. -->
+    <FontFamily x:Key="FontSans">./Fonts/#Geist, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">./Fonts/#Geist Mono, Cascadia Mono, Consolas</FontFamily>
     <!-- Status glyphs (checkmarks, arrows) pin a symbol font so they never render as tofu. -->
     <FontFamily x:Key="FontSymbol">Segoe UI Symbol</FontFamily>

@@ -9,10 +9,10 @@ always see what will be installed before anything changes.
 ## Run an apply
 
 1. Click the mode pill until it shows **Apply Updates**.
-2. Click **Run** on a machine (or **Run All** — a single confirmation lists every
-   target first).
+2. Click **Run** on a machine (or **Run All**, where a single confirmation lists
+   every target first).
 3. Confirm. The dialog names the count and warns that **BIOS and firmware
-   installs cannot be rolled back** — the one part of an apply you cannot undo.
+   installs cannot be rolled back**, the one part of an apply you cannot undo.
 4. DONUT reuses a [fresh scan](./scanning.md#scan-results-are-reused-for-24-hours)
    (less than 24 hours old) or runs one, then shows a **per-host confirmation** with
    the update list. Confirm to apply; decline to skip that host.
@@ -30,7 +30,7 @@ The updates list is also copied to the clipboard for pasting into tickets.
 
 ## Network drops
 
-If you disconnect while updates are running, the remote updates continue — you only
+If you disconnect while updates are running, the remote updates continue. You only
 lose the live feed. DONUT keeps trying to reconnect and resume the log tail for
 [`recoveryWindowMinutes`](../configuration/config-reference.md) (default 30) before
 settling the row as *Unconfirmed*.

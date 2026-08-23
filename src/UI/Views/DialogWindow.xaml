@@ -104,7 +104,8 @@
                         Height="36"
                         Style="{DynamicResource controlButton}"
                         Tag="{DynamicResource Destructive}"
-                        ToolTip="Close">
+                        ToolTip="Close"
+                        AutomationProperties.Name="Close">
                     <Path Style="{DynamicResource controlButtonIcon}"
                           Data="{DynamicResource xMark}" />
                 </Button>
@@ -164,26 +165,27 @@
                                     VerticalAlignment="Center">
                             <TextBlock Text="{Binding VersionFrom}"
                                        FontFamily="{DynamicResource FontMono}"
-                                       FontSize="15"
+                                       FontSize="16"
                                        Foreground="{DynamicResource BodyTextSecondary}" />
                             <TextBlock Text="&#x2192;"
                                        FontFamily="{DynamicResource FontMono}"
-                                       FontSize="15"
+                                       FontSize="16"
                                        Foreground="{DynamicResource BodyTextPrimary}"
                                        Margin="7,0,7,0" />
                             <TextBlock Text="{Binding VersionTo}"
                                        FontFamily="{DynamicResource FontMono}"
-                                       FontSize="15"
+                                       FontSize="16"
                                        Foreground="{DynamicResource TitleTextPrimary}" />
                         </StackPanel>
                         <TextBlock HorizontalAlignment="Right"
                                    VerticalAlignment="Center"
                                    FontFamily="{DynamicResource FontSans}"
-                                   FontSize="12.5"
+                                   FontSize="13"
                                    Visibility="{Binding HasReleaseUrl, Converter={StaticResource BoolToVis}}">
                             <Hyperlink x:Name="linkRelease"
                                        NavigateUri="{Binding ReleaseUrl}"
                                        Foreground="{DynamicResource AccentPurpleLight}"
+                                       FocusVisualStyle="{DynamicResource FocusRingVisual}"
                                        TextDecorations="None">
                                 <TextBlock Text="{Binding ReleaseLinkText}" />
                             </Hyperlink>

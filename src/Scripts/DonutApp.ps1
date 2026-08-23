@@ -96,6 +96,7 @@ try {
             if ($spawn.Ok) {
                 $logger.LogInfo('Relaunching elevated; this instance is exiting before it builds anything.')
                 Close-Splash
+                Clear-InstanceLock
                 return
             }
             # runAsAdmin stays unwritten: one declined prompt must not demote DONUT.
@@ -210,6 +211,7 @@ try {
 
 } catch {
     Close-Splash
+    Clear-InstanceLock
     if ($null -ne $logger) { $logger.LogException("Error starting Donut", $_) }
     [System.Windows.Forms.MessageBox]::Show(
         "DONUT could not start. Open the log for the full run.`n`n$_", 'DONUT')

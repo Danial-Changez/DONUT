@@ -12,8 +12,8 @@ the surrounding code.
 ## Comments
 
 **Comments explain *why*, never *what*.** A comment earns its place only by stating
-something the code cannot show — a constraint, a hazard, a protocol quirk, or a
-decision that would otherwise be re-litigated:
+something the code cannot show: a constraint, a hazard, a protocol quirk, or a
+decision that would otherwise be re-litigated.
 
 ```powershell
 # WaitHandle.WaitAll throws on an STA thread, so wait per-handle with WaitOne.
@@ -36,7 +36,7 @@ introduces a whole unit:
 
 Anything needing more room is documentation, not a comment: put it in the file's
 `.NOTES` block or a page under `docs/`, and reference it inline (`see .NOTES`).
-Deleting a comment is always an option — one that only narrates the next line has
+Deleting a comment is always an option. One that only narrates the next line has
 no claim to the space.
 
 **No semicolons or dashes as connectors.** Use "and", a comma, or a second
@@ -57,7 +57,7 @@ than the prose it replaces. It is not a licence to write more.
 - Every module and entry script opens with comment-based help: `.SYNOPSIS`,
   `.DESCRIPTION`, and `.NOTES` for cross-cutting constraints.
 - Every class and non-trivial public method gets a brief `#` doc comment stating
-  its contract — what the signature can't show, never a restatement of the name.
+  its contract: what the signature can't show, never a restatement of the name.
   Trivial getters/setters need none.
 - Fields get a short trailing comment only when the type/name doesn't already say
   it (units, ownership, lifetime).
@@ -65,9 +65,9 @@ than the prose it replaces. It is not a licence to write more.
 **Layout:**
 
 - Comments wrap at ~90 columns (hard cap 100).
-- Sentence case; capitalize acronyms (`DCU`, `SMB`, `UNC`). No all-caps emphasis —
-  if a point needs stress, say why instead.
-- Plain sentences: no informal jargon ("gotcha", "hack") — name the actual
+- Sentence case; capitalize acronyms (`DCU`, `SMB`, `UNC`). No all-caps emphasis.
+  If a point needs stress, say why instead.
+- Plain sentences: no informal jargon ("gotcha", "hack"). Name the actual
   constraint.
 - ASCII only, and never emojis. Non-ASCII in string literals is a product
   decision, not a style one.
@@ -77,7 +77,7 @@ than the prose it replaces. It is not a licence to write more.
 
 - No trailing whitespace; spaces around operators.
 - Comments inside remote-script here-string templates (e.g.
-  `InventoryService::BuildProbeScript`) are part of the shipped payload — edit
+  `InventoryService::BuildProbeScript`) are part of the shipped payload. Edit
   them only deliberately, never in a style sweep.
 
 ## C# (`src/Launcher/`)
@@ -88,8 +88,8 @@ scoped to the public API:
 - **Public types and non-trivial public members** get a `<summary>` stating the
   contract. `<param>`/`<returns>`/`<exception>` only where they carry something the
   signature doesn't; `<remarks>` for cross-cutting notes.
-- **Trivial members need none** — leave undocumented rather than restate the name.
-- **Internal/private members are not API** — a plain `//` for the why, no `///`.
+- **Trivial members need none.** Leave undocumented rather than restate the name.
+- **Internal/private members are not API.** A plain `//` for the why, no `///`.
 - **Interface implementations** use `/// <inheritdoc/>`.
 - Nullable reference types are on; annotate honestly so the compiler stays quiet.
 - WinForms custom controls mark code-only public properties
@@ -110,7 +110,7 @@ block. CI runs the same command with `--verify-no-changes`. Lines stay under 120
 
 The same rule, measured across a whole `<!-- -->` span: one line, and two only for
 a file header or a comment introducing an element or a section of a resource
-dictionary. A comment restating a style's own `x:Key` earns nothing — delete it.
+dictionary. A comment restating a style's own `x:Key` earns nothing; delete it.
 The user-facing text those files carry has its own rules in
 [UI reference](./ui-reference.md#writing-ui-text).
 
@@ -189,7 +189,7 @@ type that needs adding to the filter in `Invoke-Lint.ps1`.
   Pester's `Should` is exempt: its switches are assertion operators, not
   parameters, and `Should -Not -BeNullOrEmpty -Because '...'` reads as a sentence.
 - **DonutFunctionSize** (Information, report only): a function or method past
-  clang-tidy's `readability-function-size` limits — 150 lines or 100 statements — or
+  clang-tidy's `readability-function-size` limits (150 lines or 100 statements), or
   past 20 branches (every `if`/`elseif`/`else`, `switch` case, loop and `catch`) or
   five nested blocks. Reported, never gated: the handful of known hotspots
   (`Resolve-Lens`, `MainPresenter.Initialize`, `HomePresenter.OnJobCompleted`,

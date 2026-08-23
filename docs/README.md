@@ -1,6 +1,6 @@
 # DONUT Documentation
 
-**Read these docs as a website: <https://danial-changez.github.io/DONUT/>** — built
+**Read these docs as a website: <https://danial-changez.github.io/DONUT/>**, built
 from this folder by Astro Starlight (`web/`) and deployed on every push to
 `main`. For the everyday recipes (edit/add a page, update a diagram) see
 [Maintaining this site](development/maintaining-the-site.md).

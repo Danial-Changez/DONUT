@@ -95,9 +95,8 @@
         <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid>
-                <TextBlock Text="{Binding HeaderText}" FontFamily="{DynamicResource FontSans}" FontSize="10"
-                           FontWeight="SemiBold" Foreground="{DynamicResource BodyTextTertiary}"
-                           Margin="6,6,0,4">
+                <TextBlock Text="{Binding HeaderText}" Style="{DynamicResource TextCaption}"
+                           FontWeight="SemiBold" Margin="6,6,0,4">
                   <TextBlock.Style>
                     <Style TargetType="TextBlock">
                       <Setter Property="Visibility" Value="Collapsed" />
@@ -146,12 +145,11 @@
                       <TextBlock Text="{Binding Primary}" FontFamily="{DynamicResource FontSans}" FontSize="13"
                                  Foreground="{DynamicResource TitleTextPrimary}" TextTrimming="CharacterEllipsis"
                                  ToolTip="{Binding Primary}" />
-                      <TextBlock Text="{Binding Secondary}" FontFamily="{DynamicResource FontSans}" FontSize="11"
-                                 Foreground="{DynamicResource BodyTextTertiary}" Margin="0,1,0,0"
+                      <TextBlock Text="{Binding Secondary}" Style="{DynamicResource TextCaption}" Margin="0,1,0,0"
                                  TextTrimming="CharacterEllipsis" ToolTip="{Binding Secondary}" />
                     </StackPanel>
                     <!-- Grey stays neutral so Unlock keeps the row's one tint. -->
-                    <Button Grid.Column="1" Content="Reset..." Command="{Binding ResetCommand}"
+                    <Button Grid.Column="1" Content="Reset…" Command="{Binding ResetCommand}"
                             Style="{DynamicResource ButtonSecondary}" Height="32" FontSize="11"
                             VerticalAlignment="Center" Margin="0,0,6,0"
                             ToolTip="Set a temporary password"

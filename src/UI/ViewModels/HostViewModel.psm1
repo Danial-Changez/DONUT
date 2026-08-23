@@ -54,6 +54,7 @@ class HostViewModel : ObservableObject {
     # Detail-header and overview bindables, mirrored via SelectedMachine.* from inventory.
     [string] $DetailTitle = ''
     [string] $DetailIp = ''   # resolved IP under the hostname (freshness lives on the card)
+    [string] $OvUptime = ''   # beside the IP, since uptime is a liveness fact, not a disk one
     [string] $OvModel = '—'
     [string] $OvModelSub = 'double-click to gather inventory'
     [string] $OvModelSubValue = ''     # the tag or hostname alone, without the "Tag " prefix
@@ -164,7 +165,8 @@ class HostViewModel : ObservableObject {
                 } else { '' }))
 
         $this.Set('OvDisk', [InventoryFormat]::DiskFreeLabel($inv.FreeSpaceBytes, $inv.TotalSpaceBytes))
-        $this.Set('OvDiskSub', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
+        $this.Set('OvDiskSub', [InventoryFormat]::DiskTotalLabel($inv.TotalSpaceBytes))
+        $this.Set('OvUptime', [InventoryFormat]::UptimeLabel([TimeFormat]::ParseIso($inv.LastBootTime)))
     }
 
     # Sets the header subtitle to the resolved IP, since the card already shows freshness.

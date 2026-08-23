@@ -81,10 +81,15 @@
                                 HorizontalAlignment="Left" />
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <!-- Indeterminate is full width in WPF, so pulse instead. -->
-                        <Trigger Property="IsIndeterminate"
-                                 Value="True">
-                            <Trigger.EnterActions>
+                        <!-- Indeterminate is full width in WPF, so pulse instead, unless the OS has animations off. -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsIndeterminate, RelativeSource={RelativeSource TemplatedParent}}"
+                                           Value="True" />
+                                <Condition Binding="{Binding Source={x:Static SystemParameters.ClientAreaAnimation}}"
+                                           Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <MultiDataTrigger.EnterActions>
                                 <BeginStoryboard x:Name="pulse">
                                     <Storyboard RepeatBehavior="Forever"
                                                 AutoReverse="True">
@@ -95,11 +100,11 @@
                                                          Duration="0:0:0.6" />
                                     </Storyboard>
                                 </BeginStoryboard>
-                            </Trigger.EnterActions>
-                            <Trigger.ExitActions>
+                            </MultiDataTrigger.EnterActions>
+                            <MultiDataTrigger.ExitActions>
                                 <StopStoryboard BeginStoryboardName="pulse" />
-                            </Trigger.ExitActions>
-                        </Trigger>
+                            </MultiDataTrigger.ExitActions>
+                        </MultiDataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

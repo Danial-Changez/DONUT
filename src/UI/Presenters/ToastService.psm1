@@ -49,14 +49,12 @@ class ToastService {
     }
 
     # Builds and enqueues a toast. colorKey is a UIColors resource key used for the
-    # accent bar, border, title and glow, and durationMs is the auto-dismiss delay.
+    # accent bar and title, and durationMs is the auto-dismiss delay.
     [void] Show([string]$title, [string]$message, [string]$colorKey, [int]$durationMs) {
         if ($null -eq $this.HostControl) { return }
 
         $accent = $this.ResolveBrush($colorKey, [Colors]::White)
-        $accentColor = if ($accent -is [SolidColorBrush]) { $accent.Color } else { [Colors]::White }
-
-        $toast = [ToastViewModel]::new($title, $message, $accent, $accentColor)
+        $toast = [ToastViewModel]::new($title, $message, $accent)
 
         $svc = $this
         $dismiss = { param($p) $svc.Dismiss($toast) }.GetNewClosure()
@@ -73,15 +71,17 @@ class ToastService {
         $timer.Start()
     }
 
-    # Plays the exit animation (IsClosing DataTrigger), then removes the item.
+    # Plays the exit animation (IsClosing DataTrigger), then removes the item. With OS
+    # animations off the template shows nothing, so the item goes on the next tick.
     [void] Dismiss([object]$toast) {
         if ($null -eq $toast -or -not $this.Items.Contains($toast)) { return }
         if ($toast.IsClosing) { return }   # already on its way out
         $toast.Close()
 
         $svc = $this
+        $animates = [System.Windows.SystemParameters]::ClientAreaAnimation
         $reaper = [DispatcherTimer]::new()
-        $reaper.Interval = [TimeSpan]::FromMilliseconds($this.ExitAnimationMs)
+        $reaper.Interval = [TimeSpan]::FromMilliseconds($(if ($animates) { $this.ExitAnimationMs } else { 1 }))
         $reaper.Add_Tick({
                 $reaper.Stop()
                 if ($svc.Items.Contains($toast)) { [void]$svc.Items.Remove($toast) }

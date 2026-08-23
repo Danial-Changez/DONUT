@@ -36,6 +36,8 @@ export default defineConfig({
       // The wordmark already spells DONUT, so it replaces the text title.
       logo: { src: './src/assets/logo.png', alt: 'DONUT', replacesTitle: true },
       favicon: '/favicon.ico',
+      // The browser chrome matches the page ground (the site is dark-only).
+      head: [{ tag: 'meta', attrs: { name: 'theme-color', content: '#0a0a0a' } }],
       social: [{ icon: 'github', label: 'GitHub', href: repo }],
       customCss: [
         '@fontsource/geist-sans/400.css',

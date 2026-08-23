@@ -18,7 +18,7 @@ The tray icon is always present while DONUT runs:
 ## Global hotkey
 
 The global hotkey (default **`Ctrl+Alt+D`**) shows or restores DONUT from anywhere
-in Windows. Record a different combo — or clear it to disable — in
+in Windows. Record a different combo, or clear it to disable, in
 [Settings](./settings.md). If another app already owns the combo, DONUT warns and
 keeps running without it.
 
@@ -29,7 +29,7 @@ hidden in the tray when you sign in; turning it off unregisters it. Launching DO
 again (from the Start Menu, say) just surfaces the running instance.
 
 Turning the toggle on needs administrator rights. If DONUT doesn't have them yet,
-it prompts, restarts, and registers the task on the way back — you don't flip the
+it prompts, restarts, and registers the task on the way back. You don't flip the
 switch twice.
 
 What you get at sign-in depends on your account:

@@ -49,6 +49,12 @@ if (-not $global:SingleInstanceOwned) {
     $createdNew = $false
     $global:DonutInstanceMutex = [System.Threading.Mutex]::new(
         $true, 'Local\DONUT.SingleInstance', [ref]$createdNew)
+    # A successor waits for the lock itself: the predecessor may be an interactive shell
+    # that released it on its way out but never exits.
+    if (-not $createdNew -and $AwaitPid -gt 0) {
+        try { $createdNew = $global:DonutInstanceMutex.WaitOne(15000) }
+        catch [System.Threading.AbandonedMutexException] { $createdNew = $true }
+    }
     if (-not $createdNew) {
         # Another instance is running: ask it to surface its window, then exit quietly.
         try {
@@ -56,7 +62,19 @@ if (-not $global:SingleInstanceOwned) {
             [void]$evt.Set()
             $evt.Dispose()
         } catch { }
+        $global:DonutInstanceMutex.Dispose()
+        $global:DonutInstanceMutex = $null
         exit 0
+    }
+}
+
+# Every path that ends this script without the window up calls this, because under an
+# interactive host the process, and with it the lock, outlives the script.
+function Clear-InstanceLock {
+    if ($global:DonutInstanceMutex) {
+        try { $global:DonutInstanceMutex.ReleaseMutex() } catch { }
+        try { $global:DonutInstanceMutex.Dispose() } catch { }
+        $global:DonutInstanceMutex = $null
     }
 }
 
@@ -184,6 +202,7 @@ try {
     try { Add-Content -Path $crashFile -Value $record -Encoding UTF8 } catch { }
 
     Write-Error "DONUT failed to start: $errMsg`nCrash log: $crashFile"
+    Clear-InstanceLock
 
     # Skip the modal on the unattended tray path so a headless failure cannot hang.
     if (-not $Tray) {
