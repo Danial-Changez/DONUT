@@ -48,10 +48,11 @@ jobs:
       # Every shard reports, and a shard is a whole process: the analyzer session
       # stays serial (splitting one session changes its findings, see the tool's
       # notes), so the parallelism lives between runners, never inside a session.
-      # tests is the heavy shard (83s locally vs 44 for src and 31 for tools).
+      # Cut so no shard outruns the Unit test job, the floor of the whole run:
+      # locally Unit is 69s of tests' 83, src 44, tools 31, the rest under 20.
       fail-fast: false
       matrix:
-        scope: [src, tests, tools]
+        scope: ['src', 'tests/Unit', 'tests/Integration tests/Helpers', 'tools']
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,6 +72,15 @@ jobs:
       - name: Lint
         shell: pwsh
         run: |
+          $roots = '${{ matrix.scope }}' -split ' '
+          # The first shard also proves no tests file escaped the shard list.
+          if ($roots[0] -eq 'src') {
+              $shards = 'tests/Unit', 'tests/Integration', 'tests/Helpers'
+              $stray = @(git ls-files 'tests/*.ps1' 'tests/*.psm1' | Where-Object {
+                      $f = $_; -not ($shards | Where-Object { $f -like "$_/*" })
+                  })
+              if ($stray) { throw "Not covered by any lint shard: $($stray -join ', ')" }
+          }
           $full = '${{ github.event_name }}' -ne 'pull_request'
           $changed = @()
           if (-not $full) {
@@ -79,9 +89,13 @@ jobs:
               if ($changed -match $ruleFiles) { $full = $true }
           }
           if ($full) {
-              ./tools/Invoke-Lint.ps1 -FailOn Warning -Path '${{ matrix.scope }}'
+              ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $roots
           } else {
-              $files = @($changed | Where-Object { $_ -match '\.(ps1|psm1)$' -and $_ -like '${{ matrix.scope }}/*' -and (Test-Path $_) })
+              $files = @($changed | Where-Object {
+                      $f = $_
+                      $f -match '\.(ps1|psm1)$' -and (Test-Path $f) -and
+                      ($roots | Where-Object { $f -like "$_/*" })
+                  })
               Write-Host "PR scope (${{ matrix.scope }}): $($files.Count) changed PowerShell file(s)."
               ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $files
           }
