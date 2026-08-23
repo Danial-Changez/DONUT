@@ -5,14 +5,11 @@
     <Border Style="{DynamicResource Card}"
             Margin="0,0,0,12">
         <StackPanel>
-            <TextBlock Text="FLAGS"
+            <TextBlock Text="Flags"
                        Style="{DynamicResource SettingsSectionLabel}" />
-            <StackPanel Orientation="Horizontal">
-                <ToggleButton x:Name="silent"
-                              Style="{DynamicResource ModernToggleSwitch}" />
-                <TextBlock Text="Silent"
-                           Style="{DynamicResource SettingsToggleLabel}" />
-            </StackPanel>
+            <ToggleButton x:Name="silent"
+                          Content="Silent"
+                          Style="{DynamicResource ModernToggleSwitch}" />
         </StackPanel>
     </Border>
     <!-- SettingsPresenter fills this with the shared UpdateOptionsView. -->
@@ -22,7 +19,7 @@
                     IsTabStop="False" />
     <Border Style="{DynamicResource Card}">
         <StackPanel>
-            <TextBlock Text="TEXT OPTIONS"
+            <TextBlock Text="Text Options"
                        Style="{DynamicResource SettingsSectionLabel}" />
             <StackPanel Margin="0,0,0,10">
                 <TextBlock Text="Output Log"

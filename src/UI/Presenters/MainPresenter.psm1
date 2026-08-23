@@ -718,6 +718,7 @@ class MainPresenter {
     hidden [void] ClearResetError() {
         $box = $this.Window.FindName('resetPasswordBox')
         if ($box) { $box.Tag = $null }
+        if ($this.ResetVm) { $this.ResetVm.SetPasswordError('') }
     }
 
     hidden [void] OnGeneratePassword() {
@@ -752,10 +753,7 @@ class MainPresenter {
         if ($plain.Length -lt 8) {
             $box = $this.Window.FindName('resetPasswordBox')
             if ($box) { $box.Tag = 'error' }
-            if ($this.ToastService) {
-                $this.ToastService.ShowWarning('Reset Password',
-                    'Use at least 8 characters, or select Generate.')
-            }
+            $vm.SetPasswordError('Use at least 8 characters, or select Generate.')
             return
         }
         $this.ClearResetError()

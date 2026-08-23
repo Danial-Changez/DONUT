@@ -68,7 +68,7 @@ public sealed class SplashForm : Form {
         _pct = new Label {
             Text = "",
             ForeColor = Violet,
-            Font = new Font("Consolas", 10.5f),
+            Font = new Font("Cascadia Mono", 10.5f),
             TextAlign = ContentAlignment.MiddleRight,
             Bounds = new Rectangle(286, 240, 90, 20),
             BackColor = Color.Transparent,

@@ -29,17 +29,26 @@ Describe "InventoryFormat" {
     }
 
     Context "DiskFreeLabel" {
-        It "Formats free/total in GB" {
-            [InventoryFormat]::DiskFreeLabel(42949672960, 274877906944) | Should -Be '40 GB free of 256 GB'
+        It "Formats free space in GB as the headline" {
+            [InventoryFormat]::DiskFreeLabel(42949672960, 274877906944) | Should -Be '40 GB free'
         }
         It "Returns a dash when total is unknown" {
             [InventoryFormat]::DiskFreeLabel(0, 0) | Should -Be '—'
         }
     }
 
+    Context "DiskTotalLabel" {
+        It "Formats the total as the sub-line" {
+            [InventoryFormat]::DiskTotalLabel(274877906944) | Should -Be 'of 256 GB'
+        }
+        It "Is empty when total is unknown, so the line collapses" {
+            [InventoryFormat]::DiskTotalLabel(0) | Should -Be ''
+        }
+    }
+
     Context "UptimeLabel" {
-        It "Returns a dash for an unknown boot time" {
-            [InventoryFormat]::UptimeLabel([datetime]::MinValue) | Should -Be '—'
+        It "Is empty for an unknown boot time, so the header line collapses" {
+            [InventoryFormat]::UptimeLabel([datetime]::MinValue) | Should -Be ''
         }
         It "Phrases multi-day uptime" {
             [InventoryFormat]::UptimeLabel([datetime]::UtcNow.AddDays(-3)) | Should -BeLike 'up 3 day*'

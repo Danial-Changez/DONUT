@@ -4,6 +4,8 @@
            TargetType="Button">
         <Setter Property="Width"
                 Value="50" />
+        <Setter Property="FocusVisualStyle"
+                Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="Foreground"
@@ -47,7 +49,7 @@
         </Setter>
     </Style>
     <!-- Arcane button system, ported from getarcaneapp/arcane at its 14px root scale.
-         Shared: radius 8.4, height 32, padding 14, 12.5px medium, disabled opacity 0.5. -->
+         Shared: radius 8.4, height 32, padding 14, 13px medium, disabled opacity 0.5. -->
     <Style x:Key="ButtonBase"
            TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
@@ -58,7 +60,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Template">
             <Setter.Value>
@@ -200,6 +202,7 @@
         <Setter Property="Opacity" Value="0.4" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="ToolTip" Value="Copy" />
+        <Setter Property="AutomationProperties.Name" Value="Copy" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource FocusRingVisual}" />
         <Setter Property="Template">
             <Setter.Value>

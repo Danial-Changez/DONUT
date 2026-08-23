@@ -52,15 +52,17 @@
                             Height="36"
                             Style="{DynamicResource controlButton}"
                             Tag="{DynamicResource Destructive}"
-                            ToolTip="Close">
+                            ToolTip="Close"
+                            AutomationProperties.Name="Close">
                         <Path Style="{DynamicResource controlButtonIcon}"
                               Data="{DynamicResource xMark}" />
                     </Button>
                     <Button x:Name="btnMinimize"
                             Height="36"
                             Style="{DynamicResource controlButton}"
-                            Tag="{DynamicResource AccentBlueLight}"
-                            ToolTip="Minimize">
+                            Tag="{DynamicResource TitleTextPrimary}"
+                            ToolTip="Minimize"
+                            AutomationProperties.Name="Minimize">
                         <Path Style="{DynamicResource controlButtonIcon}"
                               Width="13"
                               StrokeThickness="1.08"
@@ -105,18 +107,18 @@
                   Margin="24,16,24,20">
                 <TextBlock VerticalAlignment="Center"
                            FontFamily="{DynamicResource FontSans}"
-                           FontSize="11.5"
+                           FontSize="12"
                            Foreground="{DynamicResource TitleTextSecondary}">
                     <Run Text="New to GitHub? " />
                     <Hyperlink x:Name="AccessLink"
                                NavigateUri="https://github.com/signup"
                                Foreground="{DynamicResource AccentPurpleLight}"
+                               FocusVisualStyle="{DynamicResource FocusRingVisual}"
                                TextDecorations="None">Create an account</Hyperlink>
                 </TextBlock>
                 <Button Command="{Binding AuthCommand}"
                         Content="Sign in with GitHub"
                         Style="{DynamicResource ButtonTintPrimary}"
-                        FontSize="12.5"
                         Height="32"
                         MinWidth="150"
                         HorizontalAlignment="Right" />

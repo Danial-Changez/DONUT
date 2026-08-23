@@ -78,19 +78,26 @@ class InventoryFormat {
         return "$healthPct% health"
     }
 
-    # Free and total disk on C: as GB. The em-dash placeholder when total is unknown.
+    # Free disk on C: as GB, the tile's headline. The em-dash placeholder when total is unknown.
     static [string] DiskFreeLabel([double]$freeBytes, [double]$totalBytes) {
         if ($totalBytes -le 0) { return '—' }
-        $gb = 1073741824.0   # 1024^3
-        $free = [Math]::Round($freeBytes / $gb, 1)
-        $total = [Math]::Round($totalBytes / $gb, 1)
-        $ci = [System.Globalization.CultureInfo]::InvariantCulture
-        return "$($free.ToString($ci)) GB free of $($total.ToString($ci)) GB"
+        return "$([InventoryFormat]::Gb($freeBytes)) GB free"
     }
 
-    # Uptime from the last boot time. The em-dash placeholder for an unknown boot.
+    # Total disk on C: as GB, the tile's sub-line. Empty when total is unknown.
+    static [string] DiskTotalLabel([double]$totalBytes) {
+        if ($totalBytes -le 0) { return '' }
+        return "of $([InventoryFormat]::Gb($totalBytes)) GB"
+    }
+
+    hidden static [string] Gb([double]$bytes) {
+        $gb = 1073741824.0   # 1024^3
+        return [Math]::Round($bytes / $gb, 1).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }
+
+    # Uptime from the last boot time. Empty for an unknown boot, so the header line collapses.
     static [string] UptimeLabel([datetime]$lastBoot) {
-        if ($lastBoot -eq [datetime]::MinValue) { return '—' }
+        if ($lastBoot -eq [datetime]::MinValue) { return '' }
         $bootUtc = if ($lastBoot.Kind -eq [System.DateTimeKind]::Utc) { $lastBoot }
         else { $lastBoot.ToUniversalTime() }
         $span = [datetime]::UtcNow - $bootUtc

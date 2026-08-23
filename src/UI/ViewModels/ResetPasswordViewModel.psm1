@@ -19,6 +19,8 @@ class ResetPasswordViewModel : ObservableObject {
     [string] $TargetUpn = ''
     [string] $DisplayName = ''
     [string] $Password = ''
+    [string] $PasswordError = ''          # the rule the field failed, shown under it
+    [bool]   $HasPasswordError = $false
     [bool]   $ChangeAtLogon = $true       # Good Defaults: temp passwords force a change
     [bool]   $IsBusy = $false
     [object] $GenerateCommand
@@ -42,5 +44,12 @@ class ResetPasswordViewModel : ObservableObject {
 
     [void] ClearSecrets() {
         $this.Set('Password', '')
+        $this.SetPasswordError('')
+    }
+
+    # An empty message clears the error; HasPasswordError is what the view collapses on.
+    [void] SetPasswordError([string]$message) {
+        $this.Set('PasswordError', [string]$message)
+        $this.Set('HasPasswordError', -not [string]::IsNullOrWhiteSpace($message))
     }
 }

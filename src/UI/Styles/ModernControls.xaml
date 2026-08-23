@@ -13,7 +13,7 @@
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="13.5" />
+                Value="14" />
         <Setter Property="BorderThickness"
                 Value="0" />
         <Setter Property="HorizontalAlignment"
@@ -166,7 +166,7 @@
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="19" />
+                Value="18" />
         <Setter Property="FontWeight"
                 Value="SemiBold" />
         <Setter Property="Foreground"
@@ -355,32 +355,19 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Callers hand-uppercase the text, WPF has no casing property. -->
+    <!-- A card heading at the TextSubtitle tier, since an all-caps eyebrow on every card read as noise. -->
     <Style x:Key="SettingsSectionLabel"
            TargetType="TextBlock">
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="11" />
+                Value="14" />
         <Setter Property="FontWeight"
                 Value="SemiBold" />
         <Setter Property="Foreground"
-                Value="{DynamicResource BodyTextPrimary}" />
+                Value="{DynamicResource TitleTextPrimary}" />
         <Setter Property="Margin"
-                Value="0,0,0,10" />
-    </Style>
-    <Style x:Key="SettingsToggleLabel"
-           TargetType="TextBlock">
-        <Setter Property="FontFamily"
-                Value="{DynamicResource FontSans}" />
-        <Setter Property="FontSize"
-                Value="13.5" />
-        <Setter Property="Foreground"
-                Value="{DynamicResource TitleTextSecondary}" />
-        <Setter Property="Margin"
-                Value="12,0,0,0" />
-        <Setter Property="VerticalAlignment"
-                Value="Center" />
+                Value="0,0,0,12" />
     </Style>
     <!-- Margin is left to instances, spacing differs above a textbox and above chips. -->
     <Style x:Key="SettingsFieldLabel"
@@ -388,7 +375,7 @@
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="12.5" />
+                Value="13" />
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextPrimary}" />
     </Style>
@@ -400,7 +387,7 @@
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"
-                Value="12.5" />
+                Value="13" />
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextSecondary}" />
         <Setter Property="Margin"
@@ -640,43 +627,51 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- Content is the label, so switch and label are one hit target with no dead zone. -->
     <Style x:Key="ModernToggleSwitch"
            TargetType="ToggleButton">
         <Setter Property="FocusVisualStyle"
                 Value="{DynamicResource FocusRingVisual}" />
-        <Setter Property="Width"
-                Value="36" />
-        <Setter Property="Height"
-                Value="20" />
+        <Setter Property="HorizontalAlignment"
+                Value="Left" />
         <Setter Property="Background"
                 Value="Transparent" />
         <Setter Property="BorderThickness"
                 Value="0" />
         <Setter Property="Cursor"
                 Value="Hand" />
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="14" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource TitleTextSecondary}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Grid x:Name="Root"
-                          Width="36"
-                          Height="20">
-                        <Border x:Name="SwitchTrack"
-                                Width="36"
-                                Height="20"
-                                CornerRadius="10"
-                                Background="{DynamicResource SurfaceMuted}"
-                                BorderBrush="{DynamicResource InputBorder}"
-                                BorderThickness="1" />
-                        <Ellipse x:Name="SwitchThumb"
-                                 Width="14"
-                                 Height="14"
-                                 Fill="{DynamicResource TitleTextPrimary}"
-                                 Margin="3,3,0,3"
-                                 HorizontalAlignment="Left" />
+                    <DockPanel x:Name="Root"
+                               Background="Transparent"
+                               LastChildFill="True">
+                        <Grid DockPanel.Dock="Left"
+                              Width="36"
+                              Height="20"
+                              VerticalAlignment="Center">
+                            <Border x:Name="SwitchTrack"
+                                    CornerRadius="10"
+                                    Background="{DynamicResource SurfaceMuted}"
+                                    BorderBrush="{DynamicResource InputBorder}"
+                                    BorderThickness="1" />
+                            <Ellipse x:Name="SwitchThumb"
+                                     Width="14"
+                                     Height="14"
+                                     Fill="{DynamicResource TitleTextPrimary}"
+                                     Margin="3,3,0,3"
+                                     HorizontalAlignment="Left" />
+                        </Grid>
                         <ContentPresenter VerticalAlignment="Center"
-                                          HorizontalAlignment="Right"
-                                          Margin="0,0,8,0" />
-                    </Grid>
+                                          HorizontalAlignment="Left"
+                                          Margin="12,0,0,0" />
+                    </DockPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked"
                                  Value="True">

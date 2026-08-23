@@ -74,17 +74,17 @@
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                   <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding HostName}" Foreground="{DynamicResource TitleTextPrimary}"
-                               FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="14"
+                    <TextBlock Text="{Binding HostName}" Style="{DynamicResource TextSubtitle}"
                                TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
                     <!-- The SCCM primary user, collapsed when SCCM has none on record. -->
                     <TextBlock Text="{Binding OwnerName, StringFormat=({0})}"
-                               Foreground="{DynamicResource BodyTextTertiary}"
-                               FontFamily="{DynamicResource FontSans}" FontSize="12"
                                VerticalAlignment="Center" Margin="8,1,0,0"
                                ToolTip="{Binding OwnerTip}">
                       <TextBlock.Style>
                         <Style TargetType="TextBlock">
+                          <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
+                          <Setter Property="FontSize" Value="12" />
+                          <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
                           <Setter Property="Visibility" Value="Visible" />
                           <Style.Triggers>
                             <DataTrigger Binding="{Binding OwnerName}" Value="">
@@ -99,7 +99,7 @@
                     </TextBlock>
                   </StackPanel>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                             FontFamily="{DynamicResource FontMono}" FontSize="10.5"
+                             FontFamily="{DynamicResource FontMono}" FontSize="11"
                              TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
                 <!-- No progress bar here, the live one sits atop the detail pane's terminal. -->
@@ -134,7 +134,8 @@
                 <!-- Removes one card, while a running host toasts and stays instead. -->
                 <Button Grid.Column="4" Command="{Binding RemoveCommand}"
                         Style="{DynamicResource fieldClearButton}" Margin="6,0,0,0"
-                        VerticalAlignment="Center" ToolTip="Remove from the list" />
+                        VerticalAlignment="Center" ToolTip="Remove from the list"
+                        AutomationProperties.Name="Remove from the list" />
               </Grid>
             </Border>
           </DataTemplate>
@@ -160,11 +161,9 @@
           </Style>
         </StackPanel.Style>
         <TextBlock Text="No machines yet"
-                   Foreground="{DynamicResource TitleTextSecondary}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="16" FontWeight="SemiBold"
+                   Style="{DynamicResource TextTitle}"
                    TextAlignment="Center" Margin="0,0,0,8" />
-        <TextBlock Foreground="{DynamicResource BodyTextTertiary}"
-                   FontFamily="{DynamicResource FontSans}" FontSize="13"
+        <TextBlock Style="{DynamicResource TextBody}"
                    TextWrapping="Wrap" TextAlignment="Center" LineHeight="20">
           <Run Text="1.  Search a machine, Enter adds the top match." />
           <LineBreak />

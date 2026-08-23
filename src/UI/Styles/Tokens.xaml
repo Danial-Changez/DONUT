@@ -1,5 +1,5 @@
-<!-- Shared container styles, colours and fonts live in UIColors.xaml. Everything here is
-     consumed via DynamicResource, so merge order does not matter. -->
+<!-- Container and text-role styles. Colours and fonts live in UIColors.xaml, and everything
+     here is consumed via DynamicResource, so merge order does not matter. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -54,7 +54,7 @@
                 Value="True" />
     </Style>
 
-    <!-- Text roles, so headings and body copy stop being styled inline at each call site. -->
+    <!-- Text roles on one ladder (11, 12, 13, 14, 16, 18), so views never size text inline. -->
     <!-- The tier above TextTitle, used for pane and dialog headings. -->
     <Style x:Key="TextPaneTitle"
            TargetType="TextBlock">
@@ -97,5 +97,25 @@
                 Value="13" />
         <Setter Property="Foreground"
                 Value="{DynamicResource BodyTextSecondary}" />
+    </Style>
+    <!-- The line under a title: a subtitle, hint, or secondary fact. -->
+    <Style x:Key="TextMeta"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="12" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextTertiary}" />
+    </Style>
+    <!-- The smallest tier, for stamps and trailing facts beside a value. -->
+    <Style x:Key="TextCaption"
+           TargetType="TextBlock">
+        <Setter Property="FontFamily"
+                Value="{DynamicResource FontSans}" />
+        <Setter Property="FontSize"
+                Value="11" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource BodyTextTertiary}" />
     </Style>
 </ResourceDictionary>
