@@ -26,6 +26,8 @@ class SelfUpdateService {
     [string]$ClientId = 'Your Github App Client ID'   # Only needed for a private fork.
     [string]$Scope = 'repo read:packages'
     [string]$TokenFile
+    # The target version, written before the worker runs and read once by the relaunch.
+    [string]$PendingUpdateFile
     [string]$Owner = 'Danial-Changez'
     [string]$Repo = 'DONUT'
     [LogService]$Logger
@@ -33,11 +35,13 @@ class SelfUpdateService {
     SelfUpdateService() {
         $this.Logger = [NullLogService]::new()
         $this.TokenFile = Join-Path ([DonutPaths]::ConfigDir()) "GitHub_Token.json"
+        $this.PendingUpdateFile = Join-Path ([DonutPaths]::DataRoot()) "update-pending.txt"
     }
 
     SelfUpdateService([LogService]$logger) {
         $this.Logger = [LogService]::Coalesce($logger)
         $this.TokenFile = Join-Path ([DonutPaths]::ConfigDir()) "GitHub_Token.json"
+        $this.PendingUpdateFile = Join-Path ([DonutPaths]::DataRoot()) "update-pending.txt"
     }
 
     # --- Token management (DPAPI) ---
@@ -251,6 +255,28 @@ class SelfUpdateService {
         if (-not (Test-Path $FilePath)) { return $false }
         $hash = Get-FileHash -Path $FilePath -Algorithm SHA256
         return ($hash.Hash -eq $ExpectedHash)
+    }
+
+    # The relaunched copy has no memory of the update that started it, so the target
+    # version waits in a marker that the next startup reads once and deletes.
+    [void] MarkPendingUpdate([version]$Target) {
+        try { [IO.File]::WriteAllText($this.PendingUpdateFile, $Target.ToString()) }
+        catch { $this.Logger.LogException("Could not record the pending update", $_) }
+    }
+
+    # The version the last update aimed for, or $null when none was pending.
+    [version] TakePendingUpdate() {
+        if (-not (Test-Path -LiteralPath $this.PendingUpdateFile)) { return $null }
+        $target = $null
+        try {
+            $parsed = $null
+            $raw = [IO.File]::ReadAllText($this.PendingUpdateFile).Trim()
+            if ([version]::TryParse($raw, [ref]$parsed)) { $target = $parsed }
+        } catch { $target = $null }
+        Remove-Item -LiteralPath $this.PendingUpdateFile `
+                    -Force `
+                    -ErrorAction SilentlyContinue
+        return $target
     }
 
     # PackagePath is the MSI or the zip, and which one decides how the worker installs it.
