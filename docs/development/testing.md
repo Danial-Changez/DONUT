@@ -60,6 +60,10 @@ and fail every remaining test with bogus operator errors. The runner pins Pester
 
 - `-FailFast` stops at the first failing test. Use it for a tight fix-and-rerun
   loop; leave it off for CI so every failure is visible.
+- CI lints a PR's changed files only and the whole tree on every push to main,
+  so a merge cannot leave drift behind. The rules are per-file, which is what
+  makes the two scopes agree, and a PR that edits the lint rules or their
+  settings runs the full scan itself.
 - **Stale classes:** `using module` never reloads an already-imported module, so a
   session that ran the suite before an edit keeps testing old classes from memory.
   The runner detects this and relaunches itself in a clean child `pwsh`; run

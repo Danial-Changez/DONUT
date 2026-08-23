@@ -26,7 +26,12 @@
     hotspots print on every run without blocking it.
 
 .PARAMETER Path
-    Roots to scan. Defaults to the repo's src\, tests\ and tools\ folders.
+    Roots or files to scan: a root recurses, a file is taken as-is. Defaults to
+    the repo's src\, tests\ and tools\ folders. The CI PR gate passes the PR's
+    changed files instead, and pushes to main run the full default; the rules
+    are all per-file, so the two scopes agree on any file they both see. With
+    no PowerShell files in scope the analyzer is skipped and the comment sweep,
+    which is repo-wide and cheap, still runs.
 
 .PARAMETER FailOn
     Minimum severity that makes this script exit non-zero (for a hook / CI gate).
@@ -80,8 +85,13 @@ try {
     Write-Warning "UI assemblies did not load ($($_.Exception.Message)); TypeNotFound will not gate."
 }
 
-$files = Get-ChildItem -Path $Path -Recurse -Include *.ps1, *.psm1 -File |
-    Where-Object { $_.FullName -notmatch '\\(bin|obj|\.cache)\\' }
+$items = @(if ($Path) { Get-Item -Path $Path -ErrorAction Stop })
+$files = @($items | Where-Object { -not $_.PSIsContainer -and $_.Extension -in '.ps1', '.psm1' })
+$roots = @($items | Where-Object PSIsContainer)
+if ($roots) {
+    $files += Get-ChildItem -Path $roots -Recurse -Include *.ps1, *.psm1 -File
+}
+$files = @($files | Where-Object { $_.FullName -notmatch '\\(bin|obj|\.cache)\\' })
 
 # Runtime-compiled C# types no static session can resolve (see .DESCRIPTION).
 $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
@@ -92,14 +102,16 @@ $runtimeTypes = 'ObservableObject|RelayCommand|WindowChromeHelper|' +
 $customRules = Join-Path $PSScriptRoot 'Rules\DonutRules.psm1'
 
 # Piped because -Path takes one string, and the per-file loop was about 9x slower.
-$results = $files.FullName |
-    Invoke-ScriptAnalyzer -Settings $settings `
-                          -CustomRulePath $customRules `
-                          -IncludeDefaultRules `
-                          -ErrorAction SilentlyContinue |
-    Where-Object {
-        -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
-    }
+$results = @(if ($files) {
+        $files.FullName |
+            Invoke-ScriptAnalyzer -Settings $settings `
+                                  -CustomRulePath $customRules `
+                                  -IncludeDefaultRules `
+                                  -ErrorAction SilentlyContinue |
+            Where-Object {
+                -not ($_.RuleName -eq 'TypeNotFound' -and $_.Message -match $runtimeTypes)
+            }
+    })
 
 Write-Host "Scanned $($files.Count) source files -> $($results.Count) findings.`n"
 
@@ -126,14 +138,22 @@ if ($results) {
 # --- Comment length ---
 # One scanner (CommentRules.ps1) serves this sweep and the per-edit style hook.
 . (Join-Path $PSScriptRoot 'CommentRules.ps1')
-# Swept repo-wide rather than over -Path, because the rule is not src-only.
+# Repo-wide, not -Path scoped: a tree walk crawls node_modules for 37s, git needs 0.1s.
 $repo = Split-Path $PSScriptRoot -Parent
 $excluded = '\\(bin|obj|\.cache|node_modules|dist|\.astro|\.diag)\\'
-$sweep = Get-ChildItem -Path $repo `
-                       -Recurse `
-                       -File `
-                       -Include *.ps1, *.psm1, *.cs, *.mjs, *.js, *.ts, *.astro, *.xaml |
-    Where-Object { $_.FullName -notmatch $excluded }
+$globs = '*.ps1', '*.psm1', '*.cs', '*.mjs', '*.js', '*.ts', '*.astro', '*.xaml'
+$tracked = @(git -C $repo ls-files -- $globs 2>$null)
+$sweep = if ($LASTEXITCODE -eq 0 -and $tracked) {
+    $tracked | ForEach-Object { Get-Item -LiteralPath (Join-Path $repo $_) } |
+        Where-Object { $_.FullName -notmatch $excluded }
+} else {
+    # Not a git checkout, so the slow walk still answers.
+    Get-ChildItem -Path $repo `
+                  -Recurse `
+                  -File `
+                  -Include *.ps1, *.psm1, *.cs, *.mjs, *.js, *.ts, *.astro, *.xaml |
+        Where-Object { $_.FullName -notmatch $excluded }
+}
 $longComments = @(Get-CommentFinding -Files $sweep)
 if ($longComments) {
     Write-Host "Comments over the line limit ($($longComments.Count)):"

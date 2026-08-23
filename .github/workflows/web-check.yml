@@ -1,16 +1,19 @@
 name: Web checks
 
-# Format, lint, and type-check the docs site. Runs independently of the deploy
-# (docs.yml) so a style/lint issue surfaces as a failed check without blocking
-# the site from shipping. Add `needs: verify` to docs.yml's build job to gate.
+# Format, lint, type-check, and build the docs site. Runs independently of the
+# deploy (docs.yml) so an issue surfaces as a failed check without blocking the
+# site from shipping. The build matters: `astro check` does not compile MDX
+# expressions, and content lives in docs/, so both trigger this workflow.
 on:
   push:
     branches: [main]
     paths:
+      - 'docs/**'
       - 'web/**'
       - '.github/workflows/web-check.yml'
   pull_request:
     paths:
+      - 'docs/**'
       - 'web/**'
       - '.github/workflows/web-check.yml'
   workflow_dispatch:
@@ -33,4 +36,9 @@ jobs:
 
       - name: Format check, lint, and type-check
         run: npm run verify
+        working-directory: web
+
+      # The production base comes from GITHUB_REPOSITORY, which Actions always sets.
+      - name: Build
+        run: npm run build
         working-directory: web
