@@ -170,16 +170,21 @@ class PersonLensService {
             $beat = Join-Path $dir 'heartbeat.txt'
             # A beating agent can still be poisoned, and two straight timeouts overrule it.
             $forceRecycle = [PersonLensService]::ShouldForceRecycle($dir)
+            $reason = 'no agent'
             if (-not $forceRecycle -and
                 (Test-Path -LiteralPath (Join-Path $dir 'key.bin')) -and
                 (Test-Path -LiteralPath $beat)) {
                 # The agent beats every 2s or so, so anything older means it is gone.
                 $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
                 if ($beatAge.TotalSeconds -lt 15) { return '' }
+                $reason = 'heartbeat {0}s stale' -f [int]$beatAge.TotalSeconds
             }
             if ($forceRecycle) {
+                $reason = 'two lookups timed out'
                 $this.Logger.LogWarning('Two Lens lookups timed out in a row, so the agent is being recycled.')
             }
+            # A cold start on a pick is that pick's whole tail, so the log names it.
+            $coldStart = [System.Diagnostics.Stopwatch]::StartNew()
 
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
             if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
@@ -245,7 +250,11 @@ class PersonLensService {
             # Wait for the first heartbeat (the agent writes it before its pre-warm).
             $deadline = (Get-Date).AddSeconds(20)
             while ((Get-Date) -lt $deadline) {
-                if (Test-Path -LiteralPath $beat) { return '' }
+                if (Test-Path -LiteralPath $beat) {
+                    $this.Logger.LogInfo(('Lens agent started in {0}ms ({1}).' -f
+                        $coldStart.ElapsedMilliseconds, $reason))
+                    return ''
+                }
                 Start-Sleep -Milliseconds 200
             }
             return "the agent did not start within 20s (as $interactiveUser)."

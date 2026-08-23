@@ -341,6 +341,29 @@ Describe "SelfUpdateService" {
         }
     }
 
+    Context "Update outcome handoff" {
+
+        It "Hands the target version to the next start once, then forgets it" {
+            $service = [SelfUpdateService]::new()
+            $service.PendingUpdateFile = Join-Path $TestDrive "update-pending.txt"
+
+            $service.MarkPendingUpdate([version]"2.4.58")
+
+            $service.TakePendingUpdate() | Should -Be ([version]"2.4.58")
+            Test-Path $service.PendingUpdateFile | Should -BeFalse
+            $service.TakePendingUpdate() | Should -BeNullOrEmpty
+        }
+
+        It "Treats a garbled marker as none pending and still clears it" {
+            $service = [SelfUpdateService]::new()
+            $service.PendingUpdateFile = Join-Path $TestDrive "update-pending.txt"
+            Set-Content $service.PendingUpdateFile "not a version"
+
+            $service.TakePendingUpdate() | Should -BeNullOrEmpty
+            Test-Path $service.PendingUpdateFile | Should -BeFalse
+        }
+    }
+
     Context "GetStoredToken Error Handling" {
         It "Returns null when token file is corrupted" {
             $service = [SelfUpdateService]::new()

@@ -63,6 +63,7 @@ class UpdatePresenter {
     # Anonymous-first, with a sign-in only when the repo refuses. See .NOTES.
     [void] CheckAndPrompt() {
         $localVer = $this.Service.GetLocalVersion()
+        $this.ReportUpdateOutcome($localVer)
         $token = $this.Service.GetStoredToken()
         # Read now, not at construction: the toggle may have been flipped this session.
         $beta = $this.Config.GetBetaUpdates()
@@ -108,6 +109,31 @@ class UpdatePresenter {
         }
     }
 
+    # The install ran with DONUT closed and nothing on screen, so the relaunched copy
+    # is the one that says where it landed.
+    hidden [void] ReportUpdateOutcome([version]$localVer) {
+        $target = $this.Service.TakePendingUpdate()
+        if (-not $target) { return }
+        if ($localVer -eq $target) {
+            $this.Logger.LogInfo("Updated to v$target.")
+            if ($this.Toasts) { $this.Toasts.ShowSuccess('Updated', "DONUT is now v$target.") }
+            return
+        }
+        $this.Logger.LogWarning("The update to v$target did not complete; this is v$localVer.")
+        if ($this.Toasts) {
+            $this.Toasts.ShowWarning('Update Incomplete', "Still on v$localVer, expected v$target.")
+        }
+    }
+
+    # ponytail: 300ms pump so a toast paints before the blocking download; go async for a real bar.
+    hidden [void] PaintNow() {
+        $until = [datetime]::UtcNow.AddMilliseconds(300)
+        while ([datetime]::UtcNow -lt $until) {
+            [Dispatcher]::CurrentDispatcher.Invoke([action] {}, [DispatcherPriority]::Background)
+            Start-Sleep -Milliseconds 16
+        }
+    }
+
     # --- Update UI ---
 
     [void] ShowUpdateWindow($Release, $LocalVer, $RemoteVer, $token) {
@@ -149,8 +175,13 @@ class UpdatePresenter {
             if (-not $asset) { throw "This release publishes no $pattern asset." }
 
             $stage = [DonutPaths]::DataRoot()
+            $target = [version]$Release.tag_name.TrimStart('v')
 
             # A blocking download is fine here: the window is closed and the app exits after.
+            if ($this.Toasts) {
+                $this.Toasts.ShowInfo('Updating', "Downloading DONUT v$target…")
+                $this.PaintNow()
+            }
             $packagePath = $this.Service.DownloadAsset($token, $asset, $stage)
 
             # By name, not by pattern: the release carries a checksum for each package.
@@ -167,6 +198,8 @@ class UpdatePresenter {
                 $this.Logger.LogWarning("No checksum file found. Skipping verification.")
             }
 
+            # Recorded first: after this the app closes, and the relaunch reports the outcome.
+            $this.Service.MarkPendingUpdate($target)
             $this.Service.ApplyUpdate($packagePath, $isRollback, $this.Resources.SourceRoot)
 
             [System.Windows.Application]::Current.Shutdown()
