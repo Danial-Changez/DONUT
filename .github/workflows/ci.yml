@@ -44,6 +44,15 @@ jobs:
   lint:
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      # Every shard reports, and a shard is a whole process: the analyzer session
+      # stays serial (splitting one session changes its findings, see the tool's
+      # notes), so the parallelism lives between runners, never inside a session.
+      # Cut so no shard outruns the Unit test job, the floor of the whole run:
+      # locally Unit is 69s of tests' 83, src 44, tools 31, the rest under 20.
+      fail-fast: false
+      matrix:
+        scope: ['src', 'tests/Unit', 'tests/Integration tests/Helpers', 'tools']
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,13 +66,21 @@ jobs:
               Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
           }
 
-      # Serial on purpose: splitting the scan across processes changes its findings.
       # A PR lints the files it changed; a push to main lints everything, so nothing
       # hides for longer than one merge. Rules are per-file, which is what makes the
       # scopes agree, so a change to the rules themselves re-scopes the PR to full.
       - name: Lint
         shell: pwsh
         run: |
+          $roots = '${{ matrix.scope }}' -split ' '
+          # The first shard also proves no tests file escaped the shard list.
+          if ($roots[0] -eq 'src') {
+              $shards = 'tests/Unit', 'tests/Integration', 'tests/Helpers'
+              $stray = @(git ls-files 'tests/*.ps1' 'tests/*.psm1' | Where-Object {
+                      $f = $_; -not ($shards | Where-Object { $f -like "$_/*" })
+                  })
+              if ($stray) { throw "Not covered by any lint shard: $($stray -join ', ')" }
+          }
           $full = '${{ github.event_name }}' -ne 'pull_request'
           $changed = @()
           if (-not $full) {
@@ -72,10 +89,14 @@ jobs:
               if ($changed -match $ruleFiles) { $full = $true }
           }
           if ($full) {
-              ./tools/Invoke-Lint.ps1 -FailOn Warning
+              ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $roots
           } else {
-              $files = @($changed | Where-Object { $_ -match '\.(ps1|psm1)$' -and (Test-Path $_) })
-              Write-Host "PR scope: $($files.Count) changed PowerShell file(s)."
+              $files = @($changed | Where-Object {
+                      $f = $_
+                      $f -match '\.(ps1|psm1)$' -and (Test-Path $f) -and
+                      ($roots | Where-Object { $f -like "$_/*" })
+                  })
+              Write-Host "PR scope (${{ matrix.scope }}): $($files.Count) changed PowerShell file(s)."
               ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $files
           }
 
@@ -91,7 +112,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Keyed on the pinned version below, so bumping the pin refills the cache.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/Documents/PowerShell/Modules
           key: psmodules-pester-6.0.1
@@ -114,12 +135,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       # Restoring the Microsoft.PowerShell.SDK graph is most of the build when uncached.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
