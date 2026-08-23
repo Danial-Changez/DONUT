@@ -139,8 +139,8 @@ function Search-Gc([string]$Filter) {
     $s = New-Object System.DirectoryServices.DirectorySearcher
     $s.SearchRoot = [ADSI]"GC://$($script:ForestNc)"
     $s.Filter = $Filter
-    # An unreachable DC hangs a searcher indefinitely without this cap.
-    $s.ClientTimeout = [TimeSpan]::FromSeconds(15)
+    # A hung DC needs this cap, and a hit cap returns null (no throw), so it stays short.
+    $s.ClientTimeout = [TimeSpan]::FromSeconds(5)
     # No PageSize: it only enables paging, and every caller here takes FindOne.
     [void]$s.PropertiesToLoad.Add('distinguishedName')
     return $s.FindOne()
@@ -241,7 +241,7 @@ $script:DeviceScript = {
         $gc = New-Object System.DirectoryServices.DirectorySearcher
         $gc.SearchRoot = [ADSI]"GC://$forestNc"
         $gc.Filter = "(&(objectCategory=computer)(cn=$wsid))"
-        $gc.ClientTimeout = [TimeSpan]::FromSeconds(15)
+        $gc.ClientTimeout = [TimeSpan]::FromSeconds(5)
         [void]$gc.PropertiesToLoad.Add('distinguishedName')
         try {
             $cHit = $gc.FindOne()
@@ -278,7 +278,7 @@ $script:DeviceScript = {
                 try {
                     $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$fd")
                     $ds.Filter = "(&(objectCategory=computer)(cn=$wsid))"
-                    $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+                    $ds.ClientTimeout = [TimeSpan]::FromSeconds(5)
                     [void]$ds.PropertiesToLoad.Add('distinguishedName')
                     $hit = $ds.FindOne()
                     if ($hit) { $compDn = [string]$hit.Properties['distinguishedname'][0]; break }
@@ -294,7 +294,7 @@ $script:DeviceScript = {
             $cs = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
             $cs.SearchScope = 'Base'
             $cs.Filter = '(objectClass=*)'
-            $cs.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            $cs.ClientTimeout = [TimeSpan]::FromSeconds(5)
             'operatingsystem', 'lastlogontimestamp' |
                 ForEach-Object { [void]$cs.PropertiesToLoad.Add($_) }
             $c = $cs.FindOne()
@@ -310,7 +310,7 @@ $script:DeviceScript = {
 
             $bl = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$compDn")
             $bl.Filter = '(objectClass=msFVE-RecoveryInformation)'
-            $bl.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            $bl.ClientTimeout = [TimeSpan]::FromSeconds(5)
             'msfve-recoverypassword', 'whencreated' |
                 ForEach-Object { [void]$bl.PropertiesToLoad.Add($_) }
             $keys = @($bl.FindAll())

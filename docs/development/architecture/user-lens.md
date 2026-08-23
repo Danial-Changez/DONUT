@@ -124,7 +124,7 @@ Rules the AdminService imposes (each learned the hard way, see
   for its SAM before any GC guess, exactly as the person read does; the optional
   `lensSoftwareCollectionFilter` config regex narrows the rows parent-side at
   render time, blank by default.
-- Every AdminService call carries a 15 s timeout and every searcher a 15 s
+- Every AdminService call carries a 15 s timeout and every searcher a 5 s
   `ClientTimeout`, so an unreachable site or DC fails a lookup instead of wedging
   the agent.
 
