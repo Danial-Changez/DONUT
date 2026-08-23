@@ -65,11 +65,12 @@ a couple of minutes.
   keyboard, and stamps its width and height from the rendered SVG.
 - Astro caches rendered pages in `web/node_modules/.astro`, keyed on the Markdown
   file. After editing the plugin, delete that folder before a local build.
-- The splash screenshot lives at `web/public/screenshots/home.png` (a copy sits
-  in `assets/Screenshots/`). To refresh it after a UI change, run
+- The splash screenshot lives at `web/src/assets/home-screenshot.png` (a copy
+  sits in `assets/Screenshots/`). To refresh it after a UI change, run
   `pwsh -Sta -File tools\Show-View.ps1 -Main -Screenshot home.png` and replace
-  both copies; the harness composes the main window with sample data, so no
-  fleet is needed. Reference it base-less as `/screenshots/<name>.png`.
+  both copies. It is imported in `docs/index.mdx`, never referenced by absolute
+  path: MDX skips the rehype plugin that base-prefixes `/diagrams/`-style paths,
+  which is exactly how the first deploy shipped a broken image.
 
 ## Update a diagram
 
