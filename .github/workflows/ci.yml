@@ -44,6 +44,14 @@ jobs:
   lint:
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      # Every shard reports, and a shard is a whole process: the analyzer session
+      # stays serial (splitting one session changes its findings, see the tool's
+      # notes), so the parallelism lives between runners, never inside a session.
+      # tests is the heavy shard (83s locally vs 44 for src and 31 for tools).
+      fail-fast: false
+      matrix:
+        scope: [src, tests, tools]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,7 +65,6 @@ jobs:
               Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
           }
 
-      # Serial on purpose: splitting the scan across processes changes its findings.
       # A PR lints the files it changed; a push to main lints everything, so nothing
       # hides for longer than one merge. Rules are per-file, which is what makes the
       # scopes agree, so a change to the rules themselves re-scopes the PR to full.
@@ -72,10 +79,10 @@ jobs:
               if ($changed -match $ruleFiles) { $full = $true }
           }
           if ($full) {
-              ./tools/Invoke-Lint.ps1 -FailOn Warning
+              ./tools/Invoke-Lint.ps1 -FailOn Warning -Path '${{ matrix.scope }}'
           } else {
-              $files = @($changed | Where-Object { $_ -match '\.(ps1|psm1)$' -and (Test-Path $_) })
-              Write-Host "PR scope: $($files.Count) changed PowerShell file(s)."
+              $files = @($changed | Where-Object { $_ -match '\.(ps1|psm1)$' -and $_ -like '${{ matrix.scope }}/*' -and (Test-Path $_) })
+              Write-Host "PR scope (${{ matrix.scope }}): $($files.Count) changed PowerShell file(s)."
               ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $files
           }
 
@@ -91,7 +98,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Keyed on the pinned version below, so bumping the pin refills the cache.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/Documents/PowerShell/Modules
           key: psmodules-pester-6.0.1
@@ -114,12 +121,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       # Restoring the Microsoft.PowerShell.SDK graph is most of the build when uncached.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
