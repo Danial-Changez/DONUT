@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: ./tools/Invoke-Format.ps1 -Check
 
-  lint:
+  lint-shard:
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
@@ -99,6 +99,19 @@ jobs:
               Write-Host "PR scope (${{ matrix.scope }}): $($files.Count) changed PowerShell file(s)."
               ./tools/Invoke-Lint.ps1 -FailOn Warning -Path $files
           }
+
+  # Branch protection requires a check named lint, and a required check matches by
+  # name: the shards report per scope, so this one job answers for all of them.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: lint-shard
+    # always(), or a failed shard skips this job and the required check never lands.
+    if: always()
+    steps:
+      - name: Fail on any failed shard
+        if: needs.lint-shard.result != 'success'
+        run: exit 1
 
   tests:
     runs-on: windows-latest
