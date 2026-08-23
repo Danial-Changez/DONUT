@@ -34,7 +34,7 @@ Based on the
 ## Return codes
 
 DONUT treats dcu-cli's return code as authoritative and classifies it per command.
-Note that `500` is only benign for `scan` — the same code from any other command
+Note that `500` is only benign for `scan`; the same code from any other command
 is a failure.
 
 | Code | Meaning | DONUT behavior |

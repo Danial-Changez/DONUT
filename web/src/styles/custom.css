@@ -141,13 +141,31 @@ main h1[data-page-title] {
 .sl-markdown-content hr:not(:where(.not-content *)) {
   margin-block: 2rem;
 }
-/* Diagrams (transparent-background SVGs themed to the site palette): centered
-   with breathing room, click to open the lightbox (components/Head.astro). */
-.sl-markdown-content img[src*='/diagrams/'] {
+/* Diagrams (transparent-background SVGs themed to the site palette): each sits
+   in a plain button (plugins/rehype-docs-links.mjs) so the lightbox opens from
+   a click, Enter, or Space (components/Head.astro). The image carries its
+   intrinsic width/height, so height: auto keeps the ratio once it scales. */
+.sl-markdown-content .dw-diagram {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   margin-inline: auto;
   margin-block: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--donut-radius);
+  background: transparent;
   cursor: zoom-in;
+}
+.sl-markdown-content .dw-diagram:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 4px;
+}
+.sl-markdown-content .dw-diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
 }
 
 /* --- Diagram lightbox: opens instantly, wheel to zoom INTO the diagram, drag
@@ -161,6 +179,7 @@ main h1[data-page-title] {
   background: rgba(0, 0, 0, 0.85);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
+  overscroll-behavior: contain;
   opacity: 0;
   visibility: hidden;
   transition:
@@ -182,6 +201,14 @@ main h1[data-page-title] {
 }
 .dw-lb-stage:active {
   cursor: grabbing;
+}
+.dw-lb-stage:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: -4px;
+}
+.dw-lb-controls button:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
 }
 /* The inlined SVG is sized to a fit box by the script; zoom happens in its
    viewBox, so it always renders sharp. (.dw-lb-fallback is the rare <img>
@@ -287,12 +314,10 @@ main h1[data-page-title] {
   margin-inline: auto;
 }
 [data-has-hero] .hero h1 {
-  background: linear-gradient(90deg, #fafafa 30%, #c4b5fd);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--sl-color-white);
   font-size: clamp(3rem, 8vw, 4.5rem);
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 [data-has-hero] .hero .tagline {
   max-width: 34rem;
@@ -303,14 +328,9 @@ main h1[data-page-title] {
 [data-has-hero] .hero .actions {
   justify-content: center;
 }
-/* Dot grid + a soft violet bloom behind the hero. */
+/* A soft violet bloom behind the hero, the one accent the splash top carries. */
 [data-has-hero] .main-frame {
-  background:
-    radial-gradient(ellipse 60% 42% at 50% 8%, rgba(128, 34, 254, 0.16), transparent 70%),
-    radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
-  background-size:
-    auto,
-    26px 26px;
+  background: radial-gradient(ellipse 60% 42% at 50% 8%, rgba(128, 34, 254, 0.16), transparent 70%);
 }
 /* Crisp 6px buttons (the radii ladder), quiet color-only hover; the trailing
    icon nudges forward as the "you're about to navigate" cue. */
@@ -349,115 +369,20 @@ main h1[data-page-title] {
   color: var(--sl-color-white);
 }
 
-/* --- Faux app window on the splash (stand-in for a product screenshot) --- */
-.dw-window {
+/* --- The splash screenshot: the app's frame treatment (hairline, large radius,
+   violet ambience), sized to the old faux window's slot. Recapture with
+   tools\Show-View.ps1 -Main -Screenshot. --- */
+.dw-shot {
+  display: block;
   width: min(44rem, 100%);
+  height: auto;
   margin: 3rem auto 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--donut-radius-xl);
-  background: #121212;
   box-shadow:
     0 0 0 1px rgba(128, 34, 254, 0.12),
     0 18px 60px rgba(128, 34, 254, 0.14),
     0 8px 28px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
-  font-size: 0.85rem;
-}
-.dw-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #0d0d0d;
-}
-.dw-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.dw-red {
-  background: #4a4a4a;
-}
-.dw-yellow {
-  background: #3a3a3a;
-}
-.dw-green {
-  background: #2e2e2e;
-}
-.dw-title {
-  margin-inline-start: 0.6rem;
-  color: #a1a1a1;
-  font-family: var(--sl-font-mono);
-  font-size: 0.75rem;
-}
-.dw-pill {
-  margin-inline-start: auto;
-  padding: 0.15rem 0.7rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(128, 34, 254, 0.5);
-  background: rgba(128, 34, 254, 0.18);
-  color: #c4b5fd;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-.dw-row {
-  display: grid;
-  grid-template-columns: auto 9rem 1fr 7rem;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.75rem 1rem;
-  text-align: left;
-}
-.dw-row + .dw-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-.dw-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.dw-busy {
-  background: #8e51ff;
-  box-shadow: 0 0 8px rgba(142, 81, 255, 0.8);
-}
-.dw-ok {
-  background: #34d399;
-}
-.dw-warn {
-  background: #fbbf24;
-}
-.dw-host {
-  color: #fafafa;
-  font-family: var(--sl-font-mono);
-  font-size: 0.8rem;
-}
-.dw-meta {
-  color: #8a8a8a;
-}
-.dw-progress {
-  height: 5px;
-  border-radius: 9999px;
-  background: #27272a;
-  overflow: hidden;
-}
-.dw-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #8022fe, #8e51ff);
-}
-.dw-fill-warn {
-  background: #b45309;
-}
-@media (max-width: 40rem) {
-  .dw-row {
-    grid-template-columns: auto 1fr;
-  }
-  .dw-meta,
-  .dw-progress {
-    display: none;
-  }
 }
 
 /* --- Cards: flat at rest, quiet on hover.
@@ -510,8 +435,8 @@ main h1[data-page-title] {
 }
 
 /* --- IconLinkCard: the icon-tile feature card (see components/IconLinkCard.astro).
-   A 36px violet-washed tile above the title, description, and an arrow footer
-   that nudges forward on hover. --- */
+   A 36px neutral tile above the title, description, and an arrow footer; the
+   violet arrives only with hover, so the grid is not six accents at rest. --- */
 .dw-icon-card {
   display: flex;
   flex-direction: column;
@@ -524,13 +449,16 @@ main h1[data-page-title] {
   width: 36px;
   height: 36px;
   border-radius: var(--donut-radius);
-  background: var(--donut-violet-10);
-  color: var(--sl-color-text-accent);
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-1);
   font-size: 1.25rem;
-  transition: background-color var(--donut-fast) var(--donut-ease);
+  transition:
+    background-color var(--donut-fast) var(--donut-ease),
+    color var(--donut-fast) var(--donut-ease);
 }
 .dw-icon-card:hover .dw-icon-tile {
-  background: var(--donut-violet-15);
+  background: var(--donut-violet-10);
+  color: var(--sl-color-text-accent);
 }
 .dw-icon-card .dw-card-title {
   color: var(--sl-color-white);
@@ -856,4 +784,25 @@ site-search[data-searching] .dw-quick-links {
   inset: 0 0 auto 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--donut-violet-30), transparent);
+}
+
+/* --- Reduced motion: hover nudges, the card sweep and the lightbox fade all
+   become instant; the pages still function identically. --- */
+@media (prefers-reduced-motion: reduce) {
+  .sl-link-button svg,
+  .dw-icon-card .dw-card-foot svg,
+  .pagination-links a svg,
+  .dw-quick-links a svg,
+  .card-grid .sl-link-card::before,
+  .dw-icon-card::before,
+  .dw-lb {
+    transition: none;
+  }
+  .sl-link-button:hover svg,
+  .dw-icon-card:hover .dw-card-foot svg,
+  .pagination-links a[rel='next']:hover svg,
+  .pagination-links a[rel='prev']:hover svg,
+  .dw-quick-links a:hover svg {
+    transform: none;
+  }
 }

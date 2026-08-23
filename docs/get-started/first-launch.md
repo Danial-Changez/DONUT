@@ -6,13 +6,13 @@ description: Signing in with the GitHub device flow, the guided tour, and where 
 ## Sign in
 
 Open DONUT from the Start Menu. On first launch (or when the stored token expires),
-sign in with your org's GitHub App using the device-code prompt — the code is shown
+sign in with your org's GitHub App using the device-code prompt. The code is shown
 in the window and copied to your clipboard. This lets the updater pull releases; if
 an update is available you'll be prompted to apply it.
 
 ## The guided tour
 
-The first time the window opens, a short **guided tour** walks the essentials — the
+The first time the window opens, a short **guided tour** walks the essentials: the
 search bar, the Scan/Apply mode toggle, the machine list, the detail pane, and
 Settings. One idea per step:
 
@@ -30,7 +30,7 @@ Settings. One idea per step:
 - Launching DONUT a second time just surfaces the running instance.
 - The **version** sits beside the DONUT wordmark. Click it to copy it, which is
   what a bug report needs first.
-- **Click a value to copy it** — a hostname, IP, service tag, SAM, UPN, email.
+- **Click a value to copy it**: a hostname, IP, service tag, SAM, UPN, email.
   Dragging still selects part of one.
 
 ## Where DONUT keeps its data

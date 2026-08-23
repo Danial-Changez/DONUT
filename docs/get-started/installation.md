@@ -13,22 +13,21 @@ description: What you need before installing, the MSI, and the Defender exclusio
   DONUT drives remotely; it is not needed on your own machine.
 - **GitHub App access**, so your team can sign in and receive updates.
 
-Everything else DONUT needs on *your* machine — PsExec, PowerShell 7, and the AD
-management tools — installs itself on first launch.
+Everything else DONUT needs on *your* machine (PsExec, PowerShell 7, and the AD
+management tools) installs itself on first launch.
 
 ## Install steps
 
 1. **Install DONUT** from the
    [GitHub Releases](https://github.com/Danial-Changez/DONUT/releases) page.
 
-2. **Launch DONUT and approve the prompt.** The first run sets up your machine:
-   it installs PsExec, PowerShell 7, and the disk-scan tool if they're missing.
-   This needs administrator rights. Anything that fails is retried the next time
-   you start DONUT as administrator.
+2. **Launch DONUT and approve the prompt.** The installer already fetched PsExec,
+   PowerShell 7, and the disk-scan tool. Anything it could not (no network, say)
+   is retried the next time you start DONUT as administrator, and DONUT says so.
 
    :::caution
    The disk-scan tool is [WizTree](https://diskanalyzer.com/), which is free for
-   personal use only. Using it in a business needs a purchased licence — the
+   personal use only. Using it in a business needs a purchased licence. The
    automatic download is a convenience, not a licence.
    :::
 
@@ -53,7 +52,7 @@ To run one, install it into its own directory from an **elevated** PowerShell:
 pwsh -File tools\Install-Beta.ps1
 ```
 
-Run it **as the admin account you elevate DONUT with** — that account ends up owning
+Run it **as the admin account you elevate DONUT with**. That account ends up owning
 the folder and is the only one able to write it. Your everyday signed-in account is
 granted read and execute, which is all it needs to launch DONUT.
 
@@ -66,7 +65,7 @@ Program Files path above.
 
 A beta install registers nothing with Windows, so it sits **beside** a normal
 install rather than replacing it, and uninstalling is deleting the folder. Both
-share your settings, machine list and reports — including the beta toggle, so
+share your settings, machine list and reports, including the beta toggle, so
 flipping it applies to whichever copy you open.
 
 Next: [First launch](./first-launch.md).

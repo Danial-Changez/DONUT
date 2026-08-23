@@ -3,11 +3,13 @@
  * Wraps Starlight's stock <Head> (imported by full path, so this override
  * augments rather than replaces it) for two things:
  *   1. Drop the "| DONUT" site-title suffix from the browser-tab title.
- *   2. Load the diagram lightbox: click a /diagrams/ image to open it, wheel to
- *      zoom INTO the diagram and drag to pan. The SVG is inlined and zoomed via
- *      its viewBox - not an <img> + CSS transform, which rasterises the vector
- *      and blurs when scaled up - so it stays crisp at any zoom. Styles are in
- *      styles/custom.css (.dw-lb*).
+ *   2. Load the diagram lightbox: activate a /diagrams/ image (click, Enter, or
+ *      Space on the button the rehype plugin wraps it in) to open it, wheel or
+ *      +/- to zoom INTO the diagram, drag or arrow keys to pan, 0 to reset, Esc
+ *      to close. The SVG is inlined and zoomed via its viewBox - not an <img> +
+ *      CSS transform, which rasterises the vector and blurs when scaled up - so
+ *      it stays crisp at any zoom. Focus moves into the dialog on open and back
+ *      to the opener on close. Styles are in styles/custom.css (.dw-lb*).
  */
 import Default from '@astrojs/starlight/components/Head.astro';
 
@@ -22,9 +24,12 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
 <script>
   // Zoom stays crisp because the SVG is inlined and only its viewBox moves.
   const MAX = 20; // deepest zoom, as a multiple of the fitted view
+  const PAN_STEP = 0.08; // arrow-key pan, as a fraction of the current view
 
   let overlay: HTMLDivElement | null = null;
+  let stage: HTMLDivElement | null = null;
   let svgEl: SVGSVGElement | null = null;
+  let opener: HTMLElement | null = null; // focus returns here on close
   const diag = { x: 0, y: 0, w: 0, h: 0 }; // the diagram's own viewBox
   const vb0 = { x: 0, y: 0, w: 0, h: 0 }; // zoom-1 view: the diagram in the screen's aspect
   const vb = { x: 0, y: 0, w: 0, h: 0 }; // current window into the diagram
@@ -35,6 +40,7 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
 
   const apply = () => svgEl?.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
   const zoom = () => (vb0.w > 0 ? vb0.w / vb.w : 1);
+  const isOpen = () => overlay?.classList.contains('is-open') ?? false;
 
   const reset = () => {
     Object.assign(vb, vb0);
@@ -58,9 +64,22 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     apply();
   };
 
+  const zoomCenter = (factor: number) =>
+    zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
+
+  const pan = (dx: number, dy: number) => {
+    if (zoom() <= 1) return;
+    vb.x += dx * vb.w;
+    vb.y += dy * vb.h;
+    apply();
+  };
+
   const close = () => {
+    if (!isOpen()) return;
     overlay?.classList.remove('is-open');
     document.body.style.overflow = '';
+    opener?.focus();
+    opener = null;
   };
 
   // The viewBox tracks the screen's aspect, not the diagram's, so a zoomed-in
@@ -84,23 +103,28 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     vb0.y = diag.y - (vb0.h - diag.h) / 2;
   };
 
+  const focusables = () =>
+    Array.from(overlay?.querySelectorAll<HTMLElement>('[tabindex="-1"], button') ?? []);
+
   const build = () => {
     overlay = document.createElement('div');
     overlay.className = 'dw-lb';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Diagram viewer');
     overlay.innerHTML = `
-      <div class="dw-lb-stage"></div>
+      <div class="dw-lb-stage" tabindex="-1"></div>
       <div class="dw-lb-controls">
         <button type="button" data-lb="out" aria-label="Zoom out">&minus;</button>
         <button type="button" data-lb="reset" aria-label="Reset zoom">Reset</button>
         <button type="button" data-lb="in" aria-label="Zoom in">+</button>
         <button type="button" data-lb="close" aria-label="Close">&times;</button>
       </div>`;
-    const stage = overlay.querySelector<HTMLDivElement>('.dw-lb-stage');
+    stage = overlay.querySelector<HTMLDivElement>('.dw-lb-stage');
     if (!stage) return;
+    const s = stage;
 
-    stage.addEventListener(
+    s.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
@@ -108,14 +132,14 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
       },
       { passive: false },
     );
-    stage.addEventListener('pointerdown', (e) => {
+    s.addEventListener('pointerdown', (e) => {
       dragging = true;
       moved = false;
       lastX = e.clientX;
       lastY = e.clientY;
-      stage.setPointerCapture(e.pointerId);
+      s.setPointerCapture(e.pointerId);
     });
-    stage.addEventListener('pointermove', (e) => {
+    s.addEventListener('pointermove', (e) => {
       if (!dragging || !svgEl || zoom() <= 1) return;
       const rect = svgEl.getBoundingClientRect();
       const dx = e.clientX - lastX;
@@ -130,33 +154,72 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     const endDrag = () => {
       dragging = false;
     };
-    stage.addEventListener('pointerup', endDrag);
-    stage.addEventListener('pointercancel', endDrag);
-    stage.addEventListener('dblclick', (e) => {
+    s.addEventListener('pointerup', endDrag);
+    s.addEventListener('pointercancel', endDrag);
+    s.addEventListener('dblclick', (e) => {
       zoomAt(e.clientX, e.clientY, zoom() > 1 ? 1 / zoom() : 2.5);
     });
 
     overlay.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
       const action = target.closest('[data-lb]')?.getAttribute('data-lb');
-      if (action === 'in') zoomAt(cx, cy, 1.4);
-      else if (action === 'out') zoomAt(cx, cy, 1 / 1.4);
+      if (action === 'in') zoomCenter(1.4);
+      else if (action === 'out') zoomCenter(1 / 1.4);
       else if (action === 'reset') reset();
       else if (action === 'close') close();
-      else if ((target === overlay || target === stage) && !moved) close();
+      else if ((target === overlay || target === s) && !moved) close();
+    });
+
+    // Keyboard: the same moves the pointer has, plus a Tab cycle kept inside the dialog.
+    overlay.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        case 'ArrowLeft':
+          pan(-PAN_STEP, 0);
+          break;
+        case 'ArrowRight':
+          pan(PAN_STEP, 0);
+          break;
+        case 'ArrowUp':
+          pan(0, -PAN_STEP);
+          break;
+        case 'ArrowDown':
+          pan(0, PAN_STEP);
+          break;
+        case '+':
+        case '=':
+          zoomCenter(1.4);
+          break;
+        case '-':
+        case '_':
+          zoomCenter(1 / 1.4);
+          break;
+        case '0':
+          reset();
+          break;
+        case 'Tab': {
+          const items = focusables();
+          if (items.length === 0) return;
+          const i = items.indexOf(document.activeElement as HTMLElement);
+          const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i + 1) % items.length;
+          items[next].focus();
+          break;
+        }
+        default:
+          return;
+      }
+      e.preventDefault();
     });
 
     document.body.appendChild(overlay);
   };
 
-  const open = async (src: string) => {
+  const open = async (src: string, from: HTMLElement | null) => {
     if (!overlay) build();
-    const stage = overlay?.querySelector<HTMLDivElement>('.dw-lb-stage');
     if (!overlay || !stage) return;
+    opener = from;
     overlay.classList.add('is-open');
     document.body.style.overflow = 'hidden';
+    stage.focus();
     // Inline the SVG so zoom re-renders vectors (an <img> would rasterise + blur).
     try {
       const res = await fetch(src);
@@ -180,20 +243,20 @@ if (titleTag && route.entry?.data?.title) titleTag.content = route.entry.data.ti
     apply();
   };
 
+  // The rehype plugin wraps each diagram in a button, so Enter and Space land here too.
   document.addEventListener('click', (e) => {
-    const target = e.target;
-    if (
-      target instanceof HTMLImageElement &&
-      /\/diagrams\//.test(target.getAttribute('src') ?? '')
-    ) {
-      void open(target.currentSrc || target.src);
+    const target = e.target as HTMLElement;
+    const button = target.closest<HTMLElement>('.dw-diagram');
+    const img = button?.querySelector('img');
+    if (button && img && /\/diagrams\//.test(img.getAttribute('src') ?? '')) {
+      void open(img.currentSrc || img.src, button);
     }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') close();
   });
   window.addEventListener('resize', () => {
-    if (!overlay?.classList.contains('is-open')) return;
+    if (!isOpen()) return;
     fitSvg();
     Object.assign(vb, vb0);
     apply();

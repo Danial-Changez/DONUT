@@ -9,17 +9,17 @@ Active Directory finder, the User Lens (a de-elevated user-to-device lookup),
 per-machine inventory and storage, and the tray, hotkey, and self-update plumbing.
 Each subsystem has its own page:
 
-- [Runspaces and workers](./runspaces-and-workers.md) — the job pool, process
+- [Runspaces and workers](./runspaces-and-workers.md): the job pool, process
   isolation, and the warm/staging rules.
-- [Remote execution](./remote-execution.md) — the PsExec transport and dcu-cli
+- [Remote execution](./remote-execution.md): the PsExec transport and dcu-cli
   return-code handling.
-- [User Lens](./user-lens.md) — the de-elevated agent and its exchange.
-- [AD query rules](./ad-queries.md) — LDAP filter shapes and bounds.
-- [UI and threading](./ui-and-threading.md) — presenters, view-models, and the
+- [User Lens](./user-lens.md): the de-elevated agent and its exchange.
+- [AD query rules](./ad-queries.md): LDAP filter shapes and bounds.
+- [UI and threading](./ui-and-threading.md): presenters, view-models, and the
   polling rules.
-- [Elevation and autostart](./elevation.md) — the elevation model, first-run
+- [Elevation and autostart](./elevation.md): the elevation model, first-run
   setup, and the one data root.
-- [PowerShell constraints](./powershell-constraints.md) — language and packaging
+- [PowerShell constraints](./powershell-constraints.md): language and packaging
   constraints the code must keep honoring.
 
 The visual counterparts are [Runtime flows](./runtime-flows.md) and
@@ -39,7 +39,7 @@ The script compiles the C# helpers in-process, so it needs nothing beyond
 PowerShell 7+. Started from Windows PowerShell 5.1 or an MTA host, it relaunches
 itself under `pwsh -Sta`. `-Tray` starts hidden in the tray (the packaged launcher
 takes `--tray`); `-DebugLog` forces verbose logging for the session. Maintainers
-build the MSI with `pwsh -File tools\Build-Installer.ps1 -Version <x.y.z>` — plain
+build the MSI with `pwsh -File tools\Build-Installer.ps1 -Version <x.y.z>`. Plain
 `dotnet` is the only prerequisite; the WiX SDK restores itself.
 
 :::note
@@ -81,32 +81,32 @@ business logic; `Core` is generic infrastructure. Runtime data lives outside
 
 ## Architecture (MVVM)
 
-Every surface renders through data bindings — the machine list, detail pane,
+Every surface renders through data bindings: the machine list, detail pane,
 folders tree, finder dropdown, toasts, dialogs, login, settings, and shell chrome
 each bind their own view-models.
 
-1. **Model layer (`src/Models`, `src/Services`, `src/Core`)** — data, business
+1. **Model layer (`src/Models`, `src/Services`, `src/Core`)**: data, business
    logic, infrastructure.
-2. **View layer (`src/UI/Views`)** — XAML only, no code-behind. Pages compose from
+2. **View layer (`src/UI/Views`)**: XAML only, no code-behind. Pages compose from
    files: `HomeView.xaml` is a slot-frame shell whose regions live under
    `Views/Home/`, loaded by `HomePresenter.ComposeRegions` via `ViewLoader`. Every
    `XamlReader.Load` root owns its file's namescope, so a presenter is handed its
    region root and cannot reach into another region's names.
-3. **ViewModel layer (`src/UI/ViewModels`)** — bindable state (`ObservableObject`
+3. **ViewModel layer (`src/UI/ViewModels`)**: bindable state (`ObservableObject`
    subclasses) + `RelayCommand`s; calls the pure Model mappers so WPF-free logic
    stays unit-testable.
-4. **Presenter layer (`src/UI/Presenters`)** — coordinators: load views, own
-   background jobs and timers, build view-models, wire commands.
+4. **Presenter layer (`src/UI/Presenters`)**: coordinators that load views, own
+   background jobs and timers, build view-models, and wire commands.
 
-### The launcher embeds `src\` — installed builds need a rebuild
+### The launcher embeds `src\`, so installed builds need a rebuild
 
 `Donut.Launcher.csproj` embeds every `.psm1`/`.ps1`/`.xaml` under `src\` as
 resources, and the launcher self-extracts them beside the exe before hosting
 PowerShell **in-process**. So `[Environment]::ProcessPath` is `Donut.Launcher.exe`,
-and `SourceRoot` is the extracted tree — *not* your clone.
+and `SourceRoot` is the extracted tree, *not* your clone.
 
 :::caution
-Editing a `.psm1` and pulling does nothing to an installed build — the running code
+Editing a `.psm1` and pulling does nothing to an installed build. The running code
 changes only when `Donut.Launcher.exe` is rebuilt and reinstalled. To test a
 PowerShell-side change, run the dev path (`pwsh -File src\Start-Donut.ps1`).
 :::
@@ -122,15 +122,15 @@ on the dev path.
 
 ### Presenters are coordinators
 
-The `*Presenter` classes act as coordinators/UI-services — bindings are the default
+The `*Presenter` classes act as coordinators/UI-services. Bindings are the default
 render path, and presenters keep only the imperative work MVVM sanctions (dialog
 lifecycles, live log appends, popup positioning, spotlight geometry, the WinForms
 `NotifyIcon`). The name is retained by choice; the rationale and the per-presenter
 list are in [Design decisions](../decisions.md#presenters-keep-their-name).
 
 `HomePresenter` is the largest coordinator (the `AsyncJob` pump, run/apply flow,
-machine list). Three clusters are carved off it — `FinderPresenter`,
-`InventoryPresenter`, `ResolutionCoordinator` — along one seam: duck-typed
+machine list). Three clusters are carved off it (`FinderPresenter`,
+`InventoryPresenter`, `ResolutionCoordinator`) along one seam: duck-typed
 `[object] $Home` back-ref, the gate stays with its owner, shared objects passed by
 reference. See [Design decisions](../decisions.md#the-coordinator-seam).
 
@@ -139,7 +139,7 @@ reference. See [Design decisions](../decisions.md#the-coordinator-seam).
 - One tray icon, owned by the WPF UI thread (`TrayPresenter`), so surfacing the
   window needs no cross-thread marshalling; dev and prod behave identically.
 - The global hotkey uses `RegisterHotKey` + a WndProc hook, never
-  `SetWindowsHookEx`/Raw Input/key-state polling — those observe the global
+  `SetWindowsHookEx`/Raw Input/key-state polling, which observe the global
   keystroke stream and trip AV/EDR keylogger heuristics.
 - Single instance via a `Local\DONUT.SingleInstance` mutex + a
   `Local\DONUT.ShowRequest` event: a second launch signals the running instance to
@@ -151,7 +151,7 @@ reference. See [Design decisions](../decisions.md#the-coordinator-seam).
 - `SelfUpdateService` owns release discovery, download, hash verification, and the
   MSI apply; `UpdatePresenter` drives it. The default Owner/Repo is queried
   anonymously; only when the repo refuses does `LoginPresenter` run the GitHub
-  Device Flow, once — tokens are DPAPI-protected. A fork points Owner/Repo at
+  Device Flow, once; tokens are DPAPI-protected. A fork points Owner/Repo at
   itself and sets `ClientId` to its own GitHub App.
 - `InstallWorker.ps1` stays a standalone script so `SelfUpdateService` can copy it
   to the data root and run it independently for updates/rollbacks (the MSI is

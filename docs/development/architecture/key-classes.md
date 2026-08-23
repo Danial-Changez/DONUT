@@ -23,13 +23,13 @@ consumes the result and exposes it to the bindings.
 | `MachineInventory` / `InventoryFormat` | Per-machine probe DTO + label formatting |
 | `MachineListShaper` | Pure mapper for the machine-list order: categorize a row and rank categories worst-first |
 | `HotkeyGesture` | Pure parse/build of hotkey gestures; rejects modifier-less and Shift-only combos |
-| `TourStep` / `TourSteps` | The guided tour's ordered step content — pure data, unit-tested headless |
+| `TourStep` / `TourSteps` | The guided tour's ordered step content: pure data, unit-tested headless |
 | `DiskUsage*` | "Biggest folders" DTOs + WizTree CSV parse + path-containment tree builder + size formatting |
 | `FolderDeletionPolicy` | Pure safety rule for "Clear selected": canonicalizes the path (resolves `..`, strips trailing dot/space, refuses 8.3 aliases), blocks the volume root and protected system dirs, allowlists known caches. Drives the UI checkbox and is re-checked server-side |
 | `AdSearchResult` / `AdFilter` | AD finder DTO + pure LDAP-filter construction, escaping, and lock/disable decode |
 | `TempPassword` | Crypto-random phone-readable temp passwords + the plaintext→SecureString bridge |
 | `PersonLens` / `LensDevice` / `LensBitLockerKey` / `LensFormat` | User-Lens DTOs parsed from the lookup's JSON bundle; `FromError` builds an empty lens carrying one failure |
-| `PendingIntent` (+ `GatedAction`) | The gated action carried across the elevation restart — untrusted by construction (enum names only; `DeleteFolders` never resumable) |
+| `PendingIntent` (+ `GatedAction`) | The gated action carried across the elevation restart, untrusted by construction (enum names only; `DeleteFolders` never resumable) |
 | `RecentConnection` | Typed view of one persisted "recent machine" entry |
 | `DeviceFlowDecision` (+ `PollOutcome`) | Pure mapper: a GitHub device-flow poll result → continue / authorized / slow-down / fail |
 
@@ -56,7 +56,7 @@ consumes the result and exposes it to the bindings.
 ## Services (`src/Services/`)
 
 All remote services subclass `RemoteJobService` (shared worker-arg building); they
-only **prepare/parse** off the UI thread — the worker does the network I/O.
+only **prepare/parse** off the UI thread; the worker does the network I/O.
 
 | Class | Purpose |
 |-------|---------|
@@ -84,7 +84,7 @@ wired by the owning presenter.
 | `HomeViewModel` | The Home page: `Machines`, `SelectedMachine`, and the finder's `SearchResults` |
 | `HostViewModel` | One machine row + the detail pane it mirrors: status dot/chip/progress, overview facts, updates list, folders tree, commands |
 | `FolderNodeViewModel` | Display-ready largest-folders tree node |
-| `SearchRowViewModel` | Finder dropdown row — header or result, with Pick/Unlock/Reset commands |
+| `SearchRowViewModel` | Finder dropdown row, header or result, with Pick/Unlock/Reset commands |
 | `PersonLensViewModel` / `LensDeviceViewModel` | The user Lens: person fields + devices, each with Reveal-BitLocker and Add commands |
 | `ToastViewModel` | One toast card |
 | `DialogViewModel` | One modal dialog's content + verdict commands |
@@ -92,7 +92,7 @@ wired by the owning presenter.
 | `ResetPasswordViewModel` | The temp-password overlay: target, password field, change-at-logon flag, Generate/Copy/QR/Apply; `ClearSecrets` wipes on close |
 | `MainViewModel` | Shell: settings/tour/QR/reset overlay state + window chrome commands |
 
-The settings option forms have no view-model by design — they stay on
+The settings option forms have no view-model by design. They stay on
 `SettingsPresenter`'s data-driven binder, and settings persist in real time, so
 there is no Save command.
 
@@ -137,11 +137,11 @@ adopts each root:
 
 | Region file | Root name | Adopted by | Names it owns |
 |-------------|-----------|------------|---------------|
-| `ActionBar.xaml` | — | `FinderPresenter` (+ `HomePresenter` for mode/run-all) | `SearchBox`, `GoogleSearchBar`, `SearchResultsPopup`, `SearchResultsList`, `btnMode`, `txtMode`, `btnRunAll` |
-| `StatCards.xaml` | — | binding-only (`SelectedMachine.Ov*`) | — |
+| `ActionBar.xaml` | none | `FinderPresenter` (+ `HomePresenter` for mode/run-all) | `SearchBox`, `GoogleSearchBar`, `SearchResultsPopup`, `SearchResultsList`, `btnMode`, `txtMode`, `btnRunAll` |
+| `StatCards.xaml` | none | binding-only (`SelectedMachine.Ov*`) | none |
 | `MachinePane.xaml` | `MachinePanel` | `HomePresenter` | `btnClearTabs`, `MachineList` |
 | `DetailPane.xaml` | `DetailPane` | `InventoryPresenter` | `btnDetailRefresh`, `btnFindFolders`, `btnDeleteFolders`, `lstDetailLog`, `btnCopyLog`, `DetailProgress`, `DiskFoldersList`, `slotLens` |
-| `LensPane.xaml` (nested in DetailPane) | `LensPanel` | binding-only (`SelectedPerson`) | — |
+| `LensPane.xaml` (nested in DetailPane) | `LensPanel` | binding-only (`SelectedPerson`) | none |
 
 ## Diagrams
 

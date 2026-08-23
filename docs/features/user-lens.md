@@ -8,16 +8,16 @@ detail pane: who they are and what machines they have.
 
 ## What it shows
 
-- **Directory facts** — UPN, email, manager, office. Click the email or SAM to
+- **Directory facts.** UPN, email, manager, office. Click the email or SAM to
   copy it; click a device's tag to copy the service tag alone.
-- **Their devices** — the person's SCCM-assigned machines, each on one line of
+- **Their devices.** The person's SCCM-assigned machines, each on one line of
   model, `Tag <service tag>`, and last domain logon, so a person with three similar
   laptops is tellable apart at a glance. The OS and manufacturer are in the row's
   tooltip. Any device can be **added to the machine list** in one click.
-- **BitLocker recovery keys** — revealed on click per device (never shown by
+- **BitLocker recovery keys.** Revealed on click per device (never shown by
   default), with a **Copy** button and a QR code for typing-free entry on the
   target.
-- **Their software** — the deployments targeted at the user: install-intent
+- **Their software.** The deployments targeted at the user: install-intent
   applications plus package deployments (each package shows its program name, so
   software and maintenance are tellable apart), as software over its carrying
   collection, matching the console's user Properties → Deployments tab. The
@@ -33,6 +33,6 @@ message.
 
 :::note
 Lens results reflect **your own** account's permissions in SCCM and AD, not the
-administrator account DONUT uses for remote work — so you see exactly what you're
+administrator account DONUT uses for remote work, so you see exactly what you're
 entitled to see.
 :::

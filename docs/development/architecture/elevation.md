@@ -25,7 +25,7 @@ The round trip a gated click takes when DONUT is de-elevated:
   whether the process carries the Administrators group; `IsSystem` is the narrower
   service-token question. `Classify` is the pure rule the UI gates on and takes the
   elevation state as a parameter, so it unit-tests on any platform.
-- **`runAsAdmin` defaults to `true`** — the only boolean that falls back to `true`
+- **`runAsAdmin` defaults to `true`**, the only boolean that falls back to `true`
   on a corrupt value, because guessing wrong yields an app where nothing remote
   works.
 - **One prompt per session, never per action.** Elevating relaunches the whole UI;
@@ -37,13 +37,14 @@ The launcher finishes machine setup on the first elevated run, in two steps:
 
 1. **`Program.ExtractEmbeddedApp`** self-extracts the embedded app tree beside the
    exe (SHA-256 verified per file). The tree is what an elevated DONUT executes, so
-   it is deliberately **not** writable de-elevated — local-user write access there
+   it is deliberately **not** writable de-elevated: local-user write access there
    would be a privilege escalation. A de-elevated launch against a stale tree gets
    start-as-admin-once guidance.
 2. **`Bootstrap.Run`** (`src/Launcher/Bootstrap.cs`) installs missing operator
-   prerequisites. Idempotent: each later launch re-checks cheaply and skips, and a
-   failure warns and retries at the next elevated launch, so an offline install
-   still opens the app. It raises that warning through a `warn` callback rather
+   prerequisites. The MSI's `--extract-only` action runs it first, quietly, so an
+   update relaunches into a ready app. Idempotent: each later launch re-checks
+   cheaply and skips, and a failure warns and retries at the next elevated launch,
+   so an offline install still opens the app. It raises that warning through a `warn` callback rather
    than a dialog of its own, so it stays compilable without a UI assembly graph;
    `Program` supplies one that opens `ErrorDialog`.
 
@@ -61,8 +62,8 @@ launcher assembly, so a hard type reference there would not parse.
 | WizTree | The vendor's portable zip | `<app tree>\src\Tools\wiztree64.exe` |
 
 The RSAT ActiveDirectory module used to sit in that table, fetched through
-`dism /Add-Capability`. It bought three cmdlets — `Unlock-ADAccount`,
-`Set-ADAccountPassword`, `Set-ADUser` — and cost a Feature-on-Demand download that
+`dism /Add-Capability`. It bought three cmdlets (`Unlock-ADAccount`,
+`Set-ADAccountPassword`, `Set-ADUser`) and cost a Feature-on-Demand download that
 ran for minutes on a first run and never returned at all where Windows Update was
 blocked by policy. All three have `System.DirectoryServices` equivalents, which is
 what `ActiveDirectoryService` writes through now, so nothing installs it.
@@ -81,7 +82,7 @@ resource.
 the order is load-bearing:
 
 1. Persist anything that must survive the swap.
-2. `Start-Process -Verb RunAs` — the prompt comes **before** any teardown, so a
+2. `Start-Process -Verb RunAs`. The prompt comes **before** any teardown, so a
    declined UAC leaves a fully working app.
 3. Only on success set `ExitRequested` and close the window.
 
@@ -90,10 +91,12 @@ reverts the setting; a gated action discards its note and undoes a remembered
 choice. Turning `runAsAdmin` off applies at the next launch (Windows has no
 un-elevate API), and the UI says so.
 
-The single-instance mutex is `Local\`-scoped — per-session, not per-token — so an
-elevated relaunch would collide with its de-elevated parent. Both hosts wait the
-predecessor out first: `--await-pid` in the launcher, `-AwaitPid` in
-`Start-Donut.ps1`.
+The single-instance mutex is `Local\`-scoped, per-session rather than per-token, so
+an elevated relaunch would collide with its de-elevated parent. Both hosts wait the
+predecessor out first (`--await-pid` in the launcher, `-AwaitPid` in
+`Start-Donut.ps1`), then up to 15 s for the lock itself. The lock is what matters: a
+dev run inside an interactive shell never exits, so `Start-Donut.ps1` releases the
+lock on every path that ends without the window, the relaunch included.
 
 ## Gated actions
 
@@ -101,11 +104,11 @@ Scan, apply, inventory, storage scan, clear selected, and the Start with Windows
 toggle all need administrator rights. Clicking one while de-elevated records what
 was clicked, elevates, and re-runs it.
 
-- **`PendingIntent` is untrusted input** — written de-elevated, read elevated. It
+- **`PendingIntent` is untrusted input**, written de-elevated and read elevated. It
   carries only an action kind and host names; `FromJson` matches enum *names*, not
   `[enum]::TryParse` (which accepts a numeric string).
 - **`DeleteFolders` is never resumed.** Its folder list lives in the window's
-  selection, and it is the one destructive action — the user re-picks after
+  selection, and it is the one destructive action, so the user re-picks after
   elevating.
 - **A note fires at most once.** `PendingIntentStore.Take` deletes the file before
   returning; stale (>2 min) and future-stamped notes are discarded.
@@ -117,16 +120,16 @@ user at `RunLevel Highest`.
 
 - On an admin console account, Highest starts DONUT elevated with no logon-time UAC
   prompt; on a non-admin account it degrades to the standard token.
-- **An autostarted DONUT never elevates itself** — a tray start elevating would
+- **An autostarted DONUT never elevates itself.** A tray start elevating would
   throw a consent (or credential) prompt at the sign-in screen. It runs de-elevated,
   says so once via toast when first surfaced, and elevation is whatever the user
   does next.
-- **Every admin-only action is gated, including `startWithWindows`** — registering
+- **Every admin-only action is gated, including `startWithWindows`.** Registering
   a scheduled task needs an elevated token, and `HomePresenter.ResumeGatedAction`
   re-runs the registration after the relaunch. The 120-second startup-task heal is
   not gated: it skips when de-elevated, because a background heal must never prompt.
 - There used to be a SYSTEM+psexec autostart lane; deleting it fixed a bug. Do not
-  reintroduce it — see
+  reintroduce it; see
   [Design decisions](../decisions.md#the-deleted-system-autostart-lane).
   `tools\Diagnose-StartupTask.ps1` flags tasks left by older builds.
 
@@ -137,25 +140,25 @@ about to hand over never warms a runspace pool it will discard, and relaunches
 through `ElevationRelaunch::Spawn` (windowless on purpose, shared with the
 presenter's spawn path).
 
-The setting is never written from this path — a declined prompt leaves `runAsAdmin`
+The setting is never written from this path. A declined prompt leaves `runAsAdmin`
 as it was, else one cancelled UAC would demote DONUT permanently. Only the Settings
 toggle and the prompt's own "always" checkbox write it.
 
 ## One data root
 
-`DonutPaths` resolves one machine-wide root at `%ProgramData%\DONUT\data` —
+`DonutPaths` resolves one machine-wide root at `%ProgramData%\DONUT\data`.
 `config.json`, `recents.json`, the GitHub token, logs, and reports all hang off it,
 secured on the run that creates it (SYSTEM, Administrators, the interactive user).
 It is deliberately not `%LOCALAPPDATA%`: that is per-account, and a de-elevated UI
 with privileged work under a different account would keep two of everything.
 
 - `config.json` is therefore writable by the standard user while supplying DCU
-  arguments to elevated remote runs — a real, accepted widening, and the price of a
+  arguments to elevated remote runs: a real, accepted widening, and the price of a
   single shared store.
 - The extracted app tree is **not** widened the same way (see
   [the first elevated launch](#the-first-elevated-launch)).
 - The recents store (`RecentConnectionsStore`) persists per-host outcomes into its
-  own `recents.json` — capped at 50, de-duplicated — so `config.json` stays
+  own `recents.json` (capped at 50, de-duplicated), so `config.json` stays
   settings-only and job traffic never rewrites it. Per-machine probe data lives in
   `reports\`, parsed on demand and memoized per session.
 

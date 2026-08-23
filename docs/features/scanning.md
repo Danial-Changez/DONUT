@@ -10,7 +10,7 @@ changing anything on the target.
 
 1. Add machines via the [search bar](./machine-list.md) (type names, or pick from the
    [AD finder](./ad-finder.md)).
-2. Make sure the mode pill shows **Scan** — click it to cycle the mode if not.
+2. Make sure the mode pill shows **Scan**; click it to cycle the mode if not.
 3. Click a machine's **Run** button to scan just that host, or **Run All** to scan
    every idle machine in the list.
 

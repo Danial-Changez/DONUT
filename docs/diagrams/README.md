@@ -3,7 +3,7 @@
 PlantUML (`.puml`) sources for DONUT's structure and runtime flows, the visual
 companion to the [architecture pages](../development/architecture/overview.md).
 
-> **Rendering.** GitHub does not render `.puml` inline without a plugin — but the
+> **Rendering.** GitHub does not render `.puml` inline without a plugin, but the
 > **docs site renders every diagram as SVG**: each structure diagram is embedded
 > on its [architecture subsystem page](../development/architecture/overview.md),
 > and the flows are on
@@ -12,7 +12,7 @@ companion to the [architecture pages](../development/architecture/overview.md).
 > or run `tools\Render-Diagrams.ps1`. `network-flow.png` is a committed render
 > (the site's SVG is canonical if the two ever differ), and the self-update flow
 > is inlined as [mermaid](#self-update-flow) below (which GitHub does render).
-> Keep each file's `@startuml <name>` equal to its filename — it names the
+> Keep each file's `@startuml <name>` equal to its filename; it names the
 > rendered SVG.
 
 ## Structure

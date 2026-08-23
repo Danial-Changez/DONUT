@@ -29,7 +29,7 @@ Lens agent (`Find-Gc` and the per-device reads in `src/Scripts/LensAgent.Common.
 - **One `(sn=$p*)` clause instead of ANR.** Measured: every extra hit ANR found was
   a surname match, and its schema-level breadth could crowd real people out of the
   per-forest cap. Surname-only hits rank last, inferred rather than read. Re-run
-  `tools\Measure-AdSearch.ps1` when the filter changes — details in
+  `tools\Measure-AdSearch.ps1` when the filter changes; details in
   [Design decisions](../decisions.md#anr-measured-and-rejected).
 - **Referral chasing stays at the default** (`External`). Measured equal on hit
   counts and ~6 ms apart; the hit count is the test, not the clock.
@@ -40,7 +40,7 @@ Lens agent (`Find-Gc` and the per-device reads in `src/Scripts/LensAgent.Common.
 
 `Search` isolates each forest in a try/catch so one down or untrusted directory
 cannot fail the others, and failures must stay visible (a misspelt forest name once
-returned nothing, silently, for a quarter of every search — see
+returned nothing, silently, for a quarter of every search; see
 [Design decisions](../decisions.md#the-misspelt-forest)):
 
 - `ActiveDirectoryService.LastErrors` records each failure as `<domain>: <reason>`,

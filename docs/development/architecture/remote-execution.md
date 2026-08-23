@@ -4,7 +4,7 @@ description: The PsExec transport - encapsulation, dcu-cli invocation, per-comma
 ---
 
 How DONUT reaches a target machine: `PsExec` over SMB (port 445) is the primary
-execution engine over native PowerShell Remoting — no WinRM/TrustedHosts
+execution engine over native PowerShell Remoting: no WinRM/TrustedHosts
 configuration, and native `SYSTEM` execution.
 
 ![Remote execution class diagram](/diagrams/class_remote_exec.svg)
@@ -19,19 +19,19 @@ configuration, and native `SYSTEM` execution.
   `pwsh -NoProfile -NonInteractive -EncodedCommand` (base64 sidesteps psexec
   quoting hazards).
 - **Pass the session id explicitly.** `-i` defaults to the caller's session, not
-  the console — field-verified against the docs
+  the console, field-verified against the docs
   ([details](../decisions.md#psexec--i-defaults-to-the-callers-session)).
 - **Headless launch:** psexec starts through `ProcessStartInfo` with
   `CreateNoWindow` (a hidden console), never `Start-Process -NoNewWindow` (which
-  spawns a visible console per psexec). Its stdout is **not** redirected —
+  spawns a visible console per psexec). Its stdout is **not** redirected;
   redirecting removed the console and caused remote `0xC0000142` init failures.
   `ExecutionService.StartPsExecHidden` is the shared launcher.
 - **One `-r` service name per job family** (DonutDcu / DonutDisk / DonutProbe /
   DonutDelete): concurrent psexec sessions sharing one PSEXESVC hang when the
   first ends and deletes the service.
 - **Every share/WMI touch is gated by a bounded port probe first** (RPC 135 for
-  psexec/CIM, SMB 445 for admin-share I/O) — UNC and CIM operations have no usable
-  timeout. The psexec path does no controller-side UNC before launch: dcu-cli
+  psexec/CIM, SMB 445 for admin-share I/O), because UNC and CIM operations have no
+  usable timeout. The psexec path does no controller-side UNC before launch: dcu-cli
   discovery and the pre-run log clear run on the target
   (`BuildRemoteDcuScript`), and a missing dcu-cli comes back as the sentinel exit
   2600, not a hung path.
@@ -46,7 +46,7 @@ configuration, and native `SYSTEM` execution.
 - **Installed-driver enrichment:** after a scan, the same target-side script appends
   a `<drivers>` section to DCU's report (PnP driver rows for the audio, network,
   Bluetooth and display classes, each carrying its device class, plus the BIOS from
-  `Win32_BIOS`) — DCU's own XML never lists installed versions, and this section is
+  `Win32_BIOS`). DCU's own XML never lists installed versions, and this section is
   what `BuildUpdateRows` matches against to render "installed → new". Only
   driver-type updates are fuzzy-matched (category agreement plus a shared name
   word); a BIOS update pairs exactly with the BIOS row, and applications and
@@ -81,7 +81,7 @@ psexec exit codes are classified in layers:
 On a drop the run does **not** fail: dcu-cli keeps going on the target, so
 `RecoverByResumeTail` reconnects (waiting out a local outage too), resumes the
 outputLog tail from the last-seen offset, and recovers the authoritative
-`return code: N` line — bounded by `AppConfig.GetRecoveryWindowMinutes`, after
+`return code: N` line, bounded by `AppConfig.GetRecoveryWindowMinutes`, after
 which the run settles Unconfirmed.
 
 ## Scan launch/wait breadcrumbs
