@@ -22,6 +22,12 @@
 .PARAMETER ProcessNameToClose
     Process to stop before installing (default 'DONUT').
 
+.PARAMETER CallerPid
+    The DONUT process that launched this worker, whatever its exe is called (a
+    publish-folder Donut.Launcher.exe is not named DONUT). Closed alongside
+    ProcessNameToClose, and the relaunch waits on it, so the new instance never
+    bows out to the single-instance lock the old one still holds.
+
 .PARAMETER Passive
     Run msiexec with a passive (non-interactive) UI.
 
@@ -44,6 +50,7 @@ param(
     [string]$ZipPath,
     [string]$InstallDir,
     [string]$ProcessNameToClose = 'DONUT',
+    [int]$CallerPid = 0,
     [switch]$Passive,
     [switch]$Rollback,
     [int]$CloseTimeoutSeconds = 10
@@ -154,10 +161,20 @@ function Install-DonutZip {
     Remove-Item $unpack -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# The processes to close: every one by name, plus the caller by id.
+function Get-DonutProcess {
+    param([string]$Name, [int]$CallerPid)
+    $procs = @(if ($Name) { Get-Process -Name $Name -ErrorAction SilentlyContinue })
+    if ($CallerPid -gt 0 -and $procs.Id -notcontains $CallerPid) {
+        $procs += @(Get-Process -Id $CallerPid -ErrorAction SilentlyContinue)
+    }
+    return $procs
+}
+
 # Closes running DONUT windows, waits up to TimeoutSeconds, then force-kills any survivors.
 function Stop-DonutProcessGracefully {
-    param([string]$Name, [int]$TimeoutSeconds = 10)
-    $procs = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
+    param([string]$Name, [int]$CallerPid = 0, [int]$TimeoutSeconds = 10)
+    $procs = @(Get-DonutProcess -Name $Name -CallerPid $CallerPid)
 
     if (-not $procs) { return }
     foreach ($p in $procs) {
@@ -169,10 +186,10 @@ function Stop-DonutProcessGracefully {
 
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 200
-        $alive = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
+        $alive = @(Get-DonutProcess -Name $Name -CallerPid $CallerPid)
         if (-not $alive) { break }
     }
-    $still = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
+    $still = @(Get-DonutProcess -Name $Name -CallerPid $CallerPid)
 
     if ($still) {
         foreach ($p in $still) {
@@ -198,8 +215,10 @@ function Show-UpdateError {
 
 # --- Main install logic ---
 try {
-    if ($ProcessNameToClose) {
-        Stop-DonutProcessGracefully -Name $ProcessNameToClose -TimeoutSeconds $CloseTimeoutSeconds
+    if ($ProcessNameToClose -or $CallerPid -gt 0) {
+        Stop-DonutProcessGracefully -Name $ProcessNameToClose `
+                                    -CallerPid $CallerPid `
+                                    -TimeoutSeconds $CloseTimeoutSeconds
     }
     $package = if ($ZipPath) { $ZipPath } else { $MsiPath }
     $exePath = $null
@@ -253,7 +272,9 @@ try {
 
     if ($exePath -and (Test-Path $exePath)) {
         try {
-            Start-Process -FilePath $exePath
+            # The successor waits the caller out, the same hand-off an elevation relaunch uses.
+            if ($CallerPid -gt 0) { Start-Process -FilePath $exePath -ArgumentList "--await-pid $CallerPid" }
+            else { Start-Process -FilePath $exePath }
         } catch {
             Show-UpdateError "DONUT updated but couldn't relaunch. Open it from the Start Menu."
             Write-Host "[WARN] Failed to launch DONUT: $($_.Exception.Message)" -ForegroundColor Yellow

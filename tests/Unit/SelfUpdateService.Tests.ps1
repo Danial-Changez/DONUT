@@ -307,7 +307,8 @@ Describe "SelfUpdateService" {
                 Should -Invoke Start-Process -Times 1 -ParameterFilter {
                     $FilePath -eq "powershell.exe" -and
                     $ArgumentList -match "InstallWorker.ps1" -and
-                    $ArgumentList -match "-MsiPath"
+                    $ArgumentList -match "-MsiPath" -and
+                    $ArgumentList -match "-CallerPid $PID\b"
                 }
             }
         }

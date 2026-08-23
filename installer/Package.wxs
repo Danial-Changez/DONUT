@@ -44,9 +44,10 @@
         <Files Directory="AppFolder"
                Include="$(var.StageDir)\**" />
 
-        <!-- The launcher writes its app tree on first elevated run, and a Start Menu
-             launch is not one. Deferred and un-impersonated to have rights on the
-             install folder; failure is ignored, since that first run still covers it. -->
+        <!-- The launcher writes its app tree and installs the prerequisites on its first
+             elevated run, and a Start Menu launch is not one. Deferred and un-impersonated
+             to have rights on the install folder; failure is ignored, since that first run
+             still covers it. -->
         <CustomAction Id="StageAppTree"
                       Directory="AppFolder"
                       ExeCommand="&quot;[AppFolder]DONUT.exe&quot; --extract-only"
