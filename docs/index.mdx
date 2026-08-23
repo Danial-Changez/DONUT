@@ -14,14 +14,18 @@ hero:
       variant: minimal
 ---
 
-import { CardGrid } from '@astrojs/starlight/components';
-import IconLinkCard from '../web/src/components/IconLinkCard.astro';
+import { CardGrid } from "@astrojs/starlight/components";
+import IconLinkCard from "../web/src/components/IconLinkCard.astro";
+import homeShot from "../web/src/assets/home-screenshot.png";
+
+{/_ Imported, not referenced by path: MDX skips the rehype plugin that base-prefixes
+absolute asset paths, so the asset pipeline carries the base instead. _/}
 
 <img
   class="dw-shot"
-  src="/screenshots/home.png"
-  width="1300"
-  height="700"
+  src={homeShot.src}
+  width={homeShot.width}
+  height={homeShot.height}
   alt="The DONUT main window: a machine list with status chips, and a selected machine's updates, inventory tiles, and live scan log."
 />
 
@@ -67,6 +71,6 @@ import IconLinkCard from '../web/src/components/IconLinkCard.astro';
 </CardGrid>
 
 <p class="dw-footer-note">
-  Start with <a href="./get-started/what-is-donut/">What is DONUT?</a> or jump straight
-  to <a href="./get-started/installation/">Installation</a>.
+  Start with <a href="./get-started/what-is-donut/">What is DONUT?</a> or jump
+  straight to <a href="./get-started/installation/">Installation</a>.
 </p>

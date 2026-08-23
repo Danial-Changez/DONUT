@@ -11,7 +11,7 @@ const BASE = base.endsWith('/') ? base : `${base}/`;
 
 // Astro does not base-prefix absolute paths in Markdown, so authors write these
 // base-less and the prefix is applied here, keeping the base in one place.
-const ASSET_PREFIXES = ['/diagrams/', '/screenshots/'];
+const ASSET_PREFIXES = ['/diagrams/'];
 
 /** Join BASE (trailing slash) onto a root-absolute path (leading slash). */
 function withBase(url) {
