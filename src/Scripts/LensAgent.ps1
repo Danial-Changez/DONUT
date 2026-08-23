@@ -115,7 +115,7 @@ try {
             $ds = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$dnc")
             $ds.SearchScope = 'Base'
             $ds.Filter = '(objectClass=*)'
-            $ds.ClientTimeout = [TimeSpan]::FromSeconds(15)
+            $ds.ClientTimeout = [TimeSpan]::FromSeconds(5)
             $null = $ds.FindOne()
         } catch { }
         if ($siteServer) {
