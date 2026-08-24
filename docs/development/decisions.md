@@ -349,6 +349,24 @@ The faux window that stood in on the splash is gone: `tools\Show-View.ps1 -Main`
 composes the real main window with sample data and renders it off-screen, so the
 splash shows an actual screenshot and `assets/Screenshots` is current again.
 
+### Montserrat, shipped this time
+
+The audit swapped the never-shipped Montserrat for the docs site's Geist. Rendered
+side by side (`tools\Show-View.ps1 -Main -Font 'Segoe UI'` against the embedded
+face), the choice came down to Montserrat or Segoe UI, and Montserrat won on look.
+So the sans is Montserrat for real now: the four static weights are embedded under
+`src/UI/Styles/Fonts` (OFL) and the launcher's pre-WPF dialog loads the same files.
+Geist Mono stays for the mono tier, and the site keeps Geist for its own text.
+
+Two things came with it. Montserrat sits taller than Segoe UI and the type ladder
+rounded every size up, so the gaps inside cards read cramped until they grew with
+the face; a stat tile now keeps equal ink gaps, measured on a render rather than
+eyeballed: 16 between its three lines and 18 from the top and bottom edges. The
+copy pill on a value hugs the value instead of spanning the row. And the
+casing rules were re-applied to what the audit missed (`Sign In`, `What's New`,
+`Press Keys…`, `BIOS`, `Reboot Required`), with the reference now naming status
+chips and toast titles as Title Case and toast bodies as sentence case.
+
 ## Releasing
 
 The current rules live in [Releasing](./releasing.md); this is why the version

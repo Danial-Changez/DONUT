@@ -63,36 +63,36 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
-      <Border Grid.Row="0" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,12">
+      <Border Grid.Row="0" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,10" Margin="0,0,6,12">
         <StackPanel>
           <TextBlock Text="EMAIL" Style="{DynamicResource MicroLabel}" />
           <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding Email}" Tag="{Binding Email}"
                    FontFamily="{DynamicResource FontMono}" FontSize="12"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-4,3,0,0" />
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-5,4,0,0" />
         </StackPanel>
       </Border>
-      <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,12">
+      <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,10" Margin="6,0,0,12">
         <StackPanel>
           <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
           <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" ToolTip="{Binding Manager}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,3,0,0" />
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="0,4,0,0" />
         </StackPanel>
       </Border>
-      <Border Grid.Row="1" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,8" Margin="0,0,6,0">
+      <Border Grid.Row="1" Grid.Column="0" Style="{DynamicResource Card}" Padding="12,10" Margin="0,0,6,0">
         <StackPanel>
           <TextBlock Text="SAM" Style="{DynamicResource MicroLabel}" />
           <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding Sam}" Tag="{Binding Sam}"
                    FontFamily="{DynamicResource FontMono}" FontSize="12"
-                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-4,3,0,0" />
+                   Foreground="{DynamicResource TitleTextPrimary}" Margin="-5,4,0,0" />
         </StackPanel>
       </Border>
-      <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,8" Margin="6,0,0,0">
+      <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,10" Margin="6,0,0,0">
         <StackPanel>
           <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
           <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" ToolTip="{Binding Office}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
-                   Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                   Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,4,0,0" />
         </StackPanel>
       </Border>
     </Grid>

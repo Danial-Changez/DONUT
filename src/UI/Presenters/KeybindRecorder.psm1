@@ -58,7 +58,7 @@ class KeybindRecorder {
         $this.Recording = $true
         $this.CapturedKey = $null
         $this.CapturedMods = $null
-        if ($this.RecordButton) { $this.RecordButton.Content = 'Press keys…' }
+        if ($this.RecordButton) { $this.RecordButton.Content = 'Press Keys…' }
         if ($this.Display) { $this.Display.Text = 'Press a key combo  ·  Esc cancels' }
         if ($this.RecordButton) { [Keyboard]::Focus($this.RecordButton) | Out-Null }
     }

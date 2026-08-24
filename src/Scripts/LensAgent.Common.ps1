@@ -730,7 +730,7 @@ function Resolve-Lens {
                     $bundle.devices = @($wsids | ForEach-Object {
                             [ordered]@{ name = $_; os = ''; lastLogon = ''; domain = ''
                                 model = ''; serial = ''; manufacturer = ''
-                                note = 'loading details…'; bitLockerKeys = @()
+                                note = 'Loading details…'; bitLockerKeys = @()
                             }
                         })
                     $seq++

@@ -29,12 +29,12 @@ Describe "TimeFormat" {
     }
 
     Context "Relative" {
-        It "Returns 'just now' for the present" {
-            [TimeFormat]::Relative([datetime]::UtcNow) | Should -Be 'just now'
+        It "Returns 'Just now' for the present" {
+            [TimeFormat]::Relative([datetime]::UtcNow) | Should -Be 'Just now'
         }
 
-        It "Returns 'just now' for small clock skew into the future" {
-            [TimeFormat]::Relative([datetime]::UtcNow.AddSeconds(5)) | Should -Be 'just now'
+        It "Returns 'Just now' for small clock skew into the future" {
+            [TimeFormat]::Relative([datetime]::UtcNow.AddSeconds(5)) | Should -Be 'Just now'
         }
 
         It "Returns minutes for a few minutes ago" {
@@ -45,8 +45,8 @@ Describe "TimeFormat" {
             [TimeFormat]::Relative([datetime]::UtcNow.AddHours(-3)) | Should -Be '3 hr ago'
         }
 
-        It "Returns 'yesterday' between 24 and 48 hours" {
-            [TimeFormat]::Relative([datetime]::UtcNow.AddHours(-30)) | Should -Be 'yesterday'
+        It "Returns 'Yesterday' between 24 and 48 hours" {
+            [TimeFormat]::Relative([datetime]::UtcNow.AddHours(-30)) | Should -Be 'Yesterday'
         }
 
         It "Returns day count within the week" {

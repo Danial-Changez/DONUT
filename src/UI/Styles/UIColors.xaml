@@ -113,8 +113,8 @@
     <Color x:Key="InputBorderColor"> #26FFFFFF</Color>
     <SolidColorBrush x:Key="InputBorder"
                      Color="{StaticResource InputBorderColor}" />
-    <!-- Geist and Geist Mono are embedded under ./Fonts (OFL), the docs site's own families. -->
-    <FontFamily x:Key="FontSans">./Fonts/#Geist, Segoe UI</FontFamily>
+    <!-- Montserrat and Geist Mono are embedded under ./Fonts (OFL); Segoe UI and Cascadia fall back. -->
+    <FontFamily x:Key="FontSans">./Fonts/#Montserrat, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">./Fonts/#Geist Mono, Cascadia Mono, Consolas</FontFamily>
     <!-- Status glyphs (checkmarks, arrows) pin a symbol font so they never render as tofu. -->
     <FontFamily x:Key="FontSymbol">Segoe UI Symbol</FontFamily>

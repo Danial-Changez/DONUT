@@ -87,7 +87,7 @@ class InventoryFormat {
     # Total disk on C: as GB, the tile's sub-line. Empty when total is unknown.
     static [string] DiskTotalLabel([double]$totalBytes) {
         if ($totalBytes -le 0) { return '' }
-        return "of $([InventoryFormat]::Gb($totalBytes)) GB"
+        return "$([InventoryFormat]::Gb($totalBytes)) GB Total"
     }
 
     hidden static [string] Gb([double]$bytes) {
@@ -102,9 +102,9 @@ class InventoryFormat {
         else { $lastBoot.ToUniversalTime() }
         $span = [datetime]::UtcNow - $bootUtc
         if ($span.TotalSeconds -lt 0) { return 'just booted' }
-        if ($span.TotalMinutes -lt 60) { return "up $([int]$span.TotalMinutes) min" }
-        if ($span.TotalHours -lt 24) { return "up $([int]$span.TotalHours) hr" }
+        if ($span.TotalMinutes -lt 60) { return "Up $([int]$span.TotalMinutes) min" }
+        if ($span.TotalHours -lt 24) { return "Up $([int]$span.TotalHours) hr" }
         $days = [int]$span.TotalDays
-        return "up $days day$(if ($days -ne 1) { 's' })"
+        return "Up $days day$(if ($days -ne 1) { 's' })"
     }
 }

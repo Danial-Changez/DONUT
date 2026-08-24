@@ -31,7 +31,7 @@
         <Setter Property="CornerRadius"
                 Value="10" />
         <Setter Property="Padding"
-                Value="16,14" />
+                Value="16,16" />
     </Style>
 
     <!-- The centered card every overlay pops. Instances set Width and x:Name only. -->

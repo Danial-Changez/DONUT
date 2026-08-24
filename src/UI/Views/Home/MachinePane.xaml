@@ -17,7 +17,7 @@
     </Grid.RowDefinitions>
 
     <!-- Mirrors the detail pane's [title | buttons] row so the two panes read as a pair. -->
-    <Grid Grid.Row="0" Margin="14,12,14,10">
+    <Grid Grid.Row="0" Margin="14,14,14,12">
       <TextBlock Text="Machines" Style="{DynamicResource TextPaneTitle}"
                  HorizontalAlignment="Left" VerticalAlignment="Center" />
       <Button x:Name="btnClearTabs" Content="Clear" Style="{DynamicResource ButtonSecondary}"
@@ -41,7 +41,7 @@
         <ListBox.ItemTemplate>
           <DataTemplate>
             <Border Margin="0,0,0,8" CornerRadius="10"
-                    Padding="14,10,8,10" HorizontalAlignment="Stretch" Cursor="Hand">
+                    Padding="14,12,8,12" HorizontalAlignment="Stretch" Cursor="Hand">
               <Border.Style>
                 <Style TargetType="Border">
                   <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
@@ -99,7 +99,7 @@
                     </TextBlock>
                   </StackPanel>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
-                             FontFamily="{DynamicResource FontMono}" FontSize="11"
+                             FontFamily="{DynamicResource FontMono}" FontSize="11" Margin="0,3,0,0"
                              TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
                 <!-- No progress bar here, the live one sits atop the detail pane's terminal. -->

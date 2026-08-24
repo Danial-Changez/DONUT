@@ -20,7 +20,7 @@ namespace Donut.Launcher;
 ///
 /// Themed by hand like <see cref="SplashForm"/>, since the WPF resource dictionaries are
 /// not loaded (and two call sites fire precisely because they failed to load). The text
-/// faces come from the embedded Geist files through GDI+, so the labels render with
+/// faces come from the embedded Montserrat files through GDI+, so the labels render with
 /// compatible text rendering; the native details box keeps the mono fallback.
 /// </remarks>
 public sealed class ErrorDialog : Form {
@@ -268,7 +268,7 @@ public sealed class ErrorDialog : Form {
     }
 
     /// <summary>
-    /// The embedded Geist faces for WinForms, loaded once from the launcher's resources so
+    /// The embedded Montserrat faces for WinForms, loaded once from the launcher's resources so
     /// the pre-WPF windows share the app's type. Falls back to Segoe UI when a face is
     /// missing, the same fallback UIColors.xaml names.
     /// </summary>
@@ -278,7 +278,7 @@ public sealed class ErrorDialog : Form {
         public static Font Sans(float px, FontStyle style) {
             float pt = px * 72f / 96f;
             foreach (FontFamily fam in Collection.Families) {
-                if (fam.Name == "Geist" && fam.IsStyleAvailable(style)) return new Font(fam, pt, style);
+                if (fam.Name == "Montserrat" && fam.IsStyleAvailable(style)) return new Font(fam, pt, style);
             }
             return new Font("Segoe UI", pt, style);
         }
@@ -295,7 +295,7 @@ public sealed class ErrorDialog : Form {
         static PrivateFontCollection Load() {
             var collection = new PrivateFontCollection();
             string dir = Path.Combine(Path.GetTempPath(), "donut-fonts");
-            foreach (string file in new[] { "Geist-Regular.ttf", "Geist-Bold.ttf", "GeistMono-Regular.ttf" }) {
+            foreach (string file in new[] { "Montserrat-Regular.ttf", "Montserrat-Bold.ttf", "GeistMono-Regular.ttf" }) {
                 using var s = EmbeddedAssets.Open("src/UI/Styles/Fonts/" + file);
                 if (s is null) continue;
                 var bytes = new byte[s.Length];

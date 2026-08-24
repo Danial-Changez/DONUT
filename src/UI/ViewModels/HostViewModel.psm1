@@ -33,7 +33,7 @@ class HostViewModel : ObservableObject {
     [string] $HostName = ''
     [string] $OwnerName = ''           # short owner form, e.g. "Danial C", '' collapses the chip
     [string] $OwnerTip = ''            # full display name, only when it says more than OwnerName
-    [string] $Subtitle = 'never run'   # a freshly-added host (not yet in recents) reads this
+    [string] $Subtitle = 'Never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone
     [bool]   $ChipVisible = $false
@@ -52,11 +52,10 @@ class HostViewModel : ObservableObject {
     [int]    $SortStatusRank = 4
 
     # Detail-header and overview bindables, mirrored via SelectedMachine.* from inventory.
-    [string] $DetailTitle = ''
     [string] $DetailIp = ''   # resolved IP under the hostname (freshness lives on the card)
     [string] $OvUptime = ''   # beside the IP, since uptime is a liveness fact, not a disk one
     [string] $OvModel = '—'
-    [string] $OvModelSub = 'double-click to gather inventory'
+    [string] $OvModelSub = 'Double-click to gather inventory'
     [string] $OvModelSubValue = ''     # the tag or hostname alone, without the "Tag " prefix
     [string] $OvBattery = '—'
     [string] $OvBatterySub = ''
@@ -77,7 +76,7 @@ class HostViewModel : ObservableObject {
     [string] $IdentityState = 'Unknown'  # Match / Mismatch / Unknown, which drives the pill
 
     # The chip and subtitle are rebuilt from these on any status or reachability change.
-    hidden [string] $BaseSubtitle = 'never run'
+    hidden [string] $BaseSubtitle = 'Never run'
     hidden [string] $IdleStatus = ''
     hidden [string] $Reachability = 'Unknown'
     hidden [string] $DotKey = 'BodyTextTertiary'
@@ -85,7 +84,6 @@ class HostViewModel : ObservableObject {
 
     HostViewModel([string]$hostName) {
         $this.HostName = $hostName
-        $this.DetailTitle = $hostName
         $this.DotBrush = [HostViewModel]::BrushFor('BodyTextTertiary')
     }
 
@@ -98,7 +96,7 @@ class HostViewModel : ObservableObject {
         $this.Set('ChipVisible', $true)
 
         if ($status.IsBusy) {
-            $this.Set('Subtitle', 'running now')
+            $this.Set('Subtitle', 'Running now')
             $this.Set('ProgressVisible', $true)
             # Indeterminate until a percentage arrives (SetPercent flips it off).
             if ($this.Percent -le 0) { $this.Set('ProgressIndeterminate', $true) }
@@ -135,7 +133,7 @@ class HostViewModel : ObservableObject {
         $this.Set('Percent', [double]0)
 
         $when = if ([string]::IsNullOrWhiteSpace($rc.LastSeen)) {
-            'never run'
+            'Never run'
         } else {
             [TimeFormat]::Relative([TimeFormat]::ParseIso($rc.LastSeen))
         }
@@ -144,7 +142,7 @@ class HostViewModel : ObservableObject {
 
         $this.RenderDot()
         $this.ApplyChip()
-        $this.ApplySubtitle()
+        $this.Set('Subtitle', $this.BaseSubtitle)
         $this.RefreshShape()
     }
 
@@ -191,16 +189,12 @@ class HostViewModel : ObservableObject {
         $this.Set('HasFolders', ($roots.Count -gt 0))
     }
 
-    # Reflects the background reachability verdict on an idle row (offline => red dot +
-    # "Offline" chip + subtitle tag). Online/Unknown restores the idle rendering.
+    # Reflects the background reachability verdict on an idle row. Offline is the red dot and
+    # the Offline chip, and nothing else repeats it; Online/Unknown restores the idle rendering.
     [void] SetReachability([string]$state) {
         $this.Reachability = $state
         $this.RenderDot()
         $this.ApplyChip()
-        $this.ApplySubtitle()
-        $title = if ($state -eq 'Offline') { "$($this.HostName)  -  offline" }
-        else { $this.HostName }
-        $this.Set('DetailTitle', $title)
         $this.RefreshShape()
     }
 
@@ -248,16 +242,6 @@ class HostViewModel : ObservableObject {
         $this.Set('OwnerTip', $(if ($full -ne $shortForm) { $full } else { '' }))
     }
 
-    hidden [void] ApplySubtitle() {
-        if ($this.Reachability -eq 'Offline') {
-            $sub = if ([string]::IsNullOrWhiteSpace($this.BaseSubtitle)) { 'offline' }
-            else { "$($this.BaseSubtitle)  ·  offline" }
-            $this.Set('Subtitle', $sub)
-        } else {
-            $this.Set('Subtitle', $this.BaseSubtitle)
-        }
-    }
-
     # Rebuild only when the key changes, since SolidColorBrush has no value-equality.
     hidden [void] SetDotKey([string]$key) {
         if ($this.DotKey -eq $key) { return }
@@ -289,7 +273,7 @@ class HostViewModel : ObservableObject {
 
     static [string] HumanStatus([string]$lastStatus) {
         switch ($lastStatus) {
-            'RebootRequired' { return 'Reboot required' }
+            'RebootRequired' { return 'Reboot Required' }
             'ConnectionLost' { return 'Unconfirmed' }
             default { return $lastStatus }
         }

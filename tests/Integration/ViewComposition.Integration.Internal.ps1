@@ -69,9 +69,9 @@ Describe "View composition" -Tag "Integration", "WPF" {
             }
         }
 
-        # DetailTitle, TagText and OvModelSub are all decorated, so copying them pastes junk.
+        # TagText and OvModelSub are decorated, so copying them pastes junk.
         It "copies the raw value, never the decorated label" -Skip:(-not $script:isStaMode) {
-            $decorated = 'DetailTitle', 'TagText', 'OvModelSub'
+            $decorated = 'TagText', 'OvModelSub'
             $views = 'UI\Views\Home\DetailPane.xaml', 'UI\Views\Home\LensPane.xaml',
             'UI\Views\Home\StatCards.xaml', 'UI\Views\MainWindow.xaml'
             foreach ($view in $views) {

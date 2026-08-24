@@ -23,41 +23,42 @@
     <ColumnDefinition Width="*" />
   </Grid.ColumnDefinitions>
 
-  <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}">
+  <!-- Equal ink gaps, measured on a render: 16 between the lines, 18 to the edges; the copy pill's 2px chrome is why its margin is 6, not 8. -->
+  <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}" />
       <TextBox Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
                  Style="{DynamicResource StatValue}" />
-      <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='no machine selected'}"
+      <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='No machine selected'}"
                Tag="{Binding SelectedMachine.OvModelSubValue}" FontFamily="{DynamicResource FontSans}" FontSize="12"
-               Foreground="{DynamicResource BodyTextTertiary}" Margin="-4,2,0,0" />
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="-5,6,0,0" />
     </StackPanel>
   </Border>
 
-  <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}">
+  <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}" />
       <TextBox Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}"
                ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
-               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,8,0,0" />
     </StackPanel>
   </Border>
 
-  <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}">
+  <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}" />
       <TextBox Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}"
                ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
-               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,8,0,0" />
     </StackPanel>
   </Border>
 
   <!-- BIOS, not the update count, which the machine card and updates card already show. -->
-  <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}">
+  <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}" />
       <TextBox Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"

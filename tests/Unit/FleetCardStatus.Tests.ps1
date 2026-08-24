@@ -42,7 +42,7 @@ Describe "FleetCardStatus" {
             $s = [FleetCardStatus]::FromJob('UpdateApply', 'Completed', $true)
 
             $s.State    | Should -Be ([FleetCardState]::RebootRequired)
-            $s.Label    | Should -Be 'Reboot required'
+            $s.Label    | Should -Be 'Reboot Required'
             $s.ColorKey | Should -Be 'AccentYellow'
             $s.IsBusy   | Should -Be $false
             $s.Glyph    | Should -Be '⚠'

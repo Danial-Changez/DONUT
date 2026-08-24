@@ -62,7 +62,7 @@ class FleetCardStatus {
             'Completed' {
                 if ($rebootRequired) {
                     return [FleetCardStatus]::new([FleetCardState]::RebootRequired,
-                        'Reboot required', 'AccentYellow', $false, '⚠')
+                        'Reboot Required', 'AccentYellow', $false, '⚠')
                 }
                 return [FleetCardStatus]::new([FleetCardState]::Completed, 'Completed',
                     'AccentGreen', $false, '✓')

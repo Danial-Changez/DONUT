@@ -28,6 +28,9 @@
 
 .PARAMETER Screenshot
     Save a PNG here and close by itself instead of waiting for Esc or X.
+.PARAMETER Font
+    Render the sans text in this installed family instead of the embedded one, for
+    a side-by-side (for example 'Segoe UI', the fallback face).
 
 .EXAMPLE
     pwsh -File tools\Show-View.ps1
@@ -50,7 +53,8 @@ param(
     [string]$View = 'UI\Views\DialogWindow.xaml',
     [switch]$Main,
     [switch]$ErrorDialog,
-    [string]$Screenshot
+    [string]$Screenshot,
+    [string]$Font
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,6 +112,8 @@ foreach ($file in Get-ChildItem -Path $stylesPath -Filter '*.xaml') {
     try { $styles.MergedDictionaries.Add([System.Windows.Markup.XamlReader]::Load($stream, $context)) }
     finally { $stream.Dispose() }
 }
+# An entry on the parent dictionary shadows the merged one, and every view resolves it live.
+if ($Font) { $styles['FontSans'] = [System.Windows.Media.FontFamily]::new($Font) }
 
 # ViewLoader.Load, dev path.
 function Read-DonutView([string]$RelativePath) {
@@ -157,6 +163,8 @@ if ($Main) {
     [System.Windows.Media.RenderOptions]::SetBitmapScalingMode($logoImage, 'HighQuality')
 
     # Plain POCOs: WPF cannot bind to PSCustomObject members, and a still frame needs no INPC.
+    # Compiled once per session: a re-run reuses them, and an edited definition needs a new pwsh.
+    if (-not ('MachineSample' -as [type])) {
     Add-Type -TypeDefinition @'
 using System.Collections.Generic;
 public class HomeSample {
@@ -182,7 +190,6 @@ public class MachineSample {
     public object ChipForeground { get; set; }
     public object ChipBackground { get; set; }
     public object ChipBorderBrush { get; set; }
-    public string DetailTitle { get; set; } = "";
     public string DetailIp { get; set; } = "";
     public string OvUptime { get; set; } = "";
     public string OvModel { get; set; } = "";
@@ -212,7 +219,8 @@ public class LogSample {
     public string DisplayText { get; set; }
     public string Severity { get; set; } = "";
 }
-'@ -ErrorAction SilentlyContinue
+'@
+    }
 
     function Get-Brush([string]$Key) { return $window.FindResource($Key) }
 
@@ -222,10 +230,10 @@ public class LogSample {
         ChipText = 'Scanning…'; StatusGlyph = [char]0x21BB; ChipVisible = $true
         DotBrush = Get-Brush AccentCyan; ChipForeground = Get-Brush AccentCyan
         ChipBackground = Get-Brush TintSky; ChipBorderBrush = Get-Brush TintSkyBorder
-        DetailTitle = 'CAP-9F3KQ2'; DetailIp = '10.24.118.37'; OvUptime = 'up 3 days'
+        DetailIp = '10.24.118.37'; OvUptime = 'Up 3 days'
         OvModel = 'Latitude 5440'; OvModelSub = 'Tag 7GZK2M3'; OvModelSubValue = '7GZK2M3'
         OvBattery = '92% health'; OvBatterySub = '78% - on battery'
-        OvDisk = '182.5 GB free'; OvDiskSub = 'of 512 GB'; OvBios = '1.24.0'
+        OvDisk = '182.5 GB free'; OvDiskSub = '512 GB Total'; OvBios = '1.24.0'
         HasUpdates = $true; IdentityState = 'Match'
         UpdatesIdentityText = 'Service tag 7GZK2M3 matches the scanned machine.'
         Updates             = [System.Collections.Generic.List[object]]@(
@@ -252,12 +260,12 @@ public class LogSample {
         [MachineSample]@{
             HostName = 'WVD-PROD-07'; OwnerName = 'Marcus W'; OwnerTip = 'Marcus Webb'
             Subtitle = 'Today 8:56 AM - 2 updates'
-            ChipText = 'Reboot required'; StatusGlyph = [char]0x26A0; ChipVisible = $true
+            ChipText = 'Reboot Required'; StatusGlyph = [char]0x26A0; ChipVisible = $true
             DotBrush = Get-Brush AccentYellow; ChipForeground = Get-Brush AccentYellow
             ChipBackground = Get-Brush TintAmber; ChipBorderBrush = Get-Brush TintAmberBorder
         }
         [MachineSample]@{
-            HostName = 'LT-8842-EDU'; Subtitle = 'never run'
+            HostName = 'LT-8842-EDU'; Subtitle = 'Never run'
             DotBrush = Get-Brush BodyTextTertiary
         }
     )
@@ -316,7 +324,7 @@ public class DialogSample {
         SecondaryText = 'Not Now'; HasSecondary = $true
         RememberText = 'Update automatically from now on'; HasRemember = $true
         VersionFrom = '2.5.819'; VersionTo = '2.6.1'; HasVersionCard = $true
-        ReleaseUrl = 'https://example.invalid'; HasReleaseUrl = $true; ReleaseLinkText = 'Release notes'
+        ReleaseUrl = 'https://example.invalid'; HasReleaseUrl = $true; ReleaseLinkText = 'Release Notes'
     }
     $window.DataContext = $sample
 }

@@ -41,6 +41,16 @@ jobs:
         shell: pwsh
         run: ./tools/Invoke-Format.ps1 -Check
 
+      # The C# half of the layout rules (.editorconfig): 1TBS braces, verified not rewritten.
+      # It lives here, not in build: whitespace formatting needs no restore, so the nit
+      # reports beside the PowerShell one instead of behind a package cache.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Format check (C#)
+        run: dotnet format whitespace src/Launcher/Donut.Launcher.csproj --no-restore --verify-no-changes
+
   lint-shard:
     runs-on: windows-latest
     timeout-minutes: 30
@@ -158,10 +168,6 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('**/*.csproj', '**/*.wixproj') }}
           restore-keys: nuget-
-
-      # The C# half of the layout rules (.editorconfig): 1TBS braces, verified not rewritten.
-      - name: Format check (C#)
-        run: dotnet format whitespace src/Launcher/Donut.Launcher.csproj --verify-no-changes
 
       - name: Build launcher
         run: dotnet build DONUT.sln -c Release

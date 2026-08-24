@@ -39,7 +39,7 @@ Describe "InventoryFormat" {
 
     Context "DiskTotalLabel" {
         It "Formats the total as the sub-line" {
-            [InventoryFormat]::DiskTotalLabel(274877906944) | Should -Be 'of 256 GB'
+            [InventoryFormat]::DiskTotalLabel(274877906944) | Should -Be '256 GB Total'
         }
         It "Is empty when total is unknown, so the line collapses" {
             [InventoryFormat]::DiskTotalLabel(0) | Should -Be ''
@@ -51,10 +51,10 @@ Describe "InventoryFormat" {
             [InventoryFormat]::UptimeLabel([datetime]::MinValue) | Should -Be ''
         }
         It "Phrases multi-day uptime" {
-            [InventoryFormat]::UptimeLabel([datetime]::UtcNow.AddDays(-3)) | Should -BeLike 'up 3 day*'
+            [InventoryFormat]::UptimeLabel([datetime]::UtcNow.AddDays(-3)) | Should -BeLike 'Up 3 day*'
         }
         It "Phrases hours uptime" {
-            [InventoryFormat]::UptimeLabel([datetime]::UtcNow.AddHours(-5)) | Should -BeLike 'up 5 hr*'
+            [InventoryFormat]::UptimeLabel([datetime]::UtcNow.AddHours(-5)) | Should -BeLike 'Up 5 hr*'
         }
     }
 }
