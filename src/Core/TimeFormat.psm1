@@ -41,8 +41,8 @@ class TimeFormat {
 
         $span = [datetime]::UtcNow - $whenUtc
 
-        # Clamp tiny negative skew (clocks, rounding) to "just now".
-        if ($span.TotalSeconds -lt 60) { return 'just now' }
+        # Clamp tiny negative skew (clocks, rounding) to "Just now".
+        if ($span.TotalSeconds -lt 60) { return 'Just now' }
         if ($span.TotalMinutes -lt 60) {
             $m = [int]$span.TotalMinutes
             return "$m min ago"
@@ -51,7 +51,7 @@ class TimeFormat {
             $h = [int]$span.TotalHours
             return "$h hr ago"
         }
-        if ($span.TotalHours -lt 48) { return 'yesterday' }
+        if ($span.TotalHours -lt 48) { return 'Yesterday' }
         if ($span.TotalDays -lt 7) {
             $d = [int]$span.TotalDays
             return "$d days ago"

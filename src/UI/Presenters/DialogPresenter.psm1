@@ -100,12 +100,12 @@ class DialogPresenter {
         $title = 'Update Available'
         $primary = 'Update Now'
         $msg = 'A newer version of DONUT is ready to install.'
-        $linkText = "What's new"
+        $linkText = "What's New"
         if ($isRollback) {
             $title = 'Roll Back'
             $primary = 'Roll Back'
             $msg = 'This puts DONUT back on an older version.'
-            $linkText = 'Release notes'
+            $linkText = 'Release Notes'
         }
         $vm = $this.NewVm($title, $msg, @(), $primary, 'Later')
         $vm.VersionFrom = $currentVer

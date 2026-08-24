@@ -1,6 +1,6 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Sign in"
+        Title="Sign In"
         SizeToContent="Height"
         Width="440"
         WindowStartupLocation="CenterScreen"
@@ -39,7 +39,7 @@
                   Grid.Row="0"
                   Background="Transparent"
                   Height="48">
-                <TextBlock Text="Sign in to GitHub"
+                <TextBlock Text="Sign In to GitHub"
                            Style="{DynamicResource TextPaneTitle}"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Left"
@@ -117,7 +117,7 @@
                                TextDecorations="None">Create an account</Hyperlink>
                 </TextBlock>
                 <Button Command="{Binding AuthCommand}"
-                        Content="Sign in with GitHub"
+                        Content="Sign In with GitHub"
                         Style="{DynamicResource ButtonTintPrimary}"
                         Height="32"
                         MinWidth="150"

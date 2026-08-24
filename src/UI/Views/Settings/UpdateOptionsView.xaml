@@ -22,7 +22,7 @@
                        Style="{DynamicResource SettingsFieldLabel}"
                        Margin="0,0,0,8" />
             <WrapPanel x:Name="updateType">
-                <CheckBox Content="Bios" Style="{DynamicResource ChipCheckBox}" />
+                <CheckBox Content="BIOS" Style="{DynamicResource ChipCheckBox}" />
                 <CheckBox Content="Firmware" Style="{DynamicResource ChipCheckBox}" />
                 <CheckBox Content="Driver" Style="{DynamicResource ChipCheckBox}" />
                 <CheckBox Content="Application" Style="{DynamicResource ChipCheckBox}" />

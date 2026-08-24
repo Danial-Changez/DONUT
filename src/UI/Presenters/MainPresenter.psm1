@@ -375,8 +375,8 @@ class MainPresenter {
         $this.CopyValue([string]$box.Tag)
     }
 
-    # Tag rather than Text, since the rendered value may be decorated: DetailTitle appends
-    # an offline suffix and TagText is prefixed with the word Tag.
+    # Tag rather than Text, since the rendered value may be decorated: TagText and OvModelSub
+    # are prefixed with the word Tag.
     [void] CopyValue([string]$text) {
         if ([string]::IsNullOrWhiteSpace($text)) { return }
         try {
