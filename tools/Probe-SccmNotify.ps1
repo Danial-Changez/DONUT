@@ -99,6 +99,14 @@ function Invoke-AdminService([string]$query, [hashtable]$body) {
 function Write-Section([string]$title) { Write-Host "`n=== $title ===" -ForegroundColor Cyan }
 function Write-Err([string]$text) { Write-Host "  ERR  $text" -ForegroundColor Red }
 
+# The provider's own message rides the response body, which is where a 500 explains itself.
+function Write-Fail($err) {
+    Write-Err $err.Exception.Message
+    if ($err.ErrorDetails -and $err.ErrorDetails.Message) {
+        Write-Host "       $($err.ErrorDetails.Message)" -ForegroundColor Red
+    }
+}
+
 # Members of one collection: the filter first, the per-collection class when it is not served.
 function Get-CollectionMember([string]$collectionId) {
     try {
@@ -125,7 +133,7 @@ try {
         Write-Host "  roles       : $(@($mine[0].RoleNames) -join ', ')"
         Write-Host "  collections : $(@($mine[0].CollectionNames) -join ', ')"
     }
-} catch { Write-Err $_.Exception.Message }
+} catch { Write-Fail $_ }
 
 Write-Section '2. SMS_DeploymentSummary: the software catalog'
 $picked = $null
@@ -189,7 +197,7 @@ try {
             $hits | Format-Table CollectionID, Collection, Type, Intent -AutoSize | Out-String -Width 200 | Write-Host
         }
     }
-} catch { Write-Err $_.Exception.Message }
+} catch { Write-Fail $_ }
 
 Write-Section '3. The target'
 $resourceId = 0
@@ -204,7 +212,7 @@ if ($Target) {
             $resourceClass = 'SMS_R_System'
             Write-Host "  device : $Target is ResourceID $resourceId" -ForegroundColor Green
         } else { Write-Err "$Target has no live SMS_R_System record" }
-    } catch { Write-Err $_.Exception.Message }
+    } catch { Write-Fail $_ }
 }
 if ($Sam) {
     try {
@@ -217,7 +225,7 @@ if ($Sam) {
             # A user collection takes the user; a device collection keeps the device pinned above.
             if (-not $picked -or $picked.Type -eq 'user') { $resourceId = $userId; $resourceClass = 'SMS_R_User' }
         } else { Write-Err "no SMS_R_User row ends with '$Sam'" }
-    } catch { Write-Err $_.Exception.Message }
+    } catch { Write-Fail $_ }
 }
 if ($picked -and $resourceId) {
     try {
@@ -237,7 +245,7 @@ try {
         $ops | Sort-Object ID -Descending | Select-Object -First 3 |
             Format-Table ID, Type, TargetCollectionID, State, TotalClients -AutoSize | Out-String | Write-Host
     }
-} catch { Write-Err $_.Exception.Message }
+} catch { Write-Fail $_ }
 
 if (-not ($Push -or $Notify -or $Retract)) {
     Write-Host ''
@@ -250,6 +258,8 @@ if (-not ($Push -or $Notify -or $Retract)) {
                -ForegroundColor Red
 } elseif ($picked -and $picked.Type -eq 'device' -and $resourceClass -ne 'SMS_R_System' -and ($Push -or $Retract)) {
     Write-Host "`n'$($picked.Collection)' is a device collection, so pass -Target." -ForegroundColor Red
+} elseif ($picked -and $picked.Type -eq 'user' -and $resourceClass -ne 'SMS_R_User' -and ($Push -or $Retract)) {
+    Write-Host "`n'$($picked.Collection)' is a user collection, so pass -Sam." -ForegroundColor Red
 } else {
     $collection = "SMS_Collection('$($picked.CollectionID)')"
     $rule = @{ collectionRule = @{
@@ -281,7 +291,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
             } else {
                 Write-Host '  not a member after 30s: check the collection in the console' -ForegroundColor Yellow
             }
-        } catch { Write-Err $_.Exception.Message }
+        } catch { Write-Fail $_ }
     }
     if ($Notify -and $resourceClass -eq 'SMS_R_System') {
         Write-Section "6. Notify: Download Computer Policy to $Target"
@@ -301,7 +311,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
                 Write-Host "  recorded : $($row | Select-Object ID, Type, TargetCollectionID, State, TotalClients |
                     ConvertTo-Json -Compress)"
             }
-        } catch { Write-Err $_.Exception.Message }
+        } catch { Write-Fail $_ }
     } elseif ($Notify) {
         Write-Host "`n-Notify needs -Target: a user has no client to notify." -ForegroundColor Yellow
     }
@@ -311,7 +321,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
             $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule
             $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
             Write-Host '  OK  rule removed, refresh requested' -ForegroundColor Green
-        } catch { Write-Err $_.Exception.Message }
+        } catch { Write-Fail $_ }
     }
 }
 
@@ -324,6 +334,7 @@ Write-Host '  2: Intent column empty                  -> the route drops Deploym
 Write-Host '  3: ALREADY IN                           -> the row shows Pushed instead of a Push button.'
 Write-Host '  5: 403                                  -> the role lacks Modify on the collection, ask for it.'
 Write-Host '  5: 404 or 405                           -> this route does not call methods, report it.'
+Write-Host '  5: 500                                  -> the line under ERR is the provider speaking, paste it.'
 Write-Host '  5: OK, member within 30s                -> design confirmed: one rule, one refresh per push.'
 Write-Host '  6: 403                                  -> the role lacks Notify Resource, the poll delivers it.'
 Write-Host '  6: OK, console names the action         -> the push lands in minutes, not an hour.'
