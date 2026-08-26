@@ -1,0 +1,307 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Probes whether this account can push approved software to a person's device
+    through its SCCM collection, over the AdminService, before the feature is wired.
+
+.DESCRIPTION
+    Run in a non-elevated pwsh as the account whose SCCM rights DONUT's Lens lane
+    already uses, on a box that reaches the AdminService. Sections 1 to 4 are GETs
+    and change nothing. The three switches each perform one write and run only when
+    passed: -Push adds the target to the software's collection, -Notify tells the
+    device to fetch policy now, -Retract removes the target again.
+
+      1. SMS_Admin: your roles and the collections your scope covers.
+      2. SMS_DeploymentSummary: the software catalog, each app over the collection
+         that carries it, with the collection's type (user or device) and the
+         deployment's intent (Required installs, Available waits in Software Center).
+      3. The target's ResourceID, and whether it is already in that collection.
+      4. SMS_ClientOperation: the class -Notify writes to, read as it stands.
+      5. -Push: SMS_Collection(id).AddMembershipRule with a direct rule, then
+         RequestRefresh, then a poll until the membership shows.
+      6. -Notify: SMS_ClientOperation.InitiateClientOperationEx, Download Computer
+         Policy, to the device alone.
+      7. -Retract: DeleteMembershipRule, then RequestRefresh.
+
+    Pick a throwaway device or account and a harmless app. A Required deployment
+    installs on the next policy fetch, so -Push without -Notify, then -Retract, is
+    the quiet round trip. Cross-check in the console: the collection's members, and
+    Monitoring, Client Operations for the notification.
+
+.PARAMETER SiteServer
+    AdminService host (the same value DONUT's config carries).
+
+.PARAMETER Software
+    The app's name as the catalog shows it, or a distinctive part of it.
+
+.PARAMETER Target
+    A machine's short name, for a device collection and for -Notify.
+
+.PARAMETER Sam
+    A user's SAM account name, for a user collection.
+
+.PARAMETER Push
+    Adds the target to the software's collection. Refused against the box or
+    account running the probe.
+
+.PARAMETER Notify
+    Sends Download Computer Policy to -Target.
+
+.PARAMETER Retract
+    Removes the target from the software's collection.
+
+.EXAMPLE
+    pwsh -File tools\Probe-SccmNotify.ps1 -SiteServer sccm.corp.com
+
+.EXAMPLE
+    pwsh -File tools\Probe-SccmNotify.ps1 -SiteServer sccm.corp.com -Software Greenshot -Target PC-123 -Push -Notify
+
+.EXAMPLE
+    pwsh -File tools\Probe-SccmNotify.ps1 -SiteServer sccm.corp.com -Software Greenshot -Target PC-123 -Retract
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)] [string] $SiteServer,
+    [string] $Software = '',
+    [string] $Target = '',
+    [string] $Sam = '',
+    [switch] $Push,
+    [switch] $Notify,
+    [switch] $Retract
+)
+
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
+
+function Invoke-AdminService([string]$query, [hashtable]$body) {
+    $p = @{
+        Uri = "https://$SiteServer/AdminService/wmi/$query"
+        UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 30
+    }
+    if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+    if ($null -ne $body) {
+        $p.Method = 'Post'
+        $p.ContentType = 'application/json'
+        $p.Body = ($body | ConvertTo-Json -Compress -Depth 4)
+    }
+    $r = Invoke-RestMethod @p
+    if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) }
+    return @($r)
+}
+
+function Write-Section([string]$title) { Write-Host "`n=== $title ===" -ForegroundColor Cyan }
+function Write-Err([string]$text) { Write-Host "  ERR  $text" -ForegroundColor Red }
+
+# Members of one collection: the filter first, the per-collection class when it is not served.
+function Get-CollectionMember([string]$collectionId) {
+    try {
+        $rows = Invoke-AdminService ("SMS_FullCollectionMembership?`$filter=" +
+            [uri]::EscapeDataString("CollectionID eq '$collectionId'") + '&$select=ResourceID,Name')
+        if ($rows.Count -gt 0) { return $rows }
+    } catch { }
+    return Invoke-AdminService "SMS_CM_RES_COLL_$collectionId?`$select=ResourceID,Name"
+}
+
+Write-Host 'DONUT SCCM push probe (reads only, unless -Push, -Notify or -Retract)' -ForegroundColor White
+Write-Host "  site '$SiteServer'  software '$Software'  target '$Target'  sam '$Sam'"
+
+Write-Section '1. SMS_Admin: your roles and collection scope'
+$me = "$env:USERDOMAIN\$env:USERNAME"
+try {
+    # No filter: a backslash in a URL 404s on this route, so the match is client side.
+    $admins = Invoke-AdminService 'SMS_Admin?$select=AdminID,LogonName,RoleNames,CollectionNames'
+    $mine = @($admins | Where-Object { [string]$_.LogonName -ieq $me })
+    if ($mine.Count -eq 0) {
+        Write-Host "  $me is not an SCCM administrative user ($($admins.Count) listed)" -ForegroundColor Red
+    } else {
+        Write-Host "  OK  $me is AdminID $($mine[0].AdminID)" -ForegroundColor Green
+        Write-Host "  roles       : $(@($mine[0].RoleNames) -join ', ')"
+        Write-Host "  collections : $(@($mine[0].CollectionNames) -join ', ')"
+    }
+} catch { Write-Err $_.Exception.Message }
+
+Write-Section '2. SMS_DeploymentSummary: the software catalog'
+$picked = $null
+$types = @{ 1 = 'user'; 2 = 'device' }
+$intents = @{ 1 = 'Required'; 2 = 'Available'; 3 = 'Simulate' }
+try {
+    $cols = @{}
+    foreach ($c in Invoke-AdminService 'SMS_Collection?$select=CollectionID,Name,CollectionType,MemberCount') {
+        $cols[[string]$c.CollectionID] = $c
+    }
+    Write-Host "  OK  $($cols.Count) collection(s) visible" -ForegroundColor Green
+    $sum = Invoke-AdminService ('SMS_DeploymentSummary?$select=SoftwareName,CollectionID,CollectionName,' +
+        'FeatureType,DesiredConfigType,DeploymentIntent')
+    # Same keep rule as the Lens software list: application installs only.
+    $apps = @($sum | Where-Object { [int]$_.FeatureType -eq 1 -and [int]$_.DesiredConfigType -eq 1 } |
+            ForEach-Object {
+                $c = $cols[[string]$_.CollectionID]
+                [pscustomobject]@{
+                    Software     = [string]$_.SoftwareName
+                    CollectionID = [string]$_.CollectionID
+                    Collection   = [string]$_.CollectionName
+                    Type         = if ($c) { $types[[int]$c.CollectionType] } else { '?' }
+                    Members      = if ($c) { [int]$c.MemberCount } else { -1 }
+                    Intent       = $intents[[int]$_.DeploymentIntent]
+                }
+            } | Sort-Object Software, Collection)
+    Write-Host "  OK  $($apps.Count) application deployment(s) out of $($sum.Count) rows" -ForegroundColor Green
+    $byType = $apps | Group-Object Type | ForEach-Object { "$($_.Name) $($_.Count)" }
+    Write-Host "  by collection type : $($byType -join ', ')"
+    $apps | Select-Object -First 20 | Format-Table Software, Collection, Type, Members, Intent -AutoSize |
+        Out-String -Width 200 | Write-Host
+    if ($Software) {
+        $hits = @($apps | Where-Object { $_.Software -ieq $Software })
+        if ($hits.Count -eq 0) { $hits = @($apps | Where-Object { $_.Software -like "*$Software*" }) }
+        if ($hits.Count -eq 1) {
+            $picked = $hits[0]
+            Write-Host ("  picked : '$($picked.Software)' via $($picked.CollectionID) '$($picked.Collection)' " +
+                "($($picked.Type), $($picked.Intent))") -ForegroundColor White
+        } elseif ($hits.Count -eq 0) {
+            Write-Host "  '$Software' matches nothing in the catalog" -ForegroundColor Yellow
+        } else {
+            Write-Host "  '$Software' matches $($hits.Count) rows, name one collection's app exactly:" `
+                       -ForegroundColor Yellow
+            $hits | Format-Table Software, Collection, Type, Intent -AutoSize | Out-String -Width 200 | Write-Host
+        }
+    }
+} catch { Write-Err $_.Exception.Message }
+
+Write-Section '3. The target'
+$resourceId = 0
+$resourceClass = ''
+if ($Target) {
+    try {
+        $rows = Invoke-AdminService ("SMS_R_System?`$filter=" +
+            [uri]::EscapeDataString("Name eq '$Target'") + '&$select=ResourceID,Name,Obsolete')
+        $live = @($rows | Where-Object { -not $_.Obsolete })
+        if ($live.Count -gt 0) {
+            $resourceId = [int]$live[0].ResourceID
+            $resourceClass = 'SMS_R_System'
+            Write-Host "  device : $Target is ResourceID $resourceId" -ForegroundColor Green
+        } else { Write-Err "$Target has no live SMS_R_System record" }
+    } catch { Write-Err $_.Exception.Message }
+}
+if ($Sam) {
+    try {
+        $rows = Invoke-AdminService ("SMS_R_User?`$filter=" +
+            [uri]::EscapeDataString("endswith(UniqueUserName,'$Sam')") + '&$select=ResourceID,UniqueUserName')
+        $exact = @($rows | Where-Object { ($_.UniqueUserName -split '\\')[-1] -ieq $Sam })
+        if ($exact.Count -gt 0) {
+            $userId = [int]$exact[0].ResourceID
+            Write-Host "  user   : $($exact[0].UniqueUserName) is ResourceID $userId" -ForegroundColor Green
+            # A user collection takes the user; a device collection keeps the device pinned above.
+            if (-not $picked -or $picked.Type -eq 'user') { $resourceId = $userId; $resourceClass = 'SMS_R_User' }
+        } else { Write-Err "no SMS_R_User row ends with '$Sam'" }
+    } catch { Write-Err $_.Exception.Message }
+}
+if ($picked -and $resourceId) {
+    try {
+        $members = Get-CollectionMember $picked.CollectionID
+        $in = @($members | Where-Object { [int]$_.ResourceID -eq $resourceId }).Count -gt 0
+        Write-Host ("  membership : $resourceClass $resourceId is " +
+            "$(if ($in) { 'ALREADY IN' } else { 'not in' }) $($picked.CollectionID) ($($members.Count) members)")
+    } catch { Write-Err "members: $($_.Exception.Message)" }
+}
+
+Write-Section '4. SMS_ClientOperation: what the site already holds'
+try {
+    $ops = Invoke-AdminService 'SMS_ClientOperation'
+    Write-Host "  OK  $($ops.Count) operation row(s)" -ForegroundColor Green
+    if ($ops.Count -gt 0) {
+        Write-Host "  properties : $(@($ops[0].PSObject.Properties.Name) -join ', ')"
+        $ops | Sort-Object ID -Descending | Select-Object -First 3 |
+            Format-Table ID, Type, TargetCollectionID, State, TotalClients -AutoSize | Out-String | Write-Host
+    }
+} catch { Write-Err $_.Exception.Message }
+
+if (-not ($Push -or $Notify -or $Retract)) {
+    Write-Host ''
+    Write-Host 'Reads only. Sections 1 to 4 are the decision; -Push, -Notify and -Retract confirm it.' `
+               -ForegroundColor DarkGray
+} elseif ($Target -ieq $env:COMPUTERNAME -or $Sam -ieq $env:USERNAME) {
+    Write-Host "`nrefused: that is the box or account running this, so pass a throwaway one." -ForegroundColor Red
+} elseif (($Push -or $Retract) -and -not ($picked -and $resourceId)) {
+    Write-Host "`n-Push and -Retract need one catalog app (section 2) and a pinned target (section 3)." `
+               -ForegroundColor Red
+} elseif ($picked -and $picked.Type -eq 'device' -and $resourceClass -ne 'SMS_R_System' -and ($Push -or $Retract)) {
+    Write-Host "`n'$($picked.Collection)' is a device collection, so pass -Target." -ForegroundColor Red
+} else {
+    $collection = "SMS_Collection('$($picked.CollectionID)')"
+    $rule = @{ collectionRule = @{
+            '@odata.type'     = '#AdminService.SMS_CollectionRuleDirect'
+            ResourceClassName = $resourceClass
+            ResourceID        = $resourceId
+            RuleName          = if ($Target -and $resourceClass -eq 'SMS_R_System') { $Target } else { $Sam }
+        }
+    }
+    if ($Push) {
+        Write-Section "5. Push: add $resourceClass $resourceId to $($picked.CollectionID)"
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $r = Invoke-AdminService "$collection/AdminService.AddMembershipRule" $rule
+            Write-Host "  OK  rule added ($($sw.ElapsedMilliseconds) ms): $($r | ConvertTo-Json -Compress -Depth 3)" `
+                       -ForegroundColor Green
+            $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            Write-Host '  OK  refresh requested' -ForegroundColor Green
+            # Membership evaluation is asynchronous, and a direct rule usually lands within seconds.
+            $seen = $false
+            foreach ($i in 1..6) {
+                Start-Sleep -Seconds 5
+                $seen = @(Get-CollectionMember $picked.CollectionID |
+                        Where-Object { [int]$_.ResourceID -eq $resourceId }).Count -gt 0
+                if ($seen) { break }
+            }
+            if ($seen) {
+                Write-Host "  OK  member after $($sw.Elapsed.TotalSeconds.ToString('0'))s" -ForegroundColor Green
+            } else {
+                Write-Host '  not a member after 30s: check the collection in the console' -ForegroundColor Yellow
+            }
+        } catch { Write-Err $_.Exception.Message }
+    }
+    if ($Notify -and $resourceClass -eq 'SMS_R_System') {
+        Write-Section "6. Notify: Download Computer Policy to $Target"
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $r = Invoke-AdminService 'SMS_ClientOperation.InitiateClientOperationEx' @{
+                Type                = 1
+                TargetCollectionID  = $(if ($picked) { $picked.CollectionID } else { 'SMS00001' })
+                TargetResourceIDs   = @($resourceId)
+                RandomizationWindow = 0
+            }
+            Write-Host "  OK  ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
+            Write-Host "  response : $($r | ConvertTo-Json -Compress -Depth 3)"
+            $opId = $r | ForEach-Object { $_.OperationID } | Select-Object -First 1
+            if ($opId) {
+                $row = Invoke-AdminService "SMS_ClientOperation($opId)"
+                Write-Host "  recorded : $($row | Select-Object ID, Type, TargetCollectionID, State, TotalClients |
+                    ConvertTo-Json -Compress)"
+            }
+        } catch { Write-Err $_.Exception.Message }
+    } elseif ($Notify) {
+        Write-Host "`n-Notify needs -Target: a user has no client to notify." -ForegroundColor Yellow
+    }
+    if ($Retract) {
+        Write-Section "7. Retract: remove $resourceClass $resourceId from $($picked.CollectionID)"
+        try {
+            $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule
+            $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            Write-Host '  OK  rule removed, refresh requested' -ForegroundColor Green
+        } catch { Write-Err $_.Exception.Message }
+    }
+}
+
+Write-Host "`nInterpretation:" -ForegroundColor White
+Write-Host '  1: not an administrative user           -> no RBAC identity, the feature cannot ship for this account.'
+Write-Host '  2: apps listed, one collection each     -> the catalog is the Lens software fetch, unfiltered.'
+Write-Host '  2: mostly user collections              -> push the person, every device follows, no device pick.'
+Write-Host '  2: mostly device collections            -> push the device, the Lens device row is the start.'
+Write-Host '  2: Intent column empty                  -> the route drops DeploymentIntent, the message stays generic.'
+Write-Host '  3: ALREADY IN                           -> the row shows Pushed instead of a Push button.'
+Write-Host '  5: 403                                  -> the role lacks Modify on the collection, ask for it.'
+Write-Host '  5: 404 or 405                           -> this route does not call methods, report it.'
+Write-Host '  5: OK, member within 30s                -> design confirmed: one rule, one refresh per push.'
+Write-Host '  6: 403                                  -> the role lacks Notify Resource, the poll delivers it.'
+Write-Host '  6: OK, console names the action         -> the push lands in minutes, not an hour.'
