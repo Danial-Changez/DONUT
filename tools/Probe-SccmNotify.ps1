@@ -32,7 +32,11 @@
     AdminService host (the same value DONUT's config carries).
 
 .PARAMETER Software
-    The app's name as the catalog shows it, or a distinctive part of it.
+    The app's name, exactly as section 2's list prints it. Run without it first
+    and copy one.
+
+.PARAMETER Collection
+    A collection ID or name, only when the app is deployed to more than one.
 
 .PARAMETER Target
     A machine's short name, for a device collection and for -Notify.
@@ -63,6 +67,7 @@
 param(
     [Parameter(Mandatory)] [string] $SiteServer,
     [string] $Software = '',
+    [string] $Collection = '',
     [string] $Target = '',
     [string] $Sam = '',
     [switch] $Push,
@@ -132,8 +137,13 @@ try {
         $cols[[string]$c.CollectionID] = $c
     }
     Write-Host "  OK  $($cols.Count) collection(s) visible" -ForegroundColor Green
-    $sum = Invoke-AdminService ('SMS_DeploymentSummary?$select=SoftwareName,CollectionID,CollectionName,' +
-        'FeatureType,DesiredConfigType,DeploymentIntent')
+    $select = 'SMS_DeploymentSummary?$select=SoftwareName,CollectionID,CollectionName,FeatureType,DesiredConfigType'
+    # The intent column is the one this route may not serve, so it is the one dropped on a retry.
+    try { $sum = Invoke-AdminService "$select,DeploymentIntent" }
+    catch {
+        Write-Host "  with DeploymentIntent: $($_.Exception.Message), retrying without it" -ForegroundColor Yellow
+        $sum = Invoke-AdminService $select
+    }
     # Same keep rule as the Lens software list: application installs only.
     $apps = @($sum | Where-Object { [int]$_.FeatureType -eq 1 -and [int]$_.DesiredConfigType -eq 1 } |
             ForEach-Object {
@@ -148,23 +158,35 @@ try {
                 }
             } | Sort-Object Software, Collection)
     Write-Host "  OK  $($apps.Count) application deployment(s) out of $($sum.Count) rows" -ForegroundColor Green
+    if ($apps.Count -eq 0 -and $sum.Count -gt 0) {
+        # The keep rule needs both columns, and a route that drops one hides every app.
+        $withFeature = @($sum | Where-Object { $null -ne $_.PSObject.Properties['FeatureType'] }).Count
+        $withConfig = @($sum | Where-Object { $null -ne $_.PSObject.Properties['DesiredConfigType'] }).Count
+        Write-Host "  rows carrying FeatureType: $withFeature   DesiredConfigType: $withConfig" -ForegroundColor Yellow
+        Write-Host '  every software name the site returned, unfiltered:' -ForegroundColor Yellow
+        $sum | ForEach-Object { [string]$_.SoftwareName } | Sort-Object -Unique | ForEach-Object { "    $_" }
+    }
     $byType = $apps | Group-Object Type | ForEach-Object { "$($_.Name) $($_.Count)" }
     Write-Host "  by collection type : $($byType -join ', ')"
-    $apps | Select-Object -First 20 | Format-Table Software, Collection, Type, Members, Intent -AutoSize |
-        Out-String -Width 200 | Write-Host
+    $apps | Format-Table Software, Collection, Type, Members, Intent -AutoSize | Out-String -Width 200 | Write-Host
+    Write-Host '  -Software takes one of these, exactly as written:' -ForegroundColor White
+    $apps | ForEach-Object { $_.Software } | Sort-Object -Unique | ForEach-Object { "    $_" }
     if ($Software) {
         $hits = @($apps | Where-Object { $_.Software -ieq $Software })
         if ($hits.Count -eq 0) { $hits = @($apps | Where-Object { $_.Software -like "*$Software*" }) }
+        if ($hits.Count -gt 1 -and $Collection) {
+            $hits = @($hits | Where-Object { $_.CollectionID -ieq $Collection -or $_.Collection -ieq $Collection })
+        }
         if ($hits.Count -eq 1) {
             $picked = $hits[0]
             Write-Host ("  picked : '$($picked.Software)' via $($picked.CollectionID) '$($picked.Collection)' " +
                 "($($picked.Type), $($picked.Intent))") -ForegroundColor White
         } elseif ($hits.Count -eq 0) {
-            Write-Host "  '$Software' matches nothing in the catalog" -ForegroundColor Yellow
+            Write-Host "  '$Software' matches nothing: copy a name from the list above" -ForegroundColor Yellow
         } else {
-            Write-Host "  '$Software' matches $($hits.Count) rows, name one collection's app exactly:" `
+            Write-Host "  '$Software' is deployed to $($hits.Count) collections, pass -Collection with one:" `
                        -ForegroundColor Yellow
-            $hits | Format-Table Software, Collection, Type, Intent -AutoSize | Out-String -Width 200 | Write-Host
+            $hits | Format-Table CollectionID, Collection, Type, Intent -AutoSize | Out-String -Width 200 | Write-Host
         }
     }
 } catch { Write-Err $_.Exception.Message }
