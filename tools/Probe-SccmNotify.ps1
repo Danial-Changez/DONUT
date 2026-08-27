@@ -192,6 +192,12 @@ try {
         Write-Host "    collections : $(@($a.CollectionNames) -join ', ')"
     }
 } catch { Write-Fail $_ }
+# The roles by name and description, so an ask can point at one that already exists.
+try {
+    $roles = Invoke-AdminService 'SMS_Role?$select=RoleName,RoleDescription,IsBuiltIn,NumberOfAdmins'
+    $roles | Sort-Object IsBuiltIn, RoleName |
+        Format-Table RoleName, IsBuiltIn, NumberOfAdmins, RoleDescription -AutoSize | Out-String -Width 200 | Write-Host
+} catch { Write-Host "  roles: not readable ($($_.Exception.Message))" -ForegroundColor Yellow }
 
 Write-Section '2. SMS_DeploymentSummary: the software catalog'
 $picked = $null
