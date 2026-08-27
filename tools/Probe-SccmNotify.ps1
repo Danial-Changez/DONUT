@@ -11,18 +11,19 @@
     passed: -Push adds the target to the software's collection, -Notify tells the
     device to fetch policy now, -Retract removes the target again.
 
-      1. SMS_Admin: your roles and the collections your scope covers.
+      1. SMS_Admin: every administrative user and group, and which of them is you,
+         since rights usually arrive through a group.
       2. SMS_DeploymentSummary: the software catalog, each app over the collection
          that carries it, with the collection's type (user or device) and the
          deployment's intent (Required installs, Available waits in Software Center).
-      3. The target's ResourceID, whether it is already in that collection, and the
+      3. The target's ResourceID, whether it is already in that collection, the
          collection's own rules (a query on an AD group means the site feeds it
-         from AD, and the push may belong in the group instead).
+         from AD, and the push may belong in the group instead), and its security
+         scopes, which a role must be granted on for a push to be allowed.
       4. SMS_ClientOperation: the class -Notify writes to, read as it stands.
-      5. -Push: SMS_Collection(id).AddMembershipRule with a direct rule, the array
-         form AddMembershipRules when that fails, then RequestRefresh and a poll
-         until the membership shows. With -Wmi the same two calls go to the SMS
-         Provider over DCOM, the console's own route.
+      5. -Push: SMS_Collection(id).AddMembershipRule with a direct rule, then
+         RequestRefresh and a poll until the membership shows. With -Wmi the same
+         two calls go to the SMS Provider over DCOM, the console's own route.
       6. -Notify: SMS_ClientOperation.InitiateClientOperationEx, Download Computer
          Policy, to the device alone.
       7. -Retract: DeleteMembershipRule, then RequestRefresh, over either route.
@@ -165,18 +166,30 @@ function Connect-Provider([string]$collectionId, [string]$class, [int]$id, [stri
 Write-Host 'DONUT SCCM push probe (reads only, unless -Push, -Notify or -Retract)' -ForegroundColor White
 Write-Host "  site '$SiteServer'  software '$Software'  target '$Target'  sam '$Sam'"
 
-Write-Section '1. SMS_Admin: your roles and collection scope'
+Write-Section '1. SMS_Admin: the identity your rights come from'
 $me = "$env:USERDOMAIN\$env:USERNAME"
+# Rights usually arrive through a group, so every group in the token counts as you.
+$groups = @([System.Security.Principal.WindowsIdentity]::GetCurrent().Groups | ForEach-Object {
+        try { $_.Translate([System.Security.Principal.NTAccount]).Value } catch { }
+    })
 try {
     # No filter: a backslash in a URL 404s on this route, so the match is client side.
-    $admins = Invoke-AdminService 'SMS_Admin?$select=AdminID,LogonName,RoleNames,CollectionNames'
-    $mine = @($admins | Where-Object { [string]$_.LogonName -ieq $me })
+    $admins = Invoke-AdminService ('SMS_Admin?$select=AdminID,LogonName,IsGroup,RoleNames,' +
+        'CategoryNames,CollectionNames')
+    Write-Host "  OK  $($admins.Count) administrative user(s) and group(s); you are in $($groups.Count) groups" `
+               -ForegroundColor Green
+    $admins | Sort-Object LogonName | Format-Table LogonName, IsGroup, RoleNames, CategoryNames -AutoSize |
+        Out-String -Width 200 | Write-Host
+    $mine = @($admins | Where-Object { [string]$_.LogonName -ieq $me -or $groups -contains [string]$_.LogonName })
     if ($mine.Count -eq 0) {
-        Write-Host "  $me is not an SCCM administrative user ($($admins.Count) listed)" -ForegroundColor Red
-    } else {
-        Write-Host "  OK  $me is AdminID $($mine[0].AdminID)" -ForegroundColor Green
-        Write-Host "  roles       : $(@($mine[0].RoleNames) -join ', ')"
-        Write-Host "  collections : $(@($mine[0].CollectionNames) -join ', ')"
+        Write-Host ("  no row is $me or a group in your token, yet the reads work: " +
+            'a nested group, so the console, Administrative Users, names it') -ForegroundColor Yellow
+    }
+    foreach ($a in $mine) {
+        Write-Host "  you, as $($a.LogonName) (AdminID $($a.AdminID))" -ForegroundColor White
+        Write-Host "    roles       : $(@($a.RoleNames) -join ', ')"
+        Write-Host "    scopes      : $(@($a.CategoryNames) -join ', ')"
+        Write-Host "    collections : $(@($a.CollectionNames) -join ', ')"
     }
 } catch { Write-Fail $_ }
 
@@ -295,6 +308,17 @@ if ($picked -and $resourceId) {
             Write-Host "    $kind : $what"
         }
     } catch { Write-Err "collection: $($_.Exception.Message)" }
+    # Its security scopes: a role grants Modify on a scope, and this is the pairing a 500 wants.
+    try {
+        $cats = @{}
+        foreach ($c in Invoke-AdminService 'SMS_SecuredCategory?$select=CategoryID,CategoryName') {
+            $cats[[string]$c.CategoryID] = [string]$c.CategoryName
+        }
+        $mem = Invoke-AdminService ("SMS_SecuredCategoryMembership?`$filter=" +
+            [uri]::EscapeDataString("ObjectKey eq '$($picked.CollectionID)'") + '&$select=CategoryID')
+        $names = @($mem | ForEach-Object { $cats[[string]$_.CategoryID] })
+        Write-Host "  scopes     : $($names -join ', ')"
+    } catch { Write-Host "  scopes     : not readable ($($_.Exception.Message))" -ForegroundColor Yellow }
 }
 
 Write-Section '4. SMS_ClientOperation: what the site already holds'
@@ -304,7 +328,8 @@ try {
     if ($ops.Count -gt 0) {
         Write-Host "  properties : $(@($ops[0].PSObject.Properties.Name) -join ', ')"
         $ops | Sort-Object ID -Descending | Select-Object -First 3 |
-            Format-Table ID, Type, TargetCollectionID, State, TotalClients -AutoSize | Out-String | Write-Host
+            Format-Table ID, PrimaryActionType, CollectionID, TargetType, State, CreatedBy, RequestedTime -AutoSize |
+            Out-String -Width 200 | Write-Host
     }
 } catch { Write-Fail $_ }
 
@@ -350,16 +375,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
                                          -CimSession $p.Session `
                                          -MethodName RequestRefresh
             } else {
-                try {
-                    $r = Invoke-AdminService "$collection/AdminService.AddMembershipRule" $rule
-                } catch {
-                    # The array form is the documented workaround for a route that 500s on the single one.
-                    Write-Fail $_
-                    Write-Host '  retrying as AddMembershipRules, the array form' -ForegroundColor Yellow
-                    $r = Invoke-AdminService "$collection/AdminService.AddMembershipRules" @{
-                        collectionRules = @($rule.collectionRule)
-                    }
-                }
+                $r = Invoke-AdminService "$collection/AdminService.AddMembershipRule" $rule
                 Write-Host "  OK  rule added ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
                 Write-Host "  response : $($r | ConvertTo-Json -Compress -Depth 3)"
                 $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
@@ -395,7 +411,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
             $opId = $r | ForEach-Object { $_.OperationID } | Select-Object -First 1
             if ($opId) {
                 $row = Invoke-AdminService "SMS_ClientOperation($opId)"
-                Write-Host "  recorded : $($row | Select-Object ID, Type, TargetCollectionID, State, TotalClients |
+                Write-Host "  recorded : $($row | Select-Object ID, PrimaryActionType, CollectionID, TargetType, State |
                     ConvertTo-Json -Compress)"
             }
         } catch { Write-Fail $_ }
@@ -419,14 +435,7 @@ if (-not ($Push -or $Notify -or $Retract)) {
                                          -CimSession $p.Session `
                                          -MethodName RequestRefresh
             } else {
-                try { $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule }
-                catch {
-                    Write-Fail $_
-                    Write-Host '  retrying as DeleteMembershipRules, the array form' -ForegroundColor Yellow
-                    $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRules" @{
-                        collectionRules = @($rule.collectionRule)
-                    }
-                }
+                $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule
                 $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
             }
             Write-Host '  OK  rule removed, refresh requested' -ForegroundColor Green
@@ -435,7 +444,8 @@ if (-not ($Push -or $Notify -or $Retract)) {
 }
 
 Write-Host "`nInterpretation:" -ForegroundColor White
-Write-Host '  1: not an administrative user           -> no RBAC identity, the feature cannot ship for this account.'
+Write-Host '  1: no row is you or your groups         -> a nested group grants the reads; the console names it.'
+Write-Host '  1: a group row is you                   -> its roles and scopes are the whole grant the app can use.'
 Write-Host '  2: apps listed, one collection each     -> the catalog is the Lens software fetch, unfiltered.'
 Write-Host '  2: mostly user collections              -> push the person, every device follows, no device pick.'
 Write-Host '  2: mostly device collections            -> push the device, the Lens device row is the start.'
@@ -444,9 +454,9 @@ Write-Host '  3: ALREADY IN                           -> the row shows Pushed in
 Write-Host '  5: 403                                  -> the role lacks Modify on the collection, ask for it.'
 Write-Host '  5: 404 or 405                           -> this route does not call methods, report it.'
 Write-Host '  3: a Query rule on an AD group          -> the site fills it from AD, the push may belong in the group.'
-Write-Host '  5: 500, then the array form OK          -> design confirmed, the app calls AddMembershipRules.'
-Write-Host '  5: both forms 500, -Wmi OK              -> the REST route is the problem, the push uses the provider.'
-Write-Host '  5: both forms 500, -Wmi ERR             -> the WMI message is the real one, paste it.'
+Write-Host '  5: 500 Insufficient rights              -> the identity in 1 lacks Modify on the scopes in 3, ask for it.'
+Write-Host '  5: 500, -Wmi OK                         -> the REST route is the problem, the push uses the provider.'
+Write-Host '  5: 500, -Wmi ERR too                    -> the WMI message is the real one, paste it.'
 Write-Host '  5: OK, member within 30s                -> design confirmed: one rule, one refresh per push.'
 Write-Host '  6: 403                                  -> the role lacks Notify Resource, the poll delivers it.'
 Write-Host '  6: OK, console names the action         -> the push lands in minutes, not an hour.'
