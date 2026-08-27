@@ -15,13 +15,17 @@
       2. SMS_DeploymentSummary: the software catalog, each app over the collection
          that carries it, with the collection's type (user or device) and the
          deployment's intent (Required installs, Available waits in Software Center).
-      3. The target's ResourceID, and whether it is already in that collection.
+      3. The target's ResourceID, whether it is already in that collection, and the
+         collection's own rules (a query on an AD group means the site feeds it
+         from AD, and the push may belong in the group instead).
       4. SMS_ClientOperation: the class -Notify writes to, read as it stands.
-      5. -Push: SMS_Collection(id).AddMembershipRule with a direct rule, then
-         RequestRefresh, then a poll until the membership shows.
+      5. -Push: SMS_Collection(id).AddMembershipRule with a direct rule, the array
+         form AddMembershipRules when that fails, then RequestRefresh and a poll
+         until the membership shows. With -Wmi the same two calls go to the SMS
+         Provider over DCOM, the console's own route.
       6. -Notify: SMS_ClientOperation.InitiateClientOperationEx, Download Computer
          Policy, to the device alone.
-      7. -Retract: DeleteMembershipRule, then RequestRefresh.
+      7. -Retract: DeleteMembershipRule, then RequestRefresh, over either route.
 
     Pick a throwaway device or account and a harmless app. A Required deployment
     installs on the next policy fetch, so -Push without -Notify, then -Retract, is
@@ -54,6 +58,11 @@
 .PARAMETER Retract
     Removes the target from the software's collection.
 
+.PARAMETER Wmi
+    Runs -Push and -Retract against the SMS Provider over DCOM instead of the
+    AdminService: the A/B when the REST call fails, since the provider's error is
+    the real one and a rule that lands here proves the rights and the rule shape.
+
 .EXAMPLE
     pwsh -File tools\Probe-SccmNotify.ps1 -SiteServer sccm.corp.com
 
@@ -72,7 +81,8 @@ param(
     [string] $Sam = '',
     [switch] $Push,
     [switch] $Notify,
-    [switch] $Retract
+    [switch] $Retract,
+    [switch] $Wmi
 )
 
 if ($PSVersionTable.PSVersion.Major -lt 6) {
@@ -115,6 +125,41 @@ function Get-CollectionMember([string]$collectionId) {
         if ($rows.Count -gt 0) { return $rows }
     } catch { }
     return Invoke-AdminService "SMS_CM_RES_COLL_$collectionId?`$select=ResourceID,Name"
+}
+
+# The console's own route: the SMS Provider over DCOM, with the collection and the rule as
+# CIM instances, since that is the shape its methods take.
+function Connect-Provider([string]$collectionId, [string]$class, [int]$id, [string]$name) {
+    $opt = New-CimSessionOption -Protocol Dcom
+    $s = New-CimSession -ComputerName $SiteServer `
+                        -SessionOption $opt `
+                        -ErrorAction Stop
+    $loc = Get-CimInstance -CimSession $s `
+                           -Namespace 'root\SMS' `
+                           -ClassName SMS_ProviderLocation `
+                           -ErrorAction Stop |
+        Where-Object { $_.ProviderForLocalSite } | Select-Object -First 1
+    if (-not $loc) { throw "root\SMS on $SiteServer names no provider for the local site" }
+    if ($loc.Machine -and $loc.Machine -notlike "$SiteServer*") {
+        $s = New-CimSession -ComputerName $loc.Machine `
+                            -SessionOption $opt `
+                            -ErrorAction Stop
+    }
+    $ns = "root\SMS\site_$($loc.SiteCode)"
+    Write-Host "  provider : $($loc.Machine)  $ns" -ForegroundColor White
+    $coll = Get-CimInstance -CimSession $s `
+                            -Namespace $ns `
+                            -ClassName SMS_Collection `
+                            -Filter "CollectionID='$collectionId'"
+    if (-not $coll) { throw "$collectionId is not visible through the provider" }
+    $cls = Get-CimClass -CimSession $s `
+                        -Namespace $ns `
+                        -ClassName SMS_CollectionRuleDirect
+    $props = @{ ResourceClassName = $class; ResourceID = [uint32]$id; RuleName = $name }
+    $rule = New-CimInstance -CimClass $cls `
+                            -ClientOnly `
+                            -Property $props
+    return @{ Session = $s; Collection = $coll; Rule = $rule }
 }
 
 Write-Host 'DONUT SCCM push probe (reads only, unless -Push, -Notify or -Retract)' -ForegroundColor White
@@ -234,6 +279,22 @@ if ($picked -and $resourceId) {
         Write-Host ("  membership : $resourceClass $resourceId is " +
             "$(if ($in) { 'ALREADY IN' } else { 'not in' }) $($picked.CollectionID) ($($members.Count) members)")
     } catch { Write-Err "members: $($_.Exception.Message)" }
+    # The keyed read expands the lazy CollectionRules, which say how the site fills this collection.
+    try {
+        $col = Invoke-AdminService "SMS_Collection('$($picked.CollectionID)')" | Select-Object -First 1
+        $rules = @($col.CollectionRules)
+        Write-Host ("  collection : IsBuiltIn=$($col.IsBuiltIn)  limited to $($col.LimitToCollectionID) " +
+            "'$($col.LimitToCollectionName)'  $($rules.Count) rule(s)")
+        foreach ($r in $rules) {
+            $kind = ([string]$r.'@odata.type') -replace '^#AdminService\.SMS_CollectionRule', ''
+            $what = [string]$r.RuleName
+            if ($r.QueryExpression) {
+                $q = [string]$r.QueryExpression -replace '\s+', ' '
+                $what = "'$what' $($q.Substring(0, [Math]::Min(100, $q.Length)))"
+            }
+            Write-Host "    $kind : $what"
+        }
+    } catch { Write-Err "collection: $($_.Exception.Message)" }
 }
 
 Write-Section '4. SMS_ClientOperation: what the site already holds'
@@ -269,14 +330,40 @@ if (-not ($Push -or $Notify -or $Retract)) {
             RuleName          = if ($Target -and $resourceClass -eq 'SMS_R_System') { $Target } else { $Sam }
         }
     }
+    $ruleName = [string]$rule.collectionRule.RuleName
     if ($Push) {
-        Write-Section "5. Push: add $resourceClass $resourceId to $($picked.CollectionID)"
+        Write-Section "5. Push: add $resourceClass $resourceId to $($picked.CollectionID)$(if ($Wmi) { ' over WMI' })"
         try {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            $r = Invoke-AdminService "$collection/AdminService.AddMembershipRule" $rule
-            Write-Host "  OK  rule added ($($sw.ElapsedMilliseconds) ms): $($r | ConvertTo-Json -Compress -Depth 3)" `
-                       -ForegroundColor Green
-            $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            if ($Wmi) {
+                $p = Connect-Provider -collectionId $picked.CollectionID `
+                                      -class $resourceClass `
+                                      -id $resourceId `
+                                      -name $ruleName
+                $out = Invoke-CimMethod -InputObject $p.Collection `
+                                        -CimSession $p.Session `
+                                        -MethodName AddMembershipRule `
+                                        -Arguments @{ collectionRule = $p.Rule }
+                Write-Host "  OK  rule added ($($sw.ElapsedMilliseconds) ms), ReturnValue $($out.ReturnValue)" `
+                           -ForegroundColor Green
+                $null = Invoke-CimMethod -InputObject $p.Collection `
+                                         -CimSession $p.Session `
+                                         -MethodName RequestRefresh
+            } else {
+                try {
+                    $r = Invoke-AdminService "$collection/AdminService.AddMembershipRule" $rule
+                } catch {
+                    # The array form is the documented workaround for a route that 500s on the single one.
+                    Write-Fail $_
+                    Write-Host '  retrying as AddMembershipRules, the array form' -ForegroundColor Yellow
+                    $r = Invoke-AdminService "$collection/AdminService.AddMembershipRules" @{
+                        collectionRules = @($rule.collectionRule)
+                    }
+                }
+                Write-Host "  OK  rule added ($($sw.ElapsedMilliseconds) ms)" -ForegroundColor Green
+                Write-Host "  response : $($r | ConvertTo-Json -Compress -Depth 3)"
+                $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            }
             Write-Host '  OK  refresh requested' -ForegroundColor Green
             # Membership evaluation is asynchronous, and a direct rule usually lands within seconds.
             $seen = $false
@@ -316,10 +403,32 @@ if (-not ($Push -or $Notify -or $Retract)) {
         Write-Host "`n-Notify needs -Target: a user has no client to notify." -ForegroundColor Yellow
     }
     if ($Retract) {
-        Write-Section "7. Retract: remove $resourceClass $resourceId from $($picked.CollectionID)"
+        Write-Section ("7. Retract: remove $resourceClass $resourceId from $($picked.CollectionID)" +
+            $(if ($Wmi) { ' over WMI' }))
         try {
-            $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule
-            $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            if ($Wmi) {
+                $p = Connect-Provider -collectionId $picked.CollectionID `
+                                      -class $resourceClass `
+                                      -id $resourceId `
+                                      -name $ruleName
+                $null = Invoke-CimMethod -InputObject $p.Collection `
+                                         -CimSession $p.Session `
+                                         -MethodName DeleteMembershipRule `
+                                         -Arguments @{ collectionRule = $p.Rule }
+                $null = Invoke-CimMethod -InputObject $p.Collection `
+                                         -CimSession $p.Session `
+                                         -MethodName RequestRefresh
+            } else {
+                try { $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRule" $rule }
+                catch {
+                    Write-Fail $_
+                    Write-Host '  retrying as DeleteMembershipRules, the array form' -ForegroundColor Yellow
+                    $null = Invoke-AdminService "$collection/AdminService.DeleteMembershipRules" @{
+                        collectionRules = @($rule.collectionRule)
+                    }
+                }
+                $null = Invoke-AdminService "$collection/AdminService.RequestRefresh" @{}
+            }
             Write-Host '  OK  rule removed, refresh requested' -ForegroundColor Green
         } catch { Write-Fail $_ }
     }
@@ -334,7 +443,10 @@ Write-Host '  2: Intent column empty                  -> the route drops Deploym
 Write-Host '  3: ALREADY IN                           -> the row shows Pushed instead of a Push button.'
 Write-Host '  5: 403                                  -> the role lacks Modify on the collection, ask for it.'
 Write-Host '  5: 404 or 405                           -> this route does not call methods, report it.'
-Write-Host '  5: 500                                  -> the line under ERR is the provider speaking, paste it.'
+Write-Host '  3: a Query rule on an AD group          -> the site fills it from AD, the push may belong in the group.'
+Write-Host '  5: 500, then the array form OK          -> design confirmed, the app calls AddMembershipRules.'
+Write-Host '  5: both forms 500, -Wmi OK              -> the REST route is the problem, the push uses the provider.'
+Write-Host '  5: both forms 500, -Wmi ERR             -> the WMI message is the real one, paste it.'
 Write-Host '  5: OK, member within 30s                -> design confirmed: one rule, one refresh per push.'
 Write-Host '  6: 403                                  -> the role lacks Notify Resource, the poll delivers it.'
 Write-Host '  6: OK, console names the action         -> the push lands in minutes, not an hour.'
