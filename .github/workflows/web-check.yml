@@ -18,6 +18,10 @@ on:
       - '.github/workflows/web-check.yml'
   workflow_dispatch:
 
+# A read-only token: the site is built and checked here, deployed by docs.yml.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
