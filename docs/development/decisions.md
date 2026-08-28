@@ -216,6 +216,31 @@ fallback for its one forest; resolved names memoize per agent session. A cached
 one-token owner (the pre-SCCM SAM shape) still displays but is re-asked once per
 session, so old caches heal instead of pinning the SAM forever.
 
+### Software push through collections (deferred 2026-08-26)
+
+The ask: push approved software to a person from their Lens. At the site this
+ships to, the apps are application deployments on **user** collections, marked
+Available, so a push is a direct membership rule on the app's collection
+(`SMS_Collection(id).AddMembershipRule`), a `RequestRefresh`, and a user-policy
+nudge to the person's devices. `tools/Probe-SccmNotify.ps1` walks that chain over
+the AdminService and, with `-Wmi`, over the SMS Provider.
+
+Field-confirmed: the `/wmi` route calls the method (the array form
+`AddMembershipRules` is not served), the catalog is the Lens software fetch
+unfiltered, and the operator reaches SCCM through a group holding Remote Tools
+Operator and a reports role, which is read-only on collections. The provider
+refuses the rule with "insufficient rights" on either route. The site's own
+self-service push runs as a service account holding a custom
+collection-membership role, and grants operators access at its own level, not
+through SCCM.
+
+Deferred until operators hold that role. The design when it lands: `Push…` in the
+Lens header, the shared dialog with a choice row over the catalog (the
+`lensSoftwareCollectionFilter` regex scopes what is pushable), one request kind
+on the Lens lane, and the software list re-fetched as the result. No service
+account inside DONUT: the Lens runs as the operator on purpose, and a push under
+a shared identity would lose who did it.
+
 ## Elevation and autostart
 
 ### The deleted SYSTEM autostart lane
