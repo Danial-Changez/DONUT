@@ -59,11 +59,9 @@ jobs:
       # The C# half of the layout rules (.editorconfig): 1TBS braces, verified not rewritten.
       # It lives here, not in build: whitespace formatting needs no restore, so the nit
       # reports beside the PowerShell one instead of behind a package cache.
-      - uses: actions/setup-dotnet@v6
-        if: matrix.language == 'CSharp'
-        with:
-          dotnet-version: 10.0.x
-
+      # No setup-dotnet: the image ships the .NET 10 SDK and no global.json pins a
+      # patch, so the action only spent seconds confirming "already installed".
+      # If the image ever drops the major, restore the pin (release.yml keeps one).
       - name: Format check (C#)
         if: matrix.language == 'CSharp'
         run: dotnet format whitespace src/Launcher/Donut.Launcher.csproj --no-restore --verify-no-changes
@@ -222,9 +220,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
+      # No setup-dotnet: the image ships the .NET 10 SDK, and the action spent 18
+      # of this job's ~60s confirming "already installed" (measured, run 33133178956).
+      # If the image ever drops the major, restore the pin (release.yml keeps one).
 
       # Restoring the Microsoft.PowerShell.SDK graph is most of the build when uncached.
       - uses: actions/cache@v6
