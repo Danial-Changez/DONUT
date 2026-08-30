@@ -392,6 +392,20 @@ casing rules were re-applied to what the audit missed (`Sign In`, `What's New`,
 `Press Keys…`, `BIOS`, `Reboot Required`), with the reference now naming status
 chips and toast titles as Title Case and toast bodies as sentence case.
 
+## CI
+
+### Unit shards split between processes, never inside one
+
+The CI matrix runs the Unit suite as alternating file shards on separate
+runners. That does not contradict the module-load deadlock above: the lock is
+per-process, so runspaces cold-loading the `using module` graph inside one
+`pwsh` hang on it, while two runner VMs share nothing and cannot. Worker
+isolation rests on the same fact. What stays forbidden is in-process
+parallelism: Pester's Run.Parallel compiles the class graph on concurrent
+runspaces and deadlocks. The workflow once cited the deadlock as the reason
+the Unit job could not split at all, which read too much into it; the shards
+ended the claim.
+
 ## Releasing
 
 The current rules live in [Releasing](./releasing.md); this is why the version

@@ -12,7 +12,10 @@ For example, "the machine card counts its updates properly".
 <!-- Note: Use 'x' or 'X' to fill in the checkboxes where applicable. -->
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
-- [ ] Documentation update
+- [ ] Refactor (no behaviour change)
+- [ ] CI or tooling change (workflows and gates, or the `tools/` scripts they run)
+- [ ] Release or installer change (`release.yml`, `installer/`, versioning)
+- [ ] Documentation update (`docs/`, or the site under `web/`)
 
 ## How It Was Verified
 CI runs the format check, lint, both test suites, and the Release build on
@@ -21,6 +24,7 @@ every PR, so a green run covers those. Check what CI cannot see:
 - [ ] UI change previewed with `tools\Show-View.ps1` (capture in Screenshots below)
 - [ ] Installer or update change exercised with a new MSI on a lab machine
 - [ ] Fleet actions validated on an Analyst workstation
+- [ ] CI or workflow change shown working by this PR's own run (cite the numbers when the change is about timing)
 
 ## Checklist
 - [ ] I followed the project structure and the coding style (`docs/development/coding-style.md`)
