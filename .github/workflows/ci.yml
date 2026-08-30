@@ -20,21 +20,31 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Three jobs rather than one so a format nit stops hiding the test results
-# behind it. Pester's own Run.Parallel cannot replace the matrix here: nearly
+# Separate jobs rather than one so a format nit stops hiding the test results
+# behind it. Pester's own Run.Parallel cannot replace any matrix here: nearly
 # every test file opens with `using module`, and concurrent class-graph
 # compiles deadlock on the module-load lock (docs/development/decisions.md).
+# That lock is per-process, so the deadlock never crosses runners: shards on
+# separate VMs share nothing, which is what lets the Unit suite split below.
 jobs:
   # Split from lint, which takes an order of magnitude longer: a brace nit should
   # not report four minutes late because an analyzer pass was queued in front of it.
-  format:
+  # The two languages split again between runners: serial, their checks stacked to
+  # ~60s of a ~73s job, the run's would-be floor once the Unit suite sharded.
+  format-shard:
     runs-on: windows-latest
     timeout-minutes: 10
+    strategy:
+      # Both halves report, so a PowerShell nit does not hide a C# one.
+      fail-fast: false
+      matrix:
+        language: [PowerShell, CSharp]
     steps:
       - uses: actions/checkout@v7
 
       # No cache: the runner image ships PSScriptAnalyzer, and neither job wants Pester.
       - name: Install PowerShell modules
+        if: matrix.language == 'PowerShell'
         shell: pwsh
         run: |
           if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
@@ -42,6 +52,7 @@ jobs:
           }
 
       - name: Format check
+        if: matrix.language == 'PowerShell'
         shell: pwsh
         run: ./tools/Invoke-Format.ps1 -Check
 
@@ -49,11 +60,26 @@ jobs:
       # It lives here, not in build: whitespace formatting needs no restore, so the nit
       # reports beside the PowerShell one instead of behind a package cache.
       - uses: actions/setup-dotnet@v6
+        if: matrix.language == 'CSharp'
         with:
           dotnet-version: 10.0.x
 
       - name: Format check (C#)
+        if: matrix.language == 'CSharp'
         run: dotnet format whitespace src/Launcher/Donut.Launcher.csproj --no-restore --verify-no-changes
+
+  # Branch protection requires a check named format, and a required check matches
+  # by name: the shards report per language, so this one job answers for both.
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: format-shard
+    # always(), or a failed shard skips this job and the required check never lands.
+    if: always()
+    steps:
+      - name: Fail on any failed shard
+        if: needs.format-shard.result != 'success'
+        run: exit 1
 
   lint-shard:
     runs-on: windows-latest
@@ -62,8 +88,8 @@ jobs:
       # Every shard reports, and a shard is a whole process: the analyzer session
       # stays serial (splitting one session changes its findings, see the tool's
       # notes), so the parallelism lives between runners, never inside a session.
-      # Cut so no shard outruns the Unit test job, the floor of the whole run:
-      # locally Unit is 69s of tests' 83, src 44, tools 31, the rest under 20.
+      # Cut so no shard outruns the longest test shard: locally Unit is 69s of
+      # tests' 83, src 44, tools 31, the rest under 20.
       fail-fast: false
       matrix:
         scope: ['src', 'tests/Unit', 'tests/Integration tests/Helpers', 'tools']
@@ -127,14 +153,18 @@ jobs:
         if: needs.lint-shard.result != 'success'
         run: exit 1
 
-  tests:
+  tests-shard:
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
-      # Both suites report, matching the no-FailFast rule in testing.md.
+      # Every shard reports, matching the no-FailFast rule in testing.md.
       fail-fast: false
       matrix:
-        suite: [Unit, Integration]
+        # Unit splits between runners, never runspaces: the module-load deadlock
+        # (decisions.md) is on a per-process lock, so separate VMs share nothing.
+        # Two shards halve Unit's ~70s, which set the whole run's wall clock;
+        # finer cuts would only re-buy each job's ~15s of setup.
+        scope: [Unit-even, Unit-odd, Integration]
     steps:
       - uses: actions/checkout@v7
 
@@ -152,9 +182,39 @@ jobs:
               Install-Module Pester -RequiredVersion 6.0.1 -Scope CurrentUser -Force
           }
 
+      # The Unit shards split the file list by alternating index: the partition
+      # is total by construction, so a new test file cannot escape the matrix,
+      # and alternation keeps heavy alphabetical neighbours apart. Pester only
+      # discovers *.Tests.ps1, so the explicit list runs what the directory would.
       - name: Tests
         shell: pwsh
-        run: ./tools/Invoke-Tests.ps1 -Path tests/${{ matrix.suite }}
+        run: |
+          $scope = '${{ matrix.scope }}'
+          $paths = if ($scope -eq 'Integration') {
+              'tests/Integration'
+          } else {
+              $files = @(git ls-files 'tests/Unit/*.Tests.ps1')
+              if (-not $files) { throw 'No Unit test files discovered.' }
+              $parity = if ($scope -eq 'Unit-even') { 0 } else { 1 }
+              $mine = @(0..($files.Count - 1) | Where-Object { ($_ % 2) -eq $parity } |
+                      ForEach-Object { $files[$_] })
+              Write-Host "${scope}: $($mine.Count) of $($files.Count) Unit files."
+              $mine
+          }
+          ./tools/Invoke-Tests.ps1 -Path $paths
+
+  # Branch protection requires a check named tests, and a required check matches
+  # by name: the shards report per scope, so this one job answers for all of them.
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: tests-shard
+    # always(), or a failed shard skips this job and the required check never lands.
+    if: always()
+    steps:
+      - name: Fail on any failed shard
+        if: needs.tests-shard.result != 'success'
+        run: exit 1
 
   build:
     runs-on: windows-latest
