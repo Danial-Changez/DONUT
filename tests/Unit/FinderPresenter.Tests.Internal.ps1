@@ -198,7 +198,10 @@ Describe "FinderPresenter Lens poll" {
             $p.LensVm.SetLoading('Jane Doe')
             $p.LensToken = 1
             # The fake handle makes EndInvoke throw, the shape a stopped pipeline leaves.
-            $p.LensJobs.Add((New-LensJob -Token 1 -AgeSeconds 1 -Completed $true))
+            $job = New-LensJob -Token 1 `
+                               -AgeSeconds 1 `
+                               -Completed $true
+            $p.LensJobs.Add($job)
 
             $p.PollLens()
 
