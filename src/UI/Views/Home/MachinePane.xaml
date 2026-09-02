@@ -65,7 +65,9 @@
               <Grid>
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
+                  <!-- The floor keeps the hostname readable when the fixed chip and
+                       buttons would otherwise squeeze the identity column to nothing. -->
+                  <ColumnDefinition Width="*" MinWidth="80" />
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" />
@@ -73,43 +75,45 @@
                 <Ellipse Grid.Column="0" Width="10" Height="10" Margin="0,0,12,0"
                          VerticalAlignment="Center" Fill="{Binding DotBrush}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding HostName}" Style="{DynamicResource TextSubtitle}"
-                               TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}" />
-                    <!-- The SCCM primary user, collapsed when SCCM has none on record. -->
-                    <TextBlock Text="{Binding OwnerName, StringFormat=({0})}"
-                               VerticalAlignment="Center" Margin="8,1,0,0"
-                               ToolTip="{Binding OwnerTip}">
-                      <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                          <Setter Property="FontFamily" Value="{DynamicResource FontSans}" />
-                          <Setter Property="FontSize" Value="12" />
-                          <Setter Property="Foreground" Value="{DynamicResource BodyTextTertiary}" />
-                          <Setter Property="Visibility" Value="Visible" />
+                  <!-- One block, not a StackPanel pair whose unbounded measure never trims:
+                       here the ellipsis sheds the owner suffix before it eats the hostname. -->
+                  <TextBlock Style="{DynamicResource TextSubtitle}"
+                             TextTrimming="CharacterEllipsis" ToolTip="{Binding HostName}"><Run
+                      Text="{Binding HostName, Mode=OneWay}" /><Run
+                      FontSize="12" FontWeight="Normal"
+                      Foreground="{DynamicResource BodyTextTertiary}"
+                      ToolTip="{Binding OwnerTip}">
+                      <Run.Style>
+                        <Style TargetType="Run">
+                          <!-- The SCCM primary user, blanked when SCCM has none on record. -->
+                          <Setter Property="Text" Value="{Binding OwnerName, Mode=OneWay, StringFormat=' ({0})'}" />
                           <Style.Triggers>
                             <DataTrigger Binding="{Binding OwnerName}" Value="">
-                              <Setter Property="Visibility" Value="Collapsed" />
+                              <Setter Property="Text" Value="" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding OwnerTip}" Value="">
                               <Setter Property="ToolTipService.IsEnabled" Value="False" />
                             </DataTrigger>
                           </Style.Triggers>
                         </Style>
-                      </TextBlock.Style>
-                    </TextBlock>
-                  </StackPanel>
+                      </Run.Style>
+                    </Run></TextBlock>
                   <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource BodyTextTertiary}"
                              FontFamily="{DynamicResource FontMono}" FontSize="11" Margin="0,3,0,0"
                              TextTrimming="CharacterEllipsis" ToolTip="{Binding Subtitle}" />
                 </StackPanel>
                 <!-- No progress bar here, the live one sits atop the detail pane's terminal. -->
+                <!-- Capped so a long status label yields to the hostname, not the reverse. -->
                 <Border Grid.Column="2" CornerRadius="8.4" Padding="8,2" VerticalAlignment="Center"
+                        MaxWidth="128"
                         Margin="16,0,8,0" Background="{Binding ChipBackground}"
                         BorderBrush="{Binding ChipBorderBrush}" BorderThickness="1"
                         Visibility="{Binding ChipVisible, Converter={StaticResource BoolToVis}}">
-                  <!-- Glyph plus label so status is not colour alone. Pinned font avoids tofu. -->
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding StatusGlyph}" Foreground="{Binding ChipForeground}"
+                  <!-- Glyph plus label so status is not colour alone. Pinned font avoids tofu.
+                       A DockPanel, not a StackPanel, so the label trims under the cap. -->
+                  <DockPanel LastChildFill="True">
+                    <TextBlock Text="{Binding StatusGlyph}" DockPanel.Dock="Left"
+                               Foreground="{Binding ChipForeground}"
                                FontFamily="{DynamicResource FontSymbol}" FontWeight="SemiBold" FontSize="11"
                                Margin="0,0,5,0" VerticalAlignment="Center">
                       <TextBlock.Style>
@@ -124,8 +128,9 @@
                     </TextBlock>
                     <TextBlock Text="{Binding ChipText}" Foreground="{Binding ChipForeground}"
                                FontFamily="{DynamicResource FontSans}" FontWeight="SemiBold" FontSize="11"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding ChipText}"
                                VerticalAlignment="Center" />
-                  </StackPanel>
+                  </DockPanel>
                 </Border>
                 <!-- No tooltip: the button says Run, and the mode pill says which. -->
                 <Button Grid.Column="3" Content="Run" Command="{Binding RunCommand}"

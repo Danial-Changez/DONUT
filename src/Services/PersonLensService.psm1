@@ -129,6 +129,14 @@ class PersonLensService {
         return [PersonLensService]::ReadLensTimeoutCount($dir) -ge 2
     }
 
+    # True when the exchange holds a key and a beat fresh enough to trust the agent.
+    hidden static [bool] AgentIsAlive([string]$dir, [string]$beat) {
+        if (-not (Test-Path -LiteralPath (Join-Path $dir 'key.bin'))) { return $false }
+        if (-not (Test-Path -LiteralPath $beat)) { return $false }
+        $beatAge = (Get-Date) - (Get-Item -LiteralPath $beat).LastWriteTime
+        return $beatAge.TotalSeconds -lt 15
+    }
+
     # Full parent-side teardown on close. The purge deletes every lens-* dir because
     # bundles hold BitLocker keys and nothing may outlive the app. Best effort.
     static [void] StopAndPurgeAgent() {
@@ -168,6 +176,11 @@ class PersonLensService {
 
             $dir = [PersonLensService]::AgentDir()
             $beat = Join-Path $dir 'heartbeat.txt'
+            # Unowned after 20s means another runspace is mid cold-start: barging in wiped its exchange dir.
+            if (-not $owned) {
+                if ([PersonLensService]::AgentIsAlive($dir, $beat)) { return '' }
+                return 'another lookup is still starting the Lens agent - retry in a moment.'
+            }
             # A beating agent can still be poisoned, and two straight timeouts overrule it.
             $forceRecycle = [PersonLensService]::ShouldForceRecycle($dir)
             $reason = 'no agent'

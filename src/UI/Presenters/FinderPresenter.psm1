@@ -466,7 +466,21 @@ class FinderPresenter {
         if ($null -eq $job -or -not $job.Handle.IsCompleted) { return }
         $this.SoftwareJob = $null
         try {
-            $json = (@($job.Ps.EndInvoke($job.Handle)) -join '')
+            $json = ''
+            $readFailed = $false
+            try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
+            catch {
+                $readFailed = $true
+                $this.Logger.LogException('Software lookup result could not be read', $_)
+            }
+            # A stopped pipeline or an empty return must never read as "no deployments".
+            if ($readFailed -or [string]::IsNullOrWhiteSpace($json)) {
+                if ([string]$job.Key -eq $this.SoftwareKey) {
+                    $this.LensVm.ApplySoftware(@(),
+                        'The software lookup was interrupted - pick the person again to retry.')
+                }
+                return
+            }
             $parsed = [LensDeployment]::ParseBundle($json)
             $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
             $rowCount = @($parsed.Rows).Count
@@ -873,11 +887,27 @@ class FinderPresenter {
                 continue
             }
             $json = ''
+            $readFailed = $false
             try { $json = (@($job.Ps.EndInvoke($job.Handle)) -join '') }
-            catch { $this.Logger.LogException("Lens lookup failed", $_) }
+            catch {
+                $readFailed = $true
+                $this.Logger.LogException("Lens lookup failed", $_)
+            }
             $this.DisposeJob($job.Ps)
             [void]$this.LensJobs.Remove($job)
             if ($job.Token -ne $this.LensToken) { continue }   # a newer pick supersedes this
+
+            # A stopped or empty pipeline is a failure, never a blank person to render and cache.
+            if ($readFailed -or [string]::IsNullOrWhiteSpace($json)) {
+                $ms = [int]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds
+                $this.Logger.LogWarning(
+                    "Lens lookup for '$($job.Key)' returned nothing after ${ms}ms.")
+                $failed = [PersonLens]::FromError(
+                    'The lookup was interrupted before it returned - pick the person again to retry.')
+                $failed.DisplayName = [string]$job.Who
+                $this.LensVm.Apply($failed)
+                continue
+            }
 
             # The job is out of LensJobs, so a throw here strands the pane on its placeholder.
             try {

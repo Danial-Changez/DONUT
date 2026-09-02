@@ -190,6 +190,64 @@ Describe "FinderPresenter Lens poll" {
         }
     }
 
+    # A stopped pipeline used to apply and cache a blank lens: both reaps must read it as a failure.
+    Context "interrupted lookup" {
+
+        It "shows the retry hint instead of a blank pane when the pipeline dies" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.LensToken = 1
+            # The fake handle makes EndInvoke throw, the shape a stopped pipeline leaves.
+            $job = New-LensJob -Token 1 `
+                               -AgeSeconds 1 `
+                               -Completed $true
+            $p.LensJobs.Add($job)
+
+            $p.PollLens()
+
+            $p.LensJobs.Count | Should -Be 0
+            $p.LensVm.IsLoading | Should -BeFalse
+            $p.LensVm.HasError | Should -BeTrue
+            $p.LensVm.StatusText | Should -Match 'interrupted'
+            $p.LensVm.DisplayName | Should -BeExactly 'Jane Doe'
+            $p.LensCache.Count | Should -Be 0 -Because "a failed lookup must not poison the cache"
+        }
+
+        It "tells the software view its lookup died instead of saying none exist" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.SoftwareKey = 'jane@corp.example'
+            $p.SoftwareJob = @{
+                Ps        = [System.Management.Automation.PowerShell]::Create()
+                Handle    = [PSCustomObject]@{ IsCompleted = $true }
+                Key       = 'jane@corp.example'
+                StartedAt = [datetime]::UtcNow
+            }
+
+            $p.PollLens()
+
+            $p.SoftwareJob | Should -Be $null
+            $p.LensVm.Deployments.Count | Should -Be 0
+            $p.LensVm.SoftwareStatusText | Should -Match 'interrupted'
+        }
+
+        It "leaves the pane alone when a superseded software lookup dies" {
+            $p = $script:presenter
+            $p.LensVm.SetLoading('Jane Doe')
+            $p.SoftwareKey = 'newer@corp.example'
+            $p.SoftwareJob = @{
+                Ps        = [System.Management.Automation.PowerShell]::Create()
+                Handle    = [PSCustomObject]@{ IsCompleted = $true }
+                Key       = 'older@corp.example'
+                StartedAt = [datetime]::UtcNow
+            }
+
+            $p.PollLens()
+
+            $p.LensVm.SoftwareStatusText | Should -BeExactly 'Looking up software…'
+        }
+    }
+
     Context "completion guard" {
         It "surfaces a failure instead of stranding the pane when applying throws" {
             $p = [ThrowingFinderPresenter]::new($script:config, $script:logger)
