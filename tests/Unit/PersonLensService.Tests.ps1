@@ -307,4 +307,34 @@ Describe "PersonLensService" {
             }
         }
     }
+
+    # The unowned EnsureAgent path stands down on this probe instead of recycling a starting agent.
+    Context "agent liveness probe" {
+
+        It "reads dead when the exchange dir holds no key or beat" {
+            $dir = Join-Path $TestDrive 'lens-empty'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $beat = Join-Path $dir 'heartbeat.txt'
+            [PersonLensService]::AgentIsAlive($dir, $beat) | Should -BeFalse
+        }
+
+        It "reads alive on a key plus a fresh beat" {
+            $dir = Join-Path $TestDrive 'lens-alive'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+            $beat = Join-Path $dir 'heartbeat.txt'
+            [IO.File]::WriteAllText($beat, [datetime]::UtcNow.ToString('o'))
+            [PersonLensService]::AgentIsAlive($dir, $beat) | Should -BeTrue
+        }
+
+        It "reads dead once the beat goes stale" {
+            $dir = Join-Path $TestDrive 'lens-stale'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+            $beat = Join-Path $dir 'heartbeat.txt'
+            [IO.File]::WriteAllText($beat, 'old')
+            (Get-Item -LiteralPath $beat).LastWriteTime = (Get-Date).AddSeconds(-16)
+            [PersonLensService]::AgentIsAlive($dir, $beat) | Should -BeFalse
+        }
+    }
 }
