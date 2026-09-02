@@ -152,6 +152,57 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
             "dead binds ahead of the 4-minute ping")
     }
 
+    It "answers an unreadable request with an error bundle instead of going silent" {
+        # Encrypted with a key the agent never had: the old loop dropped it without a reply.
+        $strayKey = [PersonLensService]::NewKeyIv()
+        $reqId = 'unread01'
+        $reqJson = @{ identity = 'x@example.invalid' } | ConvertTo-Json -Compress
+        [PersonLensService]::WriteEncrypted(
+            (Join-Path $script:exchangeDir "request-$reqId.bin"), $reqJson, $strayKey)
+
+        $resultPath = Join-Path $script:exchangeDir "result-$reqId.bin"
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
+            Start-Sleep -Milliseconds 200
+        }
+        Test-Path -LiteralPath $resultPath | Should -BeTrue -Because (
+            "a silently dropped request is exactly the stuck 'Looking up directory + SCCM' pane")
+
+        $out = [PersonLensService]::UnprotectText(
+            [IO.File]::ReadAllBytes($resultPath), $script:keyIv)
+        $lens = [PersonLens]::FromJson($out)
+        $lens.Errors.Count | Should -Be 1
+        ($lens.Errors[0] -match 'could not be read') | Should -BeTrue
+        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+    }
+
+    It "adopts a rotated session key instead of starving behind the cached one" {
+        # A recycle rotates key.bin; a surviving instance must heal, not eat requests.
+        $newKey = [PersonLensService]::NewKeyIv()
+        [IO.File]::WriteAllBytes((Join-Path $script:exchangeDir 'key.bin'), $newKey)
+        $script:keyIv = $newKey
+
+        $reqId = 'rotate01'
+        $reqJson = @{ kind = 'owner'; machines = @('WS-ROTATE-1'); siteServer = 'site.invalid' } |
+            ConvertTo-Json -Compress
+        [PersonLensService]::WriteEncrypted(
+            (Join-Path $script:exchangeDir "request-$reqId.bin"), $reqJson, $newKey)
+
+        $resultPath = Join-Path $script:exchangeDir "result-$reqId.bin"
+        $deadline = (Get-Date).AddSeconds(45)
+        while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $resultPath)) {
+            Start-Sleep -Milliseconds 200
+        }
+        Test-Path -LiteralPath $resultPath | Should -BeTrue -Because (
+            "an agent that cannot adopt the rotated key drops every request the new session writes")
+
+        $out = [PersonLensService]::UnprotectText(
+            [IO.File]::ReadAllBytes($resultPath), $newKey)
+        $bundle = $out | ConvertFrom-Json
+        @($bundle.owners).Count | Should -Be 1
+        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+    }
+
     It "exits within 5s of stop.flag" {
         New-Item -ItemType File `
                  -Path (Join-Path $script:exchangeDir 'stop.flag') `
@@ -159,5 +210,51 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
         $script:agent.WaitForExit(5000) | Should -BeTrue -Because (
             "an agent that outlives stop.flag would leak a de-elevated process " +
             "holding BitLocker-grade data past app close")
+    }
+
+    # A separate agent on its own dir, since proving the exit consumes the process.
+    Context "supersession" {
+
+        BeforeAll {
+            $script:superDir = Join-Path $script:testRoot 'DONUT\lens-agent-super'
+            New-Item -ItemType Directory -Path $script:superDir -Force | Out-Null
+            [IO.File]::WriteAllBytes(
+                (Join-Path $script:superDir 'key.bin'), [PersonLensService]::NewKeyIv())
+
+            $agentScript = (Resolve-Path (
+                    Join-Path $PSScriptRoot '..\..\src\Scripts\LensAgent.ps1')).Path
+            $psi = [System.Diagnostics.ProcessStartInfo]::new([System.Environment]::ProcessPath)
+            $psi.UseShellExecute = $false
+            $psi.CreateNoWindow = $true
+            foreach ($arg in @(
+                    '-NoProfile', '-File', $agentScript,
+                    '-ExchangeDir', $script:superDir,
+                    '-ParentPid', "$PID",
+                    '-SiteServer', 'site.invalid')) {
+                $psi.ArgumentList.Add($arg)
+            }
+            $script:superAgent = [System.Diagnostics.Process]::Start($psi)
+
+            $beat = Join-Path $script:superDir 'heartbeat.txt'
+            $deadline = (Get-Date).AddSeconds(10)
+            while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $beat)) {
+                Start-Sleep -Milliseconds 100
+            }
+        }
+
+        AfterAll {
+            try {
+                if ($script:superAgent -and -not $script:superAgent.HasExited) {
+                    $script:superAgent.Kill($true)
+                }
+            } catch { }
+        }
+
+        It "exits within 5s of losing its pid claim to a newer agent" {
+            [IO.File]::WriteAllText((Join-Path $script:superDir 'agent.pid'), '999999')
+            $script:superAgent.WaitForExit(5000) | Should -BeTrue -Because (
+                "an instance that beats on after a recycle eats every request " +
+                "with a session key it no longer holds")
+        }
     }
 }

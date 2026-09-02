@@ -23,8 +23,11 @@
                              (directory facts and name-only device rows as each
                              lands, then AD-detailed rows, hardware still pending)
       result-<id>.bin     -> lookup bundle
-    The agent deletes each request once read; the parent deletes the responses it
-    consumed; anything older than 10 minutes is swept as abandoned. Two extras ride
+    The agent deletes each request once read; an unreadable one (a scanner holding
+    the fresh file, or a key rotated under a surviving instance) retries for ~2s,
+    re-adopts key.bin from disk, and as a last resort answers with an error bundle so
+    the parent fails fast instead of waiting out its timeout. The parent deletes the
+    responses it consumed; anything older than 10 minutes is swept as abandoned. Two extras ride
     the same dir: warm.flag (plain, parent drops it on resume or a network change,
     the loop answers with an immediate keep-warm ping) and kind='toast' requests
     (key job outcomes raised as Action Center toasts here, because only the
@@ -36,8 +39,12 @@
     The lookup pipeline and all exchange helpers live in LensAgent.Common.ps1,
     dot-sourced here and into each request ThreadJob.
 
-    Exits when stop.flag appears, the parent process dies, or the exchange dir is
-    deleted. heartbeat.txt is touched every ~2s by the serve loop itself, which never
+    Exits when stop.flag appears, the parent process dies, the exchange dir is
+    deleted, or agent.pid (this instance's startup claim on the dir) is gone or names
+    another process - the recycle path wipes and rebuilds the dir faster than the
+    loop's dir check can notice, and the lost claim is what tells a superseded
+    instance to stand down instead of eating requests with a stale session key.
+    heartbeat.txt is touched every ~2s by the serve loop itself, which never
     blocks (requests and the pre-warm all ride ThreadJobs), so a fresh beat proves
     requests are being read. A dead or wedged loop stops beating either way, and
     EnsureAgent's 15s staleness check then recycles the agent on the next lookup.
@@ -89,6 +96,10 @@ $stopPath = Join-Path $ExchangeDir 'stop.flag'
 $warmFlagPath = Join-Path $ExchangeDir 'warm.flag'
 try { [IO.File]::WriteAllText($heartbeatPath, [datetime]::UtcNow.ToString('o')) } catch { return }
 
+# The pid claim marks this dir's one agent: a wipe or a newer claimant tells a superseded instance to exit.
+$pidPath = Join-Path $ExchangeDir 'agent.pid'
+try { [IO.File]::WriteAllText($pidPath, "$PID") } catch { return }
+
 try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch { }
 
 # Warming off the loop lets serving start at once, and ThrottleLimit lifts the job cap.
@@ -134,6 +145,7 @@ try {
 # --- Serve loop ---
 # Nothing here may touch the network, so a fresh beat proves the loop is serving.
 $lookupJobs = [System.Collections.Generic.List[object]]::new()
+$reqRetries = @{}   # request id -> failed read attempts, see the retry note below
 $lastBeat = [datetime]::MinValue
 $lastParentCheck = [datetime]::MinValue
 $lastWarmPing = [datetime]::UtcNow   # the startup warm above just covered this slot
@@ -145,6 +157,10 @@ while ($true) {
     $now = [datetime]::UtcNow
     if (($now - $lastBeat).TotalSeconds -ge 2) {
         $lastBeat = $now
+        # The dir check above can miss a wipe-and-rebuild between passes; a lost pid claim says superseded.
+        $claim = ''
+        try { $claim = [IO.File]::ReadAllText($pidPath).Trim() } catch { }
+        if ($claim -ne "$PID") { break }
         try { [IO.File]::WriteAllText($heartbeatPath, $now.ToString('o')) }
         catch { break }   # Exchange dir gone (the parent purged it), so exit.
     }
@@ -211,10 +227,39 @@ while ($true) {
         $req = $null
         try { $req = Unprotect-File $reqFile.FullName | ConvertFrom-Json }
         catch { }
+        if ($null -eq $req) {
+            # A held file or a rotated key retries across passes, never drops while the parent waits.
+            $tries = [int]$reqRetries[$reqId] + 1
+            $reqRetries[$reqId] = $tries
+            if ($tries -eq 8) {
+                # Adopting a rotated key.bin also heals this agent for every later request.
+                try {
+                    $disk = [IO.File]::ReadAllBytes((Join-Path $ExchangeDir 'key.bin'))
+                    if ($disk.Length -eq 48) { $script:KeyIv = $disk }
+                } catch { }
+                try { $req = Unprotect-File $reqFile.FullName | ConvertFrom-Json }
+                catch { }
+            }
+            if ($null -eq $req -and $tries -lt 12) { continue }   # left in place to retry
+        }
+        [void]$reqRetries.Remove($reqId)
         Remove-Item -LiteralPath $reqFile.FullName `
                     -Force `
                     -ErrorAction SilentlyContinue
-        if ($null -eq $req) { continue }
+        if ($null -eq $req) {
+            # One bundle both parsers read, so whichever lookup asked fails fast and says why.
+            try {
+                $reason = 'Lens agent: the request could not be read (a held file, or a rotated session key).'
+                $errJson = @{
+                    errors      = @($reason)
+                    error       = $reason
+                    deployments = @()
+                    owners      = @()
+                } | ConvertTo-Json -Compress
+                Write-LensBundle (Join-Path $ExchangeDir ("result-{0}.bin" -f $reqId)) $errJson
+            } catch { }
+            continue
+        }
         try {
             # One launch shape for every request; the job dispatches on $req.kind itself.
             $job = Start-ThreadJob -ThrottleLimit 16 `
@@ -289,6 +334,9 @@ while ($true) {
         Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
         $lookupJobs.RemoveAt($i)
     }
+
+    # A request another instance consumed leaves a stale retry entry, so idle clears them.
+    if ($requests.Count -eq 0 -and $reqRetries.Count -gt 0) { $reqRetries.Clear() }
 
     # Sweep responses a parent abandoned (e.g. it timed out and moved on).
     Get-ChildItem -Path $ExchangeDir -File -ErrorAction SilentlyContinue |
