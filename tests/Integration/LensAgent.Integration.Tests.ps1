@@ -173,7 +173,9 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
         $lens = [PersonLens]::FromJson($out)
         $lens.Errors.Count | Should -Be 1
         ($lens.Errors[0] -match 'could not be read') | Should -BeTrue
-        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $resultPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     It "adopts a rotated session key instead of starving behind the cached one" {
@@ -200,7 +202,9 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
             [IO.File]::ReadAllBytes($resultPath), $newKey)
         $bundle = $out | ConvertFrom-Json
         @($bundle.owners).Count | Should -Be 1
-        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $resultPath `
+                    -Force `
+                    -ErrorAction SilentlyContinue
     }
 
     It "exits within 5s of stop.flag" {
@@ -217,7 +221,9 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
 
         BeforeAll {
             $script:superDir = Join-Path $script:testRoot 'DONUT\lens-agent-super'
-            New-Item -ItemType Directory -Path $script:superDir -Force | Out-Null
+            New-Item -ItemType Directory `
+                     -Path $script:superDir `
+                     -Force | Out-Null
             [IO.File]::WriteAllBytes(
                 (Join-Path $script:superDir 'key.bin'), [PersonLensService]::NewKeyIv())
 
