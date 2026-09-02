@@ -365,9 +365,12 @@ class MainPresenter {
     # A click that selected nothing copies the whole value; a drag still selects, which is
     # free because a read-only box with no caret does nothing with a plain click otherwise.
     [void] OnValueClicked([object]$source) {
-        $box = $source -as [System.Windows.Controls.TextBox]
-        if (-not $box) {
-            $box = [System.Windows.Media.VisualTreeHelper]::GetParent($source) -as
+        # A Run in a TextBlock is no Visual and GetParent throws on it, so climb logical parents first.
+        $node = $source
+        while ($node -is [System.Windows.FrameworkContentElement]) { $node = $node.Parent }
+        $box = $node -as [System.Windows.Controls.TextBox]
+        if (-not $box -and $node -is [System.Windows.Media.Visual]) {
+            $box = [System.Windows.Media.VisualTreeHelper]::GetParent($node) -as
             [System.Windows.Controls.TextBox]
         }
         if (-not $box -or -not $box.IsReadOnly) { return }
