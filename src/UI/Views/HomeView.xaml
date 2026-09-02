@@ -23,8 +23,9 @@
   <!-- ==================== Machine list (left) + detail pane (right) ==================== -->
   <Grid Grid.Row="2">
     <Grid.ColumnDefinitions>
-      <!-- Clamped so a wide window gives the extra space to the detail pane. -->
-      <ColumnDefinition Width="2*" MinWidth="300" MaxWidth="460" />
+      <!-- Clamped so a wide window gives the extra space to the detail pane. The floor
+           is what a card needs to show a hostname beside its chip and buttons. -->
+      <ColumnDefinition Width="2*" MinWidth="340" MaxWidth="460" />
       <ColumnDefinition Width="6" />
       <ColumnDefinition Width="3*" MinWidth="320" />
     </Grid.ColumnDefinitions>
