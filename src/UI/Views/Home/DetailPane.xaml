@@ -53,7 +53,9 @@
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left">
+        <!-- Stretched, never Left: the copy pill caps at this panel's ActualWidth, and a
+             self-sized panel would clip the title to its widest sibling, the IP row. -->
+        <StackPanel Grid.Column="0" VerticalAlignment="Center">
           <!-- Offline shows on the card's chip alone, so the title is the bare hostname. -->
           <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.HostName}"
                    Tag="{Binding SelectedMachine.HostName}"
