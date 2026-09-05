@@ -157,6 +157,18 @@ try {
         $mainPresenter = [MainPresenter]::new(
             $global:AppConfig, $configManager, $networkProbe, $resourceService)
         $updatePresenter.Toasts = $mainPresenter.ToastService
+        # The update runs before Show(), so its outcome toasts park until the window shows.
+        $updatePresenter.QueueToast = { param($kind, $title, $message)
+            $mainPresenter.QueueToast($kind, $title, $message)
+        }.GetNewClosure()
+        # The install closes the app, so its status rides the Action Center pipeline.
+        $updatePresenter.ShellNotify = { param($title, $body)
+            $finder = $mainPresenter.HomePresenter.Finder
+            if ($finder) { $finder.NotifyKeyEvent($title, $body) }
+        }.GetNewClosure()
+        # The update service names the fork, so the bug button reports to the same repo.
+        $mainPresenter.IssuesUrl = 'https://github.com/{0}/{1}/issues/new/choose' -f
+        $selfUpdateService.Owner, $selfUpdateService.Repo
         # The same resolver the update check uses, so the badge cannot disagree with it.
         $mainPresenter.MainVm.AppVersion = $selfUpdateService.GetLocalVersion().ToString()
         $mainPresenter.MainVm.HasAppVersion = $true

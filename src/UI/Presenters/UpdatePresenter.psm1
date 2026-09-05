@@ -45,6 +45,11 @@ class UpdatePresenter {
     # Assigned after MainPresenter builds it, since this presenter is constructed first.
     [ToastService]$Toasts
 
+    # Defers an in-app toast until the window shows: pre-Show() the dismiss timer outran first paint.
+    [object]$QueueToast
+    # Raises an Action Center toast (key-outcome pipeline), the one signal that survives app close.
+    [object]$ShellNotify
+
     UpdatePresenter(
         [SelfUpdateService]$service,
         [ResourceService]$resources,
@@ -116,21 +121,22 @@ class UpdatePresenter {
         if (-not $target) { return }
         if ($localVer -eq $target) {
             $this.Logger.LogInfo("Updated to v$target.")
-            if ($this.Toasts) { $this.Toasts.ShowSuccess('Updated', "DONUT is now v$target.") }
+            $this.Deliver('Success', 'Updated', "DONUT is now v$target.")
             return
         }
         $this.Logger.LogWarning("The update to v$target did not complete; this is v$localVer.")
-        if ($this.Toasts) {
-            $this.Toasts.ShowWarning('Update Incomplete', "Still on v$localVer, expected v$target.")
-        }
+        $this.Deliver('Warning', 'Update Incomplete', "Still on v$localVer, expected v$target.")
     }
 
-    # ponytail: 300ms pump so a toast paints before the blocking download; go async for a real bar.
-    hidden [void] PaintNow() {
-        $until = [datetime]::UtcNow.AddMilliseconds(300)
-        while ([datetime]::UtcNow -lt $until) {
-            [Dispatcher]::CurrentDispatcher.Invoke([action] {}, [DispatcherPriority]::Background)
-            Start-Sleep -Milliseconds 16
+    # In-app toast, deferred through QueueToast when the window is not up yet to show it.
+    hidden [void] Deliver([string]$kind, [string]$title, [string]$message) {
+        if ($this.QueueToast) { & $this.QueueToast $kind $title $message; return }
+        if ($null -eq $this.Toasts) { return }
+        switch ($kind) {
+            'Success' { $this.Toasts.ShowSuccess($title, $message) }
+            'Warning' { $this.Toasts.ShowWarning($title, $message) }
+            'Error' { $this.Toasts.ShowError($title, $message) }
+            default { $this.Toasts.ShowInfo($title, $message) }
         }
     }
 
@@ -177,11 +183,13 @@ class UpdatePresenter {
             $stage = [DonutPaths]::DataRoot()
             $target = [version]$Release.tag_name.TrimStart('v')
 
-            # A blocking download is fine here: the window is closed and the app exits after.
-            if ($this.Toasts) {
-                $this.Toasts.ShowInfo('Updating', "Downloading DONUT v$target…")
-                $this.PaintNow()
+            # A shell toast, not an in-app one: the window may never have shown, and the
+            # app closes for the install, so only Action Center can carry the status.
+            if ($this.ShellNotify) {
+                try { & $this.ShellNotify 'DONUT Update' "Downloading and installing v$target…" }
+                catch { $this.Logger.LogException('Update status toast could not start', $_) }
             }
+            # A blocking download is fine here: the window is closed and the app exits after.
             $packagePath = $this.Service.DownloadAsset($token, $asset, $stage)
 
             # By name, not by pattern: the release carries a checksum for each package.
@@ -206,7 +214,7 @@ class UpdatePresenter {
         } catch {
             $this.Logger.LogException("Update failed", $_)
             # Reported, not blocked: nothing installed, so there is no decision to make.
-            if ($this.Toasts) { $this.Toasts.ShowError('Update Failed', $_.Exception.Message) }
+            $this.Deliver('Error', 'Update Failed', $_.Exception.Message)
         }
     }
 }

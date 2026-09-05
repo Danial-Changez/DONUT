@@ -13,8 +13,10 @@ DONUT keeps itself current from your org's **GitHub Releases**.
 4. The download is integrity-checked before it installs.
 5. DONUT closes, the installer runs, and DONUT opens again on its own.
 
-A toast says when the download starts. Once DONUT reopens, another says which
-version it is on now, or that the update did not complete.
+A Windows notification (Action Center) says when the download starts, since the
+app closes for the install and only the shell can carry that status. Once DONUT
+reopens, an in-app toast says which version it is on now, or that the update did
+not complete - it waits for the window to show, so it cannot expire unseen.
 
 The prompt shows the version you are on and the one you would move to, with a link
 to that release's notes on GitHub. A rollback shows the same pair the other way
