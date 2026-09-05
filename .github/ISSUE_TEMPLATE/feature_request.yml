@@ -1,0 +1,32 @@
+name: Feature request
+description: Something DONUT should do, or do better.
+title: "feat: "
+labels: ["feature request"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to get done, and where DONUT gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The behaviour you want. A rough sketch is plenty.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - UI
+        - Lens (people and devices)
+        - Remote worker (scan / apply / inventory)
+        - Storage (disk scan / clear)
+        - Updates and installer
+        - Other
+    validations:
+      required: true

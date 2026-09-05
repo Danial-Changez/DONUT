@@ -18,7 +18,8 @@ Settings. One idea per step:
 
 - **Esc** exits at any point; **Skip Tour** is offered on the welcome step.
 - Replay it anytime with the **`?`** button in the title bar; the **book** button beside it
-  opens this documentation in your browser.
+  opens this documentation in your browser, and the **bug** button opens the
+  project's GitHub issue forms for a bug report or feature request.
 - It only auto-runs once (tracked by the `hasSeenTour` config key).
 
 ## Tray, hotkey, and window basics

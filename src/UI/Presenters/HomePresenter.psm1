@@ -507,6 +507,9 @@ class HomePresenter : AsyncJobPresenter {
             return
         }
 
+        # De-elevated the worker only reaches a misleading CIM failure, so ask up front like Run All.
+        if (-not $this.RequireElevation([GatedAction]::Run, @($hostName), 'Running updates')) { return }
+
         # Apply no longer pre-confirms, a single confirm gates it after the scan.
         $this.MoveRowToTop($hostName)
         $this.StartProcess($hostName)

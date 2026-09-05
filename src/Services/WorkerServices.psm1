@@ -286,8 +286,45 @@ class ExecutionService {
         return $this.JobIp
     }
 
+    # Scan and Apply drive dcu-cli, which only exists on Dells: a cheap manufacturer read
+    # up front names the real blocker instead of a generic DCU failure minutes later.
+    hidden [void] AssertSupportedMake([string] $hostName) {
+        $make = $this.RemoteManufacturer($this.ResolvedIpFor($hostName))
+        # An unreadable make never blocks here: the phases report their own failures.
+        if ([string]::IsNullOrWhiteSpace($make) -or $make -match '(?i)dell') { return }
+        throw [RemoteJobService]::Fail($this.Logger,
+            [UnsupportedMakeException]::new($hostName, $make.Trim()))
+    }
+
+    # Win32_ComputerSystem.Manufacturer over a short-lived DCOM session, '' on any failure.
+    # An env-coupled seam like GatherRemoteInventory: the tests override it per case.
+    [string] RemoteManufacturer([string] $ip) {
+        if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
+        $session = $null
+        try {
+            $open = @{
+                ComputerName        = $ip
+                SessionOption       = (New-CimSessionOption -Protocol Dcom)
+                OperationTimeoutSec = 15
+                ErrorAction         = 'Stop'
+            }
+            $session = New-CimSession @open
+            $cs = Get-CimInstance -CimSession $session `
+                                  -ClassName Win32_ComputerSystem `
+                                  -Property Manufacturer `
+                                  -ErrorAction Stop
+            return [string]$cs.Manufacturer
+        } catch {
+            $this.Logger.LogDebug("[$ip] Manufacturer pre-flight unreadable: $($_.Exception.Message)")
+            return ''
+        } finally {
+            if ($session) { Remove-CimSession -CimSession $session -ErrorAction SilentlyContinue }
+        }
+    }
+
     [hashtable] RunScanPhase([string] $hostName) {
         $this.Logger.LogInfo("[$hostName] Starting preliminary scan.")
+        $this.AssertSupportedMake($hostName)
 
         $remoteOverrides = @{
             report    = 'C:\temp\DONUT'
@@ -336,6 +373,7 @@ class ExecutionService {
 
     [hashtable] RunApplyPhase([string] $hostName, [hashtable] $options) {
         $this.Logger.LogInfo("[$hostName] Starting apply updates.")
+        $this.AssertSupportedMake($hostName)
 
         # The Options bag also carries control data that dcu-cli would reject with 105.
         $remoteOverrides = @{
@@ -699,7 +737,7 @@ foreach (`$t in `$targets) {
     `$pl = `$p.ToLowerInvariant()
     `$inUse = `$false
     foreach (`$u in `$profiles) { if (`$pl -eq `$u -or `$pl.StartsWith("`$u\")) { `$inUse = `$true; break } }
-    if (`$inUse) { continue }
+    if (`$inUse) { Write-Output "skipped `$p - that user is signed in on this machine"; continue }
     `$rest = `$p.Substring(3).ToLowerInvariant()
     `$ok = `$false
     foreach (`$c in `$allowed) { if (`$rest -eq `$c -or `$rest.StartsWith("`$c\")) { `$ok = `$true; break } }

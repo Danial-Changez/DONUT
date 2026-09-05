@@ -54,6 +54,12 @@ class MainPresenter {
     [ResetPasswordViewModel] $ResetVm
     [PendingIntentStore] $IntentStore   # carries a gated click across the elevation restart
 
+    # Where the bug button reports to: DonutApp rebuilds it from the update service's fork.
+    [string] $IssuesUrl = 'https://github.com/Danial-Changez/DONUT/issues/new/choose'
+
+    # Toasts raised before the window first shows, flushed on IsVisibleChanged: earlier they expire unseen.
+    hidden [System.Collections.Generic.List[object]] $StartupToasts
+
     # Set before a real exit (tray "Exit") so the close-to-tray hook lets the close through.
     [bool] $ExitRequested
     [object] $PendingUpdateCheck   # deferred sign-in and update check parked by a hidden boot
@@ -199,6 +205,12 @@ class MainPresenter {
             catch { $presenter.Logger.LogException('Failed to open documentation', $_) }
         }.GetNewClosure()
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
+        # DonutApp overwrites IssuesUrl from the update service, so a fork reports to itself.
+        $openIssues = { param($p)
+            try { Start-Process $presenter.IssuesUrl }
+            catch { $presenter.Logger.LogException('Failed to open the issues page', $_) }
+        }.GetNewClosure()
+        $this.MainVm.OpenIssuesCommand = [RelayCommand]::new([System.Action[object]]$openIssues)
         $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
         $this.MainVm.CopyVersionCommand = [RelayCommand]::new([System.Action[object]]$copyVersion)
         # Only the BitLocker key still binds this: it wraps, so it keeps a glyph.
@@ -214,6 +226,12 @@ class MainPresenter {
                 param($s, $e) $presenter.OnValueClicked($e.OriginalSource)
             }.GetNewClosure(),
             $true)
+
+        # Startup toasts wait here for the first show, whichever path (Show or tray) it takes.
+        $this.StartupToasts = [System.Collections.Generic.List[object]]::new()
+        $this.Window.Add_IsVisibleChanged({
+                if ($presenter.Window.IsVisible) { $presenter.FlushStartupToasts() }
+            }.GetNewClosure())
 
         # On the whole borderless window, every click-drag moved it and text was unselectable.
         $controlBar = $this.Window.FindName("panelControlBar")
@@ -360,6 +378,35 @@ class MainPresenter {
             [void]$this.Window.InputBindings.Add($kb)
             $this.SettingsKeyBinding = $kb
         } catch { $this.Logger.LogException("Open-Settings shortcut apply failed", $_) }
+    }
+
+    # Shows a toast now when the window is visible, or parks it for the first show.
+    [void] QueueToast([string]$kind, [string]$title, [string]$message) {
+        if ($this.Window -and $this.Window.IsVisible) {
+            $this.ShowQueuedToast($kind, $title, $message)
+            return
+        }
+        if ($null -ne $this.StartupToasts) {
+            $this.StartupToasts.Add(@{ Kind = $kind; Title = $title; Message = $message })
+        }
+    }
+
+    hidden [void] FlushStartupToasts() {
+        if ($null -eq $this.StartupToasts -or $this.StartupToasts.Count -eq 0) { return }
+        foreach ($t in @($this.StartupToasts)) {
+            $this.ShowQueuedToast([string]$t.Kind, [string]$t.Title, [string]$t.Message)
+        }
+        $this.StartupToasts.Clear()
+    }
+
+    hidden [void] ShowQueuedToast([string]$kind, [string]$title, [string]$message) {
+        if ($null -eq $this.ToastService) { return }
+        switch ($kind) {
+            'Success' { $this.ToastService.ShowSuccess($title, $message) }
+            'Warning' { $this.ToastService.ShowWarning($title, $message) }
+            'Error' { $this.ToastService.ShowError($title, $message) }
+            default { $this.ToastService.ShowInfo($title, $message) }
+        }
     }
 
     # A click that selected nothing copies the whole value; a drag still selects, which is

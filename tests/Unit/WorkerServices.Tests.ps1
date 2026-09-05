@@ -71,6 +71,10 @@ class TestExecutionService : ExecutionService {
         return $this.GatherResult
     }
 
+    # Dell by default so phases run; a case flips it to prove the non-Dell gate.
+    [string] $ManufacturerResult = 'Dell Inc.'
+    [string] RemoteManufacturer([string]$ip) { return $this.ManufacturerResult }
+
     [void] WarmRuntimeAssemblies() { }   # no-op: tests never touch real DNS / CIM
 }
 
@@ -170,6 +174,29 @@ Describe "WorkerServices" {
                     }
                 }
             })
+        }
+
+        It "refuses a non-Dell target up front with the Dell-only reason" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $service.ManufacturerResult = 'LENOVO'
+
+            { $service.RunScanPhase('TestHost') } |
+                Should -Throw -ExpectedMessage '*only Dell models are supported*'
+        }
+
+        It "lets an unreadable manufacturer through to the scan itself" {
+            $logger = [LogService]::new($script:logsDir)
+            $probe = [MockNetworkProbeWorker]::new()
+            $matcher = [DriverMatchingService]::new()
+
+            $service = New-TestExecutionService $logger $probe $matcher $script:config
+            $service.ManufacturerResult = ''
+
+            ($service.RunScanPhase('TestHost')).ReportPath | Should -Not -BeNullOrEmpty
         }
 
         It "Should return result with ReportPath" {

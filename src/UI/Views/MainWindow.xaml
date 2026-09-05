@@ -120,6 +120,17 @@
                                               StrokeThickness="1.17"
                                               Data="{DynamicResource File}" />
                                     </Button>
+                                    <Button Command="{Binding OpenIssuesCommand}"
+                                            Style="{DynamicResource controlButton}"
+                                            Tag="{DynamicResource TitleTextPrimary}"
+                                            ToolTip="Report a bug or request a feature"
+                                            AutomationProperties.Name="Report a bug or request a feature">
+                                        <Path Style="{DynamicResource controlButtonIcon}"
+                                              Width="14"
+                                              Height="14"
+                                              StrokeThickness="1.17"
+                                              Data="{DynamicResource Bug}" />
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal"

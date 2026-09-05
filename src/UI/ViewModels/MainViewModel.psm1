@@ -48,4 +48,5 @@ class MainViewModel : ObservableObject {
     [object] $OpenTourCommand
     [object] $CloseTourCommand
     [object] $OpenDocsCommand     # opens the online documentation in the default browser
+    [object] $OpenIssuesCommand   # opens the repo's GitHub issue chooser in the default browser
 }

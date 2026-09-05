@@ -50,6 +50,11 @@ disk.
 Clearing empties each folder but keeps the folder itself, so a cache like
 `ccmcache` refills normally.
 
+User profiles (`C:\Users\<name>`) are clearable, but with two guards: ticking one
+turns its row yellow with a hazard glyph so the selection reads as the risk it is,
+and the delete itself skips any profile whose user is signed in - the skip is
+named in the machine's log rather than silently succeeding.
+
 :::caution
 Clearing cannot be undone. Protected system locations (Windows, Program Files,
 ProgramData, the volume root) never get a checkbox, and DONUT refuses to touch the
