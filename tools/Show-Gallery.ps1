@@ -270,13 +270,13 @@ $fleet = [System.Collections.Generic.List[object]]@(
 
 # Storage scene: the largest-folders tree, with a checked user profile wearing its hazard.
 $storageMachine = [GalleryMachine]@{
-    HostName = 'CAP-9F3KQ2'; OwnerName = 'Priya N'; OwnerTip = 'Priya Nair'
-    Subtitle = 'Today 9:20 AM - storage scan'; ChipVisible = $false
-    DotBrush = Get-Brush AccentGreen
-    DetailIp = '10.24.118.37'; OvUptime = 'Up 3 days'
-    OvModel = 'Latitude 5440'; OvModelSub = 'Tag 7GZK2M3'; OvModelSubValue = '7GZK2M3'
-    OvBattery = '92% health'; OvBatterySub = '78% - on battery'
-    OvDisk = '38.2 GB free'; OvDiskSub = '512 GB Total'; OvBios = '1.24.0'
+    HostName   = 'CAP-9F3KQ2'; OwnerName = 'Priya N'; OwnerTip = 'Priya Nair'
+    Subtitle   = 'Today 9:20 AM - storage scan'; ChipVisible = $false
+    DotBrush   = Get-Brush AccentGreen
+    DetailIp   = '10.24.118.37'; OvUptime = 'Up 3 days'
+    OvModel    = 'Latitude 5440'; OvModelSub = 'Tag 7GZK2M3'; OvModelSubValue = '7GZK2M3'
+    OvBattery  = '92% health'; OvBatterySub = '78% - on battery'
+    OvDisk     = '38.2 GB free'; OvDiskSub = '512 GB Total'; OvBios = '1.24.0'
     HasFolders = $true
     Folders    = [System.Collections.Generic.List[object]]@(
         [GalleryFolder]@{ Label = 'C:\'; SizeText = '473.8 GB'; Path = 'C:\'; IsRoot = $true
@@ -316,8 +316,7 @@ $person = [GalleryPerson]@{
     Devices    = [System.Collections.Generic.List[object]]@(
         [GalleryDevice]@{ Name = 'CAP-9F3KQ2'; Model = 'Latitude 5440'; TagText = 'Tag 7GZK2M3'
             Serial = '7GZK2M3'; LastSeenText = 'Seen today'; HasBitLocker = $true
-            IsBitLockerRevealed = $true
-            BitLockerText = '111111-222222-333333-444444-555555-666666-777777-888888'
+            IsBitLockerRevealed = $true; BitLockerText = '111111-222222-333333-444444-555555-666666'
         }
         [GalleryDevice]@{ Name = 'CAP-TP14S22'; Model = 'ThinkPad T14s'; TagText = 'Tag MJ0D4A55'
             Serial = 'MJ0D4A55'; LastSeenText = 'Seen 6 days ago'
@@ -368,22 +367,26 @@ $scenes = @(
             $bar.Visibility = 'Visible'
             $bar.Value = 62
             $log.ItemsSource = $scanLines
-        } }
+        }
+    }
     @{ Name = 'empty'; Label = 'Empty Fleet'; Apply = {
             $window.DataContext = $emptyHome
             $bar.Visibility = 'Collapsed'
             $log.ItemsSource = $null
-        } }
+        }
+    }
     @{ Name = 'storage'; Label = 'Storage + Hazard'; Apply = {
             $window.DataContext = $storageHome
             $machinePane.FindName('MachineList').SelectedIndex = 0
             $bar.Visibility = 'Collapsed'
             $log.ItemsSource = $storageLines
-        } }
+        }
+    }
     @{ Name = 'lens'; Label = 'Person Lens'; Apply = {
             $window.DataContext = $lensHome
             $bar.Visibility = 'Collapsed'
-        } }
+        }
+    }
 )
 
 # The update prompt rides along as its own window, the shape it really has.
