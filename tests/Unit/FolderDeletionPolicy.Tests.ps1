@@ -1,6 +1,23 @@
 using module "..\..\src\Models\FolderDeletionPolicy.psm1"
 
 Describe "FolderDeletionPolicy" {
+    Context "IsUserProfileDir" {
+        It "matches exactly a profile root under Users, case-insensitively" {
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\Users\john') | Should -BeTrue
+            [FolderDeletionPolicy]::IsUserProfileDir('c:\users\JOHN.DOE') | Should -BeTrue
+        }
+        It "does not match the Users container, subfolders, or other roots" {
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\Users') | Should -BeFalse
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\Users\john\Downloads') | Should -BeFalse
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\temp') | Should -BeFalse
+            [FolderDeletionPolicy]::IsUserProfileDir('') | Should -BeFalse
+        }
+        It "canonicalizes before matching, so traversal cannot fake a profile" {
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\temp\..\Users\john') | Should -BeTrue
+            [FolderDeletionPolicy]::IsUserProfileDir('C:\Users\john\..\..\Windows') | Should -BeFalse
+        }
+    }
+
     Context "IsDeletable" {
         It "allows ordinary folders and user subfolders" {
             [FolderDeletionPolicy]::IsDeletable('C:\temp') | Should -BeTrue

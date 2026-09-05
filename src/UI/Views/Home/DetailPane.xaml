@@ -317,6 +317,7 @@
                     <Grid.ColumnDefinitions>
                       <!-- Auto, not fixed: a hidden checkbox collapses to 0 so protected rows sit flush. -->
                       <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="*" />
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -325,10 +326,33 @@
                               IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
                               Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
                               ToolTip="Clear this folder's contents" />
-                    <TextBox Grid.Column="1" Style="{DynamicResource SelectableTreeLabel}"
+                    <!-- The hazard: a user profile checked for clearing. Inline stroke props,
+                         since BasedOn cannot reach the lucide style across per-file loads. -->
+                    <Path Grid.Column="1" Data="{DynamicResource Warning}" Stretch="Uniform"
+                          Fill="{x:Null}" Width="12" Height="12" StrokeThickness="1.15"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                          Stroke="{DynamicResource AccentYellow}" Margin="0,0,4,0"
+                          VerticalAlignment="Center"
+                          ToolTip="This clears a user's profile folder">
+                      <Path.Style>
+                        <Style TargetType="Path">
+                          <Setter Property="Visibility" Value="Collapsed" />
+                          <Style.Triggers>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsUserDir}" Value="True" />
+                                <Condition Binding="{Binding IsSelected}" Value="True" />
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Path.Style>
+                    </Path>
+                    <TextBox Grid.Column="2" Style="{DynamicResource SelectableTreeLabel}"
                              Text="{Binding Label}" ToolTip="{Binding Path}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="2" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
+                    <TextBox Grid.Column="3" Style="{DynamicResource SelectableText}" Text="{Binding SizeText}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12" FontWeight="SemiBold"
                              Foreground="{DynamicResource BodyTextSecondary}"
                              Margin="10,0,0,0" VerticalAlignment="Center" />

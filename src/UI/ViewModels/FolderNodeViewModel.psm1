@@ -29,6 +29,7 @@ class FolderNodeViewModel : ObservableObject {
     [int]      $Depth = 0
     [bool]     $IsRoot = $false
     [bool]     $IsDeletable = $false   # gates the checkbox (FolderDeletionPolicy)
+    [bool]     $IsUserDir = $false     # a profile root: hazard glyph + yellow path when checked
     [bool]     $IsSelected = $false
     [object]   $Parent = $null         # set by FromNodes, walked when a child is spared
     [object[]] $Children = @()
@@ -52,6 +53,7 @@ class FolderNodeViewModel : ObservableObject {
             $vm.SizeBytes   = $n.SizeBytes
             $vm.SizeText    = [DiskUsageFormat]::SizeLabel($n.SizeBytes)
             $vm.IsDeletable = [FolderDeletionPolicy]::IsDeletable($n.Path)
+            $vm.IsUserDir   = [FolderDeletionPolicy]::IsUserProfileDir($n.Path)
             $vm.Children    = [FolderNodeViewModel]::FromNodes($n.Children)
             foreach ($c in $vm.Children) { $c.Parent = $vm }
             $out.Add($vm)

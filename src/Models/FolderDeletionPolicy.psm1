@@ -66,4 +66,12 @@ class FolderDeletionPolicy {
         if ($rest -eq 'users') { return $false }
         return -not ([FolderDeletionPolicy]::Protected -contains $rest.Split('\')[0])
     }
+
+    # True for a profile root (C:\Users\<name>): deletable, but hazard-marked in the tree,
+    # and the delete worker still spares it whenever that user is signed in.
+    static [bool] IsUserProfileDir([string]$path) {
+        $p = [FolderDeletionPolicy]::Canonicalize($path)
+        if (-not $p) { return $false }
+        return $p -match '^[A-Za-z]:\\users\\[^\\]+$'
+    }
 }

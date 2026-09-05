@@ -100,6 +100,17 @@
                 <Setter Property="Foreground"
                         Value="{DynamicResource TitleTextPrimary}" />
             </DataTrigger>
+            <!-- A user profile selected to be cleared reads as the hazard it is. -->
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding IsUserDir}"
+                               Value="True" />
+                    <Condition Binding="{Binding IsSelected}"
+                               Value="True" />
+                </MultiDataTrigger.Conditions>
+                <Setter Property="Foreground"
+                        Value="{DynamicResource AccentYellow}" />
+            </MultiDataTrigger>
         </Style.Triggers>
     </Style>
     <!-- SelectableText that also copies. Tag carries the raw value, since the rendered one
