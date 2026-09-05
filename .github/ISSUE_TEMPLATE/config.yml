@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://danial-changez.github.io/DONUT/
+    about: The guides and reference, which answer most how-do-I questions.

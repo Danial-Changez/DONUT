@@ -61,7 +61,8 @@ class TourSteps {
                 Title     = 'Settings and Admin Rights'
                 Body      = 'The gear opens Settings, saved as you change them. Remote work needs administrator ' +
                 'rights, so if the title bar reads LIMITED the first fleet action asks once and restarts ' +
-                'DONUT. The page icon opens the docs, and ? replays this tour.'
+                'DONUT. The page icon opens the docs, the bug reports an issue on GitHub, and ? replays ' +
+                'this tour.'
                 TargetKey = 'settings'
                 Placement = 'below'
             }

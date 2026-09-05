@@ -1,0 +1,41 @@
+name: Bug report
+description: Something broke, crashed, or misbehaved.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what DONUT did instead.
+      placeholder: Picked a person in the finder; the lens pane sat on "Looking up directory + SCCM…" and never filled.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where the problem lives. Maintainers add the matching label.
+      options:
+        - UI
+        - Lens (people and devices)
+        - Remote worker (scan / apply / inventory)
+        - Storage (disk scan / clear)
+        - Updates and installer
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DONUT version
+      description: The badge in the bottom corner copies it on click.
+      placeholder: 2.6.2
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: "The relevant tail of %ProgramData%\\DONUT\\data\\logs\\Donut.log. Redact hostnames if needed."
+      render: text
