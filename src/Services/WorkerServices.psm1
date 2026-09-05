@@ -297,7 +297,8 @@ class ExecutionService {
     }
 
     # Win32_ComputerSystem.Manufacturer over a short-lived DCOM session, '' on any failure.
-    hidden [string] RemoteManufacturer([string] $ip) {
+    # An env-coupled seam like GatherRemoteInventory: the tests override it per case.
+    [string] RemoteManufacturer([string] $ip) {
         if ([string]::IsNullOrWhiteSpace($ip)) { return '' }
         $session = $null
         try {
