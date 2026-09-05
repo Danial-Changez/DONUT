@@ -49,6 +49,14 @@ Describe "RemoteError" {
             [string]$ex.Level  | Should -Be 'Error'
             [string]$ex.Reason | Should -Be 'DcuMissing'
         }
+        It "UnsupportedMakeException carries the manufacturer and names the Dell-only reason" {
+            $ex = [UnsupportedMakeException]::new('PC-9', 'LENOVO')
+            [string]$ex.Level  | Should -Be 'Error'
+            [string]$ex.Reason | Should -Be 'UnsupportedMake'
+            $ex.Manufacturer   | Should -Be 'LENOVO'
+            $ex.Message        | Should -BeLike '*LENOVO*'
+            $ex.Message        | Should -BeLike '*only Dell models are supported*'
+        }
         It "RemoteProcessStartException decodes an NTSTATUS exit code (ProcessStartFailed)" {
             $ex = [RemoteProcessStartException]::new('PC-6', 'DCU /applyUpdates', -1073741502)
             [string]$ex.Level  | Should -Be 'Error'
@@ -107,6 +115,7 @@ Describe "RemoteError" {
                 @{ Ex = [RpcUnavailableException]::new('h'); Reason = 'RpcUnavailable' }
                 @{ Ex = [RemoteExecutionException]::new('h', 'DCU /scan', 500); Reason = 'ExecutionFailed' }
                 @{ Ex = [DcuNotInstalledException]::new('h'); Reason = 'DcuMissing' }
+                @{ Ex = [UnsupportedMakeException]::new('h', 'LENOVO'); Reason = 'UnsupportedMake' }
                 @{ Ex      = [RemoteProcessStartException]::new('h', 'DCU /applyUpdates', -1073741502)
                     Reason = 'ProcessStartFailed'
                 }

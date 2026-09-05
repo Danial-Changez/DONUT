@@ -347,6 +347,10 @@ class InventoryPresenter {
 
     # Forces a re-probe of the selected host (detail-panel Refresh).
     [void] RefreshInventory([string]$hostName) {
+        # De-elevated the probe only reaches a misleading CIM failure, so ask up front.
+        if (-not $this.Home.RequireElevation([GatedAction]::Inventory, @($hostName), 'An inventory refresh')) {
+            return
+        }
         $this.Home.MoveRowToTop($hostName)
         $this.Home.StartInventory($hostName)
     }

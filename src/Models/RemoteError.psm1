@@ -39,6 +39,7 @@ enum RemoteFailureReason {
     RpcUnavailable
     ExecutionFailed
     DcuMissing
+    UnsupportedMake
     ProcessStartFailed
     ConnectionLost
     TimedOut
@@ -214,6 +215,18 @@ class DcuNotInstalledException : RemoteOperationException {
         $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::DcuMissing) {}
 }
 
+# The target is not a Dell, so there is no dcu-cli to drive: scans and updates cannot run.
+class UnsupportedMakeException : RemoteOperationException {
+    [string] $Manufacturer
+
+    UnsupportedMakeException([string]$hostName, [string]$manufacturer) : base(
+        "'$hostName' is $manufacturer hardware. DONUT drives Dell Command Update (dcu-cli), " +
+        'so only Dell models are supported for scans and updates.',
+        $hostName, [ErrorLevel]::Error, [RemoteFailureReason]::UnsupportedMake) {
+        $this.Manufacturer = $manufacturer
+    }
+}
+
 # Re-derives the failure reason from a worker error message, since the exception type does
 # not survive the runspace boundary. Matches the stable phrases the exceptions above emit.
 class RemoteFailure {
@@ -225,6 +238,9 @@ class RemoteFailure {
         }
         if ($message -match '(?i)rpc \(port 135\)') { return [RemoteFailureReason]::RpcUnavailable }
         if ($message -match '(?i)is not installed on') { return [RemoteFailureReason]::DcuMissing }
+        if ($message -match '(?i)only dell models are supported') {
+            return [RemoteFailureReason]::UnsupportedMake
+        }
         if ($message -match '(?i)process-launch failure|exited during startup') {
             return [RemoteFailureReason]::ProcessStartFailed
         }
