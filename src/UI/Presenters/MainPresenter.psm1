@@ -58,6 +58,8 @@ class MainPresenter {
     [string] $IssuesUrl = 'https://github.com/Danial-Changez/DONUT/issues/new/choose'
     # Set by DonutApp to the finder's agent hop; elevated, this process has no browser.
     [object] $OpenExternal = $null
+    # Set by DonutApp to UpdatePresenter.SwitchToMsiNow, which owns the release and the prompt.
+    [object] $SwitchToMsi = $null
 
     # Toasts raised before the window first shows, flushed on IsVisibleChanged: earlier they expire unseen.
     hidden [System.Collections.Generic.List[object]] $StartupToasts
@@ -685,6 +687,9 @@ class MainPresenter {
             }.GetNewClosure()
             DebugLog       = { $presenter.ApplyDebugLogging() }.GetNewClosure()
             RunAsAdmin     = { $presenter.RestartElevated() }.GetNewClosure()
+            SwitchToMsi    = {
+                if ($presenter.SwitchToMsi) { $presenter.SwitchToMsi.Invoke() }
+            }.GetNewClosure()
         }
         $this.SettingsPresenter = [SettingsPresenter]::new(
             $this.Config, $this.ConfigManager, $this.Window,

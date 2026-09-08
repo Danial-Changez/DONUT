@@ -301,7 +301,12 @@ class SettingsPresenter {
         $toMsi = $view.FindName('chkSwitchToMsi')
         if ($toMsi) {
             $toMsi.IsChecked = $this.Config.GetSwitchToMsi()
-            $h = { param($s, $e) $self.PersistToggle('switchToMsi', [bool]$s.IsChecked, $null) }.GetNewClosure()
+            $h = {
+                param($s, $e)
+                # Only switching it on does anything; switching it off is just a cancel.
+                $side = if ([bool]$s.IsChecked) { 'SwitchToMsi' } else { $null }
+                $self.PersistToggle('switchToMsi', [bool]$s.IsChecked, $side)
+            }.GetNewClosure()
             $toMsi.Add_Checked($h)
             $toMsi.Add_Unchecked($h)
         }

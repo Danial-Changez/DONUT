@@ -305,6 +305,8 @@ class SelfUpdateService {
             $argList += "-InstallDir `"$($this.InstallRoot())`""
         } else {
             $argList += "-MsiPath `"$PackagePath`""
+            # A portable copy taking the MSI is the switch, so its folder goes with it.
+            if ($this.IsPortable()) { $argList += "-RemoveDir `"$($this.InstallRoot())`"" }
         }
 
         if ($IsRollback) {

@@ -67,6 +67,10 @@ class UpdatePresenter {
     # Runs the update check and prompt, after the main window is built and pool-warmed.
     # Anonymous-first, with a sign-in only when the repo refuses. See .NOTES.
     [void] CheckAndPrompt() {
+        # The swap is done once msiexec owns this copy, so the flag has nothing left to do.
+        if ($this.Config.GetSwitchToMsi() -and -not $this.Service.IsPortable()) {
+            $this.ClearSwitchToMsi()
+        }
         $localVer = $this.Service.GetLocalVersion()
         $this.ReportUpdateOutcome($localVer)
         $token = $this.Service.GetStoredToken()
@@ -159,6 +163,40 @@ class UpdatePresenter {
 
         if ($answer.Remember) { $this.PersistAutoUpdate() }
         $this.PerformUpdate($Release, $isRollback, $token)
+    }
+
+    # Settings > Updates > Install as MSI, taken now rather than at the next check. The
+    # flag is already saved, so PerformUpdate picks the MSI on its own.
+    [void] SwitchToMsiNow() {
+        if (-not $this.Service.IsPortable()) {
+            $this.ClearSwitchToMsi()
+            $this.Deliver('info', 'Already an MSI install', 'Windows Installer owns this copy.')
+            return
+        }
+        $token = $this.Service.GetStoredToken()
+        $release = $null
+        try { $release = $this.Service.GetLatestRelease($token, $this.Config.GetBetaUpdates()) }
+        catch { $this.Logger.LogException('Update check failed before the MSI switch', $_) }
+        if (-not $release) {
+            $this.ClearSwitchToMsi()
+            $this.Deliver('error', 'Install as MSI', 'No release could be read, so nothing changed.')
+            return
+        }
+        $confirmed = $this.Dialog.ShowConfirmation('Install as MSI',
+            ("DONUT closes and reinstalls $($release.tag_name) through Windows Installer, " +
+                'then reopens. This folder is removed afterwards.'),
+            @(), 'Restart and Install', $false)
+        # Declining leaves the toggle on but nothing done, which is a switch that lies.
+        if (-not $confirmed) { $this.ClearSwitchToMsi(); return }
+        $this.PerformUpdate($release, $false, $token)
+    }
+
+    # Once msiexec owns the copy the flag can never do anything again, so it does not linger.
+    hidden [void] ClearSwitchToMsi() {
+        try {
+            $this.Config.SetSetting('switchToMsi', $false)
+            $this.ConfigManager.SaveConfig($this.Config)
+        } catch { $this.Logger.LogException('Could not clear the MSI switch', $_) }
     }
 
     # The prompt's checkbox, saved the way Settings would have saved the same toggle.

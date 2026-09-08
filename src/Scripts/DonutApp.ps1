@@ -168,6 +168,8 @@ try {
             $finder = $mainPresenter.HomePresenter.Finder
             if ($finder) { $finder.NotifyKeyEvent($title, $body) }
         }.GetNewClosure()
+        # Settings owns the toggle; the update presenter owns the release and the restart.
+        $mainPresenter.SwitchToMsi = { $updatePresenter.SwitchToMsiNow() }.GetNewClosure()
         # Docs and issues open through the agent: this process may hold no desktop session.
         $mainPresenter.OpenExternal = { param($url)
             $finder = $mainPresenter.HomePresenter.Finder
