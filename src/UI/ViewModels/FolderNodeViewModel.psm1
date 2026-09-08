@@ -46,10 +46,6 @@ class FolderNodeViewModel : ObservableObject {
             [DiskUsageTree]::BuildNested($report.Folders), $protectedSam)
     }
 
-    static [FolderNodeViewModel[]] FromNodes([FolderTreeNode[]]$nodes) {
-        return [FolderNodeViewModel]::FromNodes($nodes, '')
-    }
-
     # Recursively maps model nodes (already nested + size-ranked) to display nodes.
     static [FolderNodeViewModel[]] FromNodes([FolderTreeNode[]]$nodes, [string]$protectedSam) {
         $out = [System.Collections.Generic.List[FolderNodeViewModel]]::new()
