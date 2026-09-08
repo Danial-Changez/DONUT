@@ -454,6 +454,19 @@ class InventoryPresenter {
         if ($row) { $row.ApplyFolders($report) }
     }
 
+    # A profile folder holds somebody's desktop and documents, so the confirmation says so
+    # outright rather than leaving the tree's hazard glyph to carry it alone.
+    hidden static [string] ProfileWarning([object[]]$selected) {
+        $profiles = @($selected | Where-Object { $_.IsUserDir })
+        if ($profiles.Count -eq 0) { return '' }
+        if ($profiles.Count -eq 1) {
+            return ("$($profiles[0].Path) is a user profile. Clearing it deletes that " +
+                "person's desktop, documents and downloads.")
+        }
+        return ("$($profiles.Count) of these are user profiles. Clearing them deletes those " +
+            "people's desktops, documents and downloads.")
+    }
+
     # Deletes the folders the operator checked in the tree. Destructive, so it confirms first,
     # only deletable rows carry a checkbox, and the worker re-checks every path.
     [void] DeleteSelectedFolders([string]$hostName) {
@@ -476,7 +489,8 @@ class InventoryPresenter {
             "Clears ~$sizeLabel and cannot be undone. The folders are kept.",
             $list,
             'Clear',
-            $true)
+            $true,
+            [InventoryPresenter]::ProfileWarning($selected))
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
             return

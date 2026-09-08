@@ -148,3 +148,32 @@ Describe "InventoryPresenter" {
         }
     }
 }
+
+Describe "InventoryPresenter.ProfileWarning" {
+
+    # A profile folder is a person's data, so the confirmation must say so before Clear.
+    BeforeAll {
+        $script:Temp = [pscustomobject]@{ Path = 'C:\Windows\Temp\'; IsUserDir = $false }
+        $script:One = [pscustomobject]@{ Path = 'C:\Users\CE813191\'; IsUserDir = $true }
+        $script:Two = [pscustomobject]@{ Path = 'C:\Users\eg23444\'; IsUserDir = $true }
+    }
+
+    It "stays silent when nothing selected is a profile" {
+        [InventoryPresenter]::ProfileWarning(@($script:Temp)) | Should-Be ''
+    }
+
+    It "names the single profile being cleared" {
+        $w = [InventoryPresenter]::ProfileWarning(@($script:One))
+        $w.StartsWith('C:\Users\CE813191\ is a user profile.') | Should-BeTrue
+    }
+
+    It "counts them once more than one profile is checked" {
+        $w = [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One, $script:Two))
+        ($w -match '^2 of these are user profiles') | Should-BeTrue
+    }
+
+    It "ignores the non-profile rows in the same selection" {
+        $w = [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One))
+        ($w -match 'Windows') | Should-BeFalse
+    }
+}

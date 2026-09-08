@@ -72,6 +72,19 @@ class DialogPresenter {
         return $this.ShowModal()
     }
 
+    # Same confirmation with a hazard banner, for a destructive action whose reason to
+    # hesitate is not the size but what the paths are.
+    [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems,
+        [string]$primaryText, [bool]$isDestructive, [string]$warningText) {
+        $this.Initialize()
+        $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
+        if ($isDestructive) { $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonTintDestructive') }
+        $vm.WarningText = $warningText
+        $vm.HasWarning = -not [string]::IsNullOrWhiteSpace($warningText)
+        $this.Window.DataContext = $vm
+        return $this.ShowModal()
+    }
+
     # Confirmation that also asks whether to make the answer permanent. Returns
     # @{ Confirmed; Remember } so a declined prompt never changes the setting.
     [hashtable] ShowRememberableConfirmation([string]$title, [string]$message,

@@ -111,12 +111,29 @@
                 </Button>
             </Grid>
 
-            <TextBlock Grid.Row="1"
-                       Text="{Binding Message}"
-                       Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
-                       Style="{DynamicResource TextBody}"
-                       Margin="24,6,24,0"
-                       TextWrapping="Wrap" />
+            <StackPanel Grid.Row="1" Margin="24,6,24,0">
+                <TextBlock Text="{Binding Message}"
+                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
+                           Style="{DynamicResource TextBody}"
+                           TextWrapping="Wrap" />
+                <!-- The Apply tab's reboot badge, same shape: lucide triangle-alert then the
+                     reason, since a profile folder is a person's data and not a cache. -->
+                <Border Style="{DynamicResource BadgeAmber}"
+                        Height="Auto" Padding="8,5" Margin="0,10,0,0"
+                        Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Set here, not via lucideIcon: BasedOn cannot reach it across loads. -->
+                        <Path Data="{DynamicResource Warning}" Stretch="Uniform" Fill="{x:Null}"
+                              Width="11" Height="11" StrokeThickness="0.92"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Stroke="{DynamicResource AccentYellow}"
+                              VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding WarningText}"
+                                   Style="{DynamicResource BadgeAmberText}"
+                                   TextWrapping="Wrap" Margin="6,0,0,0" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
             <ScrollViewer Grid.Row="2"
                           Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
