@@ -33,6 +33,7 @@ class HostViewModel : ObservableObject {
     [string] $HostName = ''
     [string] $OwnerName = ''           # short owner form, e.g. "Danial C", '' collapses the chip
     [string] $OwnerTip = ''            # full display name, only when it says more than OwnerName
+    [string] $OwnerSam = ''            # the owner's SAM, so a clear can spare their profile
     [string] $Subtitle = 'Never run'   # a freshly-added host (not yet in recents) reads this
     [string] $ChipText = ''
     [string] $StatusGlyph = ''   # chip symbol so status reads by shape, not colour alone

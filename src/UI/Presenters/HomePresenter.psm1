@@ -1063,9 +1063,13 @@ class HomePresenter : AsyncJobPresenter {
         $onResolved = {
             param($map)
             foreach ($machine in @($map.Keys)) {
+                $entry = $map[$machine]
                 $row = $presenter.GetRow([string]$machine)
-                if ($row) { $row.SetOwner([string]$map[$machine]) }
-                $presenter.Store.UpsertOwner([string]$machine, [string]$map[$machine])
+                if ($row) {
+                    $row.SetOwner([string]$entry.Owner)
+                    $row.OwnerSam = [string]$entry.Sam
+                }
+                $presenter.Store.UpsertOwner([string]$machine, [string]$entry.Owner)
             }
         }.GetNewClosure()
         $this.Finder.ResolveOwners($wanted, $onResolved)

@@ -74,4 +74,14 @@ class FolderDeletionPolicy {
         if (-not $p) { return $false }
         return $p -match '^[A-Za-z]:\\users\\[^\\]+$'
     }
+
+    # True when $path is $sam's own profile, or anything inside it. The parent holds this
+    # gate, since only it knows the owner; the worker spares whoever is signed in.
+    static [bool] IsProfileOf([string]$path, [string]$sam) {
+        if ([string]::IsNullOrWhiteSpace($sam)) { return $false }
+        $p = [FolderDeletionPolicy]::Canonicalize($path)
+        if (-not $p) { return $false }
+        $root = $p.Substring(0, 3) + 'Users\' + $sam.Trim()
+        return ($p -ieq $root) -or $p.StartsWith("$root\", [StringComparison]::OrdinalIgnoreCase)
+    }
 }

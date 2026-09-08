@@ -425,7 +425,12 @@ class FinderPresenter {
                 if ($bundle.error) { $this.Logger.LogWarning("Owner lookup: $($bundle.error)") }
                 $map = @{}
                 foreach ($row in @($bundle.owners)) {
-                    if ($row.owner) { $map[[string]$row.name] = [string]$row.owner }
+                    # The SAM rides along: it names the profile folder the clear must spare.
+                    if ($row.owner) {
+                        $map[[string]$row.name] = @{ Owner = [string]$row.owner
+                            Sam = [string]$row.sam
+                        }
+                    }
                 }
                 # Per-machine cost decides whether this ever stops being one serial batch.
                 $ms = [long]([datetime]::UtcNow - [datetime]$job.StartedAt).TotalMilliseconds

@@ -5,6 +5,7 @@ using module "..\..\Core\AsyncJob.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module "..\ViewModels\FolderNodeViewModel.psm1"
 using module "..\ViewModels\DialogListItemViewModel.psm1"
+using module "..\..\Models\FolderDeletionPolicy.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Models\DiskUsage.psm1"
@@ -473,6 +474,19 @@ class InventoryPresenter {
         $selected = @([FolderNodeViewModel]::CollectSelected($row.Folders))
         if ($selected.Count -eq 0) {
             if ($this.Toasts) { $this.Toasts.ShowInfo($hostName, "Check at least one folder to clear.") }
+            return
+        }
+
+        # The whole clear is refused: dropping the row would clear the rest under a stale total.
+        $blocked = @($selected |
+                Where-Object { [FolderDeletionPolicy]::IsProfileOf($_.Path, $row.OwnerSam) })
+        if ($blocked.Count -gt 0) {
+            $who = if ($row.OwnerName) { $row.OwnerName } else { $row.OwnerSam }
+            $this.AppendLog($hostName, "Clear refused: $($blocked[0].Path) belongs to $who.")
+            if ($this.Toasts) {
+                $this.Toasts.ShowError($hostName,
+                    "$($blocked[0].Path) is this machine's user. Uncheck it to clear the rest.")
+            }
             return
         }
 

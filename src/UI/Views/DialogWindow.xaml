@@ -241,17 +241,9 @@
                     Height="Auto" Padding="8,5" Margin="24,16,24,0"
                     HorizontalAlignment="Center"
                     Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
-                <StackPanel Orientation="Horizontal">
-                    <!-- Set here, not via lucideIcon: BasedOn cannot reach it across loads. -->
-                    <Path Data="{DynamicResource Warning}" Stretch="Uniform" Fill="{x:Null}"
-                          Width="11" Height="11" StrokeThickness="0.92"
-                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                          StrokeLineJoin="Round" Stroke="{DynamicResource AccentYellow}"
-                          VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding WarningText}"
-                               Style="{DynamicResource BadgeAmberText}"
-                               TextWrapping="Wrap" Margin="6,0,0,0" />
-                </StackPanel>
+                <TextBlock Text="{Binding WarningText}"
+                           Style="{DynamicResource BadgeAmberText}"
+                           TextWrapping="Wrap" />
             </Border>
 
             <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
