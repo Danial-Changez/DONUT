@@ -723,7 +723,8 @@ class MainPresenter {
     # Pops the QR overlay for a BitLocker recovery key (the Lens path keeps this
     # 2-arg shape, and the caption prefix and hint stay its own).
     [void] ShowQr([string]$payload, [string]$caption) {
-        $this.ShowQr($payload, "BitLocker Recovery Key - $caption",
+        # The machine leads and the hint below says which secret, so the title fits one line.
+        $this.ShowQr($payload, "$caption Key",
             'Scan to read the recovery key, then close this.')
     }
 
@@ -799,7 +800,7 @@ class MainPresenter {
     hidden [void] OnShowPasswordQr() {
         $vm = $this.ResetVm
         if ([string]::IsNullOrWhiteSpace($vm.Password)) { return }
-        $this.ShowQr($vm.Password, "Temporary Password - $($vm.DisplayName)",
+        $this.ShowQr($vm.Password, "$($vm.DisplayName) Password",
             'Scan to read the temporary password, then close this.')
     }
 
