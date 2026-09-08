@@ -66,11 +66,8 @@ class DialogPresenter {
     # "Confirm", and $isDestructive paints the primary button red.
     [bool] ShowConfirmation([string]$title, [string]$message, [object[]]$listItems,
         [string]$primaryText, [bool]$isDestructive) {
-        $this.Initialize()
-        $vm = $this.NewVm($title, $message, $listItems, $primaryText, 'Cancel')
-        if ($isDestructive) { $vm.PrimaryStyle = $this.Window.TryFindResource('ButtonTintDestructive') }
-        $this.Window.DataContext = $vm
-        return $this.ShowModal()
+        return $this.ShowConfirmation($title, $message, $listItems, $primaryText,
+            $isDestructive, '')
     }
 
     # Same confirmation with a hazard banner, for a destructive action whose reason to
