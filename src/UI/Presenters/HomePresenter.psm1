@@ -1067,7 +1067,7 @@ class HomePresenter : AsyncJobPresenter {
                 $row = $presenter.GetRow([string]$machine)
                 if ($row) {
                     $row.SetOwner([string]$entry.Owner)
-                    $row.OwnerSam = [string]$entry.Sam
+                    $row.SetOwnerSam([string]$entry.Sam)
                 }
                 $presenter.Store.UpsertOwner([string]$machine, [string]$entry.Owner)
             }

@@ -185,7 +185,19 @@ class HostViewModel : ObservableObject {
     [void] ApplyFolders([DiskUsageReport]$report) {
         if ($null -ne $report -and [object]::ReferenceEquals($this.FoldersSource, $report)) { return }
         $this.FoldersSource = $report
-        $roots = [FolderNodeViewModel]::FromReport($report)
+        $this.RebuildFolders()
+    }
+
+    # The owner batch answers after a scan as often as before it, and the tree has to know
+    # who it is to withhold their checkbox, so a late answer rebuilds what is already drawn.
+    [void] SetOwnerSam([string]$sam) {
+        if ($this.OwnerSam -eq $sam) { return }
+        $this.OwnerSam = $sam
+        if ($null -ne $this.FoldersSource) { $this.RebuildFolders() }
+    }
+
+    hidden [void] RebuildFolders() {
+        $roots = [FolderNodeViewModel]::FromReport($this.FoldersSource, $this.OwnerSam)
         $this.Set('Folders', $roots)
         $this.Set('HasFolders', ($roots.Count -gt 0))
     }

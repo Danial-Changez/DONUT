@@ -36,12 +36,22 @@ class FolderNodeViewModel : ObservableObject {
 
     # Root display nodes for a report (empty for a null/empty report).
     static [FolderNodeViewModel[]] FromReport([DiskUsageReport]$report) {
+        return [FolderNodeViewModel]::FromReport($report, '')
+    }
+
+    # $protectedSam is the machine's own user, whose profile gets no checkbox at all.
+    static [FolderNodeViewModel[]] FromReport([DiskUsageReport]$report, [string]$protectedSam) {
         if ($null -eq $report -or $report.Folders.Count -eq 0) { return @() }
-        return [FolderNodeViewModel]::FromNodes([DiskUsageTree]::BuildNested($report.Folders))
+        return [FolderNodeViewModel]::FromNodes(
+            [DiskUsageTree]::BuildNested($report.Folders), $protectedSam)
+    }
+
+    static [FolderNodeViewModel[]] FromNodes([FolderTreeNode[]]$nodes) {
+        return [FolderNodeViewModel]::FromNodes($nodes, '')
     }
 
     # Recursively maps model nodes (already nested + size-ranked) to display nodes.
-    static [FolderNodeViewModel[]] FromNodes([FolderTreeNode[]]$nodes) {
+    static [FolderNodeViewModel[]] FromNodes([FolderTreeNode[]]$nodes, [string]$protectedSam) {
         $out = [System.Collections.Generic.List[FolderNodeViewModel]]::new()
         foreach ($n in @($nodes)) {
             if ($null -eq $n) { continue }
@@ -52,9 +62,11 @@ class FolderNodeViewModel : ObservableObject {
             $vm.IsRoot      = ($n.Depth -eq 0)
             $vm.SizeBytes   = $n.SizeBytes
             $vm.SizeText    = [DiskUsageFormat]::SizeLabel($n.SizeBytes)
-            $vm.IsDeletable = [FolderDeletionPolicy]::IsDeletable($n.Path)
+            # The machine's own user loses the checkbox, exactly like a protected folder.
+            $vm.IsDeletable = ([FolderDeletionPolicy]::IsDeletable($n.Path) -and
+                -not [FolderDeletionPolicy]::IsProfileOf($n.Path, $protectedSam))
             $vm.IsUserDir   = [FolderDeletionPolicy]::IsUserProfileDir($n.Path)
-            $vm.Children    = [FolderNodeViewModel]::FromNodes($n.Children)
+            $vm.Children    = [FolderNodeViewModel]::FromNodes($n.Children, $protectedSam)
             foreach ($c in $vm.Children) { $c.Parent = $vm }
             $out.Add($vm)
         }
