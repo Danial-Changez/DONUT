@@ -137,7 +137,7 @@ $sumAsset = $release.assets |
 $kind = if ($release.prerelease) { 'beta' } else { 'stable' }
 Write-Host "Installing DONUT $($release.tag_name) ($kind) into $InstallDir..." -ForegroundColor Cyan
 
-$stage = Join-Path $env:TEMP "donut-beta-$($release.tag_name)"
+$stage = Join-Path $env:TEMP "donut-zip-$($release.tag_name)"
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 $zip = Save-Asset -Asset $zipAsset -Dir $stage
 

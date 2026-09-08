@@ -1,5 +1,6 @@
 using namespace Donut.Mvvm
 using namespace System.Collections.ObjectModel
+using module "..\..\Core\TimeFormat.psm1"
 using module "..\..\Models\PersonLens.psm1"
 using module ".\LensDeviceViewModel.psm1"
 
@@ -54,21 +55,14 @@ class PersonLensViewModel : ObservableObject {
     # The person's own machines lead, since a pick asks about them and a row can belong to
     # someone else. Then newest-seen: their console time when SCCM has it, else the machine.
     hidden [object[]] SortByLastSeen([LensDevice[]]$devices) {
-        $stamp = {
-            param($iso)
-            $at = [datetime]::MinValue
-            [void][datetime]::TryParse([string]$iso,
-                [System.Globalization.CultureInfo]::InvariantCulture,
-                [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)
-            return $at
-        }
         return @($devices | Sort-Object -Descending `
                                         -Stable `
                                         -Property @{ Expression = { [bool]$_.IsSearchedUser } },
                                         @{
                 Expression = {
-                    $own = & $stamp $_.ConsoleUse
-                    if ($own -gt [datetime]::MinValue) { $own } else { & $stamp $_.LastLogon }
+                    $own = [TimeFormat]::ParseIso($_.ConsoleUse)
+                    if ($own -gt [datetime]::MinValue) { $own }
+                    else { [TimeFormat]::ParseIso($_.LastLogon) }
                 }
             })
     }
