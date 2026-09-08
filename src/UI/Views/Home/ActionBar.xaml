@@ -95,19 +95,11 @@
         <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid>
+                <!-- Bound, not triggered: a TextBlock.Style here would replace TextCaption
+                     outright and take its Foreground with it. -->
                 <TextBlock Text="{Binding HeaderText}" Style="{DynamicResource TextCaption}"
-                           FontWeight="SemiBold" Margin="6,6,0,4">
-                  <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                      <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsHeader}" Value="True">
-                          <Setter Property="Visibility" Value="Visible" />
-                        </DataTrigger>
-                      </Style.Triggers>
-                    </Style>
-                  </TextBlock.Style>
-                </TextBlock>
+                           FontWeight="SemiBold" Margin="6,6,0,4"
+                           Visibility="{Binding IsHeader, Converter={StaticResource BoolToVis}}" />
                 <!-- Picking a row adds a computer to the machine pane, or opens a user's Lens. -->
                 <Border CornerRadius="7" Padding="10,6,8,6" Margin="0,0,0,2">
                   <Border.Style>

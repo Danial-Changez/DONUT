@@ -134,6 +134,25 @@ Describe "View composition" -Tag "Integration", "WPF" {
             $boxes.Count | Should -Be 4 -Because 'model, battery, disk and BIOS must all be copyable'
         }
 
+        # A Style attribute plus a <X.Style> element: the element wins and the token goes.
+        It "never sets Style twice on one element" -Skip:(-not $script:isStaMode) {
+            $offenders = @()
+            foreach ($view in Get-ChildItem $script:viewsPath -Filter '*.xaml' -Recurse) {
+                $raw = Get-Content $view.FullName -Raw
+                $open = [regex]::Matches($raw, '<(\w+)[^>]*?\sStyle="\{\w+Resource[^"]*"[^>]*?>')
+                foreach ($m in $open) {
+                    $tag = $m.Groups[1].Value
+                    $tail = $raw.Substring($m.Index + $m.Length,
+                        [Math]::Min(400, $raw.Length - $m.Index - $m.Length))
+                    if ($tail -match "^\s*<$tag\.Style>") {
+                        $line = ($raw.Substring(0, $m.Index) -split "`n").Count
+                        $offenders += "$($view.Name):$line <$tag>"
+                    }
+                }
+            }
+            $offenders -join ', ' | Should -BeNullOrEmpty -Because 'the element form replaces the token style'
+        }
+
         It "hosts the Lens slot inside the detail region, not the shell" -Skip:(-not $script:isStaMode) {
             $shell = [ViewLoader]::Load($script:srcRoot, 'UI\Views\HomeView.xaml')
             $detail = [ViewLoader]::Load($script:srcRoot, 'UI\Views\Home\DetailPane.xaml')
