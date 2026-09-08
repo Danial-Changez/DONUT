@@ -378,6 +378,25 @@ Describe "PersonLensService" {
             [PersonLensService]::ColdStartWedged() | Should -BeTrue
         }
 
+        It "a live agent skips the lock entirely, so no lookup queues 20s on it" {
+            # 20s per lookup on the lock pinned every interactive runspace, stalling search.
+            $svc = [PersonLensService]::new('site.example', 'C:\Src')
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+            [IO.File]::WriteAllText((Join-Path $dir 'heartbeat.txt'), [datetime]::UtcNow.ToString('o'))
+
+            $held = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
+            $null = $held.WaitOne(1000)
+            try {
+                $elapsed = Measure-Command { $svc.EnsureAgent() }
+                $elapsed.TotalSeconds | Should -BeLessThan 5
+            } finally {
+                try { $held.ReleaseMutex() } catch { }
+                $held.Dispose()
+            }
+        }
+
         It "keeps the stamp beside the exchange dir, which a cold start wipes" {
             $stamp = [PersonLensService]::ColdStartStampPath()
             $stamp | Should -Not -BeLike (Join-Path ([PersonLensService]::AgentDir()) '*')

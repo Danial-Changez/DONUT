@@ -199,6 +199,15 @@ class PersonLensService {
     # (Re)starts the agent when its heartbeat is stale, returning '' or a failure reason.
     # Mutex-guarded so concurrent pool runspaces cannot race a double start.
     [string] EnsureAgent() {
+        $dir = [PersonLensService]::AgentDir()
+        $beat = Join-Path $dir 'heartbeat.txt'
+        # A beating agent needs no cold start, so the hot path never touches the lock at
+        # all: every lookup queued on it for 20s while holding an interactive runspace.
+        if ([PersonLensService]::AgentIsAlive($dir, $beat) -and
+            -not [PersonLensService]::ShouldForceRecycle($dir)) {
+            return ''
+        }
+
         # Resolved before the mutex: a lookup stopped inside this WMI call would wedge it.
         $interactiveUser = [ElevationContext]::InteractiveUser()
         if (-not $interactiveUser) {
@@ -208,11 +217,15 @@ class PersonLensService {
         $mutex = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
         $owned = $false
         try {
-            try { $owned = $mutex.WaitOne(20000) }
-            catch [System.Threading.AbandonedMutexException] { $owned = $true }
+            # Short waits: a pipeline stops between calls, so a long one pins its runspace.
+            $waitUntil = (Get-Date).AddSeconds(20)
+            while (-not $owned -and (Get-Date) -lt $waitUntil) {
+                # The other runspace's agent may come up mid-wait, which is all we needed.
+                if ([PersonLensService]::AgentIsAlive($dir, $beat)) { return '' }
+                try { $owned = $mutex.WaitOne(500) }
+                catch [System.Threading.AbandonedMutexException] { $owned = $true }
+            }
 
-            $dir = [PersonLensService]::AgentDir()
-            $beat = Join-Path $dir 'heartbeat.txt'
             # Unowned after 20s means another runspace is mid cold-start: barging in wiped its exchange dir.
             if (-not $owned) {
                 if ([PersonLensService]::AgentIsAlive($dir, $beat)) { return '' }
