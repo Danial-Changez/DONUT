@@ -454,17 +454,11 @@ class InventoryPresenter {
         if ($row) { $row.ApplyFolders($report) }
     }
 
-    # A profile folder holds somebody's desktop and documents, so the confirmation says so
-    # outright rather than leaving the tree's hazard glyph to carry it alone.
+    # The banner states the hazard once; each offending row is marked in the list itself,
+    # so naming the paths here would only repeat what is directly above it.
     hidden static [string] ProfileWarning([object[]]$selected) {
-        $profiles = @($selected | Where-Object { $_.IsUserDir })
-        if ($profiles.Count -eq 0) { return '' }
-        if ($profiles.Count -eq 1) {
-            return ("$($profiles[0].Path) is a user profile. Clearing it deletes that " +
-                "person's desktop, documents and downloads.")
-        }
-        return ("$($profiles.Count) of these are user profiles. Clearing them deletes those " +
-            "people's desktops, documents and downloads.")
+        if (@($selected | Where-Object { $_.IsUserDir }).Count -eq 0) { return '' }
+        return 'Warning: You are deleting a user profile'
     }
 
     # Deletes the folders the operator checked in the tree. Destructive, so it confirms first,
@@ -482,7 +476,12 @@ class InventoryPresenter {
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
-        $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
+        $list = @($selected | ForEach-Object {
+                # Hazard marks the row itself, so the profile is obvious beside its own size.
+                [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))"
+                    Hazard = [bool]$_.IsUserDir
+                }
+            })
         $sizeLabel = [DiskUsageFormat]::SizeLabel($totalBytes)
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear Folder Contents on $hostName",

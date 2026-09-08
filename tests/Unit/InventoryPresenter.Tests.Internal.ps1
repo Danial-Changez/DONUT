@@ -151,7 +151,7 @@ Describe "InventoryPresenter" {
 
 Describe "InventoryPresenter.ProfileWarning" {
 
-    # A profile folder is a person's data, so the confirmation must say so before Clear.
+    # A profile folder is a person's data, so the confirmation says so before Clear.
     BeforeAll {
         $script:Temp = [pscustomobject]@{ Path = 'C:\Windows\Temp\'; IsUserDir = $false }
         $script:One = [pscustomobject]@{ Path = 'C:\Users\CE813191\'; IsUserDir = $true }
@@ -162,18 +162,18 @@ Describe "InventoryPresenter.ProfileWarning" {
         [InventoryPresenter]::ProfileWarning(@($script:Temp)) | Should-Be ''
     }
 
-    It "names the single profile being cleared" {
-        $w = [InventoryPresenter]::ProfileWarning(@($script:One))
-        $w.StartsWith('C:\Users\CE813191\ is a user profile.') | Should-BeTrue
+    It "states the hazard once when a profile is checked" {
+        [InventoryPresenter]::ProfileWarning(@($script:One)) |
+            Should-Be 'Warning: You are deleting a user profile'
     }
 
-    It "counts them once more than one profile is checked" {
-        $w = [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One, $script:Two))
-        ($w -match '^2 of these are user profiles') | Should-BeTrue
+    It "says the same thing for several, since each row is marked itself" {
+        [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One, $script:Two)) |
+            Should-Be 'Warning: You are deleting a user profile'
     }
 
-    It "ignores the non-profile rows in the same selection" {
-        $w = [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One))
-        ($w -match 'Windows') | Should-BeFalse
+    It "fires on a profile buried among ordinary folders" {
+        ([InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One)).Length -gt 0) |
+            Should-BeTrue
     }
 }

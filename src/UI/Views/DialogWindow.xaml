@@ -85,6 +85,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Popup chrome contract: the 48px header doubles as the drag region.
@@ -111,29 +112,12 @@
                 </Button>
             </Grid>
 
-            <StackPanel Grid.Row="1" Margin="24,6,24,0">
-                <TextBlock Text="{Binding Message}"
-                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
-                           Style="{DynamicResource TextBody}"
-                           TextWrapping="Wrap" />
-                <!-- The Apply tab's reboot badge, same shape: lucide triangle-alert then the
-                     reason, since a profile folder is a person's data and not a cache. -->
-                <Border Style="{DynamicResource BadgeAmber}"
-                        Height="Auto" Padding="8,5" Margin="0,10,0,0"
-                        Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <!-- Set here, not via lucideIcon: BasedOn cannot reach it across loads. -->
-                        <Path Data="{DynamicResource Warning}" Stretch="Uniform" Fill="{x:Null}"
-                              Width="11" Height="11" StrokeThickness="0.92"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                              StrokeLineJoin="Round" Stroke="{DynamicResource AccentYellow}"
-                              VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding WarningText}"
-                                   Style="{DynamicResource BadgeAmberText}"
-                                   TextWrapping="Wrap" Margin="6,0,0,0" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+            <TextBlock Grid.Row="1"
+                       Text="{Binding Message}"
+                       Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"
+                       Style="{DynamicResource TextBody}"
+                       Margin="24,6,24,0"
+                       TextWrapping="Wrap" />
 
             <ScrollViewer Grid.Row="2"
                           Visibility="{Binding HasList, Converter={StaticResource BoolToVis}}"
@@ -147,14 +131,36 @@
                                     CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Left}"
-                                               Foreground="{DynamicResource BodyTextPrimary}"
+                                    <!-- Only a hazardous row carries it, so Hazard is absent
+                                         (null, so collapsed) on every other dialog's list. -->
+                                    <Path Grid.Column="0" Data="{DynamicResource Warning}"
+                                          Stretch="Uniform" Fill="{x:Null}" Width="12" Height="12"
+                                          StrokeThickness="1.15" StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Stroke="{DynamicResource AccentYellow}"
+                                          Margin="0,0,7,0" VerticalAlignment="Center"
+                                          Visibility="{Binding Hazard, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Left}"
                                                FontFamily="{DynamicResource FontMono}" FontSize="12"
-                                               TextWrapping="Wrap" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Right}"
+                                               TextWrapping="Wrap" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{DynamicResource BodyTextPrimary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Hazard}" Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{DynamicResource AccentYellow}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Grid.Column="2" Text="{Binding Right}"
                                                Foreground="{DynamicResource BodyTextSecondary}"
                                                FontFamily="{DynamicResource FontMono}" FontSize="12"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -220,8 +226,26 @@
                       Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
                       Margin="24,16,24,0" />
 
+            <!-- Last thing read before Clear: the Apply tab's reboot badge, same shape. -->
+            <Border Grid.Row="5" Style="{DynamicResource BadgeAmber}"
+                    Height="Auto" Padding="8,5" Margin="24,16,24,0"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <!-- Set here, not via lucideIcon: BasedOn cannot reach it across loads. -->
+                    <Path Data="{DynamicResource Warning}" Stretch="Uniform" Fill="{x:Null}"
+                          Width="11" Height="11" StrokeThickness="0.92"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round" Stroke="{DynamicResource AccentYellow}"
+                          VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding WarningText}"
+                               Style="{DynamicResource BadgeAmberText}"
+                               TextWrapping="Wrap" Margin="6,0,0,0" />
+                </StackPanel>
+            </Border>
+
             <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
-            <StackPanel Grid.Row="5"
+            <StackPanel Grid.Row="6"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">
