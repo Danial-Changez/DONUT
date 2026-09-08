@@ -108,6 +108,8 @@ try {
 
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
+    # One interactive slot per forest: a smaller lane queues every AD fan-out. See .NOTES.
+    [RunspaceManager]::SizeInteractiveFor(@($global:AppConfig.GetDomains()).Count)
     # Initialize raises the ThreadPool floor first, guarding against dispatch starvation.
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     # min = max pins every runspace, or warmed ones die and later jobs cold-load.

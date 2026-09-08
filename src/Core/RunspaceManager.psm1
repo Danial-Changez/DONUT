@@ -19,12 +19,15 @@ using module '.\LogService.psm1'
     scan pins all of them for minutes and a Lens or AD lookup submitted meanwhile
     queues behind it and never dispatches.
 
-    InteractiveSize is 4 because the AD finder's fan-out is one job per configured
-    forest and the default is four; at 3 the last forest queued on every single
-    search, not just under contention. It is still a fixed number rather than a
-    count of forests - deriving it would put a startup cost (each runspace pays a
-    serialized using-module compile at warm) behind a value users edit, which is
-    the coupling the worker/interactive split exists to avoid.
+    InteractiveSize follows the configured forest count, because the AD finder's
+    fan-out is one job per forest and a pool smaller than that queues on every
+    single search rather than only under contention. It was fixed at 4 for the
+    four-forest default, and a ten-forest site paid for it: search legs whose own
+    directory time was 350-850ms landed 1.4-6.5s late, all of it queue wait, and
+    lens jobs sharing the lane made it worse. The floor stays 4 and the ceiling is
+    12, since each runspace pays a serialized using-module compile at warm, so a
+    long domain list cannot turn startup into a stall. SizeInteractiveFor must run
+    before Initialize; after the pool is open the size is fixed.
 #>
 class RunspaceManager {
     static [System.Management.Automation.Runspaces.RunspacePool] $RunspacePool
@@ -32,8 +35,17 @@ class RunspaceManager {
     # Static like the pools it logs for. The no-op default means no null checks anywhere.
     static [LogService] $Logger = [NullLogService]::new()
 
-    # Fixed, not throttle-derived: four so a whole AD fan-out dispatches at once. See .NOTES.
+    # Not throttle-derived: one slot per forest so a whole AD fan-out dispatches at once.
     static [int] $InteractiveSize = 4
+
+    # Sizes the interactive lane to the forest fan-out. Must precede Initialize. See .NOTES.
+    static [void] SizeInteractiveFor([int]$forests) {
+        if ([RunspaceManager]::InteractivePool) { return }
+        $size = [Math]::Max(4, [Math]::Min(12, $forests))
+        [RunspaceManager]::InteractiveSize = $size
+        [RunspaceManager]::Logger.WriteLog("INFO",
+            "Interactive pool sized to $size for $forests configured forest(s).")
+    }
 
     # Lazy-init fallback when nothing configured the pool first. min = max because idle
     # cleanup only disposes above the minimum, so a lower floor lets warm runspaces die.
