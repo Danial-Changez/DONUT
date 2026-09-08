@@ -39,9 +39,13 @@ class DonutPaths {
     # Strips the inherited ACL down to SYSTEM / Administrators / the interactive user,
     # mirroring PersonLensService's exchange folder. Returns '' or a reason fragment.
     static [string] Secure([string]$dir) {
-        $who = $null
+        return [DonutPaths]::Secure($dir, [ElevationContext]::InteractiveUser())
+    }
+
+    # $who is taken as a parameter so a caller holding a lock can resolve the desktop
+    # owner before acquiring it: that lookup is a WMI round trip and can block.
+    static [string] Secure([string]$dir, [string]$who) {
         try {
-            $who = [ElevationContext]::InteractiveUser()
             if (-not $who) { return 'no interactive desktop session to grant access to' }
             $acl = Get-Acl $dir
             $acl.SetAccessRuleProtection($true, $false)

@@ -52,6 +52,17 @@ no partials, so the pane fills in one step. See
   task; two lookup timeouts in a row (`timeouts.txt`) force the same recycle even
   while the beat stays fresh, which catches an agent poisoned by dead binds after
   sleep.
+- The init mutex alone is not enough to arbitrate that cold start. A pool runspace
+  stopped while blocked inside a native call (a WMI or scheduled-task round trip)
+  never leaves `Stopping`, so its `finally` never runs, and because the pool thread
+  stays alive the mutex is never released *and* never abandoned - one superseded
+  lookup would fail every later lookup with "another lookup is still starting the
+  Lens agent" until DONUT restarted. So the desktop owner is resolved *before* the
+  lock (that WMI call was the blocking one), and `lens-coldstart.stamp` - kept beside
+  the exchange dir because the recycle wipes the dir itself - dates the start in
+  flight. A holder past 45 s, well beyond the 20 s start wait, is treated as gone and
+  the next lookup takes the cold start over; a duplicated start is safe because
+  `agent.pid` stands the losing instance down.
 - The serve loop itself beats every ~2 s and never blocks: person lookups and
   owner batches run on `ThreadJob`s (any job stuck past 90 seconds is cut loose,
   since the parent stops listening at 60 and a straggler only hogs a throttle slot),

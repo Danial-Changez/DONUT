@@ -129,6 +129,30 @@ class PersonLensService {
         return [PersonLensService]::ReadLensTimeoutCount($dir) -ge 2
     }
 
+    # Beside the exchange dir, never inside it: the cold start wipes the dir, and this
+    # stamp is what tells the next lookup whether the holder is working or wedged.
+    hidden static [string] ColdStartStampPath() {
+        return (Join-Path $env:ProgramData 'DONUT\lens-coldstart.stamp')
+    }
+
+    hidden static [void] StampColdStart() {
+        try {
+            [IO.File]::WriteAllText([PersonLensService]::ColdStartStampPath(),
+                [datetime]::UtcNow.ToString('o'))
+        } catch { }
+    }
+
+    # A pipeline stopped inside a blocking call never releases the init mutex nor abandons
+    # it, so a holder past 45s is gone; a duplicated start is safe, agent.pid settles it.
+    hidden static [bool] ColdStartWedged() {
+        try {
+            $raw = [IO.File]::ReadAllText([PersonLensService]::ColdStartStampPath()).Trim()
+            $started = [datetime]::MinValue
+            if (-not [datetime]::TryParse($raw, [ref]$started)) { return $true }
+            return ((([datetime]::UtcNow) - $started.ToUniversalTime()).TotalSeconds -ge 45)
+        } catch { return $true }
+    }
+
     # True when the exchange holds a key and a beat fresh enough to trust the agent.
     hidden static [bool] AgentIsAlive([string]$dir, [string]$beat) {
         if (-not (Test-Path -LiteralPath (Join-Path $dir 'key.bin'))) { return $false }
@@ -165,9 +189,22 @@ class PersonLensService {
 
     # --- Agent supervision ---
 
+    # Every reason reaches Donut.log: these used to surface only in the UI error bundle,
+    # which left cold-start failures with no trace at all in the log.
+    hidden [string] AgentFailure([string]$reason) {
+        $this.Logger.LogWarning("Lens agent unavailable: $reason")
+        return $reason
+    }
+
     # (Re)starts the agent when its heartbeat is stale, returning '' or a failure reason.
     # Mutex-guarded so concurrent pool runspaces cannot race a double start.
     [string] EnsureAgent() {
+        # Resolved before the mutex: a lookup stopped inside this WMI call would wedge it.
+        $interactiveUser = [ElevationContext]::InteractiveUser()
+        if (-not $interactiveUser) {
+            return $this.AgentFailure('no interactive desktop session to de-elevate into.')
+        }
+
         $mutex = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
         $owned = $false
         try {
@@ -179,7 +216,13 @@ class PersonLensService {
             # Unowned after 20s means another runspace is mid cold-start: barging in wiped its exchange dir.
             if (-not $owned) {
                 if ([PersonLensService]::AgentIsAlive($dir, $beat)) { return '' }
-                return 'another lookup is still starting the Lens agent - retry in a moment.'
+                # Unless that holder is wedged, in which case nobody is really starting it.
+                if (-not [PersonLensService]::ColdStartWedged()) {
+                    return $this.AgentFailure(
+                        'another lookup is still starting the Lens agent - retry in a moment.')
+                }
+                $this.Logger.LogWarning(
+                    'A Lens agent cold start wedged holding the init lock, so this lookup takes it over.')
             }
             # A beating agent can still be poisoned, and two straight timeouts overrule it.
             $forceRecycle = [PersonLensService]::ShouldForceRecycle($dir)
@@ -198,12 +241,14 @@ class PersonLensService {
             }
             # A cold start on a pick is that pick's whole tail, so the log names it.
             $coldStart = [System.Diagnostics.Stopwatch]::StartNew()
+            # Stamped before the first blocking call, so a later lookup can spot a wedge.
+            [PersonLensService]::StampColdStart()
+            $this.Logger.LogInfo("Starting the Lens agent ($reason).")
 
             $agentScript = Join-Path $this.SourceRoot 'Scripts\LensAgent.ps1'
-            if (-not (Test-Path -LiteralPath $agentScript)) { return "LensAgent.ps1 not found at $agentScript" }
-
-            $interactiveUser = [ElevationContext]::InteractiveUser()
-            if (-not $interactiveUser) { return 'no interactive desktop session to de-elevate into.' }
+            if (-not (Test-Path -LiteralPath $agentScript)) {
+                return $this.AgentFailure("LensAgent.ps1 not found at $agentScript")
+            }
 
             # Cold start: replace any previous instance and rebuild the exchange dir.
             $taskName = [PersonLensService]::AgentTaskName
@@ -218,14 +263,16 @@ class PersonLensService {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
             # ProgramData grants every local user read, and bundles hold BitLocker keys.
-            $aclError = [DonutPaths]::Secure($dir)
-            if ($aclError) { return $aclError }
+            $aclError = [DonutPaths]::Secure($dir, $interactiveUser)
+            if ($aclError) { return $this.AgentFailure($aclError) }
 
             # Session key: the agent encrypts every payload with it for its lifetime.
             [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
 
             $pwshPath = [WorkerProcess]::FindPwsh()
-            if (-not $pwshPath) { return 'could not resolve pwsh.exe to run the de-elevated agent.' }
+            if (-not $pwshPath) {
+                return $this.AgentFailure('could not resolve pwsh.exe to run the de-elevated agent.')
+            }
 
             $donutPid = [System.Diagnostics.Process]::GetCurrentProcess().Id
             $argFormat = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" ' +
@@ -270,9 +317,9 @@ class PersonLensService {
                 }
                 Start-Sleep -Milliseconds 200
             }
-            return "the agent did not start within 20s (as $interactiveUser)."
+            return $this.AgentFailure("the agent did not start within 20s (as $interactiveUser).")
         } catch {
-            return "could not start the Lens agent: $($_.Exception.Message)"
+            return $this.AgentFailure("could not start the Lens agent: $($_.Exception.Message)")
         } finally {
             if ($owned) { try { $mutex.ReleaseMutex() } catch { } }
             $mutex.Dispose()
