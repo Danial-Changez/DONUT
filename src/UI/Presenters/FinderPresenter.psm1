@@ -112,6 +112,7 @@ class FinderPresenter {
     [DispatcherTimer] $SearchDebounce
     [DispatcherTimer] $SearchPollTimer
     [int]             $SearchToken = 0
+    [bool]            $HighlightHeld = $false   # user arrowed off the pre-select
     [List[hashtable]] $SearchJobs          # in-flight @{ Ps; Handle; Token }
     [HashSet[string]] $ForestsWarned       # toast once per dead forest, not per keystroke
     [List[hashtable]] $AdWarmJobs          # one-shot startup AD warm jobs (results discarded)
@@ -216,7 +217,11 @@ class FinderPresenter {
             $this.SearchBar.Add_PreviewKeyDown({
                     param($s, $e)
                     switch ([string]$e.Key) {
-                        'Escape' { $presenter.CloseSearchPopup(); $e.Handled = $true }
+                        'Escape' {
+                            $presenter.AbortSearch()
+                            $presenter.CloseSearchPopup()
+                            $e.Handled = $true
+                        }
                         'Down' { $presenter.MoveHighlight(1); $e.Handled = $true }
                         'Up' { $presenter.MoveHighlight(-1); $e.Handled = $true }
                         'Return' { $presenter.CommitSelection(); $e.Handled = $true }
@@ -265,6 +270,7 @@ class FinderPresenter {
         if ($idx -ge 0 -and $idx -lt $count -and -not $items[$idx].IsHeader) {
             $this.ResultsList.SelectedIndex = $idx
             $this.ResultsList.ScrollIntoView($items[$idx])
+            $this.HighlightHeld = $true
         }
     }
 
@@ -273,6 +279,8 @@ class FinderPresenter {
         if ($this.SearchPopup -and $this.SearchPopup.IsOpen -and $null -ne $this.ResultsList) {
             $sel = $this.ResultsList.SelectedItem
             if ($null -ne $sel -and -not $sel.IsHeader -and $null -ne $sel.PickCommand) {
+                # A forest landing after this pick would re-render and reopen the dropdown.
+                $this.AbortSearch()
                 $sel.PickCommand.Execute($null)
                 return
             }
@@ -370,6 +378,14 @@ class FinderPresenter {
             $this.ToastJobs.Add($this.StartLensWorker(@{ ToastTitle = $title; ToastBody = $body }))
             $this.LensPollTimer.Start()
         } catch { $this.Logger.LogException('Key toast could not start', $_) }
+    }
+
+    # Hands a URL to the de-elevated agent, which owns the browser session. See .NOTES.
+    [void] OpenExternalUrl([string]$url) {
+        try {
+            $this.ToastJobs.Add($this.StartLensWorker(@{ OpenUrl = $url }))
+            $this.LensPollTimer.Start()
+        } catch { $this.Logger.LogException('Could not open the page', $_) }
     }
 
     # Disposes finished toast workers. They return nothing the UI needs.
@@ -534,6 +550,7 @@ class FinderPresenter {
             return
         }
         # Drop stale AD hits so they can't linger under the new text.
+        $this.HighlightHeld = $false
         $this.AbortSearch()
         $this.RenderDropdown()
         $this.SearchDebounce.Stop()
@@ -652,6 +669,12 @@ class FinderPresenter {
         if ($this.SearchJobs.Count -eq 0) { $this.SearchPollTimer.Stop() }
     }
 
+    # Identity of a dropdown row, so a re-render can put the highlight back on it.
+    hidden static [string] RowKey([object]$row) {
+        if ($null -eq $row -or $row.IsHeader) { return '' }
+        return "$([string]$row.Primary)|$([string]$row.Secondary)"
+    }
+
     # A header row, so the hint can't be picked or reached by the arrow keys.
     hidden [void] AddOverflowHint([object]$items, [int]$total) {
         $hidden = $total - $this.MaxDropdownRows
@@ -713,6 +736,11 @@ class FinderPresenter {
         # Nothing matched, so no popup shell and Enter has nothing to act on. See .NOTES.
         if ($items.Count -eq 0) { $this.CloseSearchPopup(); return 0 }
 
+        # Resetting the highlight on each landing is what makes one arrow tap read as two.
+        $held = if ($this.HighlightHeld -and $this.ResultsList) {
+            [FinderPresenter]::RowKey($this.ResultsList.SelectedItem)
+        } else { '' }
+
         # One Set, not Clear plus N Adds: each Add invalidates the ListBox layout (~3ms a row).
         $this.HomeVm.Set('SearchResults',
             [System.Collections.ObjectModel.ObservableCollection[object]]::new($items))
@@ -721,6 +749,11 @@ class FinderPresenter {
         $sel = if ($firstComputerIndex -ge 0) { $firstComputerIndex }
         elseif ($firstUserIndex -ge 0) { $firstUserIndex }
         else { -1 }
+        if ($held) {
+            for ($i = 0; $i -lt $items.Count; $i++) {
+                if ([FinderPresenter]::RowKey($items[$i]) -eq $held) { $sel = $i; break }
+            }
+        }
         if ($this.ResultsList) { $this.ResultsList.SelectedIndex = $sel }
         if ($this.SearchPopup) { $this.SearchPopup.IsOpen = $true }
         return $items.Count

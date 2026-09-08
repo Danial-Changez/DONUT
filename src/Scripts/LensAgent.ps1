@@ -299,6 +299,10 @@ while ($true) {
                         }
                         Write-LensBundle $resultPath $json
                     }
+                    'open-url' {
+                        # Fire and forget: this identity is the one with a browser session.
+                        try { Start-Process ([string]$req.url) } catch { }
+                    }
                     'toast' {
                         # Fire and forget: only this identity's toasts reach the operator's shell.
                         try { Show-LensToast -title ([string]$req.title) -body ([string]$req.body) }

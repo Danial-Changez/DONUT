@@ -398,6 +398,28 @@ class PersonLensService {
             }, $false)
     }
 
+    # Opens a URL as the interactive user. Elevated, DONUT runs as an admin account whose
+    # session has no browser or profile, so Start-Process there loads nothing.
+    [void] OpenUrl([string]$url) {
+        if ([string]::IsNullOrWhiteSpace($url)) { return }
+        # De-elevated, DONUT already is the user whose default browser should answer.
+        if (-not [ElevationContext]::IsElevated()) {
+            try { Start-Process $url }
+            catch { $this.Logger.LogException('Could not open the page', $_) }
+            return
+        }
+        if ($this.EnsureAgent()) { return }
+        $dir = [PersonLensService]::AgentDir()
+        $keyIv = $null
+        try { $keyIv = [IO.File]::ReadAllBytes((Join-Path $dir 'key.bin')) } catch { }
+        if (-not $keyIv -or $keyIv.Length -ne 48) { return }
+        $reqId = [guid]::NewGuid().ToString('N').Substring(0, 8)
+        try {
+            [PersonLensService]::WriteEncrypted((Join-Path $dir "request-$reqId.bin"),
+                (@{ kind = 'open-url'; url = $url } | ConvertTo-Json -Compress), $keyIv)
+        } catch { $this.Logger.LogException('Could not hand the page to the agent', $_) }
+    }
+
     # Raises one Action Center toast for a KEY job outcome. Callers keep them rare.
     # Fire and forget both ways: a toast that cannot be raised is silently dropped.
     [void] ShowKeyToast([string]$title, [string]$body) {

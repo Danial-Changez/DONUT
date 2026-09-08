@@ -56,6 +56,8 @@ class MainPresenter {
 
     # Where the bug button reports to: DonutApp rebuilds it from the update service's fork.
     [string] $IssuesUrl = 'https://github.com/Danial-Changez/DONUT/issues/new/choose'
+    # Set by DonutApp to the finder's agent hop; elevated, this process has no browser.
+    [object] $OpenExternal = $null
 
     # Toasts raised before the window first shows, flushed on IsVisibleChanged: earlier they expire unseen.
     hidden [System.Collections.Generic.List[object]] $StartupToasts
@@ -201,14 +203,12 @@ class MainPresenter {
         $closeTour = { param($p) $presenter.Tour.Finish() }.GetNewClosure()
         $this.MainVm.CloseTourCommand = [RelayCommand]::new([System.Action[object]]$closeTour)
         $openDocs = { param($p)
-            try { Start-Process 'https://danial-changez.github.io/DONUT/' }
-            catch { $presenter.Logger.LogException('Failed to open documentation', $_) }
+            $presenter.OpenPage('https://danial-changez.github.io/DONUT/', 'documentation')
         }.GetNewClosure()
         $this.MainVm.OpenDocsCommand = [RelayCommand]::new([System.Action[object]]$openDocs)
         # DonutApp overwrites IssuesUrl from the update service, so a fork reports to itself.
         $openIssues = { param($p)
-            try { Start-Process $presenter.IssuesUrl }
-            catch { $presenter.Logger.LogException('Failed to open the issues page', $_) }
+            $presenter.OpenPage($presenter.IssuesUrl, 'the issues page')
         }.GetNewClosure()
         $this.MainVm.OpenIssuesCommand = [RelayCommand]::new([System.Action[object]]$openIssues)
         $copyVersion = { param($p) $presenter.CopyVersion() }.GetNewClosure()
@@ -433,6 +433,15 @@ class MainPresenter {
             Set-Clipboard -Value $text
             if ($this.ToastService) { $this.ToastService.ShowInfo('Copied', $text) }
         } catch { $this.Logger.LogWarning("Clipboard copy failed: $($_.Exception.Message)") }
+    }
+
+    # Elevated, this account has no desktop session and the page never loads, so the
+    # agent hop opens it as the signed-in user instead. See DonutApp's wiring.
+    [void] OpenPage([string]$url, [string]$what) {
+        try {
+            if ($this.OpenExternal) { $this.OpenExternal.Invoke($url); return }
+            Start-Process $url
+        } catch { $this.Logger.LogException("Failed to open $what", $_) }
     }
 
     # Reporting a version is why the badge exists, so a click puts it on the clipboard.

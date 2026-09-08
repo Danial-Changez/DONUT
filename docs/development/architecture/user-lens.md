@@ -69,6 +69,10 @@ no partials, so the pane fills in one step. See
   so a fresh beat proves requests are being read and a stale one means dead or
   wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
   purged exchange dir.
+- Two side errands ride the same exchange because they need the same identity, not the
+  same data: `kind='toast'` (only the interactive user's toasts reach the shell) and
+  `kind='open-url'` (elevated, DONUT's account has no desktop session, so the docs and
+  bug pages load nothing until the agent's browser opens them). Both are fire and forget.
 - The AD finder search does **not** route through this agent. It fans out
   in-process on the pool (AD reads don't need de-elevation). Rejected designs are
   in [Design decisions](../decisions.md#rejected-agent-designs).

@@ -166,6 +166,11 @@ try {
             $finder = $mainPresenter.HomePresenter.Finder
             if ($finder) { $finder.NotifyKeyEvent($title, $body) }
         }.GetNewClosure()
+        # Docs and issues open through the agent: this process may hold no desktop session.
+        $mainPresenter.OpenExternal = { param($url)
+            $finder = $mainPresenter.HomePresenter.Finder
+            if ($finder) { $finder.OpenExternalUrl($url) } else { Start-Process $url }
+        }.GetNewClosure()
         # The update service names the fork, so the bug button reports to the same repo.
         $mainPresenter.IssuesUrl = 'https://github.com/{0}/{1}/issues/new/choose' -f
         $selfUpdateService.Owner, $selfUpdateService.Repo
