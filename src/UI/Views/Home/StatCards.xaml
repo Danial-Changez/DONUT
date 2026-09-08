@@ -27,7 +27,7 @@
   <Border Grid.Column="0" Margin="0,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="MACHINE" Style="{DynamicResource MicroLabel}" />
-      <TextBox Text="{Binding SelectedMachine.OvModel, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvModel}"
+      <TextBox Text="{Binding SelectedMachine.OvModel, FallbackValue=—}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource CopyableValue}" Text="{Binding SelectedMachine.OvModelSub, FallbackValue='No machine selected'}"
                Tag="{Binding SelectedMachine.OvModelSubValue}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -38,10 +38,10 @@
   <Border Grid.Column="1" Margin="6,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="BATTERY HEALTH" Style="{DynamicResource MicroLabel}" />
-      <TextBox Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBattery}"
+      <TextBox Text="{Binding SelectedMachine.OvBattery, FallbackValue=—}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvBatterySub}"
-               ToolTip="{Binding SelectedMachine.OvBatterySub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
+ FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="0,8,0,0" />
     </StackPanel>
   </Border>
@@ -49,10 +49,10 @@
   <Border Grid.Column="2" Margin="6,0,6,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="DISK" Style="{DynamicResource MicroLabel}" />
-      <TextBox Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvDisk}"
+      <TextBox Text="{Binding SelectedMachine.OvDisk, FallbackValue=—}"
                  Style="{DynamicResource StatValue}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding SelectedMachine.OvDiskSub}"
-               ToolTip="{Binding SelectedMachine.OvDiskSub}" FontFamily="{DynamicResource FontSans}" FontSize="12"
+ FontFamily="{DynamicResource FontSans}" FontSize="12"
                Foreground="{DynamicResource BodyTextTertiary}" Margin="0,8,0,0" />
     </StackPanel>
   </Border>
@@ -61,7 +61,7 @@
   <Border Grid.Column="3" Margin="6,0,0,0" Style="{DynamicResource Card}" Padding="16,14,16,12">
     <StackPanel>
       <TextBlock Text="BIOS" Style="{DynamicResource MicroLabel}" />
-      <TextBox Text="{Binding SelectedMachine.OvBios, FallbackValue=—}" ToolTip="{Binding SelectedMachine.OvBios}"
+      <TextBox Text="{Binding SelectedMachine.OvBios, FallbackValue=—}"
                  Style="{DynamicResource StatValue}" />
     </StackPanel>
   </Border>
