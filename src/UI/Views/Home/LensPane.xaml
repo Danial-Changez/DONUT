@@ -185,18 +185,26 @@
                                Foreground="{DynamicResource BodyTextTertiary}" />
                     </StackPanel>
                     <!-- A recovery secret, so it stays hidden until revealed, and selectable to copy. -->
+                    <!-- Fixed width, left of the row's buttons: a key is 55 mono characters plus
+                         its escrow date, so the box never needs the whole pane to show one. -->
                     <Border Background="{DynamicResource TintGreen}" BorderBrush="{DynamicResource TintGreenBorder}"
-                            BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0"
+                            BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,12,0"
+                            HorizontalAlignment="Left" Width="620"
                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
                       <DockPanel LastChildFill="True">
+                        <Button Style="{DynamicResource fieldClearButton}" DockPanel.Dock="Right"
+                                VerticalAlignment="Top" AutomationProperties.Name="Hide BitLocker key"
+                                ToolTip="Hide the recovery key" Command="{Binding HideCommand}" />
                         <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                VerticalAlignment="Top" AutomationProperties.Name="Copy latest BitLocker key"
+                                VerticalAlignment="Top" Margin="0,1,4,0"
+                                AutomationProperties.Name="Copy latest BitLocker key"
                                 ToolTip="Copy the latest recovery key"
                                 Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding LatestKey}" />
+                        <!-- NoWrap keeps the fixed box one line per key however many are escrowed. -->
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
                                  FontFamily="{DynamicResource FontMono}" FontSize="12"
-                                 Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
+                                 Foreground="{DynamicResource AccentGreen}" TextWrapping="NoWrap" />
                       </DockPanel>
                     </Border>
                     <!-- The note explains a missing key or a device SCCM could not find. -->

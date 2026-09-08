@@ -7,8 +7,9 @@ using module "..\..\Models\PersonLens.psm1"
 
 .DESCRIPTION
     Renders a LensDevice - name, OS, relative last domain logon - with the BitLocker
-    recovery key hidden until revealed (it's a recovery secret). RevealCommand is
-    self-wired (pure UI state: flips IsBitLockerRevealed); AddCommand and ShowQrCommand
+    recovery key hidden until revealed (it's a recovery secret). RevealCommand and
+    HideCommand are self-wired (pure UI state: flip IsBitLockerRevealed, and hiding
+    brings the Reveal Key button back); AddCommand and ShowQrCommand
     are wired by FinderPresenter (drop the WSID into the machine list / pop the QR
     overlay for LatestKey). Inherits ObservableObject so the reveal updates live.
 #>
@@ -27,6 +28,7 @@ class LensDeviceViewModel : ObservableObject {
     [bool]   $IsBitLockerRevealed = $false
     [string] $Note = ''
     [object] $RevealCommand               # RelayCommand: reveal the BitLocker key(s)
+    [object] $HideCommand                 # RelayCommand: re-hide them, restoring Reveal Key
     # RelayCommand: add the WSID to the machine list (presenter-wired).
     [object] $AddCommand
     # RelayCommand: show a QR of LatestKey in the shell overlay (presenter-wired).
@@ -68,5 +70,7 @@ class LensDeviceViewModel : ObservableObject {
         $self = $this
         $reveal = { param($p) $self.Set('IsBitLockerRevealed', $true) }.GetNewClosure()
         $this.RevealCommand = [RelayCommand]::new([System.Action[object]]$reveal)
+        $hide = { param($p) $self.Set('IsBitLockerRevealed', $false) }.GetNewClosure()
+        $this.HideCommand = [RelayCommand]::new([System.Action[object]]$hide)
     }
 }

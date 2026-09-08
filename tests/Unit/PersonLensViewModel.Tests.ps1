@@ -118,6 +118,14 @@ Describe "LensDeviceViewModel recovery keys" {
         ([LensDeviceViewModel]::new($device)).LatestKey | Should-Be 'DATED-777-777'
     }
 
+    It "hiding puts the key back behind the Reveal button" {
+        $vm = [LensDeviceViewModel]::new($script:device)
+        $vm.RevealCommand.Execute($null)
+        $vm.IsBitLockerRevealed | Should-BeTrue
+        $vm.HideCommand.Execute($null)
+        $vm.IsBitLockerRevealed | Should-BeFalse
+    }
+
     It "a device with no escrowed key offers nothing to copy" {
         $device = [LensDevice]::FromHashtable(@{ name = 'CAP-2'; bitLockerKeys = @() })
         $vm = [LensDeviceViewModel]::new($device)
