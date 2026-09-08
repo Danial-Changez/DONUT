@@ -126,7 +126,12 @@
             <ToggleButton x:Name="chkBetaUpdates"
                           Content="Beta Channel"
                           Style="{DynamicResource ModernToggleSwitch}"
+                          Margin="0,0,0,10"
                           ToolTip="Offer prerelease builds. Turning this off offers the stable build as a rollback." />
+            <ToggleButton x:Name="chkSwitchToMsi"
+                          Content="Install as MSI"
+                          Style="{DynamicResource ModernToggleSwitch}"
+                          ToolTip="Hand this zip install back to Windows Installer on its next update. Delete the zip folder afterwards." />
         </StackPanel>
     </Border>
     <!-- Off by default, and applied live to the app and its worker processes. -->

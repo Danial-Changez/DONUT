@@ -91,6 +91,23 @@ function Show-Snapshot {
         Write-Host ("  {0} consecutive lookup timeout(s)" -f $count) -ForegroundColor Yellow
     } else { Write-Host '  absent (no consecutive lookup timeouts)' -ForegroundColor Green }
 
+    Write-Host '=== cold-start stamp (a start older than 45s is wedged) ===' -ForegroundColor Cyan
+    $stampPath = Join-Path (Split-Path $dir -Parent) 'lens-coldstart.stamp'
+    if (Test-Path -LiteralPath $stampPath) {
+        $raw = (Get-Content -LiteralPath $stampPath `
+                            -Raw `
+                            -ErrorAction SilentlyContinue) -replace '\s+$', ''
+        $began = [datetime]::MinValue
+        if ([datetime]::TryParse($raw, [ref]$began)) {
+            $age = ([datetime]::UtcNow - $began.ToUniversalTime()).TotalSeconds
+            $wedged = ($age -ge 45)
+            $note = if ($wedged) { 'wedged; the next pick takes it over' }
+            else { 'a start in flight, or the last one finished' }
+            $colour = if ($wedged) { 'Yellow' } else { 'Green' }
+            Write-Host ("  {0:n0}s old ({1})" -f $age, $note) -ForegroundColor $colour
+        } else { Write-Host "  unreadable -> '$raw'" -ForegroundColor Yellow }
+    } else { Write-Host '  absent (no cold start has run this install)' -ForegroundColor Green }
+
     Write-Host '=== agent process (pwsh running LensAgent.ps1) ===' -ForegroundColor Cyan
     $procs = Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -like '*LensAgent*' }

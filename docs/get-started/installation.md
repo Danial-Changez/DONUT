@@ -43,14 +43,25 @@ DONUT isn't digitally signed yet, so Defender may quarantine it or slow every
 launch to a crawl. Both exclusions are scoped to DONUT's own folders.
 :::
 
-## Testing a beta build
+## Installing from the zip
 
-Beta builds are published as prereleases, so the normal install never offers them.
-To run one, install it into its own directory from an **elevated** PowerShell:
+`tools\Install-Zip.ps1` unpacks a release into a directory of your choosing instead
+of running the MSI. Use it to put DONUT somewhere the MSI cannot go, or to run a beta
+beside an existing stable install. From an **elevated** PowerShell:
 
 ```powershell
-pwsh -File tools\Install-Beta.ps1
+pwsh -File tools\Install-Zip.ps1 -InstallDir 'D:\Apps\Donut'   # newest stable
+pwsh -File tools\Install-Zip.ps1 -Beta                          # newest prerelease
 ```
+
+Only `-Beta` moves the update channel; a stable zip install leaves it alone.
+
+To hand a zip install back to Windows Installer, turn on **Settings > Updates > Install
+as MSI**. It asks to restart, then closes DONUT, installs the MSI to its normal location
+and reopens. The zip directory and its Start Menu entry are deleted once the MSI is in,
+so nothing of the zip install is left behind. From then on updates come from the MSI and
+the toggle turns itself off, since Windows Installer owns the copy. Going back to a zip
+install means running `Install-Zip.ps1` again.
 
 Run it **as the admin account you elevate DONUT with**. That account ends up owning
 the folder and is the only one able to write it. Your everyday signed-in account is

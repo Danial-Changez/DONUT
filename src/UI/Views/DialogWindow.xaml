@@ -85,6 +85,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Popup chrome contract: the 48px header doubles as the drag region.
@@ -130,14 +131,46 @@
                                     CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Left}"
-                                               Foreground="{DynamicResource BodyTextPrimary}"
+                                    <!-- Collapsed by a Setter, not a converter: a list whose
+                                         rows have no Hazard must not default to Visible. -->
+                                    <Path Grid.Column="0" Data="{DynamicResource Warning}"
+                                          Stretch="Uniform" Fill="{x:Null}" Width="12" Height="12"
+                                          StrokeThickness="1.15" StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          Stroke="{DynamicResource AccentYellow}"
+                                          Margin="0,0,7,0" VerticalAlignment="Center">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Hazard}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                    <TextBlock Grid.Column="1" Text="{Binding Left}"
                                                FontFamily="{DynamicResource FontMono}" FontSize="12"
-                                               TextWrapping="Wrap" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Right}"
+                                               TextWrapping="Wrap" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{DynamicResource BodyTextPrimary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Hazard}" Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{DynamicResource AccentYellow}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Grid.Column="2" Text="{Binding Right}"
                                                Foreground="{DynamicResource BodyTextSecondary}"
                                                FontFamily="{DynamicResource FontMono}" FontSize="12"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -203,8 +236,18 @@
                       Visibility="{Binding HasRemember, Converter={StaticResource BoolToVis}}"
                       Margin="24,16,24,0" />
 
+            <!-- Last thing read before Clear: the Apply tab's reboot badge, same shape. -->
+            <Border Grid.Row="5" Style="{DynamicResource BadgeAmber}"
+                    Height="Auto" Padding="8,5" Margin="24,16,24,0"
+                    HorizontalAlignment="Center"
+                    Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding WarningText}"
+                           Style="{DynamicResource BadgeAmberText}"
+                           TextWrapping="Wrap" />
+            </Border>
+
             <!-- The VM picks the primary Style, tinting it destructive for irreversible acts. -->
-            <StackPanel Grid.Row="5"
+            <StackPanel Grid.Row="6"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="24,22,24,20">

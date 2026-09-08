@@ -50,6 +50,8 @@ class AppConfig {
         hasSeenTour                  = $false
         # Update channel: on takes the newest prerelease too, off only what is marked latest.
         betaUpdates                  = $false
+        # A zip install takes the MSI on its next update, handing this copy back to msiexec.
+        switchToMsi                  = $false
         # Install a newer release without asking. A rollback still prompts, always.
         autoUpdate                   = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
@@ -239,6 +241,11 @@ class AppConfig {
         return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
     }
 
+    # Whether a zip install's next update installs the MSI instead of another zip.
+    [bool] GetSwitchToMsi() {
+        return [AppConfig]::AsBool($this.GetSetting('switchToMsi', $null), $false)
+    }
+
     # Whether the update check follows the beta channel (prereleases), off by default.
     [bool] GetBetaUpdates() {
         return [AppConfig]::AsBool($this.GetSetting('betaUpdates', $null), $false)
@@ -283,11 +290,14 @@ class AppConfig {
         return $default
     }
 
-    # Coerces a config value to int: a real [int] as-is, a digit string by parse,
-    # everything else to the default.
+    # Coerces a config value to int. Testing for [int] alone dropped every saved number:
+    # ConvertFrom-Json -AsHashtable deserializes each JSON integer as an Int64.
     hidden static [int] AsInt([object]$value, [int]$default) {
-        if ($value -is [int]) { return $value }
-        if ($value -is [string] -and $value -match '^\d+$') { return [int]$value }
+        if ($null -eq $value) { return $default }
+        # $true would parse as 1 on some paths, and a flag is never a count.
+        if ($value -is [bool]) { return $default }
+        $parsed = 0
+        if ([int]::TryParse([string]$value, [ref]$parsed)) { return $parsed }
         return $default
     }
 

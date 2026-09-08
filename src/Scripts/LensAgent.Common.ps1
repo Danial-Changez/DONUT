@@ -18,7 +18,9 @@
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
     returns it, writing no partials and no result file.
 
-    Resolve-MachineOwnerBatch runs the affinity query the other way (machine -> primary user).
+    Resolve-MachineOwnerBatch answers machine -> person. SMS_R_System.LastLogonUserName
+    leads, since a machine added on its own is asking who was last on it; affinity
+    (machine -> primary user) falls back when no logon is recorded.
     Unlike the person direction, which must use endswith because a UniqueUserName carries
     a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
     against the site this ships to. SCCM answers with an account name; SMS_R_User's
@@ -162,7 +164,8 @@ $script:AffinityScript = {
 # One device per call (the caller fans out), keyed-segment fallback when filters 404.
 $script:HardwareScript = {
     param($server, $pair)
-    function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
+    function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id,
+        [bool]$useKey, [bool]$all) {
         # The braces are load-bearing: "$class?" parses as an undefined variable class?.
         $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
         else {
@@ -172,7 +175,11 @@ $script:HardwareScript = {
         $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $r = Invoke-RestMethod @p
-        if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
+        # Console history keeps a row per user, so that one caller asks for the whole set.
+        if ($null -ne $r.PSObject.Properties['value']) {
+            if ($all) { return @($r.value) }
+            return @($r.value) | Select-Object -First 1
+        }
         return $r
     }
     # A site that will not serve the filter shape says so two ways: it 404s, or it answers
@@ -195,10 +202,17 @@ $script:HardwareScript = {
                                    -id $id `
                                    -useKey $true
     }
+    # DOMAIN\sam and a bare sam both appear, so compare the tail either side.
+    function Test-SameUser([string]$a, [string]$b) {
+        if (-not $a -or -not $b) { return $false }
+        return (($a -split '\\')[-1] -eq ($b -split '\\')[-1])
+    }
     $script:UseKey = $false
     $script:FilterError = ''
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
+    $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = ''
+        consoleUse = ''; lastUser = ''; isSearchedUser = $false
+    }
     if (-not $pair.resourceId) {
         $out.error = 'no ResourceID in the affinity rows'
         $out.ms = $sw.ElapsedMilliseconds
@@ -218,6 +232,31 @@ $script:HardwareScript = {
                                  -select 'SerialNumber' `
                                  -id $pair.resourceId
         if ($bios) { $out.serial = [string]$bios.SerialNumber }
+        # Who was last on the box, which the AD machine stamp cannot say. Best effort.
+        try {
+            $sys = Get-InventoryRow -srv $server `
+                                    -class 'SMS_R_System' `
+                                    -select 'LastLogonUserName' `
+                                    -id $pair.resourceId
+            if ($sys) { $out.lastUser = [string]$sys.LastLogonUserName }
+        } catch { }
+        if ($pair.sam) {
+            try {
+                $rows = @(Get-AdminServiceRow -srv $server `
+                                              -class 'SMS_G_System_SYSTEM_CONSOLE_USER' `
+                                              -select 'SystemConsoleUser,LastConsoleUse' `
+                                              -id $pair.resourceId `
+                                              -useKey $false `
+                                              -all $true)
+                $mine = @($rows | Where-Object { Test-SameUser $_.SystemConsoleUser $pair.sam })
+                # Newest wins: the class keeps a row per user, not one per session.
+                $newest = @($mine | Sort-Object -Descending -Property LastConsoleUse |
+                        Select-Object -First 1)
+                if ($newest.Count -gt 0) { $out.consoleUse = [string]$newest[0].LastConsoleUse }
+            } catch { }
+            # Console history is sparse, so the last-user name carries the claim otherwise.
+            $out.isSearchedUser = [bool]$out.consoleUse -or (Test-SameUser $out.lastUser $pair.sam)
+        }
         # Both shapes answering nothing used to blank the card with no reason on it.
         if (-not $out.model -and -not $out.serial) {
             $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
@@ -361,6 +400,16 @@ function Get-LensForestNc {
     return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 }
 
+# Who last signed in. Obsolete drops the stale row a rebuilt machine leaves behind.
+$script:LastLogonScript = {
+    param($server, $wsid)
+    $uri = "https://$server/AdminService/wmi/SMS_R_System?`$filter=" +
+    [uri]::EscapeDataString("Name eq '$wsid'") + "&`$select=LastLogonUserName,Obsolete"
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
+    if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+    return @((Invoke-RestMethod @p).value | Where-Object { -not $_.Obsolete })
+}
+
 # Machine to primary user, where a plain 'ResourceName eq' filter is served. See .NOTES.
 $script:OwnerScript = {
     param($server, $wsid)
@@ -420,19 +469,25 @@ function Get-MachineOwner {
     $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
     if (-not $wsid) { $out.error = 'no machine name'; return $out }
     $unique = ''
+    # A machine added on its own is asking who was last on it, not who it is assigned to.
     try {
-        $rows = @(& $script:OwnerScript $server $wsid)
-        if ($rows.Count -eq 0) {
-            $out.error = "no primary user recorded for $wsid"
-            return $out
-        }
-        # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
-        $unique = [string]$rows[0].UniqueUserName
-        $out.sam = ($unique -split '\\')[-1]
-    } catch {
-        $out.error = "SCCM affinity: $($_.Exception.Message)"
+        $rows = @(& $script:LastLogonScript $server $wsid)
+        if ($rows.Count -gt 0) { $unique = [string]$rows[0].LastLogonUserName }
+    } catch { $out.error = "SCCM last logon: $($_.Exception.Message)" }
+    if (-not $unique) {
+        try {
+            $rows = @(& $script:OwnerScript $server $wsid)
+            # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
+            if ($rows.Count -gt 0) { $unique = [string]$rows[0].UniqueUserName }
+        } catch { $out.error = "SCCM affinity: $($_.Exception.Message)" }
+    }
+    if (-not $unique) {
+        if (-not $out.error) { $out.error = "no logon or primary user recorded for $wsid" }
         return $out
     }
+    # A name was found, so a failure on the lane that did not answer is not worth reporting.
+    $out.error = ''
+    $out.sam = ($unique -split '\\')[-1]
     $named = Get-OwnerDisplayName -uniqueUserName $unique `
                                   -sam $out.sam `
                                   -server $server
@@ -748,7 +803,9 @@ function Resolve-Lens {
     $hwJobs = [System.Collections.Generic.List[hashtable]]::new()
     $hwPairs = @()
     if ($wsids.Count -gt 0 -and $server) {
-        $hwPairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
+        $hwPairs = @($wsids | ForEach-Object {
+                @{ name = $_; resourceId = [string]$wsMap[$_]; sam = [string]$sam }
+            })
         foreach ($hwPair in $hwPairs) {
             $hwJob = $null
             try {
@@ -868,6 +925,9 @@ function Resolve-Lens {
             $dev.manufacturer = [string]$row.manufacturer
             $dev.model = [string]$row.model
             $dev.serial = [string]$row.serial
+            $dev.consoleUse = [string]$row.consoleUse
+            $dev.lastUser = [string]$row.lastUser
+            $dev.isSearchedUser = [bool]$row.isSearchedUser
             # A virtual machine does not escrow to AD, so the missing key note is noise there.
             if ($dev.model -match 'virtual' -and $dev.note -like 'BitLocker not escrowed*') {
                 $dev.note = ''

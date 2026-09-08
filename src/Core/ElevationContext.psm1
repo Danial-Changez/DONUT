@@ -32,9 +32,15 @@ class ElevationContext {
         return [string][System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     }
 
+    # Cached for the process: the lookup below is a WMI round trip that can block.
+    hidden static [string] $ResolvedInteractiveUser = ''
+
     # Who owns the desktop DONUT shows on, never who DONUT runs as: under
     # over-the-shoulder UAC those differ. $null when there is no interactive session.
     static [string] InteractiveUser() {
+        if ([ElevationContext]::ResolvedInteractiveUser) {
+            return [ElevationContext]::ResolvedInteractiveUser
+        }
         try {
             $session = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
             foreach ($filter in @("Name='explorer.exe' AND SessionId=$session", "Name='explorer.exe'")) {
@@ -44,7 +50,10 @@ class ElevationContext {
                 $owner = Invoke-CimMethod -InputObject $explorer `
                                           -MethodName GetOwner `
                                           -ErrorAction SilentlyContinue
-                if ($owner -and $owner.User) { return "$($owner.Domain)\$($owner.User)" }
+                if ($owner -and $owner.User) {
+                    [ElevationContext]::ResolvedInteractiveUser = "$($owner.Domain)\$($owner.User)"
+                    return [ElevationContext]::ResolvedInteractiveUser
+                }
             }
             return $null
         } catch {

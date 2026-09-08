@@ -19,6 +19,10 @@
 .PARAMETER InstallDir
     Directory a zip install owns, which is where it unpacks and relaunches from.
 
+.PARAMETER RemoveDir
+    A zip install's own directory, deleted once the MSI has installed. Set only when
+    a zip install hands itself back to Windows Installer, so nothing of it is left.
+
 .PARAMETER ProcessNameToClose
     Process to stop before installing (default 'DONUT').
 
@@ -43,12 +47,13 @@
 
     The install passes the registered InstallLocation back as INSTALLFOLDER. A
     major upgrade otherwise resolves the default Program Files path, which would
-    silently migrate a beta install out of its own directory (tools/Install-Beta.ps1).
+    silently migrate a beta install out of its own directory (tools/Install-Zip.ps1).
 #>
 param(
     [string]$MsiPath,
     [string]$ZipPath,
     [string]$InstallDir,
+    [string]$RemoveDir,
     [string]$ProcessNameToClose = 'DONUT',
     [int]$CallerPid = 0,
     [switch]$Passive,
@@ -256,6 +261,26 @@ try {
             Show-UpdateError "DONUT update failed (code $exit).`nSee log: $logPath"
             Write-Error "MSI install failed with exit code $exit. See log: $logPath"
             exit 1
+        }
+    }
+
+    # The zip install this MSI replaced: its folder and its Start Menu entry both go, or
+    # a stale DONUT.exe stays on disk beside the registered one.
+    if ($RemoveDir -and -not $ZipPath -and (Test-Path -LiteralPath $RemoveDir)) {
+        try {
+            Remove-Item -LiteralPath $RemoveDir `
+                        -Recurse `
+                        -Force `
+                        -ErrorAction Stop
+        } catch {
+            Write-Host "[WARN] Failed to remove $RemoveDir`: $($_.Exception.Message)" `
+                       -ForegroundColor Yellow
+        }
+        $menu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
+        foreach ($leaf in 'DONUT (zip).lnk', 'DONUT (beta).lnk') {
+            Remove-Item -LiteralPath (Join-Path $menu $leaf) `
+                        -Force `
+                        -ErrorAction SilentlyContinue
         }
     }
 

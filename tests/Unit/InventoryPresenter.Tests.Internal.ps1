@@ -1,6 +1,7 @@
 # The wrapper loads WPF and Donut.Mvvm. Fakes replace the services and the HomePresenter.
 using module "..\..\src\UI\Presenters\InventoryPresenter.psm1"
 using module "..\..\src\Models\MachineInventory.psm1"
+using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Services\InventoryService.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
 using module "..\..\src\Models\JobEnums.psm1"
@@ -146,5 +147,63 @@ Describe "InventoryPresenter" {
             $script:fakeHome.Resolution.InvalidateCount | Should -Be 1
             $script:svc.ParseCalls | Should -Be 0
         }
+    }
+}
+
+Describe "InventoryPresenter.ProfileWarning" {
+
+    # A profile folder is a person's data, so the confirmation says so before Clear.
+    BeforeAll {
+        $script:Temp = [pscustomobject]@{ Path = 'C:\Windows\Temp\'; IsUserDir = $false }
+        $script:One = [pscustomobject]@{ Path = 'C:\Users\CE813191\'; IsUserDir = $true }
+        $script:Two = [pscustomobject]@{ Path = 'C:\Users\eg23444\'; IsUserDir = $true }
+    }
+
+    It "stays silent when nothing selected is a profile" {
+        [InventoryPresenter]::ProfileWarning(@($script:Temp)) | Should-Be ''
+    }
+
+    It "states the hazard once when a profile is checked" {
+        [InventoryPresenter]::ProfileWarning(@($script:One)) |
+            Should-Be 'Warning: You are deleting a user profile'
+    }
+
+    It "says the same thing for several, since each row is marked itself" {
+        [InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One, $script:Two)) |
+            Should-Be 'Warning: You are deleting a user profile'
+    }
+
+    It "fires on a profile buried among ordinary folders" {
+        ([InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One)).Length -gt 0) |
+            Should-BeTrue
+    }
+}
+
+Describe "InventoryPresenter.RemoveHostLog" {
+
+    # Clearing a machine takes its on-disk log too: the buffer is only this session's copy.
+    BeforeEach {
+        $script:logs = Join-Path $TestDrive ('logs-' + [guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $script:logs -Force
+        foreach ($n in 'TPS5330AP.log', 'OTHER-PC.log', 'Donut.log') {
+            Set-Content -LiteralPath (Join-Path $script:logs $n) -Value 'x'
+        }
+        $cfg = [AppConfig]::new('C:\Src', $script:logs, 'C:\Reports', @{})
+        $script:logP = [InventoryPresenter]::new(
+            $cfg, $null, $null, [FakeInventoryService]::new(), $null, $null, [FakeHome]::new())
+    }
+
+    It "deletes that machine's log and leaves the others" {
+        $script:logP.RemoveHostLog('TPS5330AP')
+
+        (Test-Path (Join-Path $script:logs 'TPS5330AP.log')) | Should-BeFalse
+        (Test-Path (Join-Path $script:logs 'OTHER-PC.log')) | Should-BeTrue
+        (Test-Path (Join-Path $script:logs 'Donut.log')) | Should-BeTrue
+    }
+
+    It "is quiet when the machine never wrote one" {
+        # No assertion needed: a throw from the call is the failure this guards against.
+        $script:logP.RemoveHostLog('NEVER-RAN')
+        $script:logP.LogBuffers.ContainsKey('NEVER-RAN') | Should-BeFalse
     }
 }

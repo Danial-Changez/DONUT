@@ -52,12 +52,27 @@ no partials, so the pane fills in one step. See
   task; two lookup timeouts in a row (`timeouts.txt`) force the same recycle even
   while the beat stays fresh, which catches an agent poisoned by dead binds after
   sleep.
+- The init mutex alone is not enough to arbitrate that cold start. A pool runspace
+  stopped while blocked inside a native call (a WMI or scheduled-task round trip)
+  never leaves `Stopping`, so its `finally` never runs, and because the pool thread
+  stays alive the mutex is never released *and* never abandoned - one superseded
+  lookup would fail every later lookup with "another lookup is still starting the
+  Lens agent" until DONUT restarted. So the desktop owner is resolved *before* the
+  lock (that WMI call was the blocking one), and `lens-coldstart.stamp` - kept beside
+  the exchange dir because the recycle wipes the dir itself - dates the start in
+  flight. A holder past 45 s, well beyond the 20 s start wait, is treated as gone and
+  the next lookup takes the cold start over; a duplicated start is safe because
+  `agent.pid` stands the losing instance down.
 - The serve loop itself beats every ~2 s and never blocks: person lookups and
   owner batches run on `ThreadJob`s (any job stuck past 90 seconds is cut loose,
   since the parent stops listening at 60 and a straggler only hogs a throttle slot),
   so a fresh beat proves requests are being read and a stale one means dead or
   wedged either way. It self-exits on a `-ParentPid` watchdog, a `stop.flag`, or a
   purged exchange dir.
+- Two side errands ride the same exchange because they need the same identity, not the
+  same data: `kind='toast'` (only the interactive user's toasts reach the shell) and
+  `kind='open-url'` (elevated, DONUT's account has no desktop session, so the docs and
+  bug pages load nothing until the agent's browser opens them). Both are fire and forget.
 - The AD finder search does **not** route through this agent. It fans out
   in-process on the pool (AD reads don't need de-elevation). Rejected designs are
   in [Design decisions](../decisions.md#rejected-agent-designs).
@@ -89,6 +104,18 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    sweep over the finder's configured domain list, the person's own domain next,
    so a stale SID costs one bind, not the whole sweep. Both fields answered
    and bound on the site this ships to (`tools/Probe-DeviceIdentity.ps1`).
+
+The device row's "seen" line is per user where the site can say so. AD's
+`lastLogonTimestamp` is the *computer account* authenticating, so on its own it credits
+the picked person with whoever last used the box - on a real four-machine fleet two were
+last used by a service account and an unrelated operator. The hardware job therefore also
+reads `SMS_G_System_SYSTEM_CONSOLE_USER` (this person's `LastConsoleUse`, which ran four
+days fresher than AD where it existed) and `SMS_R_System.LastLogonUserName`. Console
+history is sparse - one of four devices carried it - so the label is a ladder: the person's
+own console time ("Signed In ..."), else the real last user ("Last User ..."), else the
+machine stamp named as such ("Machine Seen ..."). The name replaces that stamp rather than
+trailing it, since a machine time beside another person's name only re-implies the pick.
+`isSearchedUser` flows downstream to sort the person's own machines to the top.
 
 The gather's nested jobs ride the `ThreadJob` lane (inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path),

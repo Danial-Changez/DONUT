@@ -40,8 +40,24 @@ Describe "Machine owner lookup" {
             $bundle.owners[0].name | Should -Be 'WS-1'
             $bundle.owners[2].name | Should -Be 'WS-3'
             $bundle.owners[0].owner | Should -Be 'Jane Doe'
-            # 3 affinity queries + 2 name queries (two machines share an owner) = 5.
-            Should -Invoke Invoke-RestMethod -Times 5 -Exactly
+            # 3 last-logon + 3 affinity (no logon in this mock) + 2 shared-owner names = 8.
+            Should -Invoke Invoke-RestMethod -Times 8 -Exactly
+        }
+
+        It "leads with the last logon, leaving affinity unasked" {
+            Mock Invoke-RestMethod {
+                if ($Uri -match 'SMS_R_User') { return New-SccmUser 'Jane Doe' }
+                return New-Affinity @([pscustomobject]@{ LastLogonUserName = 'CORP\jdoe' })
+            }
+
+            $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com') |
+                ConvertFrom-Json
+
+            $bundle.owners[0].sam | Should -Be 'jdoe'
+            $bundle.owners[0].owner | Should -Be 'Jane Doe'
+            Should -Not -Invoke Invoke-RestMethod -ParameterFilter {
+                $Uri -match 'SMS_UserMachineRelationship'
+            }
         }
 
         It "names the owner from SCCM without ever touching the directory" {
@@ -98,8 +114,8 @@ Describe "Machine owner lookup" {
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
             [void](Resolve-MachineOwnerBatch -wsids @('WS-1') -server 'sccm.corp.com')
 
-            # 2 affinity (one per batch) + 1 name: the second batch hits the memo.
-            Should -Invoke Invoke-RestMethod -Times 3 -Exactly
+            # 2 batches x (last logon + affinity) + 1 name: the second batch hits the memo.
+            Should -Invoke Invoke-RestMethod -Times 5 -Exactly
             $script:OwnerNameCache['CORP\jdoe'] | Should -Be 'Jane Doe'
         }
 
@@ -114,7 +130,7 @@ Describe "Machine owner lookup" {
 
             @($bundle.owners).Count | Should -Be 2
             $bundle.owners[0].error | Should -Match 'SCCM affinity'
-            $bundle.owners[1].error | Should -Match 'no primary user recorded'
+            $bundle.owners[1].error | Should -Match 'no logon or primary user recorded'
             $bundle.owners[1].owner | Should -BeNullOrEmpty
         }
 
@@ -136,8 +152,8 @@ Describe "Machine owner lookup" {
             $bundle = (Resolve-MachineOwnerBatch -wsids @('WS-1', '', $null) -server 'sccm.corp.com') | ConvertFrom-Json
 
             @($bundle.owners).Count | Should -Be 1
-            # 1 affinity + 1 name, the blanks never reach either query.
-            Should -Invoke Invoke-RestMethod -Times 2 -Exactly
+            # 1 last logon + 1 affinity + 1 name, the blanks never reach any query.
+            Should -Invoke Invoke-RestMethod -Times 3 -Exactly
         }
     }
 }

@@ -79,6 +79,34 @@ Describe "RunspaceManager" {
         }
     }
 
+    Context "SizeInteractiveFor" {
+
+        BeforeEach { $script:SavedSize = [RunspaceManager]::InteractiveSize }
+        AfterEach { [RunspaceManager]::InteractiveSize = $script:SavedSize }
+
+        It "gives the AD fan-out one slot per forest" {
+            # At 4 with ten forests every leg queued: 350-850ms searches landed seconds late.
+            [RunspaceManager]::SizeInteractiveFor(10)
+            [RunspaceManager]::InteractiveSize | Should -Be 10
+        }
+
+        It "floors at 4, so an undiscovered domain list keeps the old lane" {
+            [RunspaceManager]::SizeInteractiveFor(0)
+            [RunspaceManager]::InteractiveSize | Should -Be 4
+        }
+
+        It "caps at 12: every runspace pays a serialized compile at warm" {
+            [RunspaceManager]::SizeInteractiveFor(40)
+            [RunspaceManager]::InteractiveSize | Should -Be 12
+        }
+
+        It "is ignored once the pool is open, since the size is fixed by then" {
+            [RunspaceManager]::Initialize(1, 5)
+            [RunspaceManager]::SizeInteractiveFor(10)
+            [RunspaceManager]::InteractiveSize | Should -Be $script:SavedSize
+        }
+    }
+
     Context "GetPool" {
         It "Should return existing pool if initialized" {
             [RunspaceManager]::Initialize(1, 5)

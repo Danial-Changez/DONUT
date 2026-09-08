@@ -28,11 +28,11 @@
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0" Margin="0,0,0,10">
-      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}" ToolTip="{Binding DisplayName}"
+      <TextBox Style="{DynamicResource SelectableText}" Text="{Binding DisplayName}"
                FontFamily="{DynamicResource FontSans}" FontSize="18" FontWeight="Bold"
                Foreground="{DynamicResource TitleTextPrimary}" />
       <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Upn}" FontFamily="{DynamicResource FontSans}" FontSize="12"
-               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" ToolTip="{Binding Upn}" />
+               Foreground="{DynamicResource BodyTextTertiary}" Margin="0,2,0,0" />
     </StackPanel>
 
     <TextBlock Grid.Row="1" Text="{Binding StatusText}" FontFamily="{DynamicResource FontSans}" FontSize="12"
@@ -74,7 +74,7 @@
       <Border Grid.Row="0" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,10" Margin="6,0,0,12">
         <StackPanel>
           <TextBlock Text="MANAGER" Style="{DynamicResource MicroLabel}" />
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}" ToolTip="{Binding Manager}"
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Manager}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
                    Foreground="{DynamicResource TitleTextPrimary}" Margin="0,4,0,0" />
         </StackPanel>
@@ -90,7 +90,7 @@
       <Border Grid.Row="1" Grid.Column="1" Style="{DynamicResource Card}" Padding="12,10" Margin="6,0,0,0">
         <StackPanel>
           <TextBlock Text="OFFICE" Style="{DynamicResource MicroLabel}" />
-          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}" ToolTip="{Binding Office}"
+          <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Office}"
                    FontFamily="{DynamicResource FontSans}" FontSize="13"
                    Foreground="{DynamicResource TitleTextPrimary}" TextWrapping="Wrap" Margin="0,4,0,0" />
         </StackPanel>
@@ -138,7 +138,7 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Name}" FontFamily="{DynamicResource FontSans}" FontSize="14" FontWeight="SemiBold"
-                             Foreground="{DynamicResource TitleTextPrimary}" ToolTip="{Binding Name}" />
+                             Foreground="{DynamicResource TitleTextPrimary}" />
                     <!-- Model leads because it is what separates a person's machines. -->
                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
                                 ToolTip="{Binding DetailTip}">
@@ -185,17 +185,26 @@
                                Foreground="{DynamicResource BodyTextTertiary}" />
                     </StackPanel>
                     <!-- A recovery secret, so it stays hidden until revealed, and selectable to copy. -->
+                    <!-- Fixed width, left of the row's buttons: a key is 55 mono characters plus
+                         its escrow date, so the box never needs the whole pane to show one. -->
                     <Border Background="{DynamicResource TintGreen}" BorderBrush="{DynamicResource TintGreenBorder}"
-                            BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0"
+                            BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,12,0"
+                            HorizontalAlignment="Left" Width="620"
                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
                       <DockPanel LastChildFill="True">
+                        <Button Style="{DynamicResource fieldClearButton}" DockPanel.Dock="Right"
+                                VerticalAlignment="Top" AutomationProperties.Name="Hide BitLocker key"
+                                ToolTip="Hide the recovery key" Command="{Binding HideCommand}" />
                         <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                VerticalAlignment="Top" AutomationProperties.Name="Copy BitLocker key"
+                                VerticalAlignment="Top" Margin="0,1,4,0"
+                                AutomationProperties.Name="Copy latest BitLocker key"
+                                ToolTip="Copy the latest recovery key"
                                 Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding BitLockerText}" />
+                                CommandParameter="{Binding LatestKey}" />
+                        <!-- NoWrap keeps the fixed box one line per key however many are escrowed. -->
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
                                  FontFamily="{DynamicResource FontMono}" FontSize="12"
-                                 Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
+                                 Foreground="{DynamicResource AccentGreen}" TextWrapping="NoWrap" />
                       </DockPanel>
                     </Border>
                     <!-- The note explains a missing key or a device SCCM could not find. -->
@@ -253,11 +262,11 @@
                     <ColumnDefinition Width="Auto" />
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}" ToolTip="{Binding Software}"
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Software}"
                              FontFamily="{DynamicResource FontSans}" FontSize="14" FontWeight="SemiBold"
                              Foreground="{DynamicResource TitleTextPrimary}" />
                     <!-- The collection name shows verbatim, the install/application filter went generic. -->
-                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}" ToolTip="{Binding Collection}"
+                    <TextBox Style="{DynamicResource SelectableText}" Text="{Binding Collection}"
                              FontFamily="{DynamicResource FontSans}" FontSize="12"
                              Foreground="{DynamicResource BodyTextTertiary}" Margin="0,3,0,0" />
                   </StackPanel>

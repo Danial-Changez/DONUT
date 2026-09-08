@@ -47,7 +47,7 @@ is numbered ahead of the stable build everyone is now on.
 | Reads | `releases/latest` | `releases` (first non-draft) |
 | Sees | the release marked latest | prereleases as well |
 | Turned on by | default | Settings > Updates > Beta Channel (`betaUpdates`) |
-| Usually installed by | the MSI | `tools/Install-Beta.ps1` (zip) |
+| Usually installed by | the MSI | `tools/Install-Zip.ps1 -Beta` (zip) |
 
 `betaUpdates` lives in the shared config, so it is one choice per machine rather
 than per copy: while it is on, beta overrules stable for every install on that
@@ -90,8 +90,10 @@ already on it keep updating from the zip.
 
 ## Where a beta gets installed
 
-`tools/Install-Beta.ps1` unpacks the newest release (prereleases included) into its
-own directory, default `C:\Safe\Donut`, and turns the toggle on before first launch.
+`tools/Install-Zip.ps1 -Beta` unpacks the newest prerelease into its own directory,
+default `C:\Safe\Donut`, and turns the toggle on before first launch. Without `-Beta`
+the same script installs the newest stable build and leaves the channel alone, which is
+how a zip install of prod reaches a custom path.
 The zip rather than the MSI, for two reasons: msiexec owns one install per machine,
 so a beta MSI would move an existing stable install rather than stand beside it, and
 a beta that lands every commit should not re-run an installer each time.

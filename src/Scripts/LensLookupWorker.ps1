@@ -88,6 +88,7 @@ param(
     [string] $SoftwareFor = '',
     [string] $ToastTitle = '',
     [string] $ToastBody = '',
+    [string] $OpenUrl = '',
     [int] $TimeoutSec = 60,
     [switch] $WarmOnly,
     [switch] $ParseOnly,
@@ -116,6 +117,8 @@ if ($WarmOnly) {
     if (-not [ElevationContext]::IsElevated()) { return '' }
     return $svc.EnsureAgent()
 }
+# Pages ride the agent for the same reason: only its identity has a browser session.
+if ($OpenUrl) { $svc.OpenUrl($OpenUrl); return '' }
 # Key-outcome toasts ride the agent too, since only its identity reaches the shell.
 if ($ToastTitle) { $svc.ShowKeyToast($ToastTitle, $ToastBody); return '' }
 # Owner lookups ride the same agent and RBAC scope, so they are a mode, not a worker.

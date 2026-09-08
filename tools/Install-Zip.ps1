@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
-    Installs the newest DONUT beta build into its own directory and switches the app
-    to the beta channel.
+    Installs a DONUT zip build into a directory of your choosing. Stable by default,
+    -Beta for the newest prerelease.
 
 .DESCRIPTION
-    Reads the newest release from GitHub with prereleases included, verifies the zip
-    against its published SHA-256, unpacks it into InstallDir, writes that directory's
-    permissions, and seeds betaUpdates in the shared config so the first update check
-    already follows the beta channel.
+    Reads a release from GitHub, verifies the zip against its published SHA-256,
+    unpacks it into InstallDir and writes that directory's permissions. -Beta takes
+    the newest prerelease and seeds betaUpdates so the first update check follows the
+    beta channel; without it the newest stable release is installed and the channel
+    is left alone.
 
     The zip rather than the MSI, deliberately: msiexec owns one install per machine,
     so installing the beta as an MSI would move an existing stable install instead of
@@ -17,6 +18,9 @@
 .PARAMETER InstallDir
     Where DONUT unpacks. The zip is flat, so the exe lands at <InstallDir>\DONUT.exe
     and every later update replaces it in place.
+
+.PARAMETER Beta
+    Take the newest prerelease and follow the beta channel from then on.
 
 .PARAMETER Tag
     Pin one release (e.g. v2.4.57) instead of taking the newest.
@@ -40,17 +44,20 @@
     MSI one instead of replacing it, and uninstalling is deleting the directory. Both
     share %ProgramData%\DONUT\data, including the beta toggle this seeds.
 
-    Updating is the app's own job from here (Settings > Updates > Beta Channel), and
-    it replaces this directory's files from the same zip. Rerunning this script is
-    only for repairing an install or pinning an older tag.
+    Updating is the app's own job from here, replacing this directory's files from the
+    same zip. Rerunning this script is only for repairing an install or pinning an
+    older tag. Settings > Updates > Install as MSI hands the copy back to Windows
+    Installer on its next update, after which this directory can be deleted.
 
 .EXAMPLE
-    pwsh -File tools\Install-Beta.ps1
-    pwsh -File tools\Install-Beta.ps1 -InstallDir "$env:windir\Temp\Donut" -Tag v2.4.57
+    pwsh -File tools\Install-Zip.ps1 -InstallDir 'D:\Apps\Donut'
+    pwsh -File tools\Install-Zip.ps1 -Beta
+    pwsh -File tools\Install-Zip.ps1 -Tag v2.4.57
 #>
 #Requires -RunAsAdministrator
 param(
     [string] $InstallDir = "$env:windir\Temp\Donut",
+    [switch] $Beta,
     [string] $Tag = '',
     [string] $Token = '',
     [string] $Owner = 'Danial-Changez',
@@ -112,7 +119,9 @@ $uri = if ($Tag) { "$api/tags/$Tag" } else { "${api}?per_page=10" }
 $release = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 15
 
 if (-not $Tag) {
-    $release = $release | Where-Object { -not $_.draft } | Select-Object -First 1
+    $release = $release |
+        Where-Object { -not $_.draft -and ($Beta -or -not $_.prerelease) } |
+        Select-Object -First 1
 }
 if (-not $release) {
     throw "No release found in $Owner/$Repo."
@@ -128,7 +137,7 @@ $sumAsset = $release.assets |
 $kind = if ($release.prerelease) { 'beta' } else { 'stable' }
 Write-Host "Installing DONUT $($release.tag_name) ($kind) into $InstallDir..." -ForegroundColor Cyan
 
-$stage = Join-Path $env:TEMP "donut-beta-$($release.tag_name)"
+$stage = Join-Path $env:TEMP "donut-zip-$($release.tag_name)"
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 $zip = Save-Asset -Asset $zipAsset -Dir $stage
 
@@ -193,29 +202,33 @@ if (-not (Test-Path (Join-Path $InstallDir 'app\src\Start-Donut.ps1'))) {
     Write-Warning 'The app tree was not staged, so start DONUT as an administrator once.'
 }
 
-$lnk = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\DONUT (beta).lnk'
+$linkName = if ($release.prerelease) { 'DONUT (beta).lnk' } else { 'DONUT (zip).lnk' }
+$lnk = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\$linkName"
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
 $shortcut.TargetPath = $exe
 $shortcut.WorkingDirectory = $InstallDir
 $shortcut.Save()
 
-# Channel
+# Channel: only a prerelease install moves it, so a stable one leaves the setting alone.
 
-$configPath = Join-Path $env:ProgramData 'DONUT\data\config\config.json'
-$settings = if (Test-Path $configPath) {
-    Get-Content $configPath -Raw | ConvertFrom-Json
-} else {
-    [PSCustomObject]@{}
+if ($release.prerelease) {
+    $configPath = Join-Path $env:ProgramData 'DONUT\data\config\config.json'
+    $settings = if (Test-Path $configPath) {
+        Get-Content $configPath -Raw | ConvertFrom-Json
+    } else {
+        [PSCustomObject]@{}
+    }
+
+    $settings | Add-Member -NotePropertyName 'betaUpdates' `
+                           -NotePropertyValue $true `
+                           -Force
+    New-Item -ItemType Directory `
+             -Path (Split-Path $configPath -Parent) `
+             -Force | Out-Null
+
+    $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
 }
 
-$settings | Add-Member -NotePropertyName 'betaUpdates' `
-                       -NotePropertyValue $true `
-                       -Force
-New-Item -ItemType Directory `
-         -Path (Split-Path $configPath -Parent) `
-         -Force | Out-Null
-
-$settings | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Installed. Start it from $exe, or the DONUT (beta) shortcut." -ForegroundColor Green
+Write-Host "Installed. Start it from $exe, or the $($linkName -replace '\.lnk$') shortcut." `
+           -ForegroundColor Green

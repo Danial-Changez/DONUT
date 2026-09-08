@@ -286,7 +286,7 @@
     <Style x:Key="ModernCheckBox"
            TargetType="CheckBox">
         <Setter Property="FocusVisualStyle"
-                Value="{DynamicResource FocusRingVisual}" />
+                Value="{DynamicResource FocusRingVisualTight}" />
         <Setter Property="FontFamily"
                 Value="{DynamicResource FontSans}" />
         <Setter Property="FontSize"

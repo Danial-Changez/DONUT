@@ -4,6 +4,7 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module "..\ViewModels\FolderNodeViewModel.psm1"
+using module "..\ViewModels\DialogListItemViewModel.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Models\DiskUsage.psm1"
@@ -304,6 +305,14 @@ class InventoryPresenter {
     # Drops a host's buffered log (called when its card is cleared).
     [void] RemoveHostLog([string]$hostName) {
         $this.LogBuffers.Remove($hostName)
+        # The buffer is this session's copy; CopyRemoteArtifacts also leaves <host>.log on
+        # disk after every run, and clearing the machine has to take that with it.
+        if ([string]::IsNullOrWhiteSpace($hostName) -or $null -eq $this.Config) { return }
+        try {
+            Remove-Item -LiteralPath (Join-Path $this.Config.LogsPath "$hostName.log") `
+                        -Force `
+                        -ErrorAction SilentlyContinue
+        } catch { $this.Logger.LogDebug("Host log for $hostName could not be removed: $_") }
     }
 
     # The one driver of the selected host's progress bar for every job kind: a percentage
@@ -454,6 +463,13 @@ class InventoryPresenter {
         if ($row) { $row.ApplyFolders($report) }
     }
 
+    # The banner states the hazard once; each offending row is marked in the list itself,
+    # so naming the paths here would only repeat what is directly above it.
+    hidden static [string] ProfileWarning([object[]]$selected) {
+        if (@($selected | Where-Object { $_.IsUserDir }).Count -eq 0) { return '' }
+        return 'Warning: You are deleting a user profile'
+    }
+
     # Deletes the folders the operator checked in the tree. Destructive, so it confirms first,
     # only deletable rows carry a checkbox, and the worker re-checks every path.
     [void] DeleteSelectedFolders([string]$hostName) {
@@ -469,14 +485,18 @@ class InventoryPresenter {
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
-        $list = @($selected | ForEach-Object { [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))" } })
+        # Hazard marks the row itself, so the profile is obvious beside its own size.
+        $list = @($selected | ForEach-Object {
+                [DialogListItemViewModel]::new($_.Path, "($($_.SizeText))", [bool]$_.IsUserDir)
+            })
         $sizeLabel = [DiskUsageFormat]::SizeLabel($totalBytes)
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(
             "Clear Folder Contents on $hostName",
             "Clears ~$sizeLabel and cannot be undone. The folders are kept.",
             $list,
             'Clear',
-            $true)
+            $true,
+            [InventoryPresenter]::ProfileWarning($selected))
         if (-not $confirmed) {
             $this.AppendLog($hostName, "Clear cancelled.")
             return

@@ -213,6 +213,19 @@ class SettingsPresenter {
         return $this.CurrentSection.Substring(0, 1).ToLower() + $this.CurrentSection.Substring(1)
     }
 
+    # These persist on LostFocus, and closing the overlay never moved focus, so a value
+    # typed and then closed straight away was dropped. Commits them outright instead.
+    [void] CommitPendingEdits() {
+        $view = $this.CurrentSettingsView
+        if ($null -eq $view) { return }
+        $throttle = $view.FindName('throttleLimit')
+        if ($throttle) { $this.PersistPositiveInt($throttle, 'Throttle Limit', 'SetThrottleLimit') }
+        $folders = $view.FindName('folderScanCount')
+        if ($folders) { $this.PersistPositiveInt($folders, 'Folders to Scan', 'SetFolderScanCount') }
+        $lensRx = $view.FindName('lensSoftwareCollectionFilter')
+        if ($lensRx) { $this.PersistLensFilter($lensRx) }
+    }
+
     # Fills the General controls from config and wires each to persist live.
     hidden [void] PopulateGeneralSettings() {
         $self = $this
@@ -283,6 +296,19 @@ class SettingsPresenter {
             $h = { param($s, $e) $self.PersistToggle('betaUpdates', [bool]$s.IsChecked, $null) }.GetNewClosure()
             $beta.Add_Checked($h)
             $beta.Add_Unchecked($h)
+        }
+
+        $toMsi = $view.FindName('chkSwitchToMsi')
+        if ($toMsi) {
+            $toMsi.IsChecked = $this.Config.GetSwitchToMsi()
+            $h = {
+                param($s, $e)
+                # Only switching it on does anything; switching it off is just a cancel.
+                $side = if ([bool]$s.IsChecked) { 'SwitchToMsi' } else { $null }
+                $self.PersistToggle('switchToMsi', [bool]$s.IsChecked, $side)
+            }.GetNewClosure()
+            $toMsi.Add_Checked($h)
+            $toMsi.Add_Unchecked($h)
         }
 
         $debugLog = $view.FindName('chkDebugLogging')

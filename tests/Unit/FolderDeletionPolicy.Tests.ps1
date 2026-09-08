@@ -126,4 +126,43 @@ Describe "FolderDeletionPolicy" {
             [FolderDeletionPolicy]::Canonicalize($null) | Should -BeNullOrEmpty
         }
     }
+    Context "IsProfileOf" {
+
+        # The machine's own user is never clearable; the worker spares whoever is signed in.
+        It "blocks the account's own profile root, however it is written" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz', 'tpsadmjz') | Should-BeTrue
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz\', 'tpsadmjz') | Should-BeTrue
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\TPSADMJZ', 'tpsadmjz') | Should-BeTrue
+        }
+
+        It "blocks anything inside that profile" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz\AppData\Local', 'tpsadmjz') |
+                Should-BeTrue
+        }
+
+        It "does not block a different account whose name starts the same" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz2', 'tpsadmjz') | Should-BeFalse
+        }
+
+        It "leaves other profiles and ordinary folders alone" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\eg23444', 'tpsadmjz') | Should-BeFalse
+            [FolderDeletionPolicy]::IsProfileOf('C:\scripts\iOffice\Profiles', 'tpsadmjz') |
+                Should-BeFalse
+        }
+
+        It "blocks the profile on whichever volume it lives" {
+            [FolderDeletionPolicy]::IsProfileOf('D:\Users\tpsadmjz', 'tpsadmjz') | Should-BeTrue
+        }
+
+        It "blocks nothing when the owner is not resolved yet" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz', '') | Should-BeFalse
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\tpsadmjz', $null) | Should-BeFalse
+        }
+
+        It "refuses a traversal that resolves into the profile" {
+            [FolderDeletionPolicy]::IsProfileOf('C:\Users\x\..\tpsadmjz', 'tpsadmjz') |
+                Should-BeTrue
+        }
+    }
+
 }

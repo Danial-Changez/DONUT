@@ -337,4 +337,69 @@ Describe "PersonLensService" {
             [PersonLensService]::AgentIsAlive($dir, $beat) | Should -BeFalse
         }
     }
+
+    Context "cold-start wedge takeover" {
+
+        BeforeAll { $script:SavedProgramData = $env:ProgramData }
+        AfterAll { $env:ProgramData = $script:SavedProgramData }
+
+        BeforeEach {
+            $env:ProgramData = Join-Path $TestDrive 'pd'
+            New-Item -ItemType Directory `
+                     -Path (Join-Path $env:ProgramData 'DONUT') `
+                     -Force | Out-Null
+            Remove-Item -LiteralPath ([PersonLensService]::ColdStartStampPath()) -ErrorAction SilentlyContinue
+        }
+
+        It "keeps waiting while a cold start is genuinely in flight" {
+            [PersonLensService]::StampColdStart()
+            [PersonLensService]::ColdStartWedged() | Should -BeFalse
+        }
+
+        It "still waits at 30s, inside the 20s start wait plus slack" {
+            [IO.File]::WriteAllText([PersonLensService]::ColdStartStampPath(),
+                ([datetime]::UtcNow.AddSeconds(-30)).ToString('o'))
+            [PersonLensService]::ColdStartWedged() | Should -BeFalse
+        }
+
+        It "takes over past 45s: a stop inside a blocking call never frees the mutex" {
+            # Without this the wedged holder failed every later lookup until DONUT restarted.
+            [IO.File]::WriteAllText([PersonLensService]::ColdStartStampPath(),
+                ([datetime]::UtcNow.AddSeconds(-60)).ToString('o'))
+            [PersonLensService]::ColdStartWedged() | Should -BeTrue
+        }
+
+        It "takes over when no stamp exists at all" {
+            [PersonLensService]::ColdStartWedged() | Should -BeTrue
+        }
+
+        It "takes over on an unreadable stamp rather than blocking forever" {
+            [IO.File]::WriteAllText([PersonLensService]::ColdStartStampPath(), 'not-a-date')
+            [PersonLensService]::ColdStartWedged() | Should -BeTrue
+        }
+
+        It "a live agent skips the lock entirely, so no lookup queues 20s on it" {
+            # 20s per lookup on the lock pinned every interactive runspace, stalling search.
+            $svc = [PersonLensService]::new('site.example', 'C:\Src')
+            $dir = [PersonLensService]::AgentDir()
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            [IO.File]::WriteAllBytes((Join-Path $dir 'key.bin'), [PersonLensService]::NewKeyIv())
+            [IO.File]::WriteAllText((Join-Path $dir 'heartbeat.txt'), [datetime]::UtcNow.ToString('o'))
+
+            $held = [System.Threading.Mutex]::new($false, 'Local\DonutLensAgentInit')
+            $null = $held.WaitOne(1000)
+            try {
+                $elapsed = Measure-Command { $svc.EnsureAgent() }
+                $elapsed.TotalSeconds | Should -BeLessThan 5
+            } finally {
+                try { $held.ReleaseMutex() } catch { }
+                $held.Dispose()
+            }
+        }
+
+        It "keeps the stamp beside the exchange dir, which a cold start wipes" {
+            $stamp = [PersonLensService]::ColdStartStampPath()
+            $stamp | Should -Not -BeLike (Join-Path ([PersonLensService]::AgentDir()) '*')
+        }
+    }
 }

@@ -13,6 +13,18 @@ Describe "FolderNodeViewModel" {
             })
             return $r
         }
+
+        # The tree nests a path under any shorter path it starts with, so a same-prefix
+        # profile is not a root: the lookup walks the whole tree rather than the top.
+        function Get-Node {
+            param([object[]]$Nodes, [string]$Path)
+            foreach ($n in @($Nodes)) {
+                if ($n.Path -eq $Path) { return $n }
+                $hit = Get-Node -Nodes $n.Children -Path $Path
+                if ($hit) { return $hit }
+            }
+            return $null
+        }
     }
 
     It "maps a nested report to display nodes (label, size, depth, root flag, children)" {
@@ -92,4 +104,45 @@ Describe "FolderNodeViewModel" {
                 Should -Be @('C:\App\a', 'C:\App\b')
         }
     }
+    Context "the machine's own user" {
+
+        # No checkbox, the same way a protected folder has none, so nothing to refuse later.
+        BeforeEach {
+            $script:report = New-Report @(
+                @{ Path = 'C:\Users\tpsadmjz'; Size = 5GB },
+                @{ Path = 'C:\Users\tpsadmjz2'; Size = 2GB },
+                @{ Path = 'C:\Users\eg23444'; Size = 3GB },
+                @{ Path = 'C:\Windows'; Size = 9GB }
+            )
+        }
+
+        It "withholds the checkbox on the owner's profile" {
+            $roots = [FolderNodeViewModel]::FromReport($script:report, 'tpsadmjz')
+            ($roots | Where-Object { $_.Path -eq 'C:\Users\tpsadmjz' }).IsDeletable |
+                Should-BeFalse
+        }
+
+        It "leaves every other profile clearable" {
+            $roots = [FolderNodeViewModel]::FromReport($script:report, 'tpsadmjz')
+            ($roots | Where-Object { $_.Path -eq 'C:\Users\eg23444' }).IsDeletable |
+                Should-BeTrue
+        }
+
+        It "does not catch an account whose name merely starts the same" {
+            $roots = [FolderNodeViewModel]::FromReport($script:report, 'tpsadmjz')
+            (Get-Node -Nodes $roots -Path 'C:\Users\tpsadmjz2').IsDeletable | Should-BeTrue
+        }
+
+        It "still withholds it from protected folders, owner or not" {
+            $roots = [FolderNodeViewModel]::FromReport($script:report, 'tpsadmjz')
+            ($roots | Where-Object { $_.Path -eq 'C:\Windows' }).IsDeletable | Should-BeFalse
+        }
+
+        It "gates nothing while the owner is unresolved" {
+            $roots = [FolderNodeViewModel]::FromReport($script:report, '')
+            ($roots | Where-Object { $_.Path -eq 'C:\Users\tpsadmjz' }).IsDeletable |
+                Should-BeTrue
+        }
+    }
+
 }

@@ -108,6 +108,8 @@ try {
 
     $throttleLimit = $global:AppConfig.GetThrottleLimit()
     if ($throttleLimit -lt 1) { $throttleLimit = 5 }
+    # One interactive slot per forest: a smaller lane queues every AD fan-out. See .NOTES.
+    [RunspaceManager]::SizeInteractiveFor(@($global:AppConfig.GetDomains()).Count)
     # Initialize raises the ThreadPool floor first, guarding against dispatch starvation.
     $logger.LogInfo("Initializing RunspaceManager with ThrottleLimit: $throttleLimit")
     # min = max pins every runspace, or warmed ones die and later jobs cold-load.
@@ -165,6 +167,13 @@ try {
         $updatePresenter.ShellNotify = { param($title, $body)
             $finder = $mainPresenter.HomePresenter.Finder
             if ($finder) { $finder.NotifyKeyEvent($title, $body) }
+        }.GetNewClosure()
+        # Settings owns the toggle; the update presenter owns the release and the restart.
+        $mainPresenter.SwitchToMsi = { $updatePresenter.SwitchToMsiNow() }.GetNewClosure()
+        # Docs and issues open through the agent: this process may hold no desktop session.
+        $mainPresenter.OpenExternal = { param($url)
+            $finder = $mainPresenter.HomePresenter.Finder
+            if ($finder) { $finder.OpenExternalUrl($url) } else { Start-Process $url }
         }.GetNewClosure()
         # The update service names the fork, so the bug button reports to the same repo.
         $mainPresenter.IssuesUrl = 'https://github.com/{0}/{1}/issues/new/choose' -f

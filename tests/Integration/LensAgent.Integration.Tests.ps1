@@ -242,10 +242,20 @@ Describe "Lens agent (real process, real exchange)" -Skip:(-not $IsWindows) {
             $script:superAgent = [System.Diagnostics.Process]::Start($psi)
 
             $beat = Join-Path $script:superDir 'heartbeat.txt'
-            $deadline = (Get-Date).AddSeconds(10)
-            while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $beat)) {
+            $first = ''
+            $deadline = (Get-Date).AddSeconds(30)
+            # The startup beat precedes the pid claim, the ThreadJob import and the loop, so
+            # waiting on the file alone spends the exit budget on an agent that is not serving.
+            while ((Get-Date) -lt $deadline) {
+                $stamp = ''
+                try { $stamp = [IO.File]::ReadAllText($beat).Trim() } catch { }
+                if ($stamp) {
+                    if (-not $first) { $first = $stamp }
+                    elseif ($stamp -ne $first) { break }
+                }
                 Start-Sleep -Milliseconds 100
             }
+            $first | Should -Not -BeNullOrEmpty -Because 'the agent never wrote a heartbeat'
         }
 
         AfterAll {
