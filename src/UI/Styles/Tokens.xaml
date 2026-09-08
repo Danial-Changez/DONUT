@@ -19,6 +19,22 @@
         </Setter>
     </Style>
 
+    <!-- The ring above is sized for buttons; on a 16px box its 9px radius draws a circle. -->
+    <Style x:Key="FocusRingVisualTight">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-2"
+                               StrokeThickness="1.5"
+                               Stroke="{DynamicResource Primary}"
+                               RadiusX="5"
+                               RadiusY="5"
+                               SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Instances still set Margin, and override Padding where a denser card is wanted. -->
     <Style x:Key="Card"
            TargetType="Border">

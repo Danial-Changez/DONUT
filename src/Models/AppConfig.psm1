@@ -50,6 +50,8 @@ class AppConfig {
         hasSeenTour                  = $false
         # Update channel: on takes the newest prerelease too, off only what is marked latest.
         betaUpdates                  = $false
+        # A zip install takes the MSI on its next update, handing this copy back to msiexec.
+        switchToMsi                  = $false
         # Install a newer release without asking. A rollback still prompts, always.
         autoUpdate                   = $false
         # Verbose [DEBUG] breadcrumbs in Donut.log (Start-Donut -DebugLog overrides per session).
@@ -237,6 +239,11 @@ class AppConfig {
     # Whether the first-run guided tour has already been shown (or skipped).
     [bool] GetHasSeenTour() {
         return [AppConfig]::AsBool($this.GetSetting('hasSeenTour', $null), $false)
+    }
+
+    # Whether a zip install's next update installs the MSI instead of another zip.
+    [bool] GetSwitchToMsi() {
+        return [AppConfig]::AsBool($this.GetSetting('switchToMsi', $null), $false)
     }
 
     # Whether the update check follows the beta channel (prereleases), off by default.

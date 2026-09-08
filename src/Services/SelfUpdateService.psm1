@@ -8,7 +8,7 @@
     installed version to the release tag to decide update vs. rollback vs. no-op.
 
     Which package depends on how this copy was installed. An MSI install takes the MSI
-    and reads its version from the uninstall key; a zip install (tools/Install-Beta.ps1,
+    and reads its version from the uninstall key; a zip install (tools/Install-Zip.ps1,
     a directory of its own outside Program Files) takes the zip and reads its version
     from the version.txt inside it, so an update never runs msiexec at all. A zip
     unpacks into a directory only administrators can write, so that apply asks for the

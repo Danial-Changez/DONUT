@@ -298,6 +298,14 @@ class SettingsPresenter {
             $beta.Add_Unchecked($h)
         }
 
+        $toMsi = $view.FindName('chkSwitchToMsi')
+        if ($toMsi) {
+            $toMsi.IsChecked = $this.Config.GetSwitchToMsi()
+            $h = { param($s, $e) $self.PersistToggle('switchToMsi', [bool]$s.IsChecked, $null) }.GetNewClosure()
+            $toMsi.Add_Checked($h)
+            $toMsi.Add_Unchecked($h)
+        }
+
         $debugLog = $view.FindName('chkDebugLogging')
         if ($debugLog) {
             $debugLog.IsChecked = $this.Config.GetDebugLogging()

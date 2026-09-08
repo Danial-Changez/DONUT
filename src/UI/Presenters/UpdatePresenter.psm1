@@ -175,8 +175,9 @@ class UpdatePresenter {
     # the operator consented to is what runs, whatever a re-read would say now.
     [void] PerformUpdate($Release, [bool]$isRollback, $token) {
         try {
-            # The package this copy can actually install: msiexec owns one, the zip the other.
-            $pattern = if ($this.Service.IsPortable()) { '*.zip' } else { '*.msi' }
+            # msiexec owns one package, the zip the other; switchToMsi crosses back over.
+            $takeZip = $this.Service.IsPortable() -and -not $this.Config.GetSwitchToMsi()
+            $pattern = if ($takeZip) { '*.zip' } else { '*.msi' }
             $asset = $this.Service.GetReleaseAsset($Release, $pattern)
             if (-not $asset) { throw "This release publishes no $pattern asset." }
 

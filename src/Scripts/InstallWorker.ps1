@@ -43,7 +43,7 @@
 
     The install passes the registered InstallLocation back as INSTALLFOLDER. A
     major upgrade otherwise resolves the default Program Files path, which would
-    silently migrate a beta install out of its own directory (tools/Install-Beta.ps1).
+    silently migrate a beta install out of its own directory (tools/Install-Zip.ps1).
 #>
 param(
     [string]$MsiPath,
