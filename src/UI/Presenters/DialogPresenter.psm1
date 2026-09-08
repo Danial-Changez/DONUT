@@ -3,6 +3,7 @@ using namespace Donut.Mvvm
 using module '..\..\Services\ResourceService.psm1'
 using module '..\..\Core\ViewLoader.psm1'
 using module '..\ViewModels\DialogViewModel.psm1'
+using module '..\ViewModels\DialogListItemViewModel.psm1'
 
 <#
 .SYNOPSIS
@@ -166,12 +167,14 @@ class DialogPresenter {
         $vm.HasTitle = -not [string]::IsNullOrEmpty($title)
         $vm.Message = $message
         $vm.HasMessage = -not [string]::IsNullOrEmpty($message)
-        # Each item normalizes to @{ Left; Right } so the view can align values in a column.
+        # Normalized to a row view model, Hazard included: dropping it hid the profile glyph.
         $vm.ListItems = @(
             foreach ($it in $listItems) {
                 if ($null -eq $it) { continue }
-                if ($it -is [string]) { [pscustomobject]@{ Left = $it; Right = '' } }
-                else { [pscustomobject]@{ Left = "$($it.Left)"; Right = "$($it.Right)" } }
+                if ($it -is [string]) { [DialogListItemViewModel]::new($it, '', $false) }
+                else {
+                    [DialogListItemViewModel]::new("$($it.Left)", "$($it.Right)", [bool]$it.Hazard)
+                }
             }
         )
         $vm.HasList = ($vm.ListItems.Count -gt 0)

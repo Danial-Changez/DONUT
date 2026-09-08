@@ -4,6 +4,7 @@ using module "..\..\Core\LogService.psm1"
 using module "..\..\Core\AsyncJob.psm1"
 using module "..\ViewModels\HomeViewModel.psm1"
 using module "..\ViewModels\FolderNodeViewModel.psm1"
+using module "..\ViewModels\DialogListItemViewModel.psm1"
 using module "..\..\Services\InventoryService.psm1"
 using module "..\..\Services\DiskUsageService.psm1"
 using module "..\..\Models\DiskUsage.psm1"
@@ -476,11 +477,9 @@ class InventoryPresenter {
         }
 
         $totalBytes = [long](($selected | Measure-Object -Property SizeBytes -Sum).Sum)
+        # Hazard marks the row itself, so the profile is obvious beside its own size.
         $list = @($selected | ForEach-Object {
-                # Hazard marks the row itself, so the profile is obvious beside its own size.
-                [pscustomobject]@{ Left = $_.Path; Right = "($($_.SizeText))"
-                    Hazard = [bool]$_.IsUserDir
-                }
+                [DialogListItemViewModel]::new($_.Path, "($($_.SizeText))", [bool]$_.IsUserDir)
             })
         $sizeLabel = [DiskUsageFormat]::SizeLabel($totalBytes)
         $confirmed = $this.Home.DialogPresenter.ShowConfirmation(

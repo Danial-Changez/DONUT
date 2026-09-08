@@ -135,15 +135,25 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <!-- Only a hazardous row carries it, so Hazard is absent
-                                         (null, so collapsed) on every other dialog's list. -->
+                                    <!-- Collapsed by a Setter, not a converter: a list whose
+                                         rows have no Hazard must not default to Visible. -->
                                     <Path Grid.Column="0" Data="{DynamicResource Warning}"
                                           Stretch="Uniform" Fill="{x:Null}" Width="12" Height="12"
                                           StrokeThickness="1.15" StrokeStartLineCap="Round"
                                           StrokeEndLineCap="Round" StrokeLineJoin="Round"
                                           Stroke="{DynamicResource AccentYellow}"
-                                          Margin="0,0,7,0" VerticalAlignment="Center"
-                                          Visibility="{Binding Hazard, Converter={StaticResource BoolToVis}}" />
+                                          Margin="0,0,7,0" VerticalAlignment="Center">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Hazard}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
                                     <TextBlock Grid.Column="1" Text="{Binding Left}"
                                                FontFamily="{DynamicResource FontMono}" FontSize="12"
                                                TextWrapping="Wrap" VerticalAlignment="Center">
@@ -229,7 +239,7 @@
             <!-- Last thing read before Clear: the Apply tab's reboot badge, same shape. -->
             <Border Grid.Row="5" Style="{DynamicResource BadgeAmber}"
                     Height="Auto" Padding="8,5" Margin="24,16,24,0"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Center"
                     Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}">
                 <StackPanel Orientation="Horizontal">
                     <!-- Set here, not via lucideIcon: BasedOn cannot reach it across loads. -->
