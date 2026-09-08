@@ -283,11 +283,14 @@ class AppConfig {
         return $default
     }
 
-    # Coerces a config value to int: a real [int] as-is, a digit string by parse,
-    # everything else to the default.
+    # Coerces a config value to int. Testing for [int] alone dropped every saved number:
+    # ConvertFrom-Json -AsHashtable deserializes each JSON integer as an Int64.
     hidden static [int] AsInt([object]$value, [int]$default) {
-        if ($value -is [int]) { return $value }
-        if ($value -is [string] -and $value -match '^\d+$') { return [int]$value }
+        if ($null -eq $value) { return $default }
+        # $true would parse as 1 on some paths, and a flag is never a count.
+        if ($value -is [bool]) { return $default }
+        $parsed = 0
+        if ([int]::TryParse([string]$value, [ref]$parsed)) { return $parsed }
         return $default
     }
 

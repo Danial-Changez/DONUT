@@ -199,6 +199,45 @@ Describe "AppConfig" {
         }
     }
 
+    Context "round trip through the config file" {
+
+        # Int32 literals, which the tests used and no load path produces, hid this entirely.
+        BeforeEach {
+            $saved = @{ throttleLimit = 16; folderScanCount = 32; recoveryWindowMinutes = 45 }
+            $json = $saved | ConvertTo-Json -Depth 10
+            $script:reloaded = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath,
+                $script:testReportsPath, ($json | ConvertFrom-Json -AsHashtable))
+        }
+
+        It "the file really does hand back Int64, not Int32" {
+            $script:reloaded.Settings['folderScanCount'] | Should-BeOfType ([long])
+        }
+
+        It "keeps the throttle limit across a restart" {
+            $script:reloaded.GetThrottleLimit() | Should-Be 16
+        }
+
+        It "keeps the folder scan count across a restart" {
+            $script:reloaded.GetFolderScanCount() | Should-Be 32
+        }
+
+        It "keeps the recovery window across a restart" {
+            $script:reloaded.GetRecoveryWindowMinutes() | Should-Be 45
+        }
+
+        It "still falls back when the value is not a number" {
+            $cfg = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath,
+                $script:testReportsPath, @{ folderScanCount = 'abc' })
+            $cfg.GetFolderScanCount() | Should-Be 12
+        }
+
+        It "does not read a flag as a count" {
+            $cfg = [AppConfig]::new($script:testSourceRoot, $script:testLogsPath,
+                $script:testReportsPath, @{ folderScanCount = $true })
+            $cfg.GetFolderScanCount() | Should-Be 12
+        }
+    }
+
     Context "GetRecoveryWindowMinutes" {
         It "Should default to 30 when not set" {
             $config = New-TestConfig @{}
