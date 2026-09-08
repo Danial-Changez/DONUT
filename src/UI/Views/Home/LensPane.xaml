@@ -190,9 +190,10 @@
                             Visibility="{Binding IsBitLockerRevealed, Converter={StaticResource BoolToVis}}">
                       <DockPanel LastChildFill="True">
                         <Button Style="{DynamicResource ButtonCopyGlyph}" DockPanel.Dock="Right"
-                                VerticalAlignment="Top" AutomationProperties.Name="Copy BitLocker key"
+                                VerticalAlignment="Top" AutomationProperties.Name="Copy latest BitLocker key"
+                                ToolTip="Copy the latest recovery key"
                                 Command="{Binding DataContext.CopyValueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding BitLockerText}" />
+                                CommandParameter="{Binding LatestKey}" />
                         <TextBox Style="{DynamicResource SelectableText}" Text="{Binding BitLockerText}"
                                  FontFamily="{DynamicResource FontMono}" FontSize="12"
                                  Foreground="{DynamicResource AccentGreen}" TextWrapping="Wrap" />
