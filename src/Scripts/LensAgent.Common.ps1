@@ -18,7 +18,9 @@
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
     returns it, writing no partials and no result file.
 
-    Resolve-MachineOwnerBatch runs the affinity query the other way (machine -> primary user).
+    Resolve-MachineOwnerBatch answers machine -> person. SMS_R_System.LastLogonUserName
+    leads, since a machine added on its own is asking who was last on it; affinity
+    (machine -> primary user) falls back when no logon is recorded.
     Unlike the person direction, which must use endswith because a UniqueUserName carries
     a domain backslash, a plain "ResourceName eq '<wsid>'" filter is served - confirmed
     against the site this ships to. SCCM answers with an account name; SMS_R_User's
@@ -401,6 +403,16 @@ function Get-LensForestNc {
     return [string]([ADSI]'LDAP://RootDSE').Properties['rootDomainNamingContext'][0]
 }
 
+# Who last signed in. Obsolete drops the stale row a rebuilt machine leaves behind.
+$script:LastLogonScript = {
+    param($server, $wsid)
+    $uri = "https://$server/AdminService/wmi/SMS_R_System?`$filter=" +
+    [uri]::EscapeDataString("Name eq '$wsid'") + "&`$select=LastLogonUserName,Obsolete"
+    $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
+    if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+    return @((Invoke-RestMethod @p).value | Where-Object { -not $_.Obsolete })
+}
+
 # Machine to primary user, where a plain 'ResourceName eq' filter is served. See .NOTES.
 $script:OwnerScript = {
     param($server, $wsid)
@@ -460,19 +472,25 @@ function Get-MachineOwner {
     $out = [ordered]@{ name = $wsid; owner = ''; sam = ''; error = '' }
     if (-not $wsid) { $out.error = 'no machine name'; return $out }
     $unique = ''
+    # A machine added on its own is asking who was last on it, not who it is assigned to.
     try {
-        $rows = @(& $script:OwnerScript $server $wsid)
-        if ($rows.Count -eq 0) {
-            $out.error = "no primary user recorded for $wsid"
-            return $out
-        }
-        # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
-        $unique = [string]$rows[0].UniqueUserName
-        $out.sam = ($unique -split '\\')[-1]
-    } catch {
-        $out.error = "SCCM affinity: $($_.Exception.Message)"
+        $rows = @(& $script:LastLogonScript $server $wsid)
+        if ($rows.Count -gt 0) { $unique = [string]$rows[0].LastLogonUserName }
+    } catch { $out.error = "SCCM last logon: $($_.Exception.Message)" }
+    if (-not $unique) {
+        try {
+            $rows = @(& $script:OwnerScript $server $wsid)
+            # Affinity can list several, and the first is SCCM's own ordering, as in the Lens.
+            if ($rows.Count -gt 0) { $unique = [string]$rows[0].UniqueUserName }
+        } catch { $out.error = "SCCM affinity: $($_.Exception.Message)" }
+    }
+    if (-not $unique) {
+        if (-not $out.error) { $out.error = "no logon or primary user recorded for $wsid" }
         return $out
     }
+    # A name was found, so a failure on the lane that did not answer is not worth reporting.
+    $out.error = ''
+    $out.sam = ($unique -split '\\')[-1]
     $named = Get-OwnerDisplayName -uniqueUserName $unique `
                                   -sam $out.sam `
                                   -server $server

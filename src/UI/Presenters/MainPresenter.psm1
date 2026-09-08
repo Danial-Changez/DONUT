@@ -263,6 +263,8 @@ class MainPresenter {
 
         # $_ is the CancelEventArgs, so cancelling the close is what hides to the tray.
         $this.Window.Add_Closing({
+                # Quitting with Settings open is the other way a typed field never lost focus.
+                $presenter.CloseSettings()
                 if ($presenter.Config.GetCloseToTray() -and -not $presenter.ExitRequested) {
                     $_.Cancel = $true
                     $presenter.Window.Hide()
@@ -710,6 +712,8 @@ class MainPresenter {
     }
 
     [void] CloseSettings() {
+        # Closing is the commit point: nothing takes focus off a tuning field on the way out.
+        if ($this.SettingsPresenter) { $this.SettingsPresenter.CommitPendingEdits() }
         if ($this.MainVm) { $this.MainVm.Set('IsSettingsOpen', $false) }
     }
 
