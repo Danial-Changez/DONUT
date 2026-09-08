@@ -305,6 +305,14 @@ class InventoryPresenter {
     # Drops a host's buffered log (called when its card is cleared).
     [void] RemoveHostLog([string]$hostName) {
         $this.LogBuffers.Remove($hostName)
+        # The buffer is this session's copy; CopyRemoteArtifacts also leaves <host>.log on
+        # disk after every run, and clearing the machine has to take that with it.
+        if ([string]::IsNullOrWhiteSpace($hostName) -or $null -eq $this.Config) { return }
+        try {
+            Remove-Item -LiteralPath (Join-Path $this.Config.LogsPath "$hostName.log") `
+                        -Force `
+                        -ErrorAction SilentlyContinue
+        } catch { $this.Logger.LogDebug("Host log for $hostName could not be removed: $_") }
     }
 
     # The one driver of the selected host's progress bar for every job kind: a percentage

@@ -1,6 +1,7 @@
 # The wrapper loads WPF and Donut.Mvvm. Fakes replace the services and the HomePresenter.
 using module "..\..\src\UI\Presenters\InventoryPresenter.psm1"
 using module "..\..\src\Models\MachineInventory.psm1"
+using module "..\..\src\Models\AppConfig.psm1"
 using module "..\..\src\Services\InventoryService.psm1"
 using module "..\..\src\Core\AsyncJob.psm1"
 using module "..\..\src\Models\JobEnums.psm1"
@@ -175,5 +176,32 @@ Describe "InventoryPresenter.ProfileWarning" {
     It "fires on a profile buried among ordinary folders" {
         ([InventoryPresenter]::ProfileWarning(@($script:Temp, $script:One)).Length -gt 0) |
             Should-BeTrue
+    }
+}
+
+Describe "InventoryPresenter.RemoveHostLog" {
+
+    # Clearing a machine takes its on-disk log too: the buffer is only this session's copy.
+    BeforeEach {
+        $script:logs = Join-Path $TestDrive ('logs-' + [guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $script:logs -Force
+        foreach ($n in 'TPS5330AP.log', 'OTHER-PC.log', 'Donut.log') {
+            Set-Content -LiteralPath (Join-Path $script:logs $n) -Value 'x'
+        }
+        $cfg = [AppConfig]::new('C:\Src', $script:logs, 'C:\Reports', @{})
+        $script:logP = [InventoryPresenter]::new(
+            $cfg, $null, $null, [FakeInventoryService]::new(), $null, $null, [FakeHome]::new())
+    }
+
+    It "deletes that machine's log and leaves the others" {
+        $script:logP.RemoveHostLog('TPS5330AP')
+
+        (Test-Path (Join-Path $script:logs 'TPS5330AP.log')) | Should-BeFalse
+        (Test-Path (Join-Path $script:logs 'OTHER-PC.log')) | Should-BeTrue
+        (Test-Path (Join-Path $script:logs 'Donut.log')) | Should-BeTrue
+    }
+
+    It "is quiet when the machine never wrote one" {
+        { $script:logP.RemoveHostLog('NEVER-RAN') } | Should-NotThrow
     }
 }
