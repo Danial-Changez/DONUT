@@ -180,15 +180,64 @@ Describe "PersonLens" {
     }
 
     Context "LensFormat.LogonLabel" {
-        It "reads blank as 'no logon recorded'" {
-            [LensFormat]::LogonLabel('') | Should -Be 'no logon recorded'
+
+        # AD's stamp is the machine authenticating, so the label must never spend it on
+        # the picked person: half a real fleet row was last used by somebody else.
+        function New-Device([hashtable]$h) { return [LensDevice]::FromHashtable($h) }
+
+        It "reads blank as 'No Logon Recorded'" {
+            [LensFormat]::LogonLabel((New-Device @{ name = 'PC' })) | Should-Be 'No Logon Recorded'
         }
-        It "reads the epoch/min-value as 'no logon recorded'" {
-            [LensFormat]::LogonLabel('0001-01-01T00:00:00') | Should -Be 'no logon recorded'
+
+        It "reads the epoch/min-value as 'No Logon Recorded'" {
+            $d = New-Device @{ name = 'PC'; lastLogon = '0001-01-01T00:00:00' }
+            [LensFormat]::LogonLabel($d) | Should-Be 'No Logon Recorded'
         }
-        It "renders a real timestamp as a relative 'seen ...'" {
-            $recent = ([datetime]::UtcNow.AddMinutes(-5)).ToString('o')
-            [LensFormat]::LogonLabel($recent) | Should -BeLike 'seen *'
+
+        It "prefers the person's own console time, and says Signed In" {
+            $d = New-Device @{
+                name       = 'PC'
+                lastLogon  = ([datetime]::UtcNow.AddDays(-8)).ToString('o')
+                consoleUse = ([datetime]::UtcNow.AddMinutes(-5)).ToString('o')
+            }
+            [LensFormat]::LogonLabel($d).StartsWith('Signed In ') | Should-BeTrue
+        }
+
+        It "calls the AD stamp what it is when there is no console row" {
+            $d = New-Device @{ name = 'PC'; lastLogon = ([datetime]::UtcNow.AddHours(-3)).ToString('o') }
+            [LensFormat]::LogonLabel($d).StartsWith('Machine Seen ') | Should-BeTrue
+        }
+
+        It "names the other user, so the row cannot imply the picked person" {
+            $d = New-Device @{
+                name           = 'PC'
+                lastLogon      = ([datetime]::UtcNow.AddHours(-3)).ToString('o')
+                lastUser       = 'svc.c.tps.flow'
+                isSearchedUser = $false
+            }
+            ([LensFormat]::LogonLabel($d) -match 'Last User svc\.c\.tps\.flow') | Should-BeTrue
+        }
+
+        It "does not name the person back on their own machine" {
+            $d = New-Device @{
+                name           = 'PC'
+                lastLogon      = ([datetime]::UtcNow.AddHours(-3)).ToString('o')
+                lastUser       = 'U0073097'
+                isSearchedUser = $true
+            }
+            ([LensFormat]::LogonLabel($d) -match 'Last User') | Should-BeFalse
+        }
+
+        It "carries the SCCM facts through FromHashtable" {
+            $d = New-Device @{
+                name           = 'PC'
+                consoleUse     = '2026-09-04T20:55:18Z'
+                lastUser       = 'U0073097'
+                isSearchedUser = $true
+            }
+            $d.LastUser | Should-Be 'U0073097'
+            $d.IsSearchedUser | Should-BeTrue
+            ($d.ConsoleUse.Length -gt 0) | Should-BeTrue
         }
     }
 }

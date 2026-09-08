@@ -195,10 +195,27 @@ $script:HardwareScript = {
                                    -id $id `
                                    -useKey $true
     }
+    # Console history is one row per user, so this one keeps them all.
+    function Get-InventoryRows([string]$srv, [string]$class, [string]$select, [string]$id) {
+        $uri = "https://$srv/AdminService/wmi/${class}?`$filter=" +
+        [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
+        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
+        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
+        $r = Invoke-RestMethod @p
+        if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) }
+        return @($r)
+    }
+    # DOMAIN\sam and a bare sam both appear, so compare the tail either side.
+    function Test-SameUser([string]$a, [string]$b) {
+        if (-not $a -or -not $b) { return $false }
+        return (($a -split '\\')[-1] -eq ($b -split '\\')[-1])
+    }
     $script:UseKey = $false
     $script:FilterError = ''
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = '' }
+    $out = @{ name = [string]$pair.name; manufacturer = ''; model = ''; serial = ''; error = ''
+        consoleUse = ''; lastUser = ''; isSearchedUser = $false
+    }
     if (-not $pair.resourceId) {
         $out.error = 'no ResourceID in the affinity rows'
         $out.ms = $sw.ElapsedMilliseconds
@@ -218,6 +235,29 @@ $script:HardwareScript = {
                                  -select 'SerialNumber' `
                                  -id $pair.resourceId
         if ($bios) { $out.serial = [string]$bios.SerialNumber }
+        # Who was last on the box, which the AD machine stamp cannot say. Best effort.
+        try {
+            $sys = Get-InventoryRow -srv $server `
+                                    -class 'SMS_R_System' `
+                                    -select 'LastLogonUserName' `
+                                    -id $pair.resourceId
+            if ($sys) { $out.lastUser = [string]$sys.LastLogonUserName }
+        } catch { }
+        if ($pair.sam) {
+            try {
+                $rows = @(Get-InventoryRows -srv $server `
+                                            -class 'SMS_G_System_SYSTEM_CONSOLE_USER' `
+                                            -select 'SystemConsoleUser,LastConsoleUse' `
+                                            -id $pair.resourceId)
+                $mine = @($rows | Where-Object { Test-SameUser $_.SystemConsoleUser $pair.sam })
+                # Newest wins: the class keeps a row per user, not one per session.
+                $newest = @($mine | Sort-Object -Descending -Property LastConsoleUse |
+                        Select-Object -First 1)
+                if ($newest.Count -gt 0) { $out.consoleUse = [string]$newest[0].LastConsoleUse }
+            } catch { }
+            # Console history is sparse, so the last-user name carries the claim otherwise.
+            $out.isSearchedUser = [bool]$out.consoleUse -or (Test-SameUser $out.lastUser $pair.sam)
+        }
         # Both shapes answering nothing used to blank the card with no reason on it.
         if (-not $out.model -and -not $out.serial) {
             $out.error = "no inventory rows for ResourceID $($pair.resourceId)"
@@ -748,7 +788,9 @@ function Resolve-Lens {
     $hwJobs = [System.Collections.Generic.List[hashtable]]::new()
     $hwPairs = @()
     if ($wsids.Count -gt 0 -and $server) {
-        $hwPairs = @($wsids | ForEach-Object { @{ name = $_; resourceId = [string]$wsMap[$_] } })
+        $hwPairs = @($wsids | ForEach-Object {
+                @{ name = $_; resourceId = [string]$wsMap[$_]; sam = [string]$sam }
+            })
         foreach ($hwPair in $hwPairs) {
             $hwJob = $null
             try {
@@ -868,6 +910,9 @@ function Resolve-Lens {
             $dev.manufacturer = [string]$row.manufacturer
             $dev.model = [string]$row.model
             $dev.serial = [string]$row.serial
+            $dev.consoleUse = [string]$row.consoleUse
+            $dev.lastUser = [string]$row.lastUser
+            $dev.isSearchedUser = [bool]$row.isSearchedUser
             # A virtual machine does not escrow to AD, so the missing key note is noise there.
             if ($dev.model -match 'virtual' -and $dev.note -like 'BitLocker not escrowed*') {
                 $dev.note = ''

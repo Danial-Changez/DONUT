@@ -17,6 +17,7 @@ class LensDeviceViewModel : ObservableObject {
     [string] $Name = ''
     [string] $Domain = ''                 # home AD domain, so Add resolves the FQDN first
     [string] $LastSeenText = ''
+    [bool]   $IsSearchedUser = $false     # the picked person's own machine, so it sorts first
     [string] $Model = ''
     [string] $TagText = ''                # "Tag <service tag>", where '' collapses the separator
     [string] $Serial = ''                 # the tag alone, which is what a warranty lookup wants
@@ -48,7 +49,8 @@ class LensDeviceViewModel : ObservableObject {
             if ($d.Manufacturer) { $tip += $d.Manufacturer }
             if ($tip.Count -gt 0) { $this.DetailTip = ($tip -join '   ·   ') }
             $this.Note = $d.Note
-            $this.LastSeenText = [LensFormat]::LogonLabel($d.LastLogon)
+            $this.LastSeenText = [LensFormat]::LogonLabel($d)
+            $this.IsSearchedUser = $d.IsSearchedUser
             $this.HasBitLocker = $d.HasBitLocker()
             # Newest-first by parsed Created, blanks last, so LatestKey is the QR's newest key.
             $dated = foreach ($k in $d.BitLockerKeys) {

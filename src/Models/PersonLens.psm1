@@ -39,6 +39,9 @@ class LensDevice {
     [string] $Serial = ''       # SCCM SMS_G_System_PC_BIOS.SerialNumber (Dell service tag), or ''
     [string] $Manufacturer = ''
     [LensBitLockerKey[]] $BitLockerKeys = @()
+    [string] $ConsoleUse = ''   # SCCM SYSTEM_CONSOLE_USER.LastConsoleUse for THIS person, or ''
+    [string] $LastUser = ''     # SCCM SMS_R_System.LastLogonUserName: who was last on the box
+    [bool]   $IsSearchedUser    # the picked person is this machine's console or last user
     [string] $Note = ''         # e.g. "not found in AD" / "BitLocker not escrowed"
 
     static [LensDevice] FromHashtable([hashtable]$h) {
@@ -51,6 +54,9 @@ class LensDevice {
         $d.Model = [string]$h['model']
         $d.Serial = [string]$h['serial']
         $d.Manufacturer = [string]$h['manufacturer']
+        $d.ConsoleUse = [TimeFormat]::NormalizeStamp($h['consoleUse'])
+        $d.LastUser = [string]$h['lastUser']
+        $d.IsSearchedUser = [bool]$h['isSearchedUser']
         $d.Note = [string]$h['note']
         $keys = [System.Collections.Generic.List[LensBitLockerKey]]::new()
         foreach ($bk in @($h['bitLockerKeys'])) {
@@ -163,11 +169,21 @@ class LensDeployment {
 # Pure formatting for the Lens (mirrors InventoryFormat and DiskUsageFormat). Static and
 # WPF-free, so the device view-model just renders the result.
 class LensFormat {
-    # Relative "last seen" from AD's lastLogonTimestamp, which replicates with up to
-    # ~14 days of lag. Blank or 0001-01-01 reads as "no logon recorded".
-    static [string] LogonLabel([string]$iso) {
-        $dt = [TimeFormat]::ParseIso($iso)
-        if ($dt -gt [datetime]::MinValue) { return "seen $([TimeFormat]::Relative($dt))" }
-        return 'no logon recorded'
+    # AD's stamp is the MACHINE authenticating, so alone it credits this person with
+    # someone else's activity. Console history answers per user; the machine stamp is named.
+    static [string] LogonLabel([LensDevice]$device) {
+        if ($null -eq $device) { return 'No Logon Recorded' }
+        $console = [TimeFormat]::ParseIso($device.ConsoleUse)
+        if ($console -gt [datetime]::MinValue) {
+            return "Signed In $([TimeFormat]::Relative($console))"
+        }
+        $machine = [TimeFormat]::ParseIso($device.LastLogon)
+        if ($machine -le [datetime]::MinValue) { return 'No Logon Recorded' }
+        $label = "Machine Seen $([TimeFormat]::Relative($machine))"
+        # Naming the occupant is the point: it says outright this is not the person's box.
+        if ($device.LastUser -and -not $device.IsSearchedUser) {
+            $label += "   ·   Last User $($device.LastUser)"
+        }
+        return $label
     }
 }

@@ -105,6 +105,16 @@ future source (e.g. an Intune API) slots in beside the existing ones:
    so a stale SID costs one bind, not the whole sweep. Both fields answered
    and bound on the site this ships to (`tools/Probe-DeviceIdentity.ps1`).
 
+The device row's "seen" line is per user where the site can say so. AD's
+`lastLogonTimestamp` is the *computer account* authenticating, so on its own it credits
+the picked person with whoever last used the box - on a real four-machine fleet two were
+last used by a service account and an unrelated operator. The hardware job therefore also
+reads `SMS_G_System_SYSTEM_CONSOLE_USER` (this person's `LastConsoleUse`, which ran four
+days fresher than AD where it existed) and `SMS_R_System.LastLogonUserName`. Console
+history is sparse - one of four devices carried it - so the label falls back to naming the
+machine stamp as such plus the real last user, and `isSearchedUser` flows downstream to
+sort the person's own machines to the top.
+
 The gather's nested jobs ride the `ThreadJob` lane (inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path),
 which is disjoint from the worker and interactive runspace pools. A many-device
