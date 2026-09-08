@@ -16,7 +16,8 @@
       $ExchangeDir       the ACL-locked exchange directory; exchange callers only
 
     Resolve-Lens returns the bundle JSON. Without $reqId and $ExchangeDir it only
-    returns it, writing no partials and no result file.
+    returns it, streaming its partials to the caller's Information stream rather
+    than writing partial or result files.
 
     Resolve-MachineOwnerBatch answers machine -> person. SMS_R_System.LastLogonUserName
     leads, since a machine added on its own is asking who was last on it; affinity
@@ -382,10 +383,20 @@ $script:DeviceScript = {
     return $dev
 }
 
-# Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI.
+# Sequential partials (partial-<id>-1, -2, ...) the parent streams to the UI. Elevated
+# they cross the exchange as files; in process they ride the caller's Information stream.
 function Write-LensPartial([hashtable]$Bundle, [string]$ReqId, [int]$Seq) {
-    # No exchange means an in-process caller, which gets the whole bundle at the end.
-    if (-not $ReqId -or -not $ExchangeDir) { return }
+    # No exchange means an in-process caller, running in the very runspace whose
+    # Information stream PollLens already reads, so the stream is the exchange.
+    if (-not $ReqId -or -not $ExchangeDir) {
+        try {
+            Write-Information -MessageData ($Bundle | ConvertTo-Json -Depth 6) `
+                              -Tags 'LensPartial'
+        } catch {
+            Write-Verbose "Lens partial $Seq not streamed: $($_.Exception.Message)"
+        }
+        return
+    }
     try {
         $path = Join-Path $ExchangeDir ("partial-{0}-{1}.bin" -f $ReqId, $Seq)
         Write-LensBundle $path ($Bundle | ConvertTo-Json -Depth 6)
