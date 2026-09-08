@@ -20,9 +20,12 @@ identity's rights; a separate identity means a separate process.
 
 The agent is only needed when DONUT is elevated. De-elevated, DONUT already *is*
 the right identity, so `PersonLensService.RunLookupJson` calls `Resolve-Lens` in
-process and skips the agent, task, crypto, and heartbeat entirely; the trade-off is
-no partials, so the pane fills in one step. See
-[Elevation and autostart](./elevation.md).
+process and skips the agent, task, crypto, and heartbeat entirely. The pane still
+fills progressively: partials are a property of the gather, not of the exchange, so
+`Write-LensPartial` writes them to the calling runspace's Information stream when
+there is no exchange dir to write files into - the same stream, and the same
+`FinderPresenter.PollLens` reader, that the elevated path publishes decrypted
+partials to. See [Elevation and autostart](./elevation.md).
 
 ## The persistent agent
 
