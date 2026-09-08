@@ -177,13 +177,12 @@ class LensFormat {
         if ($console -gt [datetime]::MinValue) {
             return "Signed In $([TimeFormat]::Relative($console))"
         }
+        # The occupant's name says "not this person's box" better than a stamp that never was.
+        if ($device.LastUser -and -not $device.IsSearchedUser) {
+            return "Last User $($device.LastUser)"
+        }
         $machine = [TimeFormat]::ParseIso($device.LastLogon)
         if ($machine -le [datetime]::MinValue) { return 'No Logon Recorded' }
-        $label = "Machine Seen $([TimeFormat]::Relative($machine))"
-        # Naming the occupant is the point: it says outright this is not the person's box.
-        if ($device.LastUser -and -not $device.IsSearchedUser) {
-            $label += "   ·   Last User $($device.LastUser)"
-        }
-        return $label
+        return "Machine Seen $([TimeFormat]::Relative($machine))"
     }
 }

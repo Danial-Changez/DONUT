@@ -427,8 +427,9 @@ class FinderPresenter {
                 foreach ($row in @($bundle.owners)) {
                     # The SAM rides along: it names the profile folder the clear must spare.
                     if ($row.owner) {
-                        $map[[string]$row.name] = @{ Owner = [string]$row.owner
-                            Sam = [string]$row.sam
+                        $map[[string]$row.name] = @{
+                            Owner = [string]$row.owner
+                            Sam   = [string]$row.sam
                         }
                     }
                 }

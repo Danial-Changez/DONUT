@@ -76,7 +76,7 @@ function Invoke-AdminServiceGet([string]$query) {
 }
 
 # Filter first, keyed segment second: a rejected filter answers 404 OR 200-empty.
-function Get-ClassRows([string]$class, [string]$select, [int]$id) {
+function Get-ClassResult([string]$class, [string]$select, [int]$id) {
     $out = [ordered]@{ Rows = @(); Route = ''; Error = '' }
     $filter = [uri]::EscapeDataString("ResourceID eq $id")
     try {
@@ -169,22 +169,27 @@ foreach ($d in $devices) {
         Write-Host ("    {0,-34} {1}" -f 'AD lastLogonTimestamp (today)', (Get-AdLastLogon $d.Name))
     }
 
-    $consoleUser = Get-ClassRows 'SMS_G_System_SYSTEM_CONSOLE_USER' `
-                                 'SystemConsoleUser,LastConsoleUse,NumberOfConsoleLogons' `
-                                 $d.ResourceId
-    Show-Section 'CONSOLE_USER (per user)' $consoleUser @(
-        'SystemConsoleUser', 'LastConsoleUse', 'NumberOfConsoleLogons')
+    $consoleUser = Get-ClassResult -class 'SMS_G_System_SYSTEM_CONSOLE_USER' `
+                                   -select 'SystemConsoleUser,LastConsoleUse,NumberOfConsoleLogons' `
+                                   -id $d.ResourceId
+    Show-Section -label 'CONSOLE_USER (per user)' `
+                 -probe $consoleUser `
+                 -fields @('SystemConsoleUser', 'LastConsoleUse', 'NumberOfConsoleLogons')
     if ($consoleUser.Rows.Count -gt 0) { $anyPerUser = $true }
 
-    $usage = Get-ClassRows 'SMS_G_System_SYSTEM_CONSOLE_USAGE' `
-                           'TopConsoleUser,TotalConsoleTime' `
-                           $d.ResourceId
-    Show-Section 'CONSOLE_USAGE (top user)' $usage @('TopConsoleUser', 'TotalConsoleTime')
+    $usage = Get-ClassResult -class 'SMS_G_System_SYSTEM_CONSOLE_USAGE' `
+                             -select 'TopConsoleUser,TotalConsoleTime' `
+                             -id $d.ResourceId
+    Show-Section -label 'CONSOLE_USAGE (top user)' `
+                 -probe $usage `
+                 -fields @('TopConsoleUser', 'TotalConsoleTime')
 
-    $sys = Get-ClassRows 'SMS_R_System' `
-                         'Name,LastLogonUserName,LastLogonTimestamp' `
-                         $d.ResourceId
-    Show-Section 'R_System (last user on box)' $sys @('LastLogonUserName', 'LastLogonTimestamp')
+    $sys = Get-ClassResult -class 'SMS_R_System' `
+                           -select 'Name,LastLogonUserName,LastLogonTimestamp' `
+                           -id $d.ResourceId
+    Show-Section -label 'R_System (last user on box)' `
+                 -probe $sys `
+                 -fields @('LastLogonUserName', 'LastLogonTimestamp')
 }
 
 # --- 3. the verdict the label change hangs on ---

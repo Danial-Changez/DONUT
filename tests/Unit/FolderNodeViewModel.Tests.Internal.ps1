@@ -13,6 +13,18 @@ Describe "FolderNodeViewModel" {
             })
             return $r
         }
+
+        # The tree nests a path under any shorter path it starts with, so a same-prefix
+        # profile is not a root: the lookup walks the whole tree rather than the top.
+        function Get-Node {
+            param([object[]]$Nodes, [string]$Path)
+            foreach ($n in @($Nodes)) {
+                if ($n.Path -eq $Path) { return $n }
+                $hit = Get-Node -Nodes $n.Children -Path $Path
+                if ($hit) { return $hit }
+            }
+            return $null
+        }
     }
 
     It "maps a nested report to display nodes (label, size, depth, root flag, children)" {
@@ -118,8 +130,7 @@ Describe "FolderNodeViewModel" {
 
         It "does not catch an account whose name merely starts the same" {
             $roots = [FolderNodeViewModel]::FromReport($script:report, 'tpsadmjz')
-            ($roots | Where-Object { $_.Path -eq 'C:\Users\tpsadmjz2' }).IsDeletable |
-                Should-BeTrue
+            (Get-Node -Nodes $roots -Path 'C:\Users\tpsadmjz2').IsDeletable | Should-BeTrue
         }
 
         It "still withholds it from protected folders, owner or not" {

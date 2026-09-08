@@ -30,8 +30,32 @@ Describe "Lens hardware inventory query" {
             $rows[0].error | Should -BeNullOrEmpty
             # The per-device wall time feeds the stage marks debug logging prints.
             ($rows[0].ms -ge 0) | Should-BeTrue
-            Should -Invoke Invoke-RestMethod -Times 2 -Exactly
+            # Hardware, BIOS, and the last-user read. No sam on the pair, so no console query.
+            Should -Invoke Invoke-RestMethod -Times 3 -Exactly
             Should -Not -Invoke Invoke-RestMethod -ParameterFilter { $Uri -match '\(16777345\)' }
+        }
+
+        It "credits the searched person only when the site says they used the box" {
+            Mock Invoke-RestMethod {
+                if ($Uri -match 'COMPUTER_SYSTEM') {
+                    return New-Collection @([pscustomobject]@{ Manufacturer = 'Dell Inc.'; Model = 'X' })
+                }
+                if ($Uri -match 'SYSTEM_CONSOLE_USER') {
+                    return New-Collection @(
+                        [pscustomobject]@{ SystemConsoleUser = 'CORP\other'; LastConsoleUse = '2026-01-01T00:00:00Z' },
+                        [pscustomobject]@{ SystemConsoleUser = 'CORP\u007'; LastConsoleUse = '2026-09-04T20:55:18Z' })
+                }
+                if ($Uri -match 'SMS_R_System') {
+                    return New-Collection @([pscustomobject]@{ LastLogonUserName = 'svc.flow' })
+                }
+                return New-Collection @([pscustomobject]@{ SerialNumber = '9XKQ2Z3' })
+            }
+
+            $rows = @(& $script:HwScript 'sccm.corp.com' @{ name = 'WS-1'; resourceId = '16777345'; sam = 'u007' })
+
+            $rows[0].consoleUse | Should -Be '2026-09-04T20:55:18Z'
+            $rows[0].lastUser | Should -Be 'svc.flow'
+            $rows[0].isSearchedUser | Should-BeTrue
         }
     }
 

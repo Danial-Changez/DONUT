@@ -202,6 +202,8 @@ Describe "InventoryPresenter.RemoveHostLog" {
     }
 
     It "is quiet when the machine never wrote one" {
-        { $script:logP.RemoveHostLog('NEVER-RAN') } | Should-NotThrow
+        # No assertion needed: a throw from the call is the failure this guards against.
+        $script:logP.RemoveHostLog('NEVER-RAN')
+        $script:logP.LogBuffers.ContainsKey('NEVER-RAN') | Should-BeFalse
     }
 }

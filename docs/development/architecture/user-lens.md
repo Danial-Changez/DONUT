@@ -111,9 +111,11 @@ the picked person with whoever last used the box - on a real four-machine fleet 
 last used by a service account and an unrelated operator. The hardware job therefore also
 reads `SMS_G_System_SYSTEM_CONSOLE_USER` (this person's `LastConsoleUse`, which ran four
 days fresher than AD where it existed) and `SMS_R_System.LastLogonUserName`. Console
-history is sparse - one of four devices carried it - so the label falls back to naming the
-machine stamp as such plus the real last user, and `isSearchedUser` flows downstream to
-sort the person's own machines to the top.
+history is sparse - one of four devices carried it - so the label is a ladder: the person's
+own console time ("Signed In ..."), else the real last user ("Last User ..."), else the
+machine stamp named as such ("Machine Seen ..."). The name replaces that stamp rather than
+trailing it, since a machine time beside another person's name only re-implies the pick.
+`isSearchedUser` flows downstream to sort the person's own machines to the top.
 
 The gather's nested jobs ride the `ThreadJob` lane (inside the agent process on
 the elevated path, and a lane no other DONUT code uses on the in-process path),

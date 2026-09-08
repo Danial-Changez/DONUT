@@ -164,7 +164,8 @@ $script:AffinityScript = {
 # One device per call (the caller fans out), keyed-segment fallback when filters 404.
 $script:HardwareScript = {
     param($server, $pair)
-    function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id, [bool]$useKey) {
+    function Get-AdminServiceRow([string]$srv, [string]$class, [string]$select, [string]$id,
+        [bool]$useKey, [bool]$all) {
         # The braces are load-bearing: "$class?" parses as an undefined variable class?.
         $uri = if ($useKey) { "https://$srv/AdminService/wmi/$class($id)?`$select=$select" }
         else {
@@ -174,7 +175,11 @@ $script:HardwareScript = {
         $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
         if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
         $r = Invoke-RestMethod @p
-        if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) | Select-Object -First 1 }
+        # Console history keeps a row per user, so that one caller asks for the whole set.
+        if ($null -ne $r.PSObject.Properties['value']) {
+            if ($all) { return @($r.value) }
+            return @($r.value) | Select-Object -First 1
+        }
         return $r
     }
     # A site that will not serve the filter shape says so two ways: it 404s, or it answers
@@ -196,16 +201,6 @@ $script:HardwareScript = {
                                    -select $select `
                                    -id $id `
                                    -useKey $true
-    }
-    # Console history is one row per user, so this one keeps them all.
-    function Get-InventoryRows([string]$srv, [string]$class, [string]$select, [string]$id) {
-        $uri = "https://$srv/AdminService/wmi/${class}?`$filter=" +
-        [uri]::EscapeDataString("ResourceID eq $id") + "&`$select=$select"
-        $p = @{ Uri = $uri; UseDefaultCredentials = $true; ErrorAction = 'Stop'; TimeoutSec = 15 }
-        if ($PSVersionTable.PSVersion.Major -ge 6) { $p.SkipCertificateCheck = $true }
-        $r = Invoke-RestMethod @p
-        if ($null -ne $r.PSObject.Properties['value']) { return @($r.value) }
-        return @($r)
     }
     # DOMAIN\sam and a bare sam both appear, so compare the tail either side.
     function Test-SameUser([string]$a, [string]$b) {
@@ -247,10 +242,12 @@ $script:HardwareScript = {
         } catch { }
         if ($pair.sam) {
             try {
-                $rows = @(Get-InventoryRows -srv $server `
-                                            -class 'SMS_G_System_SYSTEM_CONSOLE_USER' `
-                                            -select 'SystemConsoleUser,LastConsoleUse' `
-                                            -id $pair.resourceId)
+                $rows = @(Get-AdminServiceRow -srv $server `
+                                              -class 'SMS_G_System_SYSTEM_CONSOLE_USER' `
+                                              -select 'SystemConsoleUser,LastConsoleUse' `
+                                              -id $pair.resourceId `
+                                              -useKey $false `
+                                              -all $true)
                 $mine = @($rows | Where-Object { Test-SameUser $_.SystemConsoleUser $pair.sam })
                 # Newest wins: the class keeps a row per user, not one per session.
                 $newest = @($mine | Sort-Object -Descending -Property LastConsoleUse |

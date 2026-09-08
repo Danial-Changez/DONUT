@@ -181,9 +181,11 @@ Describe "PersonLens" {
 
     Context "LensFormat.LogonLabel" {
 
-        # AD's stamp is the machine authenticating, so the label must never spend it on
-        # the picked person: half a real fleet row was last used by somebody else.
-        function New-Device([hashtable]$h) { return [LensDevice]::FromHashtable($h) }
+        BeforeAll {
+            # AD's stamp is the machine authenticating, so the label must never spend it
+            # on the picked person: half a real fleet row was last used by somebody else.
+            function New-Device([hashtable]$h) { return [LensDevice]::FromHashtable($h) }
+        }
 
         It "reads blank as 'No Logon Recorded'" {
             [LensFormat]::LogonLabel((New-Device @{ name = 'PC' })) | Should-Be 'No Logon Recorded'
@@ -215,7 +217,8 @@ Describe "PersonLens" {
                 lastUser       = 'svc.c.tps.flow'
                 isSearchedUser = $false
             }
-            ([LensFormat]::LogonLabel($d) -match 'Last User svc\.c\.tps\.flow') | Should-BeTrue
+            # The name replaces the machine stamp: pairing them re-implies the person.
+            [LensFormat]::LogonLabel($d) | Should-Be 'Last User svc.c.tps.flow'
         }
 
         It "does not name the person back on their own machine" {

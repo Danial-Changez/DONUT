@@ -210,7 +210,7 @@ Describe "AppConfig" {
         }
 
         It "the file really does hand back Int64, not Int32" {
-            $script:reloaded.Settings['folderScanCount'] | Should-BeOfType ([long])
+            $script:reloaded.Settings['folderScanCount'].GetType().Name | Should-Be 'Int64'
         }
 
         It "keeps the throttle limit across a restart" {

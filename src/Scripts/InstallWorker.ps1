@@ -268,14 +268,19 @@ try {
     # a stale DONUT.exe stays on disk beside the registered one.
     if ($RemoveDir -and -not $ZipPath -and (Test-Path -LiteralPath $RemoveDir)) {
         try {
-            Remove-Item -LiteralPath $RemoveDir -Recurse -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $RemoveDir `
+                        -Recurse `
+                        -Force `
+                        -ErrorAction Stop
         } catch {
             Write-Host "[WARN] Failed to remove $RemoveDir`: $($_.Exception.Message)" `
                        -ForegroundColor Yellow
         }
         $menu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
         foreach ($leaf in 'DONUT (zip).lnk', 'DONUT (beta).lnk') {
-            Remove-Item -LiteralPath (Join-Path $menu $leaf) -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath (Join-Path $menu $leaf) `
+                        -Force `
+                        -ErrorAction SilentlyContinue
         }
     }
 
