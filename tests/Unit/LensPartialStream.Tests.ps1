@@ -11,9 +11,11 @@ Describe "Lens partial delivery" {
         It "streams the bundle on the Information stream PollLens reads" {
             # Only so 6>&1 captures it; PowerShell.Invoke collects it either way.
             $InformationPreference = 'Continue'
-            $ExchangeDir = ''
+            $script:ExchangeDir = ''
 
-            $records = @(Write-LensPartial -Bundle $script:bundle -ReqId '' -Seq 1 6>&1)
+            $records = @(Write-LensPartial -Bundle $script:bundle `
+                                           -ReqId '' `
+                                           -Seq 1 6>&1)
 
             @($records).Count | Should-Be 1
             ($records[0].Tags -contains 'LensPartial') | Should-BeTrue
@@ -26,9 +28,11 @@ Describe "Lens partial delivery" {
         # The integration test covers the file write; this covers not ALSO streaming.
         It "streams nothing, so the parent never publishes the same partial twice" {
             $InformationPreference = 'Continue'
-            $ExchangeDir = Join-Path ([IO.Path]::GetTempPath()) 'donut-lens-partial-none'
+            $script:ExchangeDir = Join-Path ([IO.Path]::GetTempPath()) 'donut-lens-none'
 
-            $records = @(Write-LensPartial -Bundle $script:bundle -ReqId 'abc123' -Seq 2 6>&1)
+            $records = @(Write-LensPartial -Bundle $script:bundle `
+                                           -ReqId 'abc123' `
+                                           -Seq 2 6>&1)
 
             @($records | Where-Object { $_.Tags -contains 'LensPartial' }).Count | Should-Be 0
         }
