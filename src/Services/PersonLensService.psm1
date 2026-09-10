@@ -362,7 +362,7 @@ class PersonLensService {
     }
 
     # The same lookup the agent runs, called here instead of handed across the exchange.
-    # No partials: the pane fills in one step rather than progressively.
+    # Partials still stream, on the Information stream PollLens already reads.
     hidden [string] RunLookupInProcess([string]$identity) {
         return $this.RunInProcess("Lens lookup for $identity", $true, 'Resolve-Lens',
             @{ identity = $identity; samHint = $this.SamHint; server = $this.SiteServer; reqId = ''
